@@ -13,6 +13,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/council"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -108,6 +109,16 @@ func seedSQLiteV19Council(
 ) (*sqliteV15System, goal.GoalRef) {
 	t.Helper()
 	system := newSQLiteV15System(t, 8)
+	return seedSQLiteV19CouncilOnSystem(t, system, policy, fail)
+}
+
+func seedSQLiteV19CouncilOnSystem(
+	t *testing.T,
+	system *sqliteV15System,
+	policy council.Policy,
+	fail bool,
+) (*sqliteV15System, goal.GoalRef) {
+	t.Helper()
 	observer := &sqliteV19CouncilObserver{base: system.external, fail: fail}
 	system.orchestrator = newSQLiteV19CouncilOrchestrator(t, system, observer)
 	result, err := system.orchestrator.Submit(context.Background(), system.access, application.SubmitRequest{
@@ -420,6 +431,111 @@ func TestSQLiteV19CouncilRetryThenExhaustionAbortsCohortAtomically(t *testing.T)
 	result, err := system.orchestrator.ProcessNext(context.Background(), "worker:v19-failure-replay")
 	if err != nil || result.Processed {
 		t.Fatalf("exhausted Council replay result=%+v err=%v", result, err)
+	}
+}
+
+func TestSQLiteV19PreparedCouncilRetryClosesLocallyAfterPeerSettlement(t *testing.T) {
+	system := newSQLiteV15System(t, 8)
+	for _, envelope := range []*governance.BudgetEnvelope{
+		&system.policy.DeploymentEnvelope,
+		&system.policy.ProjectEnvelopeTemplate,
+		&system.policy.GoalEnvelopeTemplate,
+	} {
+		envelope.Limit.Tokens = 700
+		envelope.Limit.MoneyMicros = 700
+	}
+	system, goalRef := seedSQLiteV19CouncilOnSystem(t, system, council.PolicyAuto, true)
+	processSQLiteV16Actions(t, system,
+		application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionLaunchAgent,
+		application.ActionObserveAgent,
+	)
+	queued, err := system.repository.GetGoal(context.Background(), goalRef)
+	sqliteTestNoError(t, err)
+	var retry application.ExecutionRecord
+	for _, execution := range queued.Executions {
+		if execution.CouncilSubjectDigest != "" && execution.AttemptNo == 2 {
+			retry = execution
+			break
+		}
+	}
+	if retry.Ref.String() == "" || retry.State != application.ExecutionQueued {
+		t.Fatalf("Council retry not queued: %+v", queued.Executions)
+	}
+
+	system.clock.Advance(system.policy.QuotaRetryDelay)
+	retryClaim := claimSQLiteV15(t, system, "claim:v19-council-prepared-retry")
+	if retryClaim.Action.ExecutionRef != retry.Ref ||
+		retryClaim.Disposition != application.ActionClaimDispositionNormal {
+		t.Fatalf("Council prepared retry claim=%+v want=%s", retryClaim, retry.Ref)
+	}
+	_, sessionRef := prepareSQLiteV15RetryLaunchWithSession(t, system, retryClaim)
+
+	// Model the process crash after RecordLaunchPrepared. The launch lease
+	// expires, while a bounded scheduler deferral lets an independent Council
+	// peer publish the later durable settlement first.
+	system.clock.Advance(2 * time.Minute)
+	mustV10Exec(t, system.repository.db, `
+UPDATE outbox SET available_at=? WHERE ref=?`,
+		requiredTime(system.clock.Now().Add(time.Hour)), retryClaim.Action.Ref)
+	system.external.observationUsage = governance.ResourceUsage{
+		Resources: governance.ResourceVector{
+			Tokens: 300, MoneyMicros: 300, Currency: governance.Currency("USD"),
+		},
+		Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+	}
+	system.orchestrator = newSQLiteV19CouncilOrchestrator(t, system,
+		&sqliteV19CouncilObserver{base: system.external})
+	processSQLiteV16Actions(t, system, application.ActionObserveAgent)
+	mustV10Exec(t, system.repository.db, `
+UPDATE outbox SET available_at=?
+WHERE kind='observe_agent' AND completed_at IS NULL`,
+		requiredTime(system.clock.Now().Add(time.Hour)))
+	mustV10Exec(t, system.repository.db, `
+UPDATE outbox SET available_at=? WHERE ref=?`,
+		requiredTime(system.clock.Now()), retryClaim.Action.Ref)
+
+	revokeSQLiteV15Owner(t, system)
+	system.clock.Advance(2 * time.Minute)
+	if result, processErr := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v19-council-prepared-park",
+	); processErr != nil || result.Processed {
+		t.Fatalf("Council prepared parking result=%+v err=%v", result, processErr)
+	}
+	parked, err := system.repository.GetGoal(context.Background(), goalRef)
+	parkedRetry, found := sqliteExecutionByRef(parked.Executions, retry.Ref)
+	if err != nil || !found || parkedRetry.State != application.ExecutionDispatching ||
+		parkedRetry.BudgetReservationRef != "" || parkedRetry.EffectIntentRef != "" ||
+		parkedRetry.ExecutionSessionRef != sessionRef {
+		t.Fatalf("Council parked retry=%+v found=%v err=%v", parkedRetry, found, err)
+	}
+
+	system.clock.Advance(system.policy.QuotaRetryDelay)
+	launchesBefore := system.external.launchCalls
+	processSQLiteV16Actions(t, system, application.ActionLaunchAgent)
+	final, err := system.repository.GetGoal(context.Background(), goalRef)
+	failed, found := sqliteExecutionByRef(final.Executions, retry.Ref)
+	var consumed, revokeActions, attempts int
+	sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM action_consumption_receipts
+WHERE execution_ref=? AND kind='launch_agent'
+ AND error_code LIKE 'budget.retry_irreversible:%'`, retry.Ref.String()).Scan(&consumed))
+	sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM outbox
+WHERE execution_ref=? AND kind='revoke_execution_session' AND completed_at IS NULL`,
+		retry.Ref.String()).Scan(&revokeActions))
+	sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM effect_attempts WHERE execution_ref=?`,
+		retry.Ref.String()).Scan(&attempts))
+	if err != nil || !found || failed.State != application.ExecutionFailed ||
+		failed.FailureCode != "council.contribution_invalid" ||
+		failed.ExecutionSessionRef != sessionRef ||
+		consumed != 1 || revokeActions != 1 || attempts != 0 ||
+		system.external.launchCalls != launchesBefore {
+		t.Fatalf("Council local closure failed=%+v found=%v consumed=%d revoke=%d attempts=%d calls=%d/%d err=%v",
+			failed, found, consumed, revokeActions, attempts, system.external.launchCalls, launchesBefore, err)
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
+		t.Fatalf("prepared Council recovery: %v cause=%v", err, errors.Unwrap(err))
 	}
 }
 

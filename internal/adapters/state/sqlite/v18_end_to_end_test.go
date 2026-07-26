@@ -2,8 +2,10 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"orquesta/internal/application"
 	"orquesta/internal/council"
@@ -132,8 +134,8 @@ func TestReviewQueuedRetryClosesLocallyWhenPeerSettlementExhaustsBudget(t *testi
 		&system.policy.ProjectEnvelopeTemplate,
 		&system.policy.GoalEnvelopeTemplate,
 	} {
-		envelope.Limit.Tokens = 350
-		envelope.Limit.MoneyMicros = 350
+		envelope.Limit.Tokens = 400
+		envelope.Limit.MoneyMicros = 400
 	}
 	system.orchestrator = newSQLiteV16OrchestratorWithAttestor(t, system, attestor)
 	submitted, err := system.orchestrator.Submit(context.Background(), system.access, application.SubmitRequest{
@@ -180,10 +182,38 @@ WHERE purpose IN ('primary_review','adversarial_review')`)
 	if err != nil || retryRef == "" {
 		t.Fatalf("review retry not queued record=%+v err=%v", queued, err)
 	}
+	system.clock.Advance(system.policy.QuotaRetryDelay)
+	retryClaim := claimSQLiteV15(t, system, "claim:v18-review-prepared-retry")
+	if retryClaim.Action.ExecutionRef.String() != retryRef ||
+		retryClaim.Disposition != application.ActionClaimDispositionNormal {
+		t.Fatalf("review prepared retry claim=%+v want execution=%s", retryClaim, retryRef)
+	}
+	_, sessionRef := prepareSQLiteV15RetryLaunchWithSession(t, system, retryClaim)
+	system.clock.Advance(2 * time.Minute)
+	mustV10Exec(t, system.repository.db, `
+UPDATE outbox SET available_at=? WHERE ref=?`,
+		requiredTime(system.clock.Now().Add(time.Hour)), retryClaim.Action.Ref)
 	system.external.mu.Lock()
 	system.external.reviewContent = nil
+	system.external.observationUsage = governance.ResourceUsage{
+		Resources: governance.ResourceVector{
+			Tokens: 200, MoneyMicros: 200, Currency: governance.Currency("USD"),
+		},
+		Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+	}
 	system.external.mu.Unlock()
 	processSQLiteV16Actions(t, system, application.ActionObserveAgent)
+	mustV10Exec(t, system.repository.db, `
+UPDATE outbox SET available_at=? WHERE ref=?`,
+		requiredTime(system.clock.Now()), retryClaim.Action.Ref)
+	revokeSQLiteV15Owner(t, system)
+	system.clock.Advance(2 * time.Minute)
+	if result, processErr := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v18-review-prepared-park",
+	); processErr != nil || result.Processed {
+		t.Fatalf("review prepared parking result=%+v err=%v", result, processErr)
+	}
+	system.clock.Advance(system.policy.QuotaRetryDelay)
 	launchesBefore := system.external.launchCalls
 	processSQLiteV16Actions(t, system, application.ActionLaunchAgent)
 	record, err := system.repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
@@ -194,18 +224,23 @@ WHERE purpose IN ('primary_review','adversarial_review')`)
 			break
 		}
 	}
-	var consumed int
+	var consumed, revokeActions int
 	sqliteTestNoError(t, system.repository.db.QueryRow(`
 SELECT COUNT(*) FROM action_consumption_receipts
 WHERE execution_ref=? AND kind='launch_agent'
  AND error_code LIKE 'budget.retry_irreversible:%'`, retryRef).Scan(&consumed))
+	sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM outbox
+WHERE execution_ref=? AND kind='revoke_execution_session' AND completed_at IS NULL`,
+		retryRef).Scan(&revokeActions))
 	if err != nil || retry.State != application.ExecutionFailed || consumed != 1 ||
+		retry.ExecutionSessionRef != sessionRef || revokeActions != 1 ||
 		system.external.launchCalls != launchesBefore {
-		t.Fatalf("review late budget record=%+v retry=%+v consumed=%d calls=%d/%d err=%v",
-			record, retry, consumed, system.external.launchCalls, launchesBefore, err)
+		t.Fatalf("review late budget record=%+v retry=%+v consumed=%d revoke=%d calls=%d/%d err=%v",
+			record, retry, consumed, revokeActions, system.external.launchCalls, launchesBefore, err)
 	}
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
-		t.Fatalf("review late budget recovery: %v", err)
+		t.Fatalf("review late budget recovery: %v cause=%v", err, errors.Unwrap(err))
 	}
 }
 
