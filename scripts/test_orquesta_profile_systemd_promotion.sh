@@ -1217,6 +1217,39 @@ set -e
 [ "$STATUS" -eq 2 ] && [[ "$OUTPUT" == *"--functional-data-sha"* ]] ||
   fail_test "final_receipt_functional_digest_not_required"
 
+new_fixture upgrade-source-same-size-mutation
+/usr/bin/python3 - "$REAL_HELPER" "$FIXTURE/tools/binary" <<'PY'
+import importlib.util
+import os
+import pathlib
+import sys
+
+helper_path = pathlib.Path(sys.argv[1])
+subject = pathlib.Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("promotion_helper", helper_path)
+module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+spec.loader.exec_module(module)
+original_read = module.os.read
+mutated = False
+
+def mutating_read(descriptor, size):
+    global mutated
+    block = original_read(descriptor, size)
+    if block and not mutated:
+        mutated = True
+        os.utime(subject, ns=(subject.stat().st_atime_ns, subject.stat().st_mtime_ns + 1))
+    return block
+
+module.os.read = mutating_read
+try:
+    module.stable_source_sha256(subject, os.getuid())
+except module.ContractError as error:
+    if str(error) == "upgrade_source_changed":
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+
 new_fixture check-read-only
 db_sha_before="$(sha256_of "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite")"
 run_ok "status=ready action=check" "$SUBJECT" "${CONTRACT[@]}"

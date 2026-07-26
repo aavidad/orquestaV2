@@ -689,11 +689,26 @@ def stable_source_sha256(path: pathlib.Path, owner_uid: int) -> str:
             digest.update(block)
             size += len(block)
         after = os.fstat(descriptor)
-        if (before.st_dev, before.st_ino, before.st_mode, before.st_size) != (
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_mode,
+            before.st_uid,
+            before.st_gid,
+            before.st_nlink,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        ) != (
             after.st_dev,
             after.st_ino,
             after.st_mode,
+            after.st_uid,
+            after.st_gid,
+            after.st_nlink,
             after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
         ) or size != before.st_size:
             raise ContractError("upgrade_source_changed")
         return digest.hexdigest()
