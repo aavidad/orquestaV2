@@ -660,11 +660,13 @@ exec /usr/bin/sleep infinity
       fi
       set +e
       readiness_output="$(
-        set -e
-        load_unit_properties
-        require_running_profile_contract
-        printf '%s\n' "$main_pid" "$observed_daemon_pid" "$invocation_id"
-      )" 2>/dev/null
+        {
+          set -e
+          load_unit_properties
+          require_running_profile_contract
+          printf '%s\n' "$main_pid" "$observed_daemon_pid" "$invocation_id"
+        } 2>/dev/null
+      )"
       readiness_status="$?"
       set -e
       if [ "$readiness_status" -eq 0 ]; then
