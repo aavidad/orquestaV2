@@ -42,6 +42,8 @@ type applicationAPI interface {
 	CreateIntake(context.Context, application.Access, application.CreateIntakeRequest) (application.IntakeResult, error)
 	GetIntake(context.Context, application.Access, application.GetIntakeRequest) (application.IntakeRecord, error)
 	ApplyIntake(context.Context, application.Access, application.ApplyIntakeRequest) (application.IntakeResult, error)
+	PrepareIntakeDossier(context.Context, application.Access, application.PrepareIntakeDossierRequest) (application.IntakeDossierResult, error)
+	GetIntakeDossier(context.Context, application.Access, application.GetIntakeDossierRequest) (application.IntakeDossierRecord, error)
 }
 
 var _ applicationAPI = (*application.Orchestrator)(nil)
@@ -56,6 +58,7 @@ var expectedHandlerPermissions = map[string]string{
 	"GetMailbox": "goals.get", "ListMailbox": "goals.get", "AcknowledgeMailbox": "goals.get", "BlockMailbox": "goals.get",
 	"OpenCouncilRound": "goals.direct", "SkipCouncil": "council.skip",
 	"CreateIntake": "goals.create", "GetIntake": "goals.get", "ApplyIntake": "goals.create",
+	"PrepareIntakeDossier": "goals.create", "GetIntakeDossier": "goals.get",
 }
 
 func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
@@ -78,6 +81,8 @@ func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
 		"BlockMailbox": wrap(handleBlockMailbox), "OpenCouncilRound": wrap(handleOpenCouncilRound),
 		"SkipCouncil": wrap(handleSkipCouncil), "CreateIntake": wrap(handleCreateIntake),
 		"GetIntake": wrap(handleGetIntake), "ApplyIntake": wrap(handleApplyIntake),
+		"PrepareIntakeDossier": wrap(handlePrepareIntakeDossier),
+		"GetIntakeDossier":     wrap(handleGetIntakeDossier),
 	}
 }
 

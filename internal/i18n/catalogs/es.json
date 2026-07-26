@@ -18,6 +18,8 @@
   "command.goals.list.description": "Lista los Goals visibles del proyecto.",
   "command.intakes.apply.description": "Aplica un cambio causal al intake compartido.",
   "command.intakes.create.description": "Crea un intake durable para el proyecto indicado.",
+  "command.intakes.dossier.get.description": "Consulta un dossier durable de intake por su referencia inmutable.",
+  "command.intakes.dossier.prepare.description": "Prepara y persiste un dossier de intake ya redactado con su plan causal.",
   "command.intakes.get.description": "Consulta el estado versionado de un intake.",
   "command.mailbox.acknowledge.description": "Confirma el consumo de una entrega del buzón.",
   "command.mailbox.admit.description": "Admite una entrega causal en el buzón.",

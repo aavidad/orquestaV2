@@ -28,7 +28,7 @@ func TestEveryMutatingHandlerReturnsStableImmutableReceiptOnReplay(t *testing.T)
 		}
 		assertNoTransientMutationFlags(t, definition.ID, first.Data)
 	}
-	if mutations != 20 {
+	if mutations != 21 {
 		t.Fatalf("mutating command count=%d", mutations)
 	}
 }
