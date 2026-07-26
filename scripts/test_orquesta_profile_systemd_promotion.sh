@@ -768,6 +768,17 @@ db.close()
 PY
 }
 
+set +e
+OUTPUT="$("$REAL_HELPER" final-receipt \
+  --path /nonexistent --owner-uid 0 --contract invalid \
+  --binary-sha invalid --primary-config-sha invalid \
+  --rollback-config-sha invalid --backup-sha invalid \
+  --root-gate-ref invalid --old-unit-outcome invalid 2>&1)"
+STATUS="$?"
+set -e
+[ "$STATUS" -eq 2 ] && [[ "$OUTPUT" == *"--functional-data-sha"* ]] ||
+  fail_test "final_receipt_functional_digest_not_required"
+
 new_fixture check-read-only
 db_sha_before="$(sha256_of "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite")"
 run_ok "status=ready action=check" "$SUBJECT" "${CONTRACT[@]}"
