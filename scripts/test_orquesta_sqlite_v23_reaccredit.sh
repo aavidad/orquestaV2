@@ -44,6 +44,22 @@ assert not receipt["residues"]["credential_projections"]
 PY
 }
 
+assert_pid_not_live() {
+  checked_pid="$1"
+  checked_case="$2"
+  for _ in $(seq 1 40); do
+    if [ ! -r "/proc/$checked_pid/stat" ]; then
+      return 0
+    fi
+    checked_state="$(awk '{print $3}' "/proc/$checked_pid/stat")"
+    if [ "$checked_state" = Z ]; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  fail_test "$checked_case"
+}
+
 sha256_of() {
   sha256sum -- "$1" | awk '{print $1}'
 }
@@ -219,6 +235,19 @@ if operation == "start":
         evidence.rename(evidence.with_name("evidence-before-fault"))
         evidence.write_text("fault\n", encoding="utf-8")
     if (systemctl.parent / "hang-start-after-unit").exists():
+        (systemctl.parent / "start-adapter-pid").write_text(
+            str(os.getpid()) + "\n",
+            encoding="utf-8",
+        )
+        child = os.fork()
+        if child == 0:
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            time.sleep(30)
+            raise SystemExit(0)
+        (systemctl.parent / "start-child-pid").write_text(
+            str(child) + "\n",
+            encoding="utf-8",
+        )
         time.sleep(30)
     if (systemctl.parent / "fail-start-after-unit").exists():
         raise SystemExit(97)
@@ -741,6 +770,74 @@ for requested_signal in TERM INT HUP; do
   assert_failure_cleanup interrupted_by_signal true not-found ||
     fail_test "signal_cleanup_receipt"
 done
+
+write_fixture signal-kill
+: >"$COMMANDS/hang-start-after-unit"
+set_common_value --command-timeout 30
+"$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr" &
+harness_pid="$!"
+kill_ready=false
+for _ in $(seq 1 100); do
+  if [ -f "$COMMANDS/unit-state" ] &&
+    [ "$(<"$COMMANDS/unit-state")" = loaded ] &&
+    [ -f "$COMMANDS/start-adapter-pid" ] &&
+    [ -f "$COMMANDS/start-child-pid" ]; then
+    kill_ready=true
+    break
+  fi
+  sleep 0.05
+done
+[ "$kill_ready" = true ] || fail_test "sigkill_unit_not_started"
+adapter_pid="$(<"$COMMANDS/start-adapter-pid")"
+adapter_child_pid="$(<"$COMMANDS/start-child-pid")"
+kill -KILL "$harness_pid"
+set +e
+wait "$harness_pid"
+kill_status="$?"
+set -e
+[ "$kill_status" -ne 0 ] || fail_test "sigkill_exit_zero"
+crash_receipt_ready=false
+for _ in $(seq 1 200); do
+  if [ -f "$OUTPUT/failure.json" ]; then
+    crash_receipt_ready=true
+    break
+  fi
+  sleep 0.05
+done
+[ "$crash_receipt_ready" = true ] ||
+  fail_test "sigkill_crash_receipt_missing"
+assert_failure_cleanup parent_process_lost true not-found ||
+  fail_test "sigkill_cleanup_receipt"
+[ ! -e "$OUTPUT/receipt.json" ] ||
+  fail_test "sigkill_pass_receipt_present"
+[ ! -e "$OUTPUT/.receipt.json.pending" ] ||
+  fail_test "sigkill_pass_pending_present"
+watchdog_pid="$(
+  python3 - "$OUTPUT/failure.json" <<'PY'
+import json
+import pathlib
+import sys
+
+receipt = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(receipt["watchdog"]["pid"])
+assert receipt["watchdog"]["active_pgid_terminated"] is not None
+PY
+)"
+assert_pid_not_live "$adapter_pid" "sigkill_adapter_alive"
+assert_pid_not_live "$adapter_child_pid" "sigkill_adapter_child_alive"
+assert_pid_not_live "$watchdog_pid" "sigkill_watchdog_alive"
+[ "$("$COMMANDS/systemctl" --user show ignored.service \
+  --property=LoadState --value)" = "not-found" ] ||
+  fail_test "sigkill_unit_residue"
+if find "$OUTPUT" -type f -name auth.json -print -quit | grep -q .; then
+  fail_test "sigkill_auth_residue"
+fi
+if find "$OUTPUT/runtime" -type f \
+  \( -name server.pid -o -name server.start_ref \
+  -o -name server.binary_id -o -name server.binary_sha256 \
+  -o -name server.config_sha256 \) -print -quit | grep -q .; then
+  fail_test "sigkill_identity_residue"
+fi
 
 write_fixture cleanup-timeout-child
 : >"$COMMANDS/fail-start-after-unit"

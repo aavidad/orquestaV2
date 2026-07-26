@@ -11,6 +11,7 @@ import json
 import os
 import re
 import secrets
+import select
 import signal
 import shutil
 import socket
@@ -751,6 +752,60 @@ class CommandEvidence:
         }
 
 
+@dataclass
+class CrashWatchdog:
+    pid: int
+    command_fd: int
+    acknowledgement_fd: int
+    armed: bool = True
+
+    def send(self, message: str) -> None:
+        if not self.armed:
+            fail("crash_watchdog_not_armed")
+        payload = (message + "\n").encode("ascii")
+        try:
+            written = os.write(self.command_fd, payload)
+        except OSError as error:
+            fail("crash_watchdog_channel_failed", str(error))
+        if written != len(payload):
+            fail("crash_watchdog_channel_short_write")
+
+
+def process_starttime(pid: int) -> int:
+    try:
+        content = (Path("/proc") / str(pid) / "stat").read_text(
+            encoding="ascii"
+        )
+    except (OSError, UnicodeError) as error:
+        fail("process_starttime_unreadable", f"pid={pid}:{error}")
+    separator = content.rfind(")")
+    fields = content[separator + 2 :].split() if separator >= 0 else []
+    if len(fields) < 20 or not fields[19].isdigit():
+        fail("process_starttime_invalid", str(pid))
+    return int(fields[19])
+
+
+def process_group_live_members(pgid: int) -> list[int]:
+    members: list[int] = []
+    for candidate in Path("/proc").iterdir():
+        if not candidate.name.isdigit():
+            continue
+        try:
+            content = (candidate / "stat").read_text(encoding="ascii")
+        except (OSError, UnicodeError):
+            continue
+        separator = content.rfind(")")
+        fields = content[separator + 2 :].split() if separator >= 0 else []
+        if (
+            len(fields) >= 3
+            and fields[2].lstrip("-").isdigit()
+            and int(fields[2]) == pgid
+            and fields[0] != "Z"
+        ):
+            members.append(int(candidate.name))
+    return sorted(members)
+
+
 class Runner:
     def __init__(
         self, root: Path, guard: IntegrityGuard, timeout: int
@@ -760,6 +815,7 @@ class Runner:
         self.guard = guard
         self.timeout = timeout
         self.items: list[CommandEvidence] = []
+        self.watchdog: CrashWatchdog | None = None
 
     def run(
         self,
@@ -783,14 +839,24 @@ class Runner:
                 env=environment,
                 start_new_session=True,
             )
+            if self.watchdog is not None:
+                self.watchdog.send(
+                    f"PGID {process.pid} {process_starttime(process.pid)}"
+                )
             stdout_full, stderr_full = process.communicate(timeout=self.timeout)
+            if self.watchdog is not None:
+                self.watchdog.send(f"CLEAR {process.pid}")
         except subprocess.TimeoutExpired as error:
             if process is not None:
                 terminate_process_group(process)
+                if self.watchdog is not None:
+                    self.watchdog.send(f"CLEAR {process.pid}")
             fail("command_timeout", f"{label}:{error.timeout}")
         except BaseException:
             if process is not None:
                 terminate_process_group(process)
+                if self.watchdog is not None:
+                    self.watchdog.send(f"CLEAR {process.pid}")
             raise
         stdout = stdout_full[:1024 * 1024]
         stderr = stderr_full[:1024 * 1024]
@@ -839,6 +905,42 @@ def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
         process.wait(timeout=2)
     except subprocess.TimeoutExpired:
         pass
+
+
+def terminate_external_process_group(pgid: int, expected_starttime: int) -> None:
+    if pgid <= 1:
+        return
+    try:
+        observed_starttime = process_starttime(pgid)
+    except HarnessError:
+        observed_starttime = None
+    if (
+        observed_starttime is not None
+        and observed_starttime != expected_starttime
+    ):
+        fail("active_command_pid_reused", str(pgid))
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if not process_group_live_members(pgid):
+            return
+        time.sleep(0.05)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if not process_group_live_members(pgid):
+            return
+        time.sleep(0.05)
+    fail(
+        "active_command_group_remaining",
+        repr(process_group_live_members(pgid)),
+    )
 
 
 def parse_invocation(output: str, expected_action: str) -> str:
@@ -1135,11 +1237,9 @@ def write_receipt(path: Path, value: dict[str, Any]) -> str:
     return sha256_bytes(encoded)
 
 
-def write_terminal_receipt(path: Path, value: dict[str, Any]) -> str:
-    pending = path.with_name("." + path.name + ".pending")
+def publish_pending_receipt(pending: Path, path: Path) -> None:
     linked = False
     try:
-        digest = write_receipt(pending, value)
         os.link(pending, path, follow_symlinks=False)
         linked = True
         pending.unlink()
@@ -1155,7 +1255,6 @@ def write_terminal_receipt(path: Path, value: dict[str, Any]) -> str:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-        return digest
     except BaseException:
         for candidate in (path if linked else None, pending):
             if candidate is None:
@@ -1175,6 +1274,13 @@ def write_terminal_receipt(path: Path, value: dict[str, Any]) -> str:
         except OSError:
             pass
         raise
+
+
+def write_terminal_receipt(path: Path, value: dict[str, Any]) -> str:
+    pending = path.with_name("." + path.name + ".pending")
+    digest = write_receipt(pending, value)
+    publish_pending_receipt(pending, path)
+    return digest
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1296,6 +1402,7 @@ def cleanup_command(
     argv: Sequence[str],
     guard: IntegrityGuard,
     timeout: int,
+    watchdog: CrashWatchdog | None = None,
 ) -> dict[str, Any]:
     attempt: dict[str, Any] = {
         "label": label,
@@ -1318,7 +1425,13 @@ def cleanup_command(
             env=environment,
             start_new_session=True,
         )
+        if watchdog is not None:
+            watchdog.send(
+                f"PGID {process.pid} {process_starttime(process.pid)}"
+            )
         stdout, stderr = process.communicate(timeout=timeout)
+        if watchdog is not None:
+            watchdog.send(f"CLEAR {process.pid}")
         attempt["returncode"] = process.returncode
         attempt["completed"] = True
         attempt["stdout"] = stdout[:4096].decode(
@@ -1330,10 +1443,14 @@ def cleanup_command(
     except subprocess.TimeoutExpired:
         if process is not None:
             terminate_process_group(process)
+            if watchdog is not None:
+                watchdog.send(f"CLEAR {process.pid}")
         attempt["error"] = "timeout"
     except BaseException as error:
         if process is not None:
             terminate_process_group(process)
+            if watchdog is not None:
+                watchdog.send(f"CLEAR {process.pid}")
         attempt["error"] = type(error).__name__
     return attempt
 
@@ -1437,6 +1554,7 @@ def perform_failure_cleanup(
     runtime_root: Path,
     output_root: Path,
     credential_context: tuple[Path, dict[str, Path], str],
+    watchdog: CrashWatchdog | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     adapter_path = cleanup_args["adapter"]
     common_cleanup = {
@@ -1453,6 +1571,7 @@ def perform_failure_cleanup(
                 adapter_arguments(adapter_path, operation, **common_cleanup),
                 adapter_guard,
                 timeout,
+                watchdog,
             )
         )
     systemctl = common_cleanup["systemctl"]
@@ -1471,6 +1590,7 @@ def perform_failure_cleanup(
             ],
             systemctl_guard,
             timeout,
+            watchdog,
         )
         attempts.append(attempt)
         if attempt.get("returncode") != 0:
@@ -1490,6 +1610,7 @@ def perform_failure_cleanup(
                     [str(systemctl), "--user", action, unit],
                     systemctl_guard,
                     timeout,
+                    watchdog,
                 )
             )
         attempts.append(
@@ -1498,6 +1619,7 @@ def perform_failure_cleanup(
                 adapter_arguments(adapter_path, "collect", **common_cleanup),
                 adapter_guard,
                 timeout,
+                watchdog,
             )
         )
         deadline = time.monotonic() + min(timeout, 5)
@@ -1555,6 +1677,344 @@ def perform_failure_cleanup(
     return attempts, census
 
 
+def valid_terminal_receipt(path: Path) -> dict[str, Any] | None:
+    try:
+        metadata = path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            return None
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(value, dict)
+        or value.get("schema_version") != SCHEMA
+        or value.get("result") not in {"pass", "fail"}
+    ):
+        return None
+    return value
+
+
+def remove_terminal_artifacts(output_root: Path) -> None:
+    for name in (
+        "receipt.json",
+        ".receipt.json.pending",
+        "failure.json",
+        ".failure.json.pending",
+    ):
+        try:
+            (output_root / name).unlink()
+        except FileNotFoundError:
+            pass
+    descriptor = os.open(output_root, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def read_watchdog_ack(
+    watchdog: CrashWatchdog, expected: bytes, timeout: int
+) -> None:
+    readable, _, _ = select.select(
+        [watchdog.acknowledgement_fd], [], [], timeout
+    )
+    if not readable:
+        fail("crash_watchdog_ack_timeout", expected.decode("ascii").strip())
+    try:
+        observed = os.read(watchdog.acknowledgement_fd, 128)
+    except OSError as error:
+        fail("crash_watchdog_ack_failed", str(error))
+    if observed != expected:
+        fail(
+            "crash_watchdog_ack_invalid",
+            f"expected={expected!r}:observed={observed!r}",
+        )
+
+
+def crash_watchdog_child(
+    *,
+    command_fd: int,
+    acknowledgement_fd: int,
+    parent_pid: int,
+    cleanup_args: dict[str, Any],
+    adapter_guard: IntegrityGuard,
+    systemctl_guard: IntegrityGuard,
+    timeout: int,
+    proc_root: Path,
+    binary: Path,
+    database: Path,
+    runtime_root: Path,
+    output_root: Path,
+    credential_context: tuple[Path, dict[str, Path], str],
+) -> None:
+    os.setsid()
+    for current in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(current, signal.SIG_DFL)
+    null_fd = os.open("/dev/null", os.O_RDWR)
+    try:
+        for descriptor in (0, 1, 2):
+            os.dup2(null_fd, descriptor)
+    finally:
+        if null_fd > 2:
+            os.close(null_fd)
+    os.write(acknowledgement_fd, b"READY\n")
+    active_group: tuple[int, int] | None = None
+    buffer = b""
+    committed = False
+    while True:
+        chunk = os.read(command_fd, 4096)
+        if not chunk:
+            break
+        buffer += chunk
+        while b"\n" in buffer:
+            raw, buffer = buffer.split(b"\n", 1)
+            command = raw.decode("ascii", errors="strict")
+            if command.startswith("PGID "):
+                parts = command.split()
+                if (
+                    len(parts) != 3
+                    or not parts[1].isdigit()
+                    or not parts[2].isdigit()
+                ):
+                    raise RuntimeError("watchdog pgid format invalid")
+                value = int(parts[1])
+                starttime = int(parts[2])
+                if value <= 1 or starttime <= 0:
+                    raise RuntimeError("watchdog pgid invalid")
+                active_group = (value, starttime)
+            elif command.startswith("CLEAR "):
+                value = int(command.removeprefix("CLEAR "))
+                if active_group is not None and active_group[0] == value:
+                    active_group = None
+            elif command.startswith("PUBLISH_PASS "):
+                expected_sha = command.removeprefix("PUBLISH_PASS ")
+                pending = output_root / ".receipt.json.pending"
+                receipt_path = output_root / "receipt.json"
+                if (
+                    not SHA_RE.fullmatch(expected_sha)
+                    or sha256_file(pending) != expected_sha
+                ):
+                    raise RuntimeError("watchdog pass digest invalid")
+                try:
+                    pending_value = json.loads(
+                        pending.read_text(encoding="utf-8")
+                    )
+                except (OSError, UnicodeError, json.JSONDecodeError) as error:
+                    raise RuntimeError(
+                        "watchdog pass receipt invalid"
+                    ) from error
+                if (
+                    not isinstance(pending_value, dict)
+                    or pending_value.get("schema_version") != SCHEMA
+                    or pending_value.get("result") != "pass"
+                ):
+                    raise RuntimeError("watchdog pass contract invalid")
+                publish_pending_receipt(pending, receipt_path)
+                committed = True
+                os.write(acknowledgement_fd, b"PUBLISHED\n")
+                break
+            elif command == "COMMIT":
+                committed = True
+                os.write(acknowledgement_fd, b"COMMITTED\n")
+                break
+            else:
+                raise RuntimeError("watchdog command invalid")
+        if committed:
+            break
+    if committed:
+        return
+    watchdog_errors: list[str] = []
+    if active_group is not None:
+        try:
+            terminate_external_process_group(*active_group)
+        except (HarnessError, OSError) as error:
+            watchdog_errors.append(
+                f"active_group:{type(error).__name__}:{error}"
+            )
+    try:
+        attempts, census = perform_failure_cleanup(
+            cleanup_args=cleanup_args,
+            adapter_guard=adapter_guard,
+            systemctl_guard=systemctl_guard,
+            timeout=timeout,
+            proc_root=proc_root,
+            binary=binary,
+            database=database,
+            runtime_root=runtime_root,
+            output_root=output_root,
+            credential_context=credential_context,
+        )
+    except (HarnessError, KeyError, OSError) as error:
+        attempts = []
+        census = cleanup_census(
+            proc_root,
+            binary,
+            database,
+            runtime_root,
+            output_root,
+            credential_context[2],
+            "unknown",
+        )
+        watchdog_errors.append(
+            f"cleanup:{type(error).__name__}:{error}"
+        )
+    census.setdefault("cleanup_errors", []).extend(watchdog_errors)
+    failed = valid_terminal_receipt(output_root / "failure.json")
+    if failed is not None:
+        return
+    remove_terminal_artifacts(output_root)
+    write_terminal_receipt(
+        output_root / "failure.json",
+        {
+            "schema_version": SCHEMA,
+            "result": "fail",
+            "created_at": utc_now(),
+            "reason_code": "parent_process_lost",
+            "detail": f"parent_pid={parent_pid}",
+            "cleanup_attempts": attempts,
+            "cleanup_verified": cleanup_verified(census),
+            "residues": census,
+            "watchdog": {
+                "pid": os.getpid(),
+                "parent_pid": parent_pid,
+                "active_pgid_terminated": (
+                    None if active_group is None else active_group[0]
+                ),
+            },
+        },
+    )
+
+
+def arm_crash_watchdog(
+    *,
+    cleanup_args: dict[str, Any],
+    adapter_guard: IntegrityGuard,
+    systemctl_guard: IntegrityGuard,
+    timeout: int,
+    proc_root: Path,
+    binary: Path,
+    database: Path,
+    runtime_root: Path,
+    output_root: Path,
+    credential_context: tuple[Path, dict[str, Path], str],
+) -> CrashWatchdog:
+    command_read, command_write = os.pipe2(os.O_CLOEXEC)
+    acknowledgement_read, acknowledgement_write = os.pipe2(os.O_CLOEXEC)
+    parent_pid = os.getpid()
+    try:
+        pid = os.fork()
+    except OSError:
+        for descriptor in (
+            command_read,
+            command_write,
+            acknowledgement_read,
+            acknowledgement_write,
+        ):
+            os.close(descriptor)
+        raise
+    if pid == 0:
+        os.close(command_write)
+        os.close(acknowledgement_read)
+        retained = {command_read, acknowledgement_write}
+        try:
+            inherited = [
+                int(candidate.name)
+                for candidate in Path("/proc/self/fd").iterdir()
+                if candidate.name.isdigit()
+            ]
+        except OSError:
+            inherited = []
+        for descriptor in inherited:
+            if descriptor > 2 and descriptor not in retained:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+        try:
+            crash_watchdog_child(
+                command_fd=command_read,
+                acknowledgement_fd=acknowledgement_write,
+                parent_pid=parent_pid,
+                cleanup_args=cleanup_args,
+                adapter_guard=adapter_guard,
+                systemctl_guard=systemctl_guard,
+                timeout=timeout,
+                proc_root=proc_root,
+                binary=binary,
+                database=database,
+                runtime_root=runtime_root,
+                output_root=output_root,
+                credential_context=credential_context,
+            )
+            os._exit(0)
+        except BaseException:
+            os._exit(125)
+    os.close(command_read)
+    os.close(acknowledgement_write)
+    watchdog = CrashWatchdog(pid, command_write, acknowledgement_read)
+    try:
+        read_watchdog_ack(watchdog, b"READY\n", min(timeout, 5))
+    except BaseException:
+        os.close(command_write)
+        os.close(acknowledgement_read)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        os.waitpid(pid, 0)
+        raise
+    return watchdog
+
+
+def publish_pass_with_watchdog(
+    watchdog: CrashWatchdog,
+    receipt_path: Path,
+    receipt: dict[str, Any],
+    timeout: int,
+) -> str:
+    pending = receipt_path.with_name("." + receipt_path.name + ".pending")
+    digest = write_receipt(pending, receipt)
+    watchdog.send(f"PUBLISH_PASS {digest}")
+    read_watchdog_ack(watchdog, b"PUBLISHED\n", min(timeout, 5))
+    os.close(watchdog.command_fd)
+    os.close(watchdog.acknowledgement_fd)
+    _, status = os.waitpid(watchdog.pid, 0)
+    watchdog.armed = False
+    if status != 0:
+        fail("crash_watchdog_publish_failed", str(status))
+    if sha256_file(receipt_path) != digest:
+        fail("terminal_receipt_hash_mismatch")
+    return digest
+
+
+def commit_crash_watchdog(watchdog: CrashWatchdog, timeout: int) -> None:
+    if not watchdog.armed:
+        return
+    watchdog.send("COMMIT")
+    read_watchdog_ack(watchdog, b"COMMITTED\n", min(timeout, 5))
+    os.close(watchdog.command_fd)
+    os.close(watchdog.acknowledgement_fd)
+    _, status = os.waitpid(watchdog.pid, 0)
+    watchdog.armed = False
+    if status != 0:
+        fail("crash_watchdog_exit_failed", str(status))
+
+
+def trigger_crash_watchdog(watchdog: CrashWatchdog) -> None:
+    if not watchdog.armed:
+        return
+    os.close(watchdog.command_fd)
+    os.close(watchdog.acknowledgement_fd)
+    _, status = os.waitpid(watchdog.pid, 0)
+    watchdog.armed = False
+    if status != 0:
+        fail("crash_watchdog_cleanup_failed", str(status))
+
+
 def main(arguments: Sequence[str]) -> int:
     args = parser().parse_args(arguments)
     os.umask(0o077)
@@ -1577,6 +2037,7 @@ def main(arguments: Sequence[str]) -> int:
     cleanup_resource_context: (
         tuple[Path, Path, Path, Path] | None
     ) = None
+    crash_watchdog: CrashWatchdog | None = None
     credential_cleanup_context: (
         tuple[Path, dict[str, Path], str] | None
     ) = None
@@ -2045,6 +2506,19 @@ def main(arguments: Sequence[str]) -> int:
             "adapter": projected_adapter,
             **common,
         }
+        crash_watchdog = arm_crash_watchdog(
+            cleanup_args=cleanup_args,
+            adapter_guard=cleanup_guard,
+            systemctl_guard=cleanup_systemctl_guard,
+            timeout=args.command_timeout,
+            proc_root=proc_root,
+            binary=projected_binary,
+            database=database,
+            runtime_root=runtime_root,
+            output_root=output_root,
+            credential_context=credential_cleanup_context,
+        )
+        runner.watchdog = crash_watchdog
         cycles: list[dict[str, Any]] = []
         snapshots: list[dict[str, Any]] = []
         for cycle in (1, 2):
@@ -2326,7 +2800,12 @@ def main(arguments: Sequence[str]) -> int:
         }
         for current in handled_signals:
             signal.signal(current, signal.SIG_IGN)
-        receipt_sha = write_terminal_receipt(receipt_path, receipt)
+        receipt_sha = publish_pass_with_watchdog(
+            crash_watchdog,
+            receipt_path,
+            receipt,
+            args.command_timeout,
+        )
         terminal_published = True
         try:
             print(
@@ -2360,6 +2839,11 @@ def main(arguments: Sequence[str]) -> int:
             "cleanup_errors": [],
         }
         if output_root is not None and output_root.exists():
+            if not terminal_published and (output_root / "receipt.json").exists():
+                try:
+                    remove_terminal_artifacts(output_root)
+                except OSError:
+                    pass
             if (
                 cleanup_args is not None
                 and cleanup_guard is not None
@@ -2380,6 +2864,7 @@ def main(arguments: Sequence[str]) -> int:
                             runtime_root=cleanup_resource_context[3],
                             output_root=output_root,
                             credential_context=credential_cleanup_context,
+                            watchdog=crash_watchdog,
                         )
                     )
                 except (HarnessError, KeyError, OSError) as cleanup_error:
@@ -2411,8 +2896,20 @@ def main(arguments: Sequence[str]) -> int:
                             "residues": cleanup_residues,
                         },
                     )
+                    terminal_published = True
                 except (OSError, HarnessError):
                     pass
+            if (
+                terminal_published
+                and crash_watchdog is not None
+                and crash_watchdog.armed
+            ):
+                try:
+                    commit_crash_watchdog(
+                        crash_watchdog, args.command_timeout
+                    )
+                except HarnessError:
+                    terminal_published = False
         print(
             f"{PROGRAM}: status=error reason_code={error.code}"
             + (f" detail={json.dumps(error.detail)}" if error.detail else ""),
@@ -2420,6 +2917,8 @@ def main(arguments: Sequence[str]) -> int:
         )
         return 1
     finally:
+        if crash_watchdog is not None and crash_watchdog.armed:
+            trigger_crash_watchdog(crash_watchdog)
         if not terminal_published:
             for current, previous in previous_signal_handlers.items():
                 signal.signal(current, previous)
