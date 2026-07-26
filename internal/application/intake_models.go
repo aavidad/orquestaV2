@@ -116,13 +116,14 @@ type IntakeResult struct {
 // IntakeSnapshot is the adapter-safe state-centric representation of
 // intake.State. It contains no independent lifecycle or mutation authority.
 type IntakeSnapshot struct {
-	Schema         string            `json:"schema"`
-	Ref            intake.Ref        `json:"ref"`
-	Revision       intake.Revision   `json:"revision"`
-	Policy         intake.Policy     `json:"policy"`
-	QuestionRounds uint32            `json:"question_rounds"`
-	Issues         []intake.Issue    `json:"issues,omitempty"`
-	Questions      []intake.Question `json:"questions,omitempty"`
-	Decisions      []intake.Decision `json:"decisions,omitempty"`
-	History        []intake.Mutation `json:"history,omitempty"`
+	Schema           string                   `json:"schema"`
+	Ref              intake.Ref               `json:"ref"`
+	Revision         intake.Revision          `json:"revision"`
+	Policy           intake.Policy            `json:"policy"`
+	QuestionRounds   uint32                   `json:"question_rounds"`
+	Issues           []intake.Issue           `json:"issues,omitempty"`
+	Questions        []intake.Question        `json:"questions,omitempty"`
+	QuestionVersions []intake.QuestionVersion `json:"question_versions,omitempty"`
+	Decisions        []intake.Decision        `json:"decisions,omitempty"`
+	History          []intake.Mutation        `json:"history,omitempty"`
 }

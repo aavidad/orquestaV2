@@ -12,6 +12,10 @@ var errIntakeSnapshotInvalid = errors.New("application.intake_snapshot_invalid")
 func SnapshotIntake(state intake.State) IntakeSnapshot {
 	issues := state.Issues()
 	questions := state.Questions()
+	var questionVersions []intake.QuestionVersion
+	if state.HasQuestionRevisions() {
+		questionVersions = state.QuestionVersions()
+	}
 	decisions := state.Decisions()
 	history := state.History()
 	if len(issues) == 0 {
@@ -27,15 +31,16 @@ func SnapshotIntake(state intake.State) IntakeSnapshot {
 		history = nil
 	}
 	return IntakeSnapshot{
-		Schema:         state.Schema(),
-		Ref:            state.Ref(),
-		Revision:       state.Revision(),
-		Policy:         state.Policy(),
-		QuestionRounds: state.QuestionRounds(),
-		Issues:         issues,
-		Questions:      questions,
-		Decisions:      decisions,
-		History:        history,
+		Schema:           state.Schema(),
+		Ref:              state.Ref(),
+		Revision:         state.Revision(),
+		Policy:           state.Policy(),
+		QuestionRounds:   state.QuestionRounds(),
+		Issues:           issues,
+		Questions:        questions,
+		QuestionVersions: questionVersions,
+		Decisions:        decisions,
+		History:          history,
 	}
 }
 
@@ -51,15 +56,49 @@ func RestoreIntake(snapshot IntakeSnapshot) (intake.State, error) {
 		return intake.State{}, invalidIntakeSnapshotWithCause(err)
 	}
 
-	issueOffset, questionOffset, decisionOffset := 0, 0, 0
+	issueOffset, questionOffset, questionVersionOffset, decisionOffset := 0, 0, 0, 0
 	for _, mutation := range snapshot.History {
 		if mutation.Revision != state.Revision()+1 ||
 			mutation.IssuesAdded < 0 || mutation.QuestionsAdded < 0 ||
+			mutation.QuestionsRevised < 0 ||
 			mutation.ChoicesRecorded < 0 ||
 			mutation.IssuesAdded > len(snapshot.Issues)-issueOffset ||
-			mutation.QuestionsAdded > len(snapshot.Questions)-questionOffset ||
 			mutation.ChoicesRecorded > len(snapshot.Decisions)-decisionOffset {
 			return intake.State{}, invalidIntakeSnapshot()
+		}
+		var questions, revisions []intake.Question
+		if len(snapshot.QuestionVersions) == 0 {
+			if mutation.QuestionsRevised != 0 ||
+				mutation.QuestionsAdded > len(snapshot.Questions)-questionOffset {
+				return intake.State{}, invalidIntakeSnapshot()
+			}
+			questions = cloneSnapshotQuestions(
+				snapshot.Questions[questionOffset : questionOffset+mutation.QuestionsAdded],
+			)
+			questionOffset += mutation.QuestionsAdded
+		} else {
+			versionCount := mutation.QuestionsAdded + mutation.QuestionsRevised
+			if versionCount > len(snapshot.QuestionVersions)-questionVersionOffset {
+				return intake.State{}, invalidIntakeSnapshot()
+			}
+			versions := snapshot.QuestionVersions[questionVersionOffset : questionVersionOffset+versionCount]
+			questions = make([]intake.Question, 0, mutation.QuestionsAdded)
+			revisions = make([]intake.Question, 0, mutation.QuestionsRevised)
+			for _, version := range versions {
+				if version.Revision != mutation.Revision {
+					return intake.State{}, invalidIntakeSnapshot()
+				}
+				if version.ReplacesRevision == 0 {
+					questions = append(questions, cloneSnapshotQuestion(version.Question))
+				} else {
+					revisions = append(revisions, cloneSnapshotQuestion(version.Question))
+				}
+			}
+			if len(questions) != mutation.QuestionsAdded ||
+				len(revisions) != mutation.QuestionsRevised {
+				return intake.State{}, invalidIntakeSnapshot()
+			}
+			questionVersionOffset += versionCount
 		}
 		choices := make([]intake.Choice, mutation.ChoicesRecorded)
 		for index := range choices {
@@ -82,10 +121,9 @@ func RestoreIntake(snapshot IntakeSnapshot) (intake.State, error) {
 				[]intake.Issue(nil),
 				snapshot.Issues[issueOffset:issueOffset+mutation.IssuesAdded]...,
 			),
-			Questions: cloneSnapshotQuestions(
-				snapshot.Questions[questionOffset : questionOffset+mutation.QuestionsAdded],
-			),
-			Choices: choices,
+			Questions:         questions,
+			QuestionRevisions: revisions,
+			Choices:           choices,
 		})
 		if applyErr != nil {
 			return intake.State{}, invalidIntakeSnapshotWithCause(applyErr)
@@ -96,11 +134,12 @@ func RestoreIntake(snapshot IntakeSnapshot) (intake.State, error) {
 		}
 		state = next
 		issueOffset += mutation.IssuesAdded
-		questionOffset += mutation.QuestionsAdded
 		decisionOffset += mutation.ChoicesRecorded
 	}
 	if issueOffset != len(snapshot.Issues) ||
-		questionOffset != len(snapshot.Questions) ||
+		(len(snapshot.QuestionVersions) == 0 && questionOffset != len(snapshot.Questions)) ||
+		(len(snapshot.QuestionVersions) > 0 &&
+			questionVersionOffset != len(snapshot.QuestionVersions)) ||
 		decisionOffset != len(snapshot.Decisions) ||
 		!reflect.DeepEqual(SnapshotIntake(state), snapshot) {
 		return intake.State{}, invalidIntakeSnapshot()
@@ -114,6 +153,9 @@ func canonicalIntakeSnapshot(snapshot IntakeSnapshot) IntakeSnapshot {
 	}
 	if len(snapshot.Questions) == 0 {
 		snapshot.Questions = nil
+	}
+	if len(snapshot.QuestionVersions) == 0 {
+		snapshot.QuestionVersions = nil
 	}
 	if len(snapshot.Decisions) == 0 {
 		snapshot.Decisions = nil
@@ -129,9 +171,14 @@ func cloneSnapshotQuestions(values []intake.Question) []intake.Question {
 	for index, question := range values {
 		result[index] = question
 		result[index].DerivedFrom = append([]intake.IssueRef(nil), question.DerivedFrom...)
+		result[index].DependsOn = append([]intake.QuestionRef(nil), question.DependsOn...)
 		result[index].Options = append([]intake.Option(nil), question.Options...)
 	}
 	return result
+}
+
+func cloneSnapshotQuestion(value intake.Question) intake.Question {
+	return cloneSnapshotQuestions([]intake.Question{value})[0]
 }
 
 func invalidIntakeSnapshot() error {
