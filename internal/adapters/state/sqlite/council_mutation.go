@@ -90,6 +90,11 @@ func (repository *Repository) RecordCouncilContribution(
 func (repository *Repository) RecordCouncilExecutionReplaced(
 	ctx context.Context, state application.CouncilExecutionReplacedState,
 ) error {
+	if err := validateFailedExecutionExpectedState(
+		state.Claim, state.ExpectedExecutionState, false,
+	); err != nil {
+		return invalid(err)
+	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(tx *sql.Tx) error {
 		current, err := requireCouncilMutationFrontier(ctx, tx, state.Claim.Action.GoalRef,
 			state.Claim.Action.WorkItemRef, state.ExpectedGoalRevision, state.ExpectedItemRevision)
@@ -99,8 +104,7 @@ func (repository *Repository) RecordCouncilExecutionReplaced(
 		if !validCouncilReplacement(current, state) {
 			return invalid(errors.New("sqlite.council_replacement_invalid"))
 		}
-		expected := failedClaimExpectedExecutionState(state.Claim)
-		if err := updateExecutionCAS(ctx, tx, state.FailedExecution, expected); err != nil {
+		if err := updateExecutionCAS(ctx, tx, state.FailedExecution, state.ExpectedExecutionState); err != nil {
 			return err
 		}
 		if state.BudgetSettlement != nil {
@@ -124,6 +128,11 @@ func (repository *Repository) RecordCouncilExecutionReplaced(
 func (repository *Repository) RecordCouncilExecutionFailed(
 	ctx context.Context, state application.CouncilExecutionFailedState,
 ) error {
+	if err := validateFailedExecutionExpectedState(
+		state.Claim, state.ExpectedExecutionState, true,
+	); err != nil {
+		return invalid(err)
+	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(tx *sql.Tx) error {
 		current, err := requireCouncilMutationFrontier(ctx, tx, state.Claim.Action.GoalRef,
 			state.Claim.Action.WorkItemRef, state.ExpectedGoalRevision, state.ExpectedItemRevision)
@@ -132,9 +141,8 @@ func (repository *Repository) RecordCouncilExecutionFailed(
 		}
 		role, ok := councilExecutionRole(state.Execution)
 		round, found := councilRoundFor(current.CouncilRounds, state.Execution.CouncilSubjectDigest)
-		expected := failedClaimExpectedExecutionState(state.Claim)
 		stored, exists := executionFor(current.Executions, state.Execution.Ref)
-		if !ok || !found || role == "" || !exists || stored.State != expected ||
+		if !ok || !found || role == "" || !exists || stored.State != state.ExpectedExecutionState ||
 			state.Execution.Ref != state.Claim.Action.ExecutionRef ||
 			state.Execution.GoalRef != state.Claim.Action.GoalRef ||
 			state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef ||
@@ -164,7 +172,7 @@ func (repository *Repository) RecordCouncilExecutionFailed(
 				return err
 			}
 		}
-		if err := updateExecutionCAS(ctx, tx, state.Execution, expected); err != nil {
+		if err := updateExecutionCAS(ctx, tx, state.Execution, state.ExpectedExecutionState); err != nil {
 			return err
 		}
 		if state.AuthorExecution.Ref.String() != "" {

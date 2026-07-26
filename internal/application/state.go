@@ -503,16 +503,17 @@ type ExecutionReplacedState struct {
 // ExecutionInterruptedState consumes an exhausted provider attempt without
 // closing the Goal. The Director may causally replan the interrupted WorkItem.
 type ExecutionInterruptedState struct {
-	Claim                ActionClaim
-	ExpectedGoalRevision goal.Revision
-	ExpectedItemRevision goal.Revision
-	Goal                 goal.Goal
-	Execution            ExecutionRecord
-	NewExecutions        []ExecutionRecord
-	NewActions           []ActionRecord
-	Events               []EventRecord
-	BudgetSettlement     *governance.BudgetSettlement
-	OperationAt          time.Time
+	Claim                  ActionClaim
+	ExpectedGoalRevision   goal.Revision
+	ExpectedItemRevision   goal.Revision
+	ExpectedExecutionState ExecutionState
+	Goal                   goal.Goal
+	Execution              ExecutionRecord
+	NewExecutions          []ExecutionRecord
+	NewActions             []ActionRecord
+	Events                 []EventRecord
+	BudgetSettlement       *governance.BudgetSettlement
+	OperationAt            time.Time
 }
 
 type GoalSucceededState struct {
@@ -577,16 +578,17 @@ type ReviewAssessedState struct {
 // ReviewExecutionReplacedState retries a reviewer without rebinding the
 // WorkItem's authoritative author execution.
 type ReviewExecutionReplacedState struct {
-	Claim                ActionClaim
-	ExpectedGoalRevision goal.Revision
-	ExpectedItemRevision goal.Revision
-	FailedExecution      ExecutionRecord
-	ReplacementExecution ExecutionRecord
-	NextAction           ActionRecord
-	DiagnosticArtifact   *ArtifactRecord
-	BudgetSettlement     *governance.BudgetSettlement
-	Events               []EventRecord
-	OperationAt          time.Time
+	Claim                  ActionClaim
+	ExpectedGoalRevision   goal.Revision
+	ExpectedItemRevision   goal.Revision
+	ExpectedExecutionState ExecutionState
+	FailedExecution        ExecutionRecord
+	ReplacementExecution   ExecutionRecord
+	NextAction             ActionRecord
+	DiagnosticArtifact     *ArtifactRecord
+	BudgetSettlement       *governance.BudgetSettlement
+	Events                 []EventRecord
+	OperationAt            time.Time
 }
 
 // ReviewParticipantRetirement terminalizes another live participant of the
@@ -597,23 +599,24 @@ type ReviewParticipantRetirement struct {
 }
 
 type ReviewExecutionFailedState struct {
-	Claim                ActionClaim
-	ExpectedGoalRevision goal.Revision
-	ExpectedItemRevision goal.Revision
-	Execution            ExecutionRecord
-	Goal                 goal.Goal
-	AuthorExecution      ExecutionRecord
-	RetiredReviewers     []ReviewParticipantRetirement
-	RetireActionRefs     []string
-	CleanupControls      []ControlRecord
-	CleanupActions       []ActionRecord
-	ResolvedCleanup      *ControlRecord
-	DiagnosticArtifact   *ArtifactRecord
-	EffectReceipt        *EffectReceipt
-	QuarantineClaim      bool
-	BudgetSettlement     *governance.BudgetSettlement
-	Events               []EventRecord
-	OperationAt          time.Time
+	Claim                  ActionClaim
+	ExpectedGoalRevision   goal.Revision
+	ExpectedItemRevision   goal.Revision
+	ExpectedExecutionState ExecutionState
+	Execution              ExecutionRecord
+	Goal                   goal.Goal
+	AuthorExecution        ExecutionRecord
+	RetiredReviewers       []ReviewParticipantRetirement
+	RetireActionRefs       []string
+	CleanupControls        []ControlRecord
+	CleanupActions         []ActionRecord
+	ResolvedCleanup        *ControlRecord
+	DiagnosticArtifact     *ArtifactRecord
+	EffectReceipt          *EffectReceipt
+	QuarantineClaim        bool
+	BudgetSettlement       *governance.BudgetSettlement
+	Events                 []EventRecord
+	OperationAt            time.Time
 }
 
 // StateRepository is the durable state port. Every mutation is an atomic

@@ -259,6 +259,7 @@ func (orchestrator *Orchestrator) resolveUnappliedReviewCleanupLaunch(ctx contex
 	control ControlRecord, attemptRef string, at time.Time,
 ) error {
 	at = lifecycleTime(at, record.Goal, item)
+	expectedExecutionState := execution.State
 	execution.State, execution.FailureCode, execution.FinishedAt =
 		ExecutionFailed, "review.round_aborted", at.UTC()
 	aggregate, author := record.Goal, ExecutionRecord{}
@@ -290,7 +291,8 @@ func (orchestrator *Orchestrator) resolveUnappliedReviewCleanupLaunch(ctx contex
 	}
 	return orchestrator.state.RecordReviewExecutionFailed(ctx, ReviewExecutionFailedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		Execution: execution, Goal: aggregate, AuthorExecution: author, ResolvedCleanup: &resolved,
+		ExpectedExecutionState: expectedExecutionState,
+		Execution:              execution, Goal: aggregate, AuthorExecution: author, ResolvedCleanup: &resolved,
 		BudgetSettlement: settlement, Events: events, OperationAt: at.UTC(),
 	})
 }

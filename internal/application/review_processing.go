@@ -135,6 +135,7 @@ func (orchestrator *Orchestrator) replaceReviewerExecutionWithDiagnostic(ctx con
 		return &StateError{Code: StateConflict}
 	}
 	at = lifecycleTime(at, record.Goal, item)
+	expectedExecutionState := execution.State
 	execution.State, execution.FailureCode, execution.FinishedAt = ExecutionFailed, stableFailureCode(code), at.UTC()
 	settlement, err := settlementForExecutionAttempt(record, claim, execution, usage, diskBytes, at, definitelyUnapplied)
 	if err != nil {
@@ -171,7 +172,8 @@ func (orchestrator *Orchestrator) replaceReviewerExecutionWithDiagnostic(ctx con
 			cleanupEvents...)
 		return orchestrator.state.RecordReviewExecutionFailed(ctx, ReviewExecutionFailedState{
 			Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-			Execution: execution, Goal: aggregate, AuthorExecution: author,
+			ExpectedExecutionState: expectedExecutionState,
+			Execution:              execution, Goal: aggregate, AuthorExecution: author,
 			RetiredReviewers: retired, RetireActionRefs: actionRefs,
 			CleanupControls: cleanupControls, CleanupActions: cleanupActions, DiagnosticArtifact: diagnostic,
 			BudgetSettlement: settlement, Events: events, OperationAt: at.UTC(),
@@ -208,7 +210,8 @@ func (orchestrator *Orchestrator) replaceReviewerExecutionWithDiagnostic(ctx con
 	}
 	return orchestrator.state.RecordReviewExecutionReplaced(ctx, ReviewExecutionReplacedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		FailedExecution: execution, ReplacementExecution: replacement, NextAction: action,
+		ExpectedExecutionState: expectedExecutionState,
+		FailedExecution:        execution, ReplacementExecution: replacement, NextAction: action,
 		DiagnosticArtifact: diagnostic,
 		BudgetSettlement:   settlement, Events: events, OperationAt: at.UTC(),
 	})

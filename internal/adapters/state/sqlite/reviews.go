@@ -55,9 +55,13 @@ func (repository *Repository) RecordReviewAssessed(ctx context.Context, state ap
 func (repository *Repository) RecordReviewExecutionReplaced(ctx context.Context,
 	state application.ReviewExecutionReplacedState,
 ) error {
+	if err := validateFailedExecutionExpectedState(
+		state.Claim, state.ExpectedExecutionState, false,
+	); err != nil {
+		return invalid(err)
+	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(tx *sql.Tx) error {
-		expected := failedClaimExpectedExecutionState(state.Claim)
-		if err := updateExecutionCAS(ctx, tx, state.FailedExecution, expected); err != nil {
+		if err := updateExecutionCAS(ctx, tx, state.FailedExecution, state.ExpectedExecutionState); err != nil {
 			return err
 		}
 		if state.BudgetSettlement != nil {
@@ -86,6 +90,11 @@ func (repository *Repository) RecordReviewExecutionReplaced(ctx context.Context,
 func (repository *Repository) RecordReviewExecutionFailed(ctx context.Context,
 	state application.ReviewExecutionFailedState,
 ) error {
+	if err := validateFailedExecutionExpectedState(
+		state.Claim, state.ExpectedExecutionState, true,
+	); err != nil {
+		return invalid(err)
+	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(tx *sql.Tx) error {
 		if state.Goal.Revision() != state.ExpectedGoalRevision {
 			if err := updateGoalCAS(ctx, tx, state.Goal, state.ExpectedGoalRevision); err != nil {
@@ -101,8 +110,7 @@ func (repository *Repository) RecordReviewExecutionFailed(ctx context.Context,
 				return err
 			}
 		}
-		expected := failedClaimExpectedExecutionState(state.Claim)
-		if err := updateExecutionCAS(ctx, tx, state.Execution, expected); err != nil {
+		if err := updateExecutionCAS(ctx, tx, state.Execution, state.ExpectedExecutionState); err != nil {
 			return err
 		}
 		if state.AuthorExecution.Ref.String() != "" {

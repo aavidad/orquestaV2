@@ -47,15 +47,16 @@ type CouncilContributionState struct {
 // CouncilExecutionReplaced retries one Council role without rebinding the
 // WorkItem authority or touching its two peer roles.
 type CouncilExecutionReplacedState struct {
-	Claim                ActionClaim
-	ExpectedGoalRevision goal.Revision
-	ExpectedItemRevision goal.Revision
-	FailedExecution      ExecutionRecord
-	ReplacementExecution ExecutionRecord
-	NextAction           ActionRecord
-	BudgetSettlement     *governance.BudgetSettlement
-	Events               []EventRecord
-	OperationAt          time.Time
+	Claim                  ActionClaim
+	ExpectedGoalRevision   goal.Revision
+	ExpectedItemRevision   goal.Revision
+	ExpectedExecutionState ExecutionState
+	FailedExecution        ExecutionRecord
+	ReplacementExecution   ExecutionRecord
+	NextAction             ActionRecord
+	BudgetSettlement       *governance.BudgetSettlement
+	Events                 []EventRecord
+	OperationAt            time.Time
 }
 
 type CouncilParticipantRetirement struct {
@@ -66,20 +67,21 @@ type CouncilParticipantRetirement struct {
 // CouncilExecutionFailed preserves a failed/exhausted role as a durable fact
 // and atomically begins causal cleanup of the remaining live round.
 type CouncilExecutionFailedState struct {
-	Claim                ActionClaim
-	ExpectedGoalRevision goal.Revision
-	ExpectedItemRevision goal.Revision
-	Execution            ExecutionRecord
-	Goal                 goal.Goal
-	AuthorExecution      ExecutionRecord
-	RetiredPeers         []CouncilParticipantRetirement
-	RetireActionRefs     []string
-	CleanupControls      []ControlRecord
-	CleanupActions       []ActionRecord
-	ResolvedCleanup      *ControlRecord
-	BudgetSettlement     *governance.BudgetSettlement
-	Events               []EventRecord
-	OperationAt          time.Time
+	Claim                  ActionClaim
+	ExpectedGoalRevision   goal.Revision
+	ExpectedItemRevision   goal.Revision
+	ExpectedExecutionState ExecutionState
+	Execution              ExecutionRecord
+	Goal                   goal.Goal
+	AuthorExecution        ExecutionRecord
+	RetiredPeers           []CouncilParticipantRetirement
+	RetireActionRefs       []string
+	CleanupControls        []ControlRecord
+	CleanupActions         []ActionRecord
+	ResolvedCleanup        *ControlRecord
+	BudgetSettlement       *governance.BudgetSettlement
+	Events                 []EventRecord
+	OperationAt            time.Time
 }
 
 // CouncilSkipState is an authorized human fact before any round or fact.

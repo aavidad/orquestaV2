@@ -34,6 +34,7 @@ func (orchestrator *Orchestrator) abortReviewerLaunch(ctx context.Context, claim
 	if !found || execution.State != ExecutionDispatching || !isReviewerExecution(execution) {
 		return &StateError{Code: StateConflict}
 	}
+	expectedExecutionState := execution.State
 	at := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State, execution.FailureCode, execution.FinishedAt =
 		ExecutionFailed, "review.external_ref_reused", at.UTC()
@@ -76,7 +77,8 @@ func (orchestrator *Orchestrator) abortReviewerLaunch(ctx context.Context, claim
 	}}, cleanupEvents...)
 	return orchestrator.state.RecordReviewExecutionFailed(ctx, ReviewExecutionFailedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		Execution: execution, Goal: aggregate, AuthorExecution: author,
+		ExpectedExecutionState: expectedExecutionState,
+		Execution:              execution, Goal: aggregate, AuthorExecution: author,
 		RetiredReviewers: retired, RetireActionRefs: actionRefs,
 		CleanupControls: cleanupControls, CleanupActions: cleanupActions,
 		ResolvedCleanup: resolvedCleanup,
