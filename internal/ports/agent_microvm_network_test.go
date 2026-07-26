@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 )
 
@@ -27,8 +26,8 @@ func validAgentMicroVMNetworkPolicy(t *testing.T) AgentMicroVMNetworkPolicy {
 		Ref: "policy:agent-network:test", Scope: scope, GuestCID: 42,
 		LaunchIdentityRef: "launch-identity:network-test",
 		LaunchCredential: AgentMicroVMLaunchCredentialBinding{
-			Ref:        credentials.CredentialRef("credential:launch-network-test"),
-			OwnerRef:   credentials.OwnerRef(scope.ProjectRef.String()),
+			Ref:        "credential:launch-network-test",
+			OwnerRef:   scope.ProjectRef.String(),
 			ScopeRef:   AgentMicroVMLaunchCredentialScopeRef(scope),
 			PurposeRef: AgentMicroVMLaunchCredentialPurpose,
 			Version:    1,
@@ -190,7 +189,7 @@ func TestAgentMicroVMNetworkPolicyDigestIsDeterministicAndCausal(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			candidate := validAgentMicroVMNetworkPolicy(t)
 			mutate(&candidate)
-			candidate.LaunchCredential.OwnerRef = credentials.OwnerRef(candidate.Scope.ProjectRef.String())
+			candidate.LaunchCredential.OwnerRef = candidate.Scope.ProjectRef.String()
 			candidate.LaunchCredential.ScopeRef = AgentMicroVMLaunchCredentialScopeRef(candidate.Scope)
 			candidate.LaunchBindingDigest = AgentMicroVMLaunchBindingDigest(
 				candidate.Scope, candidate.LaunchIdentityRef,

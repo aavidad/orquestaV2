@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
-
-	"orquesta/internal/credentials"
 )
 
 const (
@@ -17,16 +15,46 @@ const (
 	agentMicroVMProofBytes        = sha256.Size
 )
 
-// AgentMicroVMLaunchProofRequest is transient. Proof is redacted by the
-// credentials.Secret type and raw proof bytes must never be logged, persisted
-// or copied into a policy or receipt. Generic JSON serialization redacts them.
+// AgentMicroVMLaunchProof is callback-scoped proof material, not a durable
+// credential. The future host verifier obtains the credential through its
+// CredentialStore adapter and compares this proof without crossing that
+// adapter boundary with secret material.
+type AgentMicroVMLaunchProof struct {
+	material []byte
+}
+
+func NewAgentMicroVMLaunchProof(material []byte) (AgentMicroVMLaunchProof, error) {
+	if len(material) != agentMicroVMProofBytes {
+		return AgentMicroVMLaunchProof{}, agentMicroVMNetworkError("launch_proof_invalid")
+	}
+	return AgentMicroVMLaunchProof{material: append([]byte(nil), material...)}, nil
+}
+
+func (proof AgentMicroVMLaunchProof) Bytes() []byte {
+	return append([]byte(nil), proof.material...)
+}
+
+func (proof *AgentMicroVMLaunchProof) Destroy() {
+	if proof != nil {
+		clear(proof.material)
+		proof.material = nil
+	}
+}
+
+func (AgentMicroVMLaunchProof) String() string               { return "[REDACTED]" }
+func (AgentMicroVMLaunchProof) GoString() string             { return "[REDACTED]" }
+func (AgentMicroVMLaunchProof) MarshalJSON() ([]byte, error) { return json.Marshal("[REDACTED]") }
+
+// AgentMicroVMLaunchProofRequest is transient. Raw proof bytes must never be
+// logged, persisted or copied into a policy or receipt. Generic JSON
+// serialization redacts them.
 type AgentMicroVMLaunchProofRequest struct {
 	Policy               AgentMicroVMNetworkPolicy
 	ExpectedPolicyDigest string
 	Scheme               string
 	ChallengeRef         string
 	Challenge            []byte
-	Proof                credentials.Secret
+	Proof                AgentMicroVMLaunchProof
 	RequestedAt          time.Time
 }
 
@@ -120,8 +148,8 @@ func AgentMicroVMLaunchProofMessage(
 	}{
 		Schema: AgentMicroVMLaunchProofScheme, PolicyDigest: policyDigest,
 		LaunchBindingDigest:  policy.LaunchBindingDigest,
-		CredentialRef:        policy.LaunchCredential.Ref.String(),
-		CredentialVersion:    uint64(policy.LaunchCredential.Version),
+		CredentialRef:        policy.LaunchCredential.Ref,
+		CredentialVersion:    policy.LaunchCredential.Version,
 		LaunchAttestationRef: policy.LaunchAttestationRef.String(),
 		ChallengeRef:         challengeRef, Challenge: append([]byte(nil), challenge...),
 	}
@@ -155,8 +183,8 @@ func ValidateAgentMicroVMLaunchAuthorizationReceipt(
 		receipt.PolicyDigest == request.ExpectedPolicyDigest,
 		receipt.LaunchIdentityRef == policy.LaunchIdentityRef,
 		receipt.LaunchBindingDigest == policy.LaunchBindingDigest,
-		receipt.LaunchCredentialRef == policy.LaunchCredential.Ref.String(),
-		receipt.LaunchCredentialVersion == uint64(policy.LaunchCredential.Version),
+		receipt.LaunchCredentialRef == policy.LaunchCredential.Ref,
+		receipt.LaunchCredentialVersion == policy.LaunchCredential.Version,
 		receipt.LaunchAttestationRef == policy.LaunchAttestationRef.String(),
 		receipt.Scheme == AgentMicroVMLaunchProofScheme,
 		receipt.ChallengeRef == request.ChallengeRef,

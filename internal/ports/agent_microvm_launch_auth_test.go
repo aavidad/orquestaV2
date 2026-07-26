@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 )
 
@@ -29,7 +28,7 @@ func validAgentMicroVMLaunchProofRequest(t *testing.T) AgentMicroVMLaunchProofRe
 	}
 	mac := hmac.New(sha256.New, []byte("test-only-launch-key"))
 	_, _ = mac.Write(message)
-	proof, err := credentials.NewSecret(mac.Sum(nil))
+	proof, err := NewAgentMicroVMLaunchProof(mac.Sum(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +49,8 @@ func validAgentMicroVMLaunchAuthorizationReceipt(
 		AgentRef: policy.Scope.AgentRef, PolicyRef: policy.Ref,
 		PolicyDigest: request.ExpectedPolicyDigest, LaunchIdentityRef: policy.LaunchIdentityRef,
 		LaunchBindingDigest:     policy.LaunchBindingDigest,
-		LaunchCredentialRef:     policy.LaunchCredential.Ref.String(),
-		LaunchCredentialVersion: uint64(policy.LaunchCredential.Version),
+		LaunchCredentialRef:     policy.LaunchCredential.Ref,
+		LaunchCredentialVersion: policy.LaunchCredential.Version,
 		LaunchAttestationRef:    policy.LaunchAttestationRef.String(), Scheme: request.Scheme,
 		ChallengeRef: request.ChallengeRef, ChallengeDigest: AgentMicroVMChallengeDigest(request.Challenge),
 		VerifierRef:             "verifier:agent-microvm-launch",
@@ -112,7 +111,7 @@ func TestAgentMicroVMLaunchProofRejectsReplayAcrossAttemptAndGoal(t *testing.T) 
 		t.Run(name, func(t *testing.T) {
 			replayed := original.Policy
 			mutate(&replayed)
-			replayed.LaunchCredential.OwnerRef = credentials.OwnerRef(replayed.Scope.ProjectRef.String())
+			replayed.LaunchCredential.OwnerRef = replayed.Scope.ProjectRef.String()
 			replayed.LaunchCredential.ScopeRef = AgentMicroVMLaunchCredentialScopeRef(replayed.Scope)
 			replayed.LaunchBindingDigest = AgentMicroVMLaunchBindingDigest(
 				replayed.Scope, replayed.LaunchIdentityRef,

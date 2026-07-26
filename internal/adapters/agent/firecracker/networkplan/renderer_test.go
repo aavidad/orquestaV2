@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
@@ -30,8 +29,8 @@ func validPolicy(t *testing.T) ports.AgentMicroVMNetworkPolicy {
 		Ref: "policy:agent-network:controlled", Scope: scope, GuestCID: 73,
 		LaunchIdentityRef: "launch-identity:execution:firecracker-network",
 		LaunchCredential: ports.AgentMicroVMLaunchCredentialBinding{
-			Ref:        credentials.CredentialRef("credential:launch-firecracker-network"),
-			OwnerRef:   credentials.OwnerRef(scope.ProjectRef.String()),
+			Ref:        "credential:launch-firecracker-network",
+			OwnerRef:   scope.ProjectRef.String(),
 			ScopeRef:   ports.AgentMicroVMLaunchCredentialScopeRef(scope),
 			PurposeRef: ports.AgentMicroVMLaunchCredentialPurpose,
 			Version:    1,
@@ -125,7 +124,7 @@ func TestRenderProducesDeterministicVsockOnlyPlan(t *testing.T) {
 	}
 	if first.Receipt.Status != ReceiptStatus ||
 		first.Receipt.PolicyDigest != request.ExpectedPolicyDigest ||
-		first.Receipt.LaunchCredentialRef != request.Policy.LaunchCredential.Ref.String() ||
+		first.Receipt.LaunchCredentialRef != request.Policy.LaunchCredential.Ref ||
 		!strings.HasPrefix(first.Receipt.ReceiptRef, "agent-microvm-network-plan-receipt:") {
 		t.Fatalf("receipt does not bind plan: %+v", first.Receipt)
 	}
