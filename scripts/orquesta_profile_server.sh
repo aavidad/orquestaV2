@@ -504,6 +504,7 @@ path_keys = (
     ("artifact", "filesystem", "root"),
     ("credentials", "local", "path"),
     ("runtime", "codex", "work_root"),
+    ("runtime", "codex", "cache_root"),
     ("workspace", "local", "root"),
     ("identity", "local_token_path"),
     ("config", "effective_path"),
@@ -511,6 +512,7 @@ path_keys = (
 directory_keys = {
     ("artifact", "filesystem", "root"),
     ("runtime", "codex", "work_root"),
+    ("runtime", "codex", "cache_root"),
     ("workspace", "local", "root"),
 }
 
@@ -566,6 +568,41 @@ if (
     or set(allowlist) != {"PATH", "HOME", "CODEX_HOME"}
 ):
     raise ValueError("allowlist")
+
+go_toolchain_root = nested("runtime", "codex", "go_toolchain_root")
+if not isinstance(go_toolchain_root, str):
+    raise ValueError("go_toolchain")
+if go_toolchain_root:
+    if (
+        not os.path.isabs(go_toolchain_root)
+        or os.path.normpath(go_toolchain_root) != go_toolchain_root
+        or os.path.realpath(go_toolchain_root) != go_toolchain_root
+        or "\n" in go_toolchain_root
+        or "\r" in go_toolchain_root
+    ):
+        raise ValueError("go_toolchain")
+    pending = [go_toolchain_root]
+    while pending:
+        current = pending.pop()
+        metadata = os.lstat(current)
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) & 0o022
+        ):
+            raise ValueError("go_toolchain")
+        if stat.S_ISDIR(metadata.st_mode):
+            with os.scandir(current) as entries:
+                pending.extend(entry.path for entry in entries)
+        elif not stat.S_ISREG(metadata.st_mode):
+            raise ValueError("go_toolchain")
+    go_executable = os.path.join(go_toolchain_root, "bin", "go")
+    metadata = os.lstat(go_executable)
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or not metadata.st_mode & 0o111
+        or metadata.st_mode & 0o022
+    ):
+        raise ValueError("go_toolchain")
 
 account_home_root = nested("runtime", "codex", "account_home_root")
 account_profile = nested("runtime", "codex", "account_profile")

@@ -21,6 +21,8 @@ REPOSITORY="$TEST_ROOT/repository"
 FAKE_BWRAP_9000="$TEST_ROOT/fake-bwrap-9000"
 FAKE_BWRAP_65536="$TEST_ROOT/fake-bwrap-65536"
 FAKE_BWRAP_FAILED="$TEST_ROOT/fake-bwrap-failed"
+FAKE_TOOLCHAIN="$TEST_ROOT/go-toolchain"
+UNSAFE_TOOLCHAIN="$TEST_ROOT/go-toolchain-unsafe"
 mkdir -m 700 "$BASE" "$ACCOUNTS" "$GO_CACHE"
 
 cleanup() {
@@ -164,6 +166,19 @@ GO
 GOCACHE="$GO_CACHE" go build -o "$FAKE_BINARY" "$FAKE_SOURCE"
 chmod 755 "$FAKE_BINARY"
 
+mkdir -m 700 "$FAKE_TOOLCHAIN" "$FAKE_TOOLCHAIN/bin"
+printf '#!/bin/sh\nexit 97\n' >"$FAKE_TOOLCHAIN/bin/go"
+chmod 700 "$FAKE_TOOLCHAIN/bin/go"
+mkdir -m 700 \
+  "$UNSAFE_TOOLCHAIN" \
+  "$UNSAFE_TOOLCHAIN/bin" \
+  "$UNSAFE_TOOLCHAIN/pkg" \
+  "$UNSAFE_TOOLCHAIN/pkg/tool"
+printf '#!/bin/sh\nexit 97\n' >"$UNSAFE_TOOLCHAIN/bin/go"
+printf 'unsafe tool\n' >"$UNSAFE_TOOLCHAIN/pkg/tool/compile"
+chmod 700 "$UNSAFE_TOOLCHAIN/bin/go"
+chmod 720 "$UNSAFE_TOOLCHAIN/pkg/tool/compile"
+
 write_fake_bwrap() {
   command_path="$1"
   capacity="$2"
@@ -227,6 +242,7 @@ write_config() {
   port="$2"
   max_concurrent="${3:-1}"
   auth_max_document_bytes="$4"
+  go_toolchain_root="${5-$FAKE_TOOLCHAIN}"
   runtime_root="$BASE/$profile"
   config="$TEST_ROOT/$profile.toml"
   cat >"$config" <<EOF
@@ -246,6 +262,8 @@ path = "$runtime_root/secrets/credentials.json"
 command = "$FAKE_BINARY"
 max_concurrent_executions = $max_concurrent
 work_root = "$runtime_root/work"
+cache_root = "$runtime_root/cache/codex-go"
+go_toolchain_root = "$go_toolchain_root"
 env_allowlist = ["PATH", "HOME", "CODEX_HOME"]
 account_home_root = "$ACCOUNTS"
 account_profile = "$profile"
@@ -346,7 +364,7 @@ grep -Fq '[ "$(uname -s 2>/dev/null)" = "Linux" ] || fail "platform_unsupported"
 prepare_account CodexA account-a
 prepare_account CodexB account-b
 write_config CodexA "$(available_port)" 1 1048576
-write_config CodexB "$(available_port)" 1 1048576
+write_config CodexB "$(available_port)" 1 1048576 ""
 
 # Dos cuentas arrancan desde el mismo cwd sin compartir HOME, auth ni estado.
 start_profile CodexA >"$TEST_ROOT/start-a-1.out" &
@@ -363,6 +381,10 @@ grep -q "status=running profile=CodexA pid=$pid_a" \
 start_profile CodexB >"$TEST_ROOT/start-b.out"
 assert_observed_environment CodexA
 assert_observed_environment CodexB
+[ "$(stat -Lc '%a' -- "$BASE/CodexA/cache/codex-go")" = 700 ]
+grep -Fq "go_toolchain_root = \"$FAKE_TOOLCHAIN\"" \
+  "$BASE/CodexA/config/orquesta.toml"
+grep -Fq 'go_toolchain_root = ""' "$BASE/CodexB/config/orquesta.toml"
 readiness_ref_a="$(<"$BASE/CodexA/daemon-home/readiness-ref.txt")"
 [[ "$readiness_ref_a" =~ ^request:profile-server-readiness:[0-9a-f]{64}$ ]]
 [ ! -e "$BASE/CodexA/daemon-home/auth.json" ]
@@ -386,6 +408,9 @@ exec 7>&-
 
 # Un contrato inseguro no arranca ni reemplaza al daemon vivo.
 write_config CodexA "$(available_port)" 70 1048576
+expect_failure orquesta_config_invalid start_profile CodexA
+[ "$(<"$BASE/CodexA/run/server.pid")" = "$pid_a" ]
+write_config CodexA "$(available_port)" 1 1048576 "$UNSAFE_TOOLCHAIN"
 expect_failure orquesta_config_invalid start_profile CodexA
 [ "$(<"$BASE/CodexA/run/server.pid")" = "$pid_a" ]
 write_config CodexA "$(available_port)" 1 1048576
