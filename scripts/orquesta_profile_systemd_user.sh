@@ -634,6 +634,7 @@ exec /usr/bin/sleep infinity
 '
     systemd_run_args=(
       --user
+      --expand-environment=no
       --collect
       --service-type=exec
       "--unit=$unit"
