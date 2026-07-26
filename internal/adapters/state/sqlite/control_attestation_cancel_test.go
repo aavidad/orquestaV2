@@ -203,6 +203,141 @@ func TestSQLiteCancelRacingStartedAttestationQuarantinesRatherThanRetires(t *tes
 	}
 }
 
+func TestSQLiteCancelExpiredAttestationAttemptTakesOverClaimCausally(t *testing.T) {
+	const attestLease = 2 * time.Minute
+	for _, reclaimed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "expired_original_claim", true: "expired_reclaimed_claim"}[reclaimed],
+			func(t *testing.T) {
+				system, goalRef := seedSQLiteV17Committed(t, &sqliteTestAttestor{})
+				oldClaim := claimV17WithLeases(
+					t, system.repository, "claim:attestation-before-crash",
+					time.Minute, attestLease, system.policy,
+				)
+				attempt := sqliteV15Attempt(oldClaim, system.clock.Now())
+				if _, created, err := system.repository.RecordEffectAttempt(
+					context.Background(), application.RecordEffectAttemptState{
+						Claim: oldClaim, Attempt: attempt, OperationAt: system.clock.Now(),
+					},
+				); err != nil || !created {
+					t.Fatalf("record pre-crash attempt: created=%v err=%v", created, err)
+				}
+				sqliteTestNoError(t, system.repository.Close())
+				system.clock.Advance(attestLease)
+				system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
+
+				currentClaim := oldClaim
+				if reclaimed {
+					currentClaim = claimV17WithLeases(
+						t, system.repository, "claim:attestation-after-restart",
+						time.Minute, attestLease, system.policy,
+					)
+					if currentClaim.Fence <= oldClaim.Fence ||
+						currentClaim.DeliveryAttempt != oldClaim.DeliveryAttempt+1 {
+						t.Fatalf("reclaim did not advance scheduler identity: old=%+v current=%+v",
+							oldClaim, currentClaim)
+					}
+					sqliteTestNoError(t, system.repository.Close())
+					system.clock.Advance(attestLease)
+					system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
+				}
+				system.orchestrator = newSQLiteV16Orchestrator(t, system)
+				before, err := system.repository.GetGoal(context.Background(), goalRef)
+				sqliteTestNoError(t, err)
+				request := bug453ControlRequest(
+					before, application.ControlCancel, application.ControlTargetWorkItem,
+					"request:cancel-expired-attestation:"+map[bool]string{
+						false: "original", true: "reclaimed",
+					}[reclaimed],
+				)
+
+				canceled, err := system.orchestrator.Control(
+					context.Background(), system.access, request,
+				)
+				if err != nil || !canceled.Created ||
+					canceled.Control.Status != application.ControlConfirmed {
+					t.Fatalf("cancel expired attempt: result=%+v err=%v cause=%v",
+						canceled, err, errors.Unwrap(err))
+				}
+				var row claimV17Row
+				var completedAt int64
+				sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT claim_token,claimed_by,claimed_until,delivery_attempt,fence,
+       completed_at,quarantined_at
+FROM outbox WHERE ref=?`, oldClaim.Action.Ref).Scan(
+					&row.token, &row.worker, &row.leaseUntil, &row.deliveryAttempt, &row.fence,
+					&completedAt, &row.quarantinedAt,
+				))
+				wantToken := "retire:" + canceled.Control.Ref + ":" + oldClaim.Action.Ref
+				wantWorker := "system:" + canceled.Control.Ref
+				if row.token != wantToken || row.worker != wantWorker ||
+					row.deliveryAttempt != int64(currentClaim.DeliveryAttempt+1) ||
+					row.fence != int64(currentClaim.Fence) ||
+					!row.quarantinedAt.Valid || row.quarantinedAt.Int64 != completedAt ||
+					row.leaseUntil != completedAt+1 {
+					t.Fatalf("control takeover row=%+v completed=%d want token/worker=%s/%s attempt/fence=%d/%d",
+						row, completedAt, wantToken, wantWorker,
+						currentClaim.DeliveryAttempt+1, currentClaim.Fence)
+				}
+				var receiptToken, receiptWorker, outcome, code string
+				var receiptAttempt, receiptFence, attempts, attestations, effectReceipts int64
+				sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT receipt.claim_token,receipt.worker_ref,receipt.delivery_attempt,receipt.fence,
+       receipt.outcome,receipt.error_code,
+       (SELECT COUNT(*) FROM effect_attempts WHERE action_ref=receipt.action_ref),
+       (SELECT COUNT(*) FROM attestations WHERE kind='required_tests'),
+       (SELECT COUNT(*) FROM effect_receipts WHERE action_ref=receipt.action_ref)
+FROM action_consumption_receipts receipt WHERE receipt.action_ref=?`,
+					oldClaim.Action.Ref,
+				).Scan(
+					&receiptToken, &receiptWorker, &receiptAttempt, &receiptFence,
+					&outcome, &code, &attempts, &attestations, &effectReceipts,
+				))
+				if receiptToken != wantToken || receiptWorker != wantWorker ||
+					receiptAttempt != int64(currentClaim.DeliveryAttempt+1) ||
+					receiptFence != int64(currentClaim.Fence) ||
+					outcome != "quarantined" || code != "application.effect_unknown_applied" ||
+					attempts != 1 || attestations != 0 || effectReceipts != 0 {
+					t.Fatalf("control takeover receipt identity=%s/%s attempt/fence=%d/%d outcome/code=%s/%s facts=%d/%d/%d",
+						receiptToken, receiptWorker, receiptAttempt, receiptFence,
+						outcome, code, attempts, attestations, effectReceipts)
+				}
+				var persistedAttemptFence int64
+				sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT action_fence FROM effect_attempts WHERE ref=?`,
+					attempt.Ref,
+				).Scan(&persistedAttemptFence))
+				if persistedAttemptFence != int64(oldClaim.Fence) {
+					t.Fatalf("old effect attempt fence changed=%d want=%d",
+						persistedAttemptFence, oldClaim.Fence)
+				}
+				if _, _, err := validateRecoveryDatabase(
+					context.Background(), system.repository.db,
+				); err != nil {
+					t.Fatalf("recovery rejected expired claim takeover: %s",
+						sqliteTestErrorChain(err))
+				}
+
+				transaction, err := system.repository.writer.BeginTx(context.Background(), nil)
+				sqliteTestNoError(t, err)
+				lateErr := completeClaim(
+					context.Background(), transaction, currentClaim, system.clock.Now(), "", false,
+				)
+				_ = transaction.Rollback()
+				if !application.IsStateError(lateErr, application.StateConflict) {
+					t.Fatalf("stale completion crossed control takeover: %v", lateErr)
+				}
+				if _, _, err := system.repository.RecordEffectAttempt(
+					context.Background(), application.RecordEffectAttemptState{
+						Claim: oldClaim, Attempt: attempt, OperationAt: attempt.StartedAt,
+					},
+				); !application.IsStateError(err, application.StateConflict) {
+					t.Fatalf("old effect attempt regained execution authority: %v", err)
+				}
+				assertBUG453RecoveryAndRestart(t, system, goalRef)
+			})
+	}
+}
+
 func TestSQLiteAttestationCompletionThenCancellationPreservesTerminalEvidence(t *testing.T) {
 	system, goalRef := seedSQLiteV17Committed(t, &sqliteTestAttestor{})
 	before, err := system.repository.GetGoal(context.Background(), goalRef)
