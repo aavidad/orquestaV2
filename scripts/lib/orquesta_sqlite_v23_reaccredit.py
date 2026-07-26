@@ -584,13 +584,15 @@ def sqlite_snapshot(
 def load_expected_migrations(
     repository_root: Path,
 ) -> tuple[dict[int, dict[str, str]], list[GuardedFile], str]:
-    root = repository_root / "internal/adapters/state/sqlite/migrations"
-    if not root.is_dir() or root.is_symlink():
-        fail("migration_root_invalid")
+    root = require_directory(
+        str(repository_root / "internal/adapters/state/sqlite/migrations"),
+        "migration_root",
+    )
     expected: dict[int, dict[str, str]] = {}
     guarded: list[GuardedFile] = []
-    for path in sorted(root.glob("[0-9][0-9][0-9]_*.sql")):
-        if path.is_symlink() or not path.is_file():
+    for candidate in sorted(root.glob("[0-9][0-9][0-9]_*.sql")):
+        path = canonical_existing(str(candidate), "migration_file")
+        if not path.is_file():
             fail("migration_file_invalid", str(path))
         match = re.match(r"^([0-9]{3})_", path.name)
         if match is None:

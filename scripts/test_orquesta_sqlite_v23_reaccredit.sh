@@ -465,6 +465,18 @@ grep -q 'reason_code=backup_symlink_or_noncanonical' "$FIXTURE/stderr" ||
   fail_test "symlink_reason"
 [ ! -e "$COMMANDS/operations" ] || fail_test "symlink_adapter_called"
 
+write_fixture migration-symlink
+migration="$REPOSITORY/internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql"
+mv -- "$migration" "$migration.real"
+ln -s -- "$migration.real" "$migration"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "migration_symlink_accepted"
+fi
+grep -q 'reason_code=migration_file_symlink_or_noncanonical' \
+  "$FIXTURE/stderr" || fail_test "migration_symlink_reason"
+[ ! -e "$COMMANDS/operations" ] ||
+  fail_test "migration_symlink_adapter_called"
+
 write_fixture hash
 set_common_value --expected-backup-sha256 \
   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
