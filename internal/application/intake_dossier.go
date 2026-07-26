@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/intake"
 )
 
@@ -310,41 +312,82 @@ func validateIntakeDossierPlan(plan PlanSpec) error {
 	if len(plan.Phases) == 0 || len(plan.WorkItems) == 0 {
 		return invalidIntakeDossier("plan.required", nil)
 	}
-	phaseKeys := make(map[string]struct{}, len(plan.Phases))
+	phases := make([]goal.PhaseInstance, 0, len(plan.Phases))
 	for index, phase := range plan.Phases {
-		if _, err := compilePhaseSpec(phase); err != nil {
+		compiled, err := compilePhaseSpec(phase)
+		if err != nil {
 			return invalidIntakeDossier(indexedDossierField("plan.phases", index), err)
 		}
-		if _, duplicate := phaseKeys[phase.Key]; duplicate {
-			return invalidIntakeDossier("plan.phases.key.duplicate", nil)
-		}
-		phaseKeys[phase.Key] = struct{}{}
+		phases = append(phases, compiled)
 	}
-	workKeys := make(map[string]struct{}, len(plan.WorkItems))
+
+	refs := make(map[string]goal.WorkItemRef, len(plan.WorkItems))
 	for index, item := range plan.WorkItems {
-		if strings.TrimSpace(item.Key) == "" || strings.TrimSpace(item.Objective) == "" ||
-			strings.TrimSpace(item.Role) == "" {
-			return invalidIntakeDossier(indexedDossierField("plan.work_items", index), nil)
+		if strings.TrimSpace(item.Key) == "" ||
+			strings.TrimSpace(item.Key) != item.Key {
+			return invalidIntakeDossier(
+				indexedDossierField("plan.work_items.key", index),
+				errors.New("application.plan_item_key_invalid"),
+			)
 		}
-		if _, found := phaseKeys[item.Phase]; !found {
-			return invalidIntakeDossier(indexedDossierField("plan.work_items.phase", index), nil)
-		}
-		if _, duplicate := workKeys[item.Key]; duplicate {
+		if _, duplicate := refs[item.Key]; duplicate {
 			return invalidIntakeDossier("plan.work_items.key.duplicate", nil)
 		}
-		workKeys[item.Key] = struct{}{}
+		ref, err := goal.NewWorkItemRef(
+			"work-item:intake-dossier-plan-validation:" + strconv.Itoa(index+1),
+		)
+		if err != nil {
+			return invalidIntakeDossier(
+				indexedDossierField("plan.work_items.ref", index), err,
+			)
+		}
+		refs[item.Key] = ref
 	}
+
+	goalRef, err := goal.NewGoalRef("goal:intake-dossier-plan-validation")
+	if err != nil {
+		return invalidIntakeDossier("plan.validation_goal_ref", err)
+	}
+	actorRef, err := goal.NewActorRef("actor:intake-dossier-plan-validation")
+	if err != nil {
+		return invalidIntakeDossier("plan.validation_actor_ref", err)
+	}
+	projectRef, err := goal.NewProjectRef("project:intake-dossier-plan-validation")
+	if err != nil {
+		return invalidIntakeDossier("plan.validation_project_ref", err)
+	}
+	const validationProcessSlots int64 = 1
+	defaultDemand := governance.ResourceVector{ProcessSlots: validationProcessSlots}
+	baseScope := workItemCompileScope{
+		goalRef: goalRef, actorRef: actorRef, projectRef: projectRef,
+		createdAt:     time.Unix(1, 0).UTC(),
+		defaultDemand: defaultDemand,
+	}
+	resolver := workItemRefResolver{
+		requestLocal: refs, parentUnknown: ErrPlanParentUnknown,
+	}
+	items := make([]goal.WorkItem, 0, len(plan.WorkItems))
 	for index, item := range plan.WorkItems {
-		if item.Parent != "" {
-			if _, found := workKeys[item.Parent]; !found {
-				return invalidIntakeDossier(indexedDossierField("plan.work_items.parent", index), nil)
-			}
+		scope := baseScope
+		// Dossier validation is structural, not deployment policy. Giving the
+		// declared demand an equal neutral envelope lets compileWorkItemSpec
+		// apply its canonical demand/ref/metadata validation without imposing
+		// one runtime composition's configurable budget ceiling.
+		scope.goalLimit = effectiveDemand(item.BudgetDemand, defaultDemand).Resources
+		compiled, compileErr := compileWorkItemSpec(
+			item, refs[item.Key], scope, resolver,
+		)
+		if compileErr != nil {
+			return invalidIntakeDossier(
+				indexedDossierField("plan.work_items", index), compileErr,
+			)
 		}
-		for _, dependency := range item.Dependencies {
-			if _, found := workKeys[dependency]; !found {
-				return invalidIntakeDossier(indexedDossierField("plan.work_items.dependencies", index), nil)
-			}
-		}
+		items = append(items, compiled)
+	}
+	if _, err := goal.NewPlan(goal.PlanInput{
+		Generation: 1, Phases: phases, WorkItems: items,
+	}); err != nil {
+		return invalidIntakeDossier("plan", err)
 	}
 	return nil
 }

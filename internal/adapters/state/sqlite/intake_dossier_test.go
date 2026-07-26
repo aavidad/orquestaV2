@@ -340,7 +340,7 @@ func sqliteIntakeDossierPlan() application.PlanSpec {
 		WorkItems: []application.WorkItemSpec{{
 			Key: "work:dossier", Objective: "Crear aplicación confirmada",
 			Phase: "phase.intake-dossier", Role: goal.DefaultRoleKey().String(),
-			HandoffRequired: true, WriteSet: []string{"internal/**"},
+			WriteSet:      []string{"internal"},
 			CouncilPolicy: council.PolicyRequired,
 			RequiredTests: []application.RequiredTestSpec{{
 				Ref: "required-test:intake-dossier", ToolRef: "tool:go-test",

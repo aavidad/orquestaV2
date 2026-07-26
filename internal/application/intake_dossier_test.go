@@ -5,7 +5,9 @@ import (
 	"reflect"
 	"testing"
 
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/intake"
 )
 
@@ -109,6 +111,97 @@ func TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan(t 
 	unknownPhase.WorkItems[0].Phase = "phase.unknown"
 	if _, err := BuildIntakeDossier(records[2], unknownPhase, input); !errors.Is(err, ErrIntakeDossierInvalid) {
 		t.Fatalf("unknown phase error = %v", err)
+	}
+}
+
+func TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*WorkItemSpec)
+	}{
+		{name: "output contract", mutate: func(item *WorkItemSpec) {
+			item.OutputContract = "unknown"
+		}},
+		{name: "role", mutate: func(item *WorkItemSpec) {
+			item.Role = " role:worker"
+		}},
+		{name: "write scope dot", mutate: func(item *WorkItemSpec) {
+			item.WriteSet = []string{"."}
+			item.CouncilPolicy = council.PolicyRequired
+		}},
+		{name: "required test ref", mutate: func(item *WorkItemSpec) {
+			item.RequiredTests[0].Ref = ""
+		}},
+		{name: "required test tool ref", mutate: func(item *WorkItemSpec) {
+			item.RequiredTests[0].ToolRef = ""
+		}},
+		{name: "required test working directory", mutate: func(item *WorkItemSpec) {
+			item.RequiredTests[0].WorkingDirectory = "../escape"
+		}},
+		{name: "council policy", mutate: func(item *WorkItemSpec) {
+			item.CouncilPolicy = "advisory"
+		}},
+		{name: "budget demand", mutate: func(item *WorkItemSpec) {
+			item.BudgetDemand = governance.BudgetDemand{
+				Ref: "budget-demand:invalid",
+				Resources: governance.ResourceVector{
+					ProcessSlots: -1,
+				},
+			}
+		}},
+		{name: "security criticality", mutate: func(item *WorkItemSpec) {
+			item.SecurityCriticality = "provider-derived"
+		}},
+		{name: "reasoning effort", mutate: func(item *WorkItemSpec) {
+			item.ReasoningEffort = "auto"
+		}},
+		{name: "skill ref", mutate: func(item *WorkItemSpec) {
+			item.SkillRefs = []string{""}
+		}},
+		{name: "tool ref", mutate: func(item *WorkItemSpec) {
+			item.ToolRefs = []string{""}
+		}},
+		{name: "capability ref", mutate: func(item *WorkItemSpec) {
+			item.CapabilityRefs = []string{""}
+		}},
+	}
+	record := validIntakeChain(t)[2]
+	input := validIntakeDossierInput()
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			plan := cloneIntakeDossierPlan(validIntakeDossierPlan())
+			test.mutate(&plan.WorkItems[0])
+			dossier, err := BuildIntakeDossier(record, plan, input)
+			if !errors.Is(err, ErrIntakeDossierInvalid) ||
+				!reflect.DeepEqual(dossier, IntakeDossier{}) {
+				t.Fatalf("compiler-invalid plan accepted: dossier=%+v err=%v", dossier, err)
+			}
+		})
+	}
+}
+
+func TestBuildIntakeDossierAcceptsCanonicalWriterMetadata(t *testing.T) {
+	plan := cloneIntakeDossierPlan(validIntakeDossierPlan())
+	item := &plan.WorkItems[0]
+	item.WriteSet = []string{"internal/application"}
+	item.CouncilPolicy = council.PolicyRequired
+	item.SkillRefs = []string{"skill:programming"}
+	item.ToolRefs = []string{"tool:go-test"}
+	item.CapabilityRefs = []string{"capability:repository-write"}
+	item.BudgetDemand = governance.BudgetDemand{
+		Ref: "budget-demand:intake-dossier",
+		Resources: governance.ResourceVector{
+			Tokens: 10, ProcessSlots: 1, DiskBytes: 1024,
+		},
+	}
+	item.SecurityCriticality = governance.SecurityCriticalitySensitive
+	item.ReasoningEffort = governance.ReasoningEffortXHigh
+
+	dossier, err := BuildIntakeDossier(
+		validIntakeChain(t)[2], plan, validIntakeDossierInput(),
+	)
+	if err != nil || dossier.Ref() == "" {
+		t.Fatalf("canonical writer metadata rejected: dossier=%+v err=%v", dossier, err)
 	}
 }
 
