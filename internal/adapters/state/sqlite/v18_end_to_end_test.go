@@ -8,6 +8,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/council"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/review"
 )
 
@@ -120,6 +121,91 @@ WHERE purpose IN ('primary_review','adversarial_review')`)
 	}
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
 		t.Fatalf("reopened retry closure recovery: %v", err)
+	}
+}
+
+func TestReviewQueuedRetryClosesLocallyWhenPeerSettlementExhaustsBudget(t *testing.T) {
+	attestor := &sqliteTestAttestor{}
+	system := newSQLiteV15System(t, 4)
+	for _, envelope := range []*governance.BudgetEnvelope{
+		&system.policy.DeploymentEnvelope,
+		&system.policy.ProjectEnvelopeTemplate,
+		&system.policy.GoalEnvelopeTemplate,
+	} {
+		envelope.Limit.Tokens = 350
+		envelope.Limit.MoneyMicros = 350
+	}
+	system.orchestrator = newSQLiteV16OrchestratorWithAttestor(t, system, attestor)
+	submitted, err := system.orchestrator.Submit(context.Background(), system.access, application.SubmitRequest{
+		RequestRef: "request:v18-review-late-budget", Statement: "close exhausted reviewer retry", Confirm: true,
+		Plan: &application.PlanSpec{
+			Phases: []application.PhaseSpec{{
+				Ref: "phase-instance:v18-review-late-budget", Key: "phase:v18-review-late-budget",
+				TemplateRef: "phase-template:v18-review-late-budget",
+			}},
+			WorkItems: []application.WorkItemSpec{{
+				Key: "writer", Objective: "produce a reviewed isolated change",
+				Phase: "phase:v18-review-late-budget", Role: "role:writer",
+				WriteSet:       []string{"internal/v18-budget"},
+				CouncilPolicy:  council.PolicyAuto,
+				RequiredTests:  sqliteRequiredTestSpecs("required-test:v18-budget"),
+				OutputContract: goal.OutputContractEvidenceBundle,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	processSQLiteV16Actions(t, system,
+		application.ActionPrepareWorkspace, application.ActionLaunchAgent,
+		application.ActionObserveAgent, application.ActionCommitChange,
+		application.ActionAttestTest, application.ActionLaunchAgent, application.ActionLaunchAgent,
+	)
+	rewriteRecoveryTrigger(t, system.repository.db, "executions_identity_immutable", func() {
+		mustV10Exec(t, system.repository.db, `UPDATE executions SET max_execution_attempts=2
+WHERE purpose IN ('primary_review','adversarial_review')`)
+	})
+	system.external.mu.Lock()
+	system.external.reviewContent = []byte(`{"malformed":"retry-once"}`)
+	system.external.mu.Unlock()
+	processSQLiteV16Actions(t, system, application.ActionObserveAgent)
+	queued, err := system.repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
+	retryRef := ""
+	for _, execution := range queued.Executions {
+		if execution.AttemptNo == 2 && (execution.Purpose == application.ExecutionPurposePrimaryReview ||
+			execution.Purpose == application.ExecutionPurposeAdversarialReview) {
+			retryRef = execution.Ref.String()
+		}
+	}
+	if err != nil || retryRef == "" {
+		t.Fatalf("review retry not queued record=%+v err=%v", queued, err)
+	}
+	system.external.mu.Lock()
+	system.external.reviewContent = nil
+	system.external.mu.Unlock()
+	processSQLiteV16Actions(t, system, application.ActionObserveAgent)
+	launchesBefore := system.external.launchCalls
+	processSQLiteV16Actions(t, system, application.ActionLaunchAgent)
+	record, err := system.repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
+	var retry application.ExecutionRecord
+	for _, execution := range record.Executions {
+		if execution.Ref.String() == retryRef {
+			retry = execution
+			break
+		}
+	}
+	var consumed int
+	sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM action_consumption_receipts
+WHERE execution_ref=? AND kind='launch_agent'
+ AND error_code LIKE 'budget.retry_irreversible:%'`, retryRef).Scan(&consumed))
+	if err != nil || retry.State != application.ExecutionFailed || consumed != 1 ||
+		system.external.launchCalls != launchesBefore {
+		t.Fatalf("review late budget record=%+v retry=%+v consumed=%d calls=%d/%d err=%v",
+			record, retry, consumed, system.external.launchCalls, launchesBefore, err)
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
+		t.Fatalf("review late budget recovery: %v", err)
 	}
 }
 
