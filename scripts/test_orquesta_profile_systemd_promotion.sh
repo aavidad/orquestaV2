@@ -1591,6 +1591,75 @@ run_fails "candidate_unit_identity_mismatch" \
 [ -e "$FIXTURE/runtime/$PROFILE/run/server.pid" ] ||
   fail_test "replacement_primary_was_stopped"
 
+new_fixture phase90-v23-data-preserved
+run_ok "status=primary_ready mode=primary" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+/usr/bin/python3 - \
+  "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite" <<'PY'
+import sqlite3
+import sys
+
+database = sqlite3.connect(sys.argv[1])
+database.execute("PRAGMA foreign_keys=ON")
+database.execute("INSERT INTO projects(ref) VALUES('project:post-cut')")
+database.execute(
+    "INSERT INTO principals(ref,actor_ref) VALUES('principal:post-cut','actor')"
+)
+database.execute(
+    "INSERT INTO authorization_receipts("
+    "ref,principal_ref,request_ref,project_ref,permission,"
+    "resource_ref,outcome"
+    ") VALUES(?,?,?,?,?,?,?)",
+    (
+        "authorization:post-cut","principal:post-cut",
+        "authorization-request:intake-create:post-cut",
+        "project:post-cut","goals.create","project:post-cut","allowed",
+    ),
+)
+receipt_ref = "intake-receipt:" + "1" * 64
+state_digest = "0" * 64
+database.execute(
+    "INSERT INTO intake_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+    (
+        receipt_ref,"post-cut","2"*64,"create","actor","project:post-cut",
+        "intake:post-cut",0,1,state_digest,
+        "authorization:post-cut","{}",
+    ),
+)
+database.execute(
+    "INSERT INTO intake_states VALUES(?,?,?,?,?,?,?,?,?,?)",
+    (
+        "intake:post-cut","actor","project:post-cut",
+        "orquesta.intake.state.v1",1,1,0,state_digest,"{}",receipt_ref,
+    ),
+)
+database.commit()
+database.close()
+PY
+operations_before="$(wc -l <"$FIXTURE/log/adapter")"
+run_ok "status=complete action=check mode=primary" \
+  "$SUBJECT" "${CONTRACT[@]}"
+run_ok "status=complete mode=primary" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ "$(sqlite_value "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite" \
+  "SELECT COUNT(*) FROM intake_states WHERE state_ref='intake:post-cut'")" = 1 ] &&
+  [ "$(wc -l <"$FIXTURE/log/adapter")" -eq "$operations_before" ] ||
+  fail_test "phase90_v23_data_not_preserved"
+
+new_fixture phase90-v23-schema-tampered
+run_ok "status=primary_ready mode=primary" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+/usr/bin/python3 - "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite" <<'PY'
+import sqlite3
+import sys
+
+database = sqlite3.connect(sys.argv[1])
+database.execute("DROP INDEX intake_states_scope_idx")
+database.commit()
+database.close()
+PY
+run_fails "sqlite_post_start_invalid" "$SUBJECT" "${CONTRACT[@]}"
+
 new_fixture rollback-stopped-before-receipt
 : >"$FIXTURE/state/primary-fail"
 : >"$FIXTURE/state/rollback-snapshot-after-publish-fail"

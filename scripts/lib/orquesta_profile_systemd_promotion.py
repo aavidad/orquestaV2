@@ -894,7 +894,9 @@ def expected_v23_schema_manifest(
 
 
 def validate_v23_schema(
-    connection: sqlite3.Connection, repository: pathlib.Path
+    connection: sqlite3.Connection,
+    repository: pathlib.Path,
+    require_empty: bool = True,
 ) -> None:
     expected = expected_v23_schema_manifest(repository)
     expected_names = {item["name"] for item in expected}
@@ -903,12 +905,15 @@ def validate_v23_schema(
         for item in sqlite_schema_manifest(connection)
         if item["name"] in expected_names or item["table"] in V23_TABLES
     ]
-    if observed != expected or any(
-        connection.execute(
-            f"SELECT COUNT(*) FROM {quote_identifier(table)}"
-        ).fetchone()[0]
-        != 0
-        for table in V23_TABLES
+    if observed != expected or (
+        require_empty
+        and any(
+            connection.execute(
+                f"SELECT COUNT(*) FROM {quote_identifier(table)}"
+            ).fetchone()[0]
+            != 0
+            for table in V23_TABLES
+        )
     ):
         raise ContractError("sqlite_v23_schema_changed")
 
@@ -1897,7 +1902,11 @@ def command_sqlite_after(args: argparse.Namespace) -> None:
             or counts != [1, 1, 1]
         ):
             raise ContractError("sqlite_after")
-        validate_v23_schema(connection, pathlib.Path(args.repository))
+        validate_v23_schema(
+            connection,
+            pathlib.Path(args.repository),
+            require_empty=not args.allow_v23_data,
+        )
         verify_audit_history_preserved(backup, connection)
         if not args.skip_functional:
             projection = functional_projection(backup)
@@ -2218,6 +2227,7 @@ def parser() -> argparse.ArgumentParser:
     after.add_argument("--backup", required=True)
     after.add_argument("--repository", required=True)
     after.add_argument("--skip-functional", action="store_true")
+    after.add_argument("--allow-v23-data", action="store_true")
     after.set_defaults(handler=command_sqlite_after)
 
     functional = commands.add_parser("functional-digest", add_help=False)

@@ -978,7 +978,7 @@ verify_candidate() {
     --backup "$backup_path"
   )
   [ "$functional_mode" = required ] ||
-    sqlite_after_args+=(--skip-functional)
+    sqlite_after_args+=(--skip-functional --allow-v23-data)
   "$promotion_helper" sqlite-after "${sqlite_after_args[@]}" ||
     fail "sqlite_post_start_invalid"
 }
