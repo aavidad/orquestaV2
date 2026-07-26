@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"testing"
@@ -122,6 +123,256 @@ func TestSQLiteIrreversibleGoalChargeInterruptsImpossibleAutomaticRetry(t *testi
 	}
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
 		t.Fatalf("irreversible retry recovery: %v cause=%v", err, errors.Unwrap(err))
+	}
+}
+
+func TestSQLiteQueuedRetryBecomesIrreversibleAfterPeerSettlement(t *testing.T) {
+	system := newSQLiteV15System(t, 2)
+	for _, envelope := range []*governance.BudgetEnvelope{
+		&system.policy.DeploymentEnvelope,
+		&system.policy.ProjectEnvelopeTemplate,
+		&system.policy.GoalEnvelopeTemplate,
+	} {
+		envelope.Limit.Tokens = 200
+		envelope.Limit.MoneyMicros = 200
+	}
+	system.orchestrator = newSQLiteV15Orchestrator(
+		t, system.repository, system.clock, system.external, system.policy, system.ids,
+	)
+	created, err := system.orchestrator.Submit(context.Background(), system.access, application.SubmitRequest{
+		RequestRef: "request:v15-late-irreversible", Statement: "two concurrent retry frontiers", Confirm: true,
+		Plan: &application.PlanSpec{
+			Phases: []application.PhaseSpec{{
+				Ref: "phase-instance:v15-late-irreversible", Key: "phase:v15-late-irreversible",
+				TemplateRef: "phase-template:parallel",
+			}},
+			WorkItems: []application.WorkItemSpec{
+				{Key: "a", Objective: "retry after peer settlement", Phase: "phase:v15-late-irreversible",
+					Role: "role:worker", OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "b", Objective: "settle active peer", Phase: "phase:v15-late-irreversible",
+					Role: "role:worker", OutputContract: goal.OutputContractEvidenceBundle},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 2; index++ {
+		result, processErr := system.orchestrator.ProcessNext(
+			context.Background(), fmt.Sprintf("worker:v15-late-launch:%d", index),
+		)
+		if processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+			t.Fatalf("launch %d result=%+v err=%v", index, result, processErr)
+		}
+	}
+	system.external.observationStatus = ports.AgentFailed
+	system.external.observationError = "codex.process_failed"
+	system.clock.Advance(time.Second)
+	if result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-late-first-failure",
+	); err != nil || !result.Processed || result.Action != application.ActionObserveAgent {
+		t.Fatalf("first failure result=%+v err=%v", result, err)
+	}
+	intermediate, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
+	var replacementAtCreation application.ExecutionRecord
+	for _, execution := range intermediate.Executions {
+		if execution.AttemptNo == 2 {
+			replacementAtCreation = execution
+			break
+		}
+	}
+	if err != nil || len(intermediate.Executions) != 3 ||
+		replacementAtCreation.State != application.ExecutionQueued ||
+		replacementAtCreation.ReplacesExecutionRef.String() == "" {
+		t.Fatalf("replacement was not created while peer active: record=%+v err=%v", intermediate, err)
+	}
+	system.external.observationStatus = ports.AgentCompleted
+	system.external.observationError = ""
+	if result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-late-peer-settlement",
+	); err != nil || !result.Processed || result.Action != application.ActionObserveAgent {
+		t.Fatalf("peer settlement result=%+v err=%v", result, err)
+	}
+	settled, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
+	if err != nil || len(settled.BudgetSettlements) != 2 {
+		t.Fatalf("peer settlement frontier=%+v err=%v", settled, err)
+	}
+	// Local exhaustion must remain claimable after launch authority becomes
+	// stale: it performs no provider effect and only consumes the queued retry.
+	revokeSQLiteV15Owner(t, system)
+	system.clock.Advance(time.Second)
+	firstClaim := claimSQLiteV15(t, system, "claim:v15-late-irreversible:first")
+	if firstClaim.Disposition != application.ActionClaimDispositionRetryBudgetIrreversible ||
+		firstClaim.BudgetReservationRef != "" || firstClaim.RetryBudgetExhaustion.FrontierDigest == "" {
+		t.Fatalf("late irreversible claim=%+v", firstClaim)
+	}
+	for name, forge := range map[string]func(application.ActionClaim) application.ActionClaim{
+		"disposition": func(value application.ActionClaim) application.ActionClaim {
+			value.Disposition = application.ActionClaimDispositionNormal
+			value.RetryBudgetExhaustion = application.RetryBudgetExhaustion{}
+			return value
+		},
+		"marker": func(value application.ActionClaim) application.ActionClaim {
+			value.RetryBudgetExhaustion.FrontierDigest =
+				"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+			return value
+		},
+	} {
+		t.Run("forged_"+name, func(t *testing.T) {
+			err := system.repository.mutate(context.Background(), forge(firstClaim), system.clock.Now(),
+				func(*sql.Tx) error { return nil })
+			if !application.IsStateError(err, application.StateConflict) {
+				t.Fatalf("forged %s accepted: %v", name, err)
+			}
+		})
+	}
+	system.clock.Advance(2 * time.Minute)
+	restartSQLiteV15System(t, system)
+	reclaimed := claimSQLiteV15(t, system, "claim:v15-late-irreversible:restart")
+	if reclaimed.Disposition != application.ActionClaimDispositionRetryBudgetIrreversible ||
+		reclaimed.Fence <= firstClaim.Fence ||
+		reclaimed.RetryBudgetExhaustion != firstClaim.RetryBudgetExhaustion {
+		t.Fatalf("restart claim first=%+v reclaimed=%+v", firstClaim, reclaimed)
+	}
+	system.clock.Advance(2 * time.Minute)
+	launchesBefore := system.external.launchCalls
+	result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-late-irreversible:consume",
+	)
+	if err != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+		t.Fatalf("consume result=%+v err=%v", result, err)
+	}
+	if system.external.launchCalls != launchesBefore {
+		t.Fatalf("irreversible retry reached provider calls=%d before=%d",
+			system.external.launchCalls, launchesBefore)
+	}
+	final, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
+	var completed, receipts, activeReservations, attempts int
+	if queryErr := system.repository.db.QueryRow(`
+SELECT COUNT(*),SUM(CASE WHEN receipt.action_ref IS NOT NULL THEN 1 ELSE 0 END)
+FROM outbox action LEFT JOIN action_consumption_receipts receipt ON receipt.action_ref=action.ref
+WHERE action.execution_ref=? AND action.kind='launch_agent'
+ AND action.last_error_code LIKE 'budget.retry_irreversible:%'`,
+		replacementAtCreation.Ref.String()).Scan(&completed, &receipts); queryErr != nil {
+		t.Fatal(queryErr)
+	}
+	if queryErr := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM budget_reservations reservation
+LEFT JOIN budget_settlements settlement ON settlement.reservation_ref=reservation.ref
+WHERE reservation.execution_ref=? AND settlement.ref IS NULL`,
+		replacementAtCreation.Ref.String()).Scan(&activeReservations); queryErr != nil {
+		t.Fatal(queryErr)
+	}
+	if queryErr := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM effect_attempts WHERE execution_ref=?`,
+		replacementAtCreation.Ref.String()).Scan(&attempts); queryErr != nil {
+		t.Fatal(queryErr)
+	}
+	var replacement application.ExecutionRecord
+	for _, execution := range final.Executions {
+		if execution.Ref == replacementAtCreation.Ref {
+			replacement = execution
+			break
+		}
+	}
+	item, _ := final.Goal.WorkItem(replacement.WorkItemRef)
+	if err != nil || replacement.State != application.ExecutionFailed ||
+		replacement.FailureCode != "codex.process_failed" ||
+		item.State() != goal.WorkItemStateInterrupted ||
+		completed != 1 || receipts != 1 || activeReservations != 0 || attempts != 0 {
+		t.Fatalf("late irreversible final=%+v replacement=%+v item=%+v completed=%d receipts=%d reservations=%d attempts=%d err=%v",
+			final, replacement, item, completed, receipts, activeReservations, attempts, err)
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
+		t.Fatalf("late irreversible recovery: %v cause=%v", err, errors.Unwrap(err))
+	}
+}
+
+func TestSQLiteQueuedRetryWaitsForReleasablePeerCapacity(t *testing.T) {
+	system := newSQLiteV15System(t, 2)
+	for _, envelope := range []*governance.BudgetEnvelope{
+		&system.policy.DeploymentEnvelope,
+		&system.policy.ProjectEnvelopeTemplate,
+		&system.policy.GoalEnvelopeTemplate,
+	} {
+		envelope.Limit.Tokens = 200
+		envelope.Limit.MoneyMicros = 200
+	}
+	system.orchestrator = newSQLiteV15Orchestrator(
+		t, system.repository, system.clock, system.external, system.policy, system.ids,
+	)
+	created, err := system.orchestrator.Submit(context.Background(), system.access, application.SubmitRequest{
+		RequestRef: "request:v15-late-temporary", Statement: "wait for releasable peer capacity", Confirm: true,
+		Plan: &application.PlanSpec{
+			Phases: []application.PhaseSpec{{
+				Ref: "phase-instance:v15-late-temporary", Key: "phase:v15-late-temporary",
+				TemplateRef: "phase-template:parallel",
+			}},
+			WorkItems: []application.WorkItemSpec{
+				{Key: "a", Objective: "retry after peer release", Phase: "phase:v15-late-temporary",
+					Role: "role:worker", OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "b", Objective: "release active peer", Phase: "phase:v15-late-temporary",
+					Role: "role:worker", OutputContract: goal.OutputContractEvidenceBundle},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 2; index++ {
+		if result, processErr := system.orchestrator.ProcessNext(
+			context.Background(), fmt.Sprintf("worker:v15-temporary-launch:%d", index),
+		); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+			t.Fatalf("launch %d result=%+v err=%v", index, result, processErr)
+		}
+	}
+	system.external.observationStatus = ports.AgentFailed
+	system.external.observationError = "codex.process_failed"
+	system.clock.Advance(time.Second)
+	if result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-temporary-first-failure",
+	); err != nil || !result.Processed || result.Action != application.ActionObserveAgent {
+		t.Fatalf("first failure result=%+v err=%v", result, err)
+	}
+	system.external.observationStatus = ports.AgentCompleted
+	system.external.observationError = ""
+	system.external.observationUsage = governance.ResourceUsage{
+		Resources: governance.ResourceVector{Currency: "USD"},
+		Known:     governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+	}
+	system.clock.Advance(time.Second)
+	if result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-temporary-peer-release",
+	); err != nil || !result.Processed || result.Action != application.ActionObserveAgent {
+		t.Fatalf("peer release result=%+v err=%v", result, err)
+	}
+	var deferred int
+	if err := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM outbox action JOIN executions execution ON execution.ref=action.execution_ref
+WHERE action.goal_ref=? AND action.kind='launch_agent' AND execution.attempt_no=2
+ AND action.last_error_code='budget.temporarily_unavailable'
+ AND action.delivery_attempt=0 AND action.completed_at IS NULL`,
+		created.Record.Goal.Ref().String()).Scan(&deferred); err != nil || deferred != 1 {
+		t.Fatalf("retry did not retain temporary contention deferred=%d err=%v", deferred, err)
+	}
+	system.clock.Advance(time.Second)
+	if result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-temporary-retry-launch",
+	); err != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+		t.Fatalf("retry launch result=%+v err=%v", result, err)
+	}
+	record, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
+	var retry application.ExecutionRecord
+	for _, execution := range record.Executions {
+		if execution.AttemptNo == 2 {
+			retry = execution
+			break
+		}
+	}
+	if err != nil || retry.State != application.ExecutionRunning ||
+		retry.BudgetReservationRef == "" || system.external.launchCalls != 3 {
+		t.Fatalf("temporary retry record=%+v retry=%+v calls=%d err=%v",
+			record, retry, system.external.launchCalls, err)
 	}
 }
 
