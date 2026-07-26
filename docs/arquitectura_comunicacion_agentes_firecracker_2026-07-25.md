@@ -84,13 +84,48 @@ NAT queda prohibido para este perfil: no existe fallback a TAP, bridge,
 El host CID de vsock y los puertos exactos de broker/proxy se fijan en una
 política sellada. La identidad de lanzamiento liga proyecto, Goal, WorkItem,
 ejecución, generación, intento y agente; el broker/proxy no confían en el CID
-como autenticación. Política, plan efectivo y receipt llevan digests
-independientes.
+como autenticación. Un digest de esas refs públicas solo liga causalidad: no
+autentica la VM. Antes de exponer mailbox, CAS o proxy, el broker debe consumir
+un challenge de un solo uso, verificar un proof contra la versión exacta de una
+credencial leída mediante `CredentialStore` y verificar la atestación exacta
+del lanzamiento. Solo refs, versión y digests entran en política/receipt; el
+secreto y el proof permanecen en callback/memoria transitoria. Política, plan
+efectivo, autorización y receipt llevan digests independientes.
+
+Este corte es una composición/adaptador alternativo de `AGT-01`/`AGT-03`, con
+la evidencia de aislamiento exigida por `EVD-13` y el broker futuro relacionado
+con `ORC-15`. No añade una capacidad 258 ni cambia el estado acreditado de esos
+IDs: el plan declara `planned_not_applied`.
 
 Gateway, proxy, política o su verificación indisponibles, ambiguos o inválidos
 producen denegación fail-closed: no se crea una conectividad degradada, no se
 abre fallback directo y el agente recibe una causa estructurada recuperable por
 replan/retry autorizado.
+
+## Estado del primer corte
+
+El corte 2026-07-26 implementa:
+
+- contrato neutral de política y scope exacto con digests causales;
+- binding a una versión de credencial con owner/scope/purpose exactos y
+  atestación del lanzamiento;
+- protocolo transitorio de challenge/proof HMAC, receipt sin secreto y
+  negativos de replay entre Goal e intento;
+- render determinista `planned_not_applied` con cero interfaces, TAP, bridge,
+  NAT, inbound, east-west o Internet directo, y allowlist vsock exacta.
+
+No implementa ni simula conectividad física. La siguiente dependencia causal
+es un corte separado con:
+
+1. verificador host que implemente `AgentMicroVMLaunchProofVerifier`, lea el
+   secreto solo mediante `CredentialStore`, consuma el challenge una sola vez y
+   verifique la atestación antes de exponer broker o proxy;
+2. reserva content-addressed de un backend vsock distinto por VM y composición
+   Firecracker que materialice el plan sin NIC;
+3. bridge HTTP guest loopback→vsock y proxy host-side con política SSRF,
+   resolución/redirect/puerto/cuota y receipts;
+4. E2E multi-microVM físico con negativos y cleanup antes de cambiar
+   `planned_not_applied`.
 
 ## Aceptación y pruebas de composición
 
