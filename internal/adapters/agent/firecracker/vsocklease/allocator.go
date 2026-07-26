@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -37,6 +38,7 @@ type Config struct {
 type Allocator struct {
 	config           Config
 	beginTransaction func(context.Context) (*sql.Conn, error)
+	execTransaction  func(context.Context, *sql.Conn, string) (sql.Result, error)
 }
 
 var _ ports.AgentMicroVMVsockCIDAllocator = (*Allocator)(nil)
@@ -90,6 +92,13 @@ func Open(ctx context.Context, config Config) (*Allocator, error) {
 	}
 	allocator := &Allocator{config: config}
 	allocator.beginTransaction = allocator.beginImmediate
+	allocator.execTransaction = func(
+		ctx context.Context,
+		connection *sql.Conn,
+		statement string,
+	) (sql.Result, error) {
+		return connection.ExecContext(ctx, statement)
+	}
 	return allocator, nil
 }
 
@@ -118,7 +127,7 @@ func (allocator *Allocator) Reserve(
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
-	defer rollback(connection)
+	defer allocator.rollback(connection)
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
@@ -133,7 +142,7 @@ func (allocator *Allocator) Reserve(
 	}
 	if found {
 		if operation.Kind != "reserve" || operation.RequestDigest != requestDigest {
-			return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+			return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 				ctx, connection, allocatorError("idempotency_conflict"),
 			)
 		}
@@ -142,11 +151,11 @@ func (allocator *Allocator) Reserve(
 			return ports.AgentMicroVMVsockCIDLease{}, mapReadError(err)
 		}
 		if record.State != reservationStateActive || !record.Lease.ExpiresAt.After(now) {
-			return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+			return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 				ctx, connection, allocatorError("reservation_replay_denied"),
 			)
 		}
-		if err := commit(ctx, connection); err != nil {
+		if err := allocator.commit(ctx, connection); err != nil {
 			return ports.AgentMicroVMVsockCIDLease{}, err
 		}
 		return record.Lease, nil
@@ -158,7 +167,7 @@ func (allocator *Allocator) Reserve(
 	}
 	guestCID, ok := allocator.selectCID(requestDigest, used)
 	if !ok {
-		return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 			ctx, connection, allocatorError("capacity_reached"),
 		)
 	}
@@ -172,7 +181,13 @@ func (allocator *Allocator) Reserve(
 		OwnerRef: request.OwnerRef, RequestDigest: requestDigest,
 		IdempotencyKey: request.IdempotencyKey, GuestCID: guestCID,
 		FencingToken: fencingToken, Revision: 1, AcquiredAt: now,
-		ExpiresAt: now.Add(request.LeaseDuration), AdapterRef: allocator.config.AdapterRef,
+		AdapterRef: allocator.config.AdapterRef,
+	}
+	lease.ExpiresAt, ok = addLeaseDuration(now, request.LeaseDuration)
+	if !ok {
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
+			ctx, connection, allocatorError("lease_time_unrepresentable"),
+		)
 	}
 	lease.LeaseRef = ports.AgentMicroVMVsockCIDLeaseRef(lease)
 	lease.VsockBackendRef = ports.AgentMicroVMVsockBackendRef(lease.LeaseRef)
@@ -190,7 +205,7 @@ func (allocator *Allocator) Reserve(
 	}); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
 	}
-	if err := commit(ctx, connection); err != nil {
+	if err := allocator.commit(ctx, connection); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	return lease, nil
@@ -214,7 +229,7 @@ func (allocator *Allocator) Renew(
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
-	defer rollback(connection)
+	defer allocator.rollback(connection)
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
@@ -228,7 +243,7 @@ func (allocator *Allocator) Renew(
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
 	} else if found {
 		if operation.Kind != "renew" || operation.RequestDigest != requestDigest {
-			return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+			return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 				ctx, connection, allocatorError("idempotency_conflict"),
 			)
 		}
@@ -242,11 +257,11 @@ func (allocator *Allocator) Renew(
 			return ports.AgentMicroVMVsockCIDLease{}, mapReadError(err)
 		}
 		if record.State != reservationStateActive || !record.Lease.ExpiresAt.After(now) {
-			return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+			return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 				ctx, connection, allocatorError("lease_inactive"),
 			)
 		}
-		if err := commit(ctx, connection); err != nil {
+		if err := allocator.commit(ctx, connection); err != nil {
 			return ports.AgentMicroVMVsockCIDLease{}, err
 		}
 		return lease, nil
@@ -254,27 +269,32 @@ func (allocator *Allocator) Renew(
 
 	record, err := readReservationByLease(ctx, connection, request.LeaseRef)
 	if err != nil {
-		return ports.AgentMicroVMVsockCIDLease{}, mapReadErrorAfterClock(
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.mapReadErrorAfterClock(
 			ctx, connection, err,
 		)
 	}
 	if err := validateCurrentOwner(record, request.PoolRef, request.ScopeDigest,
 		request.OwnerRef, request.FencingToken); err != nil {
-		return ports.AgentMicroVMVsockCIDLease{}, commitRejection(ctx, connection, err)
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(ctx, connection, err)
 	}
 	if record.State != reservationStateActive || !record.Lease.ExpiresAt.After(now) {
-		return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 			ctx, connection, allocatorError("lease_inactive"),
 		)
 	}
 	if record.Lease.Revision != request.ExpectedRevision {
-		return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 			ctx, connection, allocatorError("stale_revision"),
 		)
 	}
-	newExpiry := now.Add(request.LeaseDuration)
+	newExpiry, representable := addLeaseDuration(now, request.LeaseDuration)
+	if !representable {
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
+			ctx, connection, allocatorError("lease_time_unrepresentable"),
+		)
+	}
 	if !newExpiry.After(record.Lease.ExpiresAt) {
-		return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 			ctx, connection, allocatorError("renewal_not_extending"),
 		)
 	}
@@ -297,7 +317,7 @@ WHERE lease_ref = ? AND state = ? AND revision = ?`,
 	}); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
 	}
-	if err := commit(ctx, connection); err != nil {
+	if err := allocator.commit(ctx, connection); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	return record.Lease, nil
@@ -318,7 +338,7 @@ func (allocator *Allocator) Recover(
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
-	defer rollback(connection)
+	defer allocator.rollback(connection)
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
@@ -328,20 +348,20 @@ func (allocator *Allocator) Recover(
 	}
 	record, err := readReservationByLease(ctx, connection, request.LeaseRef)
 	if err != nil {
-		return ports.AgentMicroVMVsockCIDLease{}, mapReadErrorAfterClock(
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.mapReadErrorAfterClock(
 			ctx, connection, err,
 		)
 	}
 	if err := validateCurrentOwner(record, request.PoolRef, request.ScopeDigest,
 		request.OwnerRef, request.FencingToken); err != nil {
-		return ports.AgentMicroVMVsockCIDLease{}, commitRejection(ctx, connection, err)
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(ctx, connection, err)
 	}
 	if record.State != reservationStateActive || !record.Lease.ExpiresAt.After(now) {
-		return ports.AgentMicroVMVsockCIDLease{}, commitRejection(
+		return ports.AgentMicroVMVsockCIDLease{}, allocator.commitRejection(
 			ctx, connection, allocatorError("lease_inactive"),
 		)
 	}
-	if err := commit(ctx, connection); err != nil {
+	if err := allocator.commit(ctx, connection); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	return record.Lease, nil
@@ -363,7 +383,7 @@ func (allocator *Allocator) Release(
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
 	}
-	defer rollback(connection)
+	defer allocator.rollback(connection)
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
@@ -377,7 +397,7 @@ func (allocator *Allocator) Release(
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocatorError("store_unavailable")
 	} else if found {
 		if operation.Kind != "release" || operation.RequestDigest != requestDigest {
-			return ports.AgentMicroVMVsockCIDReleaseReceipt{}, commitRejection(
+			return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocator.commitRejection(
 				ctx, connection, allocatorError("idempotency_conflict"),
 			)
 		}
@@ -386,7 +406,7 @@ func (allocator *Allocator) Release(
 			ports.ValidateAgentMicroVMVsockCIDReleaseReceipt(request, receipt) != nil {
 			return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocatorError("store_corrupt")
 		}
-		if err := commit(ctx, connection); err != nil {
+		if err := allocator.commit(ctx, connection); err != nil {
 			return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
 		}
 		return receipt, nil
@@ -394,21 +414,21 @@ func (allocator *Allocator) Release(
 
 	record, err := readReservationByLease(ctx, connection, request.LeaseRef)
 	if err != nil {
-		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, mapReadErrorAfterClock(
+		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocator.mapReadErrorAfterClock(
 			ctx, connection, err,
 		)
 	}
 	if err := validateCurrentOwner(record, request.PoolRef, request.ScopeDigest,
 		request.OwnerRef, request.FencingToken); err != nil {
-		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, commitRejection(ctx, connection, err)
+		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocator.commitRejection(ctx, connection, err)
 	}
 	if record.State != reservationStateActive || !record.Lease.ExpiresAt.After(now) {
-		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, commitRejection(
+		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocator.commitRejection(
 			ctx, connection, allocatorError("lease_inactive"),
 		)
 	}
 	if record.Lease.Revision != request.ExpectedRevision {
-		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, commitRejection(
+		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocator.commitRejection(
 			ctx, connection, allocatorError("stale_revision"),
 		)
 	}
@@ -439,7 +459,7 @@ WHERE lease_ref = ? AND state = ? AND revision = ?`,
 	}); err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocatorError("store_unavailable")
 	}
-	if err := commit(ctx, connection); err != nil {
+	if err := allocator.commit(ctx, connection); err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
 	}
 	return receipt, nil
@@ -636,6 +656,21 @@ WHERE pool_ref = ? AND state = ? AND expires_at_unix_nano <= ?`,
 	return err
 }
 
+func addLeaseDuration(now time.Time, duration time.Duration) (time.Time, bool) {
+	now = now.UTC()
+	nowUnixNano := now.UnixNano()
+	if now.IsZero() || nowUnixNano <= 0 || duration <= 0 ||
+		int64(duration) > math.MaxInt64-nowUnixNano {
+		return time.Time{}, false
+	}
+	expiresUnixNano := nowUnixNano + int64(duration)
+	expiresAt := time.Unix(0, expiresUnixNano).UTC()
+	if expiresAt.UnixNano() != expiresUnixNano || !expiresAt.After(now) {
+		return time.Time{}, false
+	}
+	return expiresAt, true
+}
+
 func durableOperationTime(
 	ctx context.Context,
 	connection *sql.Conn,
@@ -739,10 +774,15 @@ INSERT INTO agent_microvm_vsock_cid_operations (
 	return err
 }
 
-func commit(ctx context.Context, connection *sql.Conn) error {
-	if _, err := connection.ExecContext(ctx, "COMMIT"); err != nil {
-		_, _ = connection.ExecContext(context.Background(), "ROLLBACK")
-		_ = connection.Close()
+func (allocator *Allocator) commit(ctx context.Context, connection *sql.Conn) error {
+	if _, err := allocator.execTransaction(ctx, connection, "COMMIT"); err != nil {
+		if _, rollbackErr := allocator.execTransaction(
+			context.Background(), connection, "ROLLBACK",
+		); rollbackErr != nil {
+			discardConnection(connection)
+		} else {
+			_ = connection.Close()
+		}
 		if ctx.Err() != nil {
 			return allocatorError("canceled")
 		}
@@ -751,11 +791,26 @@ func commit(ctx context.Context, connection *sql.Conn) error {
 	return connection.Close()
 }
 
-func rollback(connection *sql.Conn) {
+func (allocator *Allocator) rollback(connection *sql.Conn) {
 	if connection == nil {
 		return
 	}
-	_, _ = connection.ExecContext(context.Background(), "ROLLBACK")
+	if _, err := allocator.execTransaction(
+		context.Background(), connection, "ROLLBACK",
+	); err != nil {
+		discardConnection(connection)
+		return
+	}
+	_ = connection.Close()
+}
+
+func discardConnection(connection *sql.Conn) {
+	if connection == nil {
+		return
+	}
+	_ = connection.Raw(func(any) error {
+		return driver.ErrBadConn
+	})
 	_ = connection.Close()
 }
 
@@ -770,14 +825,14 @@ func mapReadError(err error) error {
 	return allocatorError("store_unavailable")
 }
 
-func mapReadErrorAfterClock(
+func (allocator *Allocator) mapReadErrorAfterClock(
 	ctx context.Context,
 	connection *sql.Conn,
 	err error,
 ) error {
 	mapped := mapReadError(err)
 	if ErrorCode(mapped) == "agent_firecracker_vsock_cid.lease_not_found" {
-		return commitRejection(ctx, connection, mapped)
+		return allocator.commitRejection(ctx, connection, mapped)
 	}
 	return mapped
 }
@@ -785,8 +840,12 @@ func mapReadErrorAfterClock(
 // commitRejection persists the high-water mark and any expiry observed by the
 // operation before returning a semantic rejection. Rolling those changes back
 // could make an expired lease authoritative again after a host clock rollback.
-func commitRejection(ctx context.Context, connection *sql.Conn, rejection error) error {
-	if err := commit(ctx, connection); err != nil {
+func (allocator *Allocator) commitRejection(
+	ctx context.Context,
+	connection *sql.Conn,
+	rejection error,
+) error {
+	if err := allocator.commit(ctx, connection); err != nil {
 		return err
 	}
 	return rejection
@@ -895,13 +954,20 @@ var schemaStatements = []string{
     guest_cid INTEGER NOT NULL CHECK (guest_cid >= 3 AND guest_cid < 4294967295),
     fencing_token INTEGER NOT NULL CHECK (fencing_token > 0),
     revision INTEGER NOT NULL CHECK (revision > 0),
-    acquired_at_unix_nano INTEGER NOT NULL,
-    expires_at_unix_nano INTEGER NOT NULL,
+    acquired_at_unix_nano INTEGER NOT NULL CHECK (acquired_at_unix_nano > 0),
+    expires_at_unix_nano INTEGER NOT NULL CHECK (expires_at_unix_nano > acquired_at_unix_nano),
     backend_ref TEXT NOT NULL UNIQUE,
     adapter_ref TEXT NOT NULL,
     receipt_ref TEXT NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('active', 'expired', 'released')),
-    released_at_unix_nano INTEGER,
+    released_at_unix_nano INTEGER CHECK (
+        released_at_unix_nano IS NULL OR
+        (released_at_unix_nano >= acquired_at_unix_nano AND released_at_unix_nano < expires_at_unix_nano)
+    ),
+    CHECK (
+        (state = 'released' AND released_at_unix_nano IS NOT NULL) OR
+        (state IN ('active', 'expired') AND released_at_unix_nano IS NULL)
+    ),
     UNIQUE (pool_ref, acquire_idempotency_key),
     UNIQUE (pool_ref, guest_cid, fencing_token)
 ) STRICT`,
@@ -915,7 +981,7 @@ WHERE state = 'active'`,
     request_digest TEXT NOT NULL,
     lease_ref TEXT NOT NULL,
     result_json BLOB NOT NULL,
-    completed_at_unix_nano INTEGER NOT NULL,
+    completed_at_unix_nano INTEGER NOT NULL CHECK (completed_at_unix_nano > 0),
     PRIMARY KEY (pool_ref, idempotency_key),
     FOREIGN KEY (lease_ref) REFERENCES agent_microvm_vsock_cid_reservations (lease_ref)
 ) STRICT`,
