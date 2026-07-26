@@ -74,6 +74,61 @@ func historicalEffectPolicy(record GoalRecord) (effectPolicySnapshot, error) {
 	return policy, nil
 }
 
+// retryFitsIrreversibleGoalBudget distinguishes durable Goal consumption from
+// capacity that another active reservation may later release. Only the former
+// can prove that an automatic replacement will never fit its original demand.
+func retryFitsIrreversibleGoalBudget(
+	record GoalRecord,
+	settlement *governance.BudgetSettlement,
+	demand governance.BudgetDemand,
+) (bool, error) {
+	if settlement == nil {
+		return true, nil
+	}
+	if governance.ValidateBudgetSettlement(*settlement) != nil ||
+		governance.ValidateBudgetDemand(demand) != nil {
+		return false, errors.New("application.execution_retry_budget_invalid")
+	}
+	policy, err := historicalEffectPolicy(record)
+	if err != nil {
+		return false, err
+	}
+	charged := governance.ResourceVector{}
+	currentSeen := false
+	for _, prior := range record.BudgetSettlements {
+		reservation, found := reservationByRef(record.BudgetReservations, prior.ReservationRef)
+		if !found || reservation.GoalRef != record.Goal.Ref().String() {
+			return false, errors.New("application.execution_retry_budget_invalid")
+		}
+		if prior.ReservationRef == settlement.ReservationRef {
+			if prior != *settlement {
+				return false, errors.New("application.execution_retry_budget_conflict")
+			}
+			currentSeen = true
+		}
+		charged, err = governance.Add(charged, prior.Charged)
+		if err != nil {
+			return false, err
+		}
+	}
+	if !currentSeen {
+		reservation, found := reservationByRef(record.BudgetReservations, settlement.ReservationRef)
+		if !found || reservation.GoalRef != record.Goal.Ref().String() ||
+			settlement.Reserved != reservation.Resources {
+			return false, errors.New("application.execution_retry_budget_invalid")
+		}
+		charged, err = governance.Add(charged, settlement.Charged)
+		if err != nil {
+			return false, err
+		}
+	}
+	required, err := governance.Add(charged, demand.Resources)
+	if err != nil {
+		return false, err
+	}
+	return governance.Fits(policy.GoalLimit, required)
+}
+
 func ValidateBudgetPolicy(policy BudgetPolicy) error {
 	if !validEffectDigest(policy.PolicyHash) || policy.QuotaRetryDelay <= 0 || policy.EffectApprovalTTL <= 0 ||
 		governance.ValidateResourceVector(policy.DefaultWorkItemDemand) != nil ||

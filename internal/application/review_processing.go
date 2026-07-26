@@ -145,7 +145,11 @@ func (orchestrator *Orchestrator) replaceReviewerExecutionWithDiagnostic(ctx con
 	default:
 		return errors.New("application.review_retry_policy_invalid")
 	}
-	if retryPolicy == failedExecutionMustTerminate || execution.AttemptNo >= execution.MaxExecutionAttempts {
+	retryFits, err := retryFitsIrreversibleGoalBudget(record, settlement, item.BudgetDemand())
+	if err != nil {
+		return err
+	}
+	if retryPolicy == failedExecutionMustTerminate || execution.AttemptNo >= execution.MaxExecutionAttempts || !retryFits {
 		retired, actionRefs, cleanupControls, cleanupActions, cleanupEvents, cleanupErr :=
 			orchestrator.reviewCleanupPlan(record, item, execution.Ref, execution.ReviewSubjectDigest,
 				claim.Action.Ref, at)

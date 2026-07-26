@@ -10,6 +10,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
+	"orquesta/internal/ports"
 )
 
 func TestSQLitePersistsUnknownPartialAndExactUsageReconciliation(t *testing.T) {
@@ -77,6 +78,92 @@ func TestSQLitePersistsUnknownPartialAndExactUsageReconciliation(t *testing.T) {
 				t.Fatalf("usage recovery: %v cause=%v", err, errors.Unwrap(err))
 			}
 		})
+	}
+}
+
+func TestSQLiteIrreversibleGoalChargeInterruptsImpossibleAutomaticRetry(t *testing.T) {
+	system := newSQLiteV15System(t, 1)
+	for _, envelope := range []*governance.BudgetEnvelope{
+		&system.policy.DeploymentEnvelope,
+		&system.policy.ProjectEnvelopeTemplate,
+		&system.policy.GoalEnvelopeTemplate,
+	} {
+		envelope.Limit.ActiveTimeNS = system.policy.DefaultWorkItemDemand.ActiveTimeNS
+	}
+	system.orchestrator = newSQLiteV15Orchestrator(
+		t, system.repository, system.clock, system.external, system.policy, system.ids,
+	)
+	system.external.observationStatus = ports.AgentFailed
+	system.external.observationError = "codex.process_failed"
+	system.external.observationUsage = governance.ResourceUsage{Quality: governance.UsageQualityUnknown}
+	created := system.submit(t, "request:v15-irreversible-retry-budget")
+
+	if result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-irreversible-launch",
+	); err != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+		t.Fatalf("launch result=%+v err=%v", result, err)
+	}
+	system.clock.Advance(time.Second)
+	if result, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v15-irreversible-observe",
+	); err != nil || !result.Processed || result.Action != application.ActionObserveAgent {
+		t.Fatalf("observe result=%+v err=%v", result, err)
+	}
+
+	assertSQLiteIrreversibleRetryFrontier(t, system, created.Record.Goal.Ref())
+	for restart := 0; restart < 2; restart++ {
+		restartSQLiteV15System(t, system)
+		if result, err := system.orchestrator.ProcessNext(
+			context.Background(), fmt.Sprintf("worker:v15-irreversible-replay:%d", restart),
+		); err != nil || result.Processed {
+			t.Fatalf("replay %d result=%+v err=%v", restart, result, err)
+		}
+		assertSQLiteIrreversibleRetryFrontier(t, system, created.Record.Goal.Ref())
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
+		t.Fatalf("irreversible retry recovery: %v cause=%v", err, errors.Unwrap(err))
+	}
+}
+
+func assertSQLiteIrreversibleRetryFrontier(
+	t *testing.T,
+	system *sqliteV15System,
+	goalRef goal.GoalRef,
+) {
+	t.Helper()
+	record, err := system.repository.GetGoal(context.Background(), goalRef)
+	items := record.Goal.WorkItems()
+	if err != nil || record.Goal.State() != goal.GoalStateRunning || len(items) != 1 ||
+		items[0].State() != goal.WorkItemStateInterrupted || len(record.Executions) != 1 ||
+		record.Executions[0].State != application.ExecutionFailed ||
+		record.Executions[0].FailureCode != "codex.process_failed" ||
+		record.Executions[0].MaxExecutionAttempts <= 1 ||
+		len(record.BudgetSettlements) != 1 {
+		t.Fatalf("irreversible retry frontier record=%+v err=%v", record, err)
+	}
+	settlement := record.BudgetSettlements[0]
+	if settlement.Observed.Quality != governance.UsageQualityMeasured ||
+		settlement.Charged.Tokens != system.policy.DefaultWorkItemDemand.Tokens ||
+		settlement.Charged.MoneyMicros != system.policy.DefaultWorkItemDemand.MoneyMicros ||
+		settlement.Charged.ActiveTimeNS != int64(time.Second) {
+		t.Fatalf("irreversible retry settlement=%+v", settlement)
+	}
+	var pendingLaunches, consumedObservations int
+	if err := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM outbox
+WHERE goal_ref=? AND kind='launch_agent' AND completed_at IS NULL`,
+		goalRef.String()).Scan(&pendingLaunches); err != nil {
+		t.Fatal(err)
+	}
+	if err := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM action_consumption_receipts
+WHERE goal_ref=? AND kind='observe_agent' AND outcome='completed'`,
+		goalRef.String()).Scan(&consumedObservations); err != nil {
+		t.Fatal(err)
+	}
+	if pendingLaunches != 0 || consumedObservations != 1 || system.external.launchCalls != 1 {
+		t.Fatalf("retry replay launches=%d observations=%d calls=%d",
+			pendingLaunches, consumedObservations, system.external.launchCalls)
 	}
 }
 
