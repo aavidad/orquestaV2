@@ -1395,17 +1395,21 @@ def command_upgrade_receipt(args: argparse.Namespace) -> None:
         raise ContractError("upgrade_harness_checks")
 
     repository = pathlib.Path(args.repository)
+    profile = require_string(harness["profile"], "upgrade_harness_profile")
+    live_profile = require_string(args.profile, "upgrade_live_profile")
     forbidden = pathlib.Path(
         require_string(harness["forbidden_live_root"], "upgrade_forbidden_root")
     )
     runtime_base = pathlib.Path(args.runtime_base)
+    expected_forbidden = runtime_base / live_profile
     output = pathlib.Path(require_string(harness["output_dir"], "upgrade_output_dir"))
     if (
         not output.is_absolute()
         or not forbidden.is_absolute()
-        or forbidden != runtime_base
+        or forbidden != expected_forbidden
         or forbidden.resolve(strict=True) != forbidden
         or runtime_base.resolve(strict=True) != runtime_base
+        or expected_forbidden.resolve(strict=True) != expected_forbidden
         or within(output, forbidden)
     ):
         raise ContractError("upgrade_output_isolation")
@@ -1413,7 +1417,6 @@ def command_upgrade_receipt(args: argparse.Namespace) -> None:
     receipt_path = pathlib.Path(args.path)
     if receipt_path.parent != output or receipt_path.name != "receipt.json":
         raise ContractError("upgrade_receipt_location")
-    profile = require_string(harness["profile"], "upgrade_harness_profile")
     unit = require_string(harness["unit"], "upgrade_harness_unit")
     if (
         not REACCREDIT_PROFILE.fullmatch(profile)

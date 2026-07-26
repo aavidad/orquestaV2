@@ -890,7 +890,8 @@ document = {
   "core_counts":core_counts,"schema_migrations":result_migrations},
  "harness":{
   "created_at":"2026-07-26T12:00:00Z","output_dir":str(output),
-  "forbidden_live_root":str(root/"runtime"),"profile":profile,"unit":unit,
+  "forbidden_live_root":str(root/"runtime/Codex12"),
+  "profile":profile,"unit":unit,
   "listen":listen,"unit_control_group":str(control),
   "delegated_cgroup_root":str(delegated),
   "projected_repository_revision":projected_revision,
@@ -1269,6 +1270,39 @@ receipt = json.loads(path.read_text())
 receipt["schema_version"] = "orquesta_sqlite_upgrade_audit.v0"
 path.write_text(json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n")
 PY
+set_contract_value --expected-sqlite-upgrade-receipt-sha256 \
+  "$(sha256_of "$FIXTURE/audit-output/receipt.json")"
+run_fails "sqlite_upgrade_receipt_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
+new_fixture upgrade-forbidden-root-too-broad
+/usr/bin/python3 - "$FIXTURE/audit-output/receipt.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+receipt = json.loads(path.read_text())
+receipt["harness"]["forbidden_live_root"] = str(path.parents[1] / "runtime")
+path.write_text(json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n")
+PY
+set_contract_value --expected-sqlite-upgrade-receipt-sha256 \
+  "$(sha256_of "$FIXTURE/audit-output/receipt.json")"
+run_fails "sqlite_upgrade_receipt_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
+new_fixture upgrade-forbidden-root-wrong-profile
+/usr/bin/python3 - "$FIXTURE/audit-output/receipt.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+receipt = json.loads(path.read_text())
+receipt["harness"]["forbidden_live_root"] = str(
+    path.parents[1] / "runtime/OtroPerfil"
+)
+path.write_text(json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n")
+PY
+mkdir -m 700 "$FIXTURE/runtime/OtroPerfil"
 set_contract_value --expected-sqlite-upgrade-receipt-sha256 \
   "$(sha256_of "$FIXTURE/audit-output/receipt.json")"
 run_fails "sqlite_upgrade_receipt_invalid" \
