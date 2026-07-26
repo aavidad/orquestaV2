@@ -55,6 +55,15 @@ case "$operation" in
     if [ "$value_only" -eq 1 ]; then
       cat -- "$root/state/load_state"
     else
+      if [ -f "$root/state/transient_main_executable" ]; then
+        transient_remaining="$(<"$root/state/transient_main_executable")"
+        if [ "$transient_remaining" = "1" ]; then
+          printf '%s\n' "0" >"$root/state/transient_main_executable"
+        else
+          ln -sfn -- /usr/bin/sleep "$root/proc/30001/exe"
+          rm -f -- "$root/state/transient_main_executable"
+        fi
+      fi
       cat -- "$root/state/properties"
     fi
     ;;
@@ -78,6 +87,12 @@ printf '%s\0' "$@" >"$root/log/systemd-run.argv"
   exit 97
 case "${ORQUESTA_SYSTEMD_FAKE_RUN_MODE:-success}" in
   success)
+    cp -- "$root/state/properties.ready" "$root/state/properties"
+    printf '%s\n' "loaded" >"$root/state/load_state"
+    ;;
+  transient-success)
+    ln -sfn -- /bin/bash "$root/proc/30001/exe"
+    printf '%s\n' "1" >"$root/state/transient_main_executable"
     cp -- "$root/state/properties.ready" "$root/state/properties"
     printf '%s\n' "loaded" >"$root/state/load_state"
     ;;
@@ -274,7 +289,12 @@ run_fails() {
   output="$(ORQUESTA_SYSTEMD_FAKE_ROOT="$FIXTURE" "$@" 2>&1)"
   status="$?"
   set -e
-  [ "$status" -ne 0 ] && [[ "$output" == *"reason_code=$expected"* ]] || {
+  reason_codes="$(
+    printf '%s\n' "$output" |
+      grep -o 'reason_code=[^[:space:]]*' || true
+  )"
+  [ "$status" -ne 0 ] &&
+    [ "$reason_codes" = "reason_code=$expected" ] || {
     printf 'status=%s output=%s\n' "$status" "$output" >&2
     fail_test "$expected"
   }
@@ -320,6 +340,16 @@ if '"$profile_script" start' not in body or "bash -lc" in body:
     raise SystemExit("unsafe or missing profile invocation")
 PY
   fail_test "start_argv_contract"
+
+new_fixture readiness-transient-success
+printf '%s\n' "not-found" >"$FIXTURE/state/load_state"
+printf '%s\n' "LoadState=not-found" >"$FIXTURE/state/properties"
+run_ok "status=running action=start" env \
+  ORQUESTA_SYSTEMD_FAKE_RUN_MODE=transient-success \
+  "$SUBJECT" --apply start "${CONTRACT[@]}"
+[[ "$output" != *"status=error"* ]] &&
+  [[ "$output" != *"reason_code="* ]] ||
+  fail_test "readiness_transient_diagnostic_leaked"
 
 new_fixture unit-conflict
 write_ready_properties "$FIXTURE" "$FIXTURE/state/properties" \
