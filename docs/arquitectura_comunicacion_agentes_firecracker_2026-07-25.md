@@ -94,11 +94,17 @@ consultar el ledger de atestaciones o `CredentialStore`; missing, expirado
 (`now >= expires_at`), consumido y la carrera perdedora terminan ahí. Una vez
 reclamado, cualquier fallo posterior lo invalida y el agente debe pedir uno
 nuevo. Solo después de atestación, credencial y HMAC válidos, el authorizer
-invoca dentro de esa misma llamada el callback que abre una sesión. El receipt
-posterior es evidencia estructurada, nunca una credencial ni una autoridad
-reutilizable. Solo refs, versión y digests entran en política/receipt; el secreto
-y el proof permanecen en callback/memoria transitoria. Política, plan efectivo,
-autorización y receipt llevan digests independientes.
+inicia dentro de esa misma llamada una transacción de apertura. `Begin` tiene
+cero efectos, `Open` solo prepara recursos internos y `Commit` es el único punto
+atómico que puede hacer alcanzable la sesión. Cualquier error o cancelación
+desde `Begin` hasta antes de un `Commit` correcto ejecuta `Rollback` con el
+timeout de cleanup explícito de la composición. Si el rollback falla o agota su
+plazo, se devuelve `cleanup_failed` sin receipt; puede quedar un residuo interno
+para reparación, pero nunca una sesión alcanzable. El receipt posterior es
+evidencia estructurada, nunca una credencial ni una autoridad reutilizable.
+Solo refs, versión y digests entran en política/receipt; el secreto y el proof
+permanecen en el callback de credenciales y en memoria transitoria. Política,
+plan efectivo, autorización y receipt llevan digests independientes.
 
 Este corte es una composición/adaptador alternativo de `AGT-01`/`AGT-03`, con
 la evidencia de aislamiento exigida por `EVD-13` y el broker futuro relacionado
@@ -119,8 +125,10 @@ El corte 2026-07-26 implementa:
   atestación del lanzamiento;
 - authorizer host mínimo que reclama primero el challenge, exige después la
   atestación exacta, calcula HMAC-SHA256 solo dentro del callback de
-  `CredentialStore`, compara con `hmac.Equal` e invoca como máximo una vez el
-  callback de apertura; el receipt resultante es solo evidencia sin secreto;
+  `CredentialStore`, compara con `hmac.Equal` y crea como máximo una transacción
+  de apertura; `Open` prepara, `Commit` publica atómicamente y `Rollback`
+  acotado limpia todo fallo o cancelación; el receipt resultante es solo
+  evidencia sin secreto;
 - almacén de challenges en memoria, acotado y ligado a política, lanzamiento,
   ejecución y agente; el consumo es atómico y una segunda presentación
   idéntica queda denegada sin consultar los ledgers. Proof, atestación,
@@ -134,8 +142,9 @@ No implementa ni simula conectividad física. La siguiente dependencia causal
 es un corte separado con:
 
 1. adaptador físico de atestación y wiring del
-   `AgentMicroVMLaunchAuthorizer` ya implementado, de modo que solo su callback
-   pueda abrir cada sesión del broker y del proxy;
+   `AgentMicroVMLaunchAuthorizer` ya implementado, de modo que solo una
+   transacción autorizada pueda hacer `Commit` de cada sesión del broker y del
+   proxy;
 2. reserva content-addressed de un backend vsock distinto por VM y composición
    Firecracker que materialice el plan sin NIC;
 3. bridge HTTP guest loopback→vsock y proxy host-side con política SSRF,
