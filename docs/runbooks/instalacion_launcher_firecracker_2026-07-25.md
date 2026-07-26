@@ -235,26 +235,66 @@ scripts/test_install_firecracker_attestor_launcher.sh
 
 ## 4. E2E físico del candidato staged
 
-La secuencia obligatoria es: compilar con Go `1.25.11` fijado, `--apply`,
-`systemctl daemon-reload`, comprobar que el candidato está **inactivo**, ejecutar
-el E2E físico `1 + 16`, validar cero residual y solo entonces `--activate`.
+La secuencia obligatoria es: reconstruir launcher y supervisor desde un objeto
+Git exacto con Go `1.25.11` fijado, publicar el recibo de build, verificar ese
+recibo, `--apply`, `systemctl daemon-reload`, comprobar que el candidato está
+**inactivo**, ejecutar el E2E físico `1 + 16`, validar cero residual y solo
+entonces `--activate`.
 No se arranca manualmente la unidad antes del E2E: el ejecutor inicia y detiene
 la unidad versionada candidata y comprueba su identidad estable.
 
 ```bash
-CGO_ENABLED=0 \
-  /srv/orquesta-self/toolchains/go1.25.11/bin/go build \
-  -mod=vendor -trimpath -buildvcs=false \
-  -o /ABS/build/orquesta-firecracker-attestor-e2e \
-  ./cmd/orquesta-firecracker-attestor-e2e
-sha256sum /ABS/build/orquesta-firecracker-attestor-e2e
+build_parent="$(mktemp -d /tmp/orquesta-firecracker-host-build.XXXXXX)"
+/home/alberto/Trabajo/orquestaV2/scripts/build_firecracker_host_bundle.sh \
+  --confirm-real \
+  --source-root /home/alberto/Trabajo/orquestaV2 \
+  --source-commit "$(git -C /home/alberto/Trabajo/orquestaV2 rev-parse HEAD)" \
+  --toolchain-root /srv/orquesta-self/toolchains/go1.25.11 \
+  --output-root "$build_parent/bundle" \
+  --tmp-parent "$build_parent"
+sha256sum "$build_parent"/bundle/*
 # copiar los siete inputs y el instalador a staging root-owned;
+# copiar también el recibo de build y su verificador fijado por SHA;
 # ejecutar allí --dry-run, --apply y --check con el mismo juego de flags
 sudo systemctl daemon-reload
 ! sudo systemctl is-active --quiet \
   orquesta-firecracker-attestor-<UNIT_SHA256>.service
 sudo /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256> \
   --spec /ABS/root/e2e-spec.json
+```
+
+`buildvcs=false` es deliberado para conservar bytes reproducibles, por lo que
+`go version -m` puede mostrar `(devel)`. La procedencia no se infiere de ese
+texto del ELF: vive en
+`orquesta-firecracker-host-build.receipt.json`, publicado **después** de ambos
+binarios como marcador de commit del bundle. El builder compila dos veces con
+cachés aisladas desde un `git archive` privado y exacto; el recibo fija:
+
+- commit y tree Git;
+- SHA-256 del archivo fuente y del objeto commit;
+- SHA-256 del builder exacto;
+- versión, SHA-256 del ejecutable Go y SHA-256 del árbol completo del
+  toolchain;
+- receta y entorno cerrados (`vendor`, `trimpath`, `buildvcs=false`, `CGO=0`,
+  `linux/amd64`, `GOENV=off`, `GOTOOLCHAIN=local`, red de módulos desactivada,
+  locale/tiempo fijos y cachés privadas);
+- tamaño, modo, paquete y SHA-256 de launcher y supervisor.
+
+El driver privilegiado no confía en un JSON sustituible. Fija por constantes
+el SHA-256 del recibo y del verificador, los copia primero a staging
+`root:root`, vuelve a comprobar ambos hashes y ejecuta allí la validación
+estricta contra los dos ELF staged. Un cambio de fuente, toolchain, receta,
+campo JSON, binario o verificador corta antes de `--apply`. El recibo queda
+fuera de los binarios que acredita, como exige la regla de sujetos inmutables.
+
+Para el candidato `3451d3108c0c14b9539bec1ca134afd07a9beb19`, el rebuild
+independiente produjo bytes idénticos a las dos compilaciones previas:
+
+```text
+source_tree=a716368249de9ef4ebf3d93fe2eb44630a8ba438
+launcher_sha256=e625d01c0c7298eb36931ca3344625fc3497498bd98967551a8d508d0a906323
+supervisor_sha256=dd335825332730a476130c62629a422fb6d478df2fcc30b006c3645a37dcba3b
+host_build_receipt_sha256=ba367934b520326181662e2e65febd5a21f50d2d3a7d21bc8fdfb2a5cc0ecff9
 ```
 
 El E2E realiza una atestación física y después una ola física de 16; verifica
