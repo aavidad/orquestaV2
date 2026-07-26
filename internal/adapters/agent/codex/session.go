@@ -155,7 +155,9 @@ func (adapter *Adapter) preflightSessionLaunch(session *resolvedSession, request
 	surfaces := []credentials.LeakSurface{
 		{Name: "prompt", Content: []byte(prompt)},
 		{Name: "command", Content: []byte(adapter.command)},
-		{Name: "arguments", Content: []byte(strings.Join(adapter.commandArgumentsWithSession("run:session", false, false, session), "\x00"))},
+		{Name: "arguments", Content: []byte(strings.Join(adapter.commandArgumentsWithSession(
+			"run:session", false, false, request.ReasoningEffort, session,
+		), "\x00"))},
 	}
 	defer clearLeakSurfaces(surfaces)
 	if err := session.guard.Scan(surfaces); err != nil {

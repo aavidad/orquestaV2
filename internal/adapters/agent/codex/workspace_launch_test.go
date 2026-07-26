@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -26,7 +27,9 @@ func TestCodexCommandArgumentsForceNonInteractiveApproval(t *testing.T) {
 		{name: "unbound", arguments: adapter.commandArguments("run:unbound")},
 		{name: "review", arguments: adapter.commandArguments("run:review", true, false)},
 		{name: "writer", arguments: adapter.commandArguments("run:writer", true, true)},
-		{name: "session", arguments: adapter.commandArgumentsWithSession("run:session", false, false, session)},
+		{name: "session", arguments: adapter.commandArgumentsWithSession(
+			"run:session", false, false, governance.ReasoningEffortMedium, session,
+		)},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if len(test.arguments) < 3 ||

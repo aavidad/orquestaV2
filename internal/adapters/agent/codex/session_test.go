@@ -118,7 +118,9 @@ func TestSessionProjectionIsPerExecutionAndKeepsBearerOutOfArguments(t *testing.
 		if err != nil {
 			t.Fatal(err)
 		}
-		arguments := adapter.commandArgumentsWithSession("run:session", false, false, session)
+		arguments := adapter.commandArgumentsWithSession(
+			"run:session", false, false, request.ReasoningEffort, session,
+		)
 		joined := strings.Join(arguments, "\x00")
 		if !strings.Contains(joined, `mcp_servers.orquesta.url="http://127.0.0.1:7777/mcp"`) ||
 			!strings.Contains(joined, `mcp_servers.orquesta.bearer_token_env_var="PRIVATE_MCP_TOKEN"`) ||

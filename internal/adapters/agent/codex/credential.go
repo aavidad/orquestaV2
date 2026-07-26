@@ -99,7 +99,8 @@ func (record launchRecord) recoveryRequest(receipt ports.AgentLaunchReceipt) por
 	return ports.AgentLaunchRequest{SessionRef: sessionRef, ProjectRef: projectRef, ActorRef: actorRef,
 		GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef, ExecutionRef: receipt.ExecutionRef,
 		ExecutionAttempt: receipt.ExecutionAttempt, PlanGeneration: receipt.PlanGeneration,
-		AppSpecGeneration: receipt.AppSpecGeneration, SpecHash: record.SpecHash}
+		AppSpecGeneration: receipt.AppSpecGeneration, SpecHash: record.SpecHash,
+		ReasoningEffort: record.ReasoningEffort}
 }
 
 func (adapter *Adapter) recoverExecutionGuards(ctx context.Context, record launchRecord, state *executionState) error {
@@ -281,7 +282,9 @@ func (adapter *Adapter) preflightCredentialLaunch(secret credentials.Secret, gua
 	surfaces := []credentials.LeakSurface{
 		{Name: "prompt", Content: []byte(prompt)},
 		{Name: "command", Content: []byte(adapter.command)},
-		{Name: "arguments", Content: []byte(strings.Join(adapter.commandArgumentsWithSession(runPath, false, false, session), "\x00"))},
+		{Name: "arguments", Content: []byte(strings.Join(adapter.commandArgumentsWithSession(
+			runPath, false, false, request.ReasoningEffort, session,
+		), "\x00"))},
 		{Name: "work_root", Content: []byte(adapter.rootPath)},
 	}
 	surfaces = append(surfaces, credentialLaunchRequestSurfaces(request)...)

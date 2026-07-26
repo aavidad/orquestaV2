@@ -211,8 +211,8 @@ func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 }
 
 func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
-	if stateSchemaVersion != 6 {
-		t.Fatalf("launch metadata schema version = %d, want explicit V6 cut", stateSchemaVersion)
+	if stateSchemaVersion != 7 {
+		t.Fatalf("launch metadata schema version = %d, want explicit V7 cut", stateSchemaVersion)
 	}
 	request := testRequest(t, "plan-metadata", "helper:success", 1024)
 	baseHash := mustRequestHash(t, request)
@@ -237,6 +237,9 @@ func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
 		"capabilities":   func(value *ports.AgentLaunchRequest) { value.CapabilityRefs = []string{"capability:review"} },
 		"writes":         func(value *ports.AgentLaunchRequest) { value.WriteSet = []string{"internal/other"} },
 		"output":         func(value *ports.AgentLaunchRequest) { value.OutputContract = string(goal.OutputContractArtifact) },
+		"reasoning_effort": func(value *ports.AgentLaunchRequest) {
+			value.ReasoningEffort = governance.ReasoningEffortXHigh
+		},
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
@@ -452,6 +455,26 @@ func TestAdapterPassesModelOnlyWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestAdapterUsesExactRequestReasoningEffort(t *testing.T) {
+	config := testConfig(t)
+	config.ReasoningEffort = "low"
+	adapter := openTestAdapter(t, config)
+	request := testRequest(t, "reasoning-xhigh", "helper:reasoning:xhigh helper:success", 1024)
+	request.ReasoningEffort = governance.ReasoningEffortXHigh
+
+	if _, err := adapter.Launch(context.Background(), request); err != nil {
+		t.Fatalf("Launch() error = %v", err)
+	}
+	observation := awaitTerminal(t, adapter, request.ExecutionRef)
+	if observation.Status != ports.AgentCompleted {
+		t.Fatalf("reasoning observation = %+v", observation)
+	}
+	record, _, found, err := adapter.loadLaunchRecord(request.ExecutionRef)
+	if err != nil || !found || record.ReasoningEffort != request.ReasoningEffort {
+		t.Fatalf("durable reasoning record=%+v found=%v error=%v", record, found, err)
+	}
+}
+
 func TestAdapterCapabilitiesUseStableLogicalDefaultModelSelector(t *testing.T) {
 	adapter := openTestAdapter(t, testConfig(t))
 	capabilities, err := adapter.Capabilities(context.Background())
@@ -525,6 +548,11 @@ func runCodexHelper(arguments []string) error {
 	}
 	if !strings.Contains(string(prompt), "Return only the JSON object required by the supplied schema") {
 		return fmt.Errorf("structured-output instruction missing")
+	}
+	for _, effort := range []string{"low", "medium", "high", "xhigh", "ultra"} {
+		if strings.Contains(string(prompt), "helper:reasoning:"+effort) && options.reasoningEffort != effort {
+			return fmt.Errorf("reasoning effort = %q, want %s", options.reasoningEffort, effort)
+		}
 	}
 	credentialMaterial, err := validateHelperEnvironment(string(prompt))
 	if err != nil {
@@ -675,10 +703,11 @@ func startSetsidHelper() error {
 }
 
 type helperOptions struct {
-	schemaPath string
-	outputPath string
-	model      string
-	configs    []string
+	schemaPath      string
+	outputPath      string
+	model           string
+	reasoningEffort string
+	configs         []string
 }
 
 func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
@@ -746,7 +775,6 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 	}
 	sort.Strings(options.configs)
 	wantConfigs := []string{
-		`model_reasoning_effort="medium"`,
 		`shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY","ORQUESTA_MCP_BEARER_TOKEN"]`,
 		`shell_environment_policy.experimental_use_profile=false`,
 		`shell_environment_policy.ignore_default_excludes=false`,
@@ -756,6 +784,14 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 	hasSessionURL := false
 	hasSessionBearerProjection := false
 	for _, config := range options.configs {
+		for _, effort := range []string{"low", "medium", "high", "xhigh", "ultra"} {
+			if config == fmt.Sprintf("model_reasoning_effort=%q", effort) {
+				if options.reasoningEffort != "" {
+					return helperOptions{}, fmt.Errorf("duplicate reasoning effort")
+				}
+				options.reasoningEffort = effort
+			}
+		}
 		switch config {
 		case `mcp_servers.orquesta.url="http://127.0.0.1:7777/mcp"`:
 			hasSessionURL = true
@@ -772,6 +808,10 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 			`mcp_servers.orquesta.bearer_token_env_var="ORQUESTA_MCP_BEARER_TOKEN"`,
 		)
 	}
+	if options.reasoningEffort == "" {
+		return helperOptions{}, fmt.Errorf("reasoning effort missing")
+	}
+	wantConfigs = append(wantConfigs, fmt.Sprintf("model_reasoning_effort=%q", options.reasoningEffort))
 	sort.Strings(wantConfigs)
 	accountConfigs := append([]string(nil), wantConfigs...)
 	for index, value := range accountConfigs {
