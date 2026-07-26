@@ -347,6 +347,18 @@ Con `set -e`, cualquier diferencia de hash o metadata corta antes del último
 `sudo env -i`; el driver no llega a ejecutarse. Si ya existe un target distinto,
 también se rechaza antes de sobrescribirlo.
 
+Hasta ejecutar este bloque, los scripts
+`scripts/build_firecracker_host_bundle.sh` y
+`scripts/verify_firecracker_host_bundle_receipt.py` son parte inmutable del
+handoff: el driver exige respectivamente los hashes `ff6950ab…` y
+`2e06b6ea…`. La correccion que mueve los tres comandos bajo
+`cmd/orquesta/**` queda preservada en la rama remota
+`agente/firecracker-cmd-product-root` (`37893ace`, `6e1cbe7b`) y no debe
+fusionarse antes del E2E root. Tras obtener el receipt fisico se integra esa
+rama, se actualizan las referencias documentales y los futuros bundles se
+construyen desde un candidato nuevo; el bundle y driver anteriores no se
+reescriben.
+
 El E2E realiza una atestación física y después una ola física de 16; verifica
 límites, `memory.swap.max=0`, red/API/vsock/serial ausentes y deja unidad,
 procesos, cgroup y directorios de runs sin residuo. No habilita el alias

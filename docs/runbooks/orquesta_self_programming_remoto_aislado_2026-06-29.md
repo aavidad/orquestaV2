@@ -57,6 +57,43 @@ con `--install-direct-mcp`. La comunicacion compacta tipo `caveman`, si existe,
 y la norma persistente en `~/.codex/AGENTS.md` siguen siendo obligatorias. Ver
 `docs/runbooks/herramientas_agentes_orquesta_2026-06-30.md`.
 
+## Toolchain y caches Go del runtime Codex
+
+Cada perfil debe declarar un `runtime.codex.cache_root` privado y disjunto de
+estado, artefactos, workspaces, credenciales, HOME y configuracion. Orquesta
+crea bajo esa raiz `GOCACHE`, `GOMODCACHE`, `GOPATH`, `GOTMPDIR` y `TMPDIR`
+separados con modo `0700`; dos perfiles no comparten esas rutas aunque arranquen
+desde el mismo repositorio.
+
+El proceso Codex y los comandos que lance reciben siempre `GOENV=off` y
+`GOTOOLCHAIN=local`. Esto convierte una version incompatible en un fallo local
+observable: nunca debe aparecer una descarga automatica de toolchain por
+`GOTOOLCHAIN=auto`. No se fuerza `GOPROXY=off`; si la composicion autoriza
+acceso a modulos, `GOPROXY` puede entrar por la allowlist normal. Las pruebas
+del repositorio siguen usando `vendor`.
+
+`runtime.codex.go_toolchain_root` es opcional:
+
+- vacio: modo portable; conserva el `PATH` autorizado, elimina un `GOROOT`
+  heredado y no busca ni ejecuta Go durante el preflight;
+- no vacio: fija `GOROOT` y antepone su `bin` a `PATH`. En Unix es un trust
+  anchor y debe ser una ruta absoluta canonica cuyos ancestros y arbol completo
+  sean `root:root`, sin symlinks, nodos especiales ni escritura de grupo/otros.
+  Cualquier diferencia corta antes de crear caches o invocar Codex.
+
+Perfil local de este host:
+
+```toml
+[runtime.codex]
+cache_root = "/home/alberto/Trabajo/.orquesta-runtime-v2-v23/Codex12/cache/codex-go"
+go_toolchain_root = "/srv/orquesta-self/toolchains/go1.25.11"
+```
+
+El toolchain explicito evita deriva y mutacion por el UID del agente, pero no
+es un recibo de procedencia ni sustituye el aislamiento Firecracker. La
+procedencia reproducible de binarios y guests conserva sus digests y receipts
+separados.
+
 ## Direccion operativa
 
 En remoto manda Orquesta. `orquesta-server` recibe el trabajo por web/API o lo
