@@ -80,12 +80,15 @@ func (cgroup *fakeRunnerCgroup) cleanup(
 func (*fakeRunnerCgroup) Close() error { return nil }
 
 type recordingCommandFactory struct {
-	mu       sync.Mutex
-	mode     string
-	args     [][]string
-	configs  [][]byte
-	layouts  []recordedJailLayout
-	commands []*exec.Cmd
+	mu                sync.Mutex
+	mode              string
+	signalHelperReady bool
+	helperReadyPath   string
+	commandBuilt      chan struct{}
+	args              [][]string
+	configs           [][]byte
+	layouts           []recordedJailLayout
+	commands          []*exec.Cmd
 }
 
 func (factory *recordingCommandFactory) build(_ string, arguments ...string) *exec.Cmd {
@@ -103,9 +106,20 @@ func (factory *recordingCommandFactory) build(_ string, arguments ...string) *ex
 		"--",
 		"--helper-mode=" + factory.mode,
 	}
+	if factory.signalHelperReady {
+		factory.helperReadyPath = filepath.Join(root, "helper.ready")
+		helperArguments = append(
+			helperArguments,
+			"--helper-ready-path="+factory.helperReadyPath,
+		)
+	}
 	helperArguments = append(helperArguments, arguments...)
 	command := exec.Command(os.Args[0], helperArguments...)
 	factory.commands = append(factory.commands, command)
+	if factory.commandBuilt != nil {
+		close(factory.commandBuilt)
+		factory.commandBuilt = nil
+	}
 	return command
 }
 
@@ -116,6 +130,11 @@ func TestPhysicalRunnerHelperProcess(t *testing.T) {
 	}
 	if mode == "hang" {
 		signal.Ignore(syscall.SIGTERM)
+		if readyPath := argumentValue(os.Args, "--helper-ready-path"); readyPath != "" {
+			if err := os.WriteFile(readyPath, []byte("ready\n"), 0o600); err != nil {
+				os.Exit(93)
+			}
+		}
 		_, _ = os.Stdout.Write(bytes.Repeat([]byte("D"), 128))
 		for {
 			time.Sleep(time.Hour)
@@ -209,9 +228,33 @@ func TestJailerArgumentsNeverDetachObservedFirecrackerLifecycle(t *testing.T) {
 
 func TestPhysicalRunnerTimeoutTermsKillsWaitsAndCleans(t *testing.T) {
 	runner, factory, cgroup, _, request, input, output := physicalRunnerFixture(t, "hang")
-	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
-	defer cancel()
-	_, err := runner.Run(ctx, request, input, output)
+	runner.config.CleanupTimeout = 500 * time.Millisecond
+	factory.signalHelperReady = true
+	commandBuilt := make(chan struct{})
+	factory.commandBuilt = commandBuilt
+	ctx := newControlledDeadlineContext()
+	defer ctx.expire()
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := runner.Run(ctx, request, input, output)
+		runDone <- err
+	}()
+	select {
+	case <-commandBuilt:
+	case <-time.After(30 * time.Second):
+		ctx.expire()
+		err := <-runDone
+		_ = runner.Close()
+		t.Fatalf("runner did not build helper command: %v", err)
+	}
+	if !waitForHelperReady(factory, 10*time.Second) {
+		ctx.expire()
+		err := <-runDone
+		_ = runner.Close()
+		t.Fatalf("helper did not become ready: %v", err)
+	}
+	ctx.expire()
+	err := <-runDone
 	if ErrorCode(err) != CodeExecutionTimeout {
 		t.Fatalf("timeout err=%v", err)
 	}
@@ -231,6 +274,56 @@ func TestPhysicalRunnerTimeoutTermsKillsWaitsAndCleans(t *testing.T) {
 	if err := runner.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+type controlledDeadlineContext struct {
+	done chan struct{}
+	once sync.Once
+}
+
+func newControlledDeadlineContext() *controlledDeadlineContext {
+	return &controlledDeadlineContext{done: make(chan struct{})}
+}
+
+func (*controlledDeadlineContext) Deadline() (time.Time, bool) {
+	return time.Time{}, false
+}
+
+func (ctx *controlledDeadlineContext) Done() <-chan struct{} {
+	return ctx.done
+}
+
+func (ctx *controlledDeadlineContext) Err() error {
+	select {
+	case <-ctx.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (*controlledDeadlineContext) Value(any) any {
+	return nil
+}
+
+func (ctx *controlledDeadlineContext) expire() {
+	ctx.once.Do(func() { close(ctx.done) })
+}
+
+func waitForHelperReady(factory *recordingCommandFactory, budget time.Duration) bool {
+	deadline := time.Now().Add(budget)
+	for time.Now().Before(deadline) {
+		factory.mu.Lock()
+		readyPath := factory.helperReadyPath
+		factory.mu.Unlock()
+		if readyPath != "" {
+			if _, err := os.Stat(readyPath); err == nil {
+				return true
+			}
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return false
 }
 
 func TestPhysicalRunnerCleanupFailureDominatesSuccessfulExecution(t *testing.T) {
