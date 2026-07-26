@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"orquesta/internal/commands"
+	"orquesta/internal/config"
 	"orquesta/internal/intake"
 )
 
@@ -62,6 +63,7 @@ type v23WizardRoundPolicy struct {
 	ZeroIsInvalid          bool   `json:"zero_is_invalid"`
 	PackageDefault         string `json:"package_default"`
 	CanonicalConfiguration string `json:"canonical_configuration"`
+	CanonicalDefault       uint32 `json:"canonical_default"`
 }
 
 type v23WizardBinding struct {
@@ -203,6 +205,13 @@ func TestV23WizardIntakeNegativeAndAtomicContract(t *testing.T) {
 }
 
 func TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset(t *testing.T) {
+	snapshot, err := config.Resolve(config.ResolveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.IntakeMaxQuestionRounds() != 6 {
+		t.Fatalf("canonical intake round default = %d", snapshot.IntakeMaxQuestionRounds())
+	}
 	if _, err := intake.NewState("intake:v23-policy-zero", intake.Policy{}); intake.ErrorCodeOf(err) != intake.ErrorInvalidArgument {
 		t.Fatalf("zero policy accepted: %v", err)
 	}
@@ -364,7 +373,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	}
 	if fixture.TypedRoundPolicy != (v23WizardRoundPolicy{
 		Field: "max_question_rounds", ExampleValue: 2, ZeroIsInvalid: true,
-		PackageDefault: "none", CanonicalConfiguration: "pending_goal_with_lease_L-CONFIG",
+		PackageDefault: "none", CanonicalConfiguration: "intake.max_question_rounds",
+		CanonicalDefault: 6,
 	}) {
 		t.Fatalf("invalid round policy boundary: %+v", fixture.TypedRoundPolicy)
 	}
@@ -384,7 +394,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"exact_dossier_confirmation_freezes_it_and_creates_one_causal_goal",
 		"required_test_runs_named_contract_and_two_negatives",
 		"selected_and_recommended_options_coexist_when_they_differ",
-		"typed_policy_is_shared_across_origins_and_has_no_package_default",
+		"typed_policy_is_shared_across_origins_with_canonical_default_six",
 	}
 	if !reflect.DeepEqual(fixture.StableErrorCodes, wantErrors) ||
 		!reflect.DeepEqual(fixture.RequiredAssertions, wantAssertions) {
@@ -459,20 +469,22 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"durable_dossier_persistence",
 		"public_dossier_commands",
 		"causal_plan_creation",
+		"canonical_round_default",
 		"explicit_confirmation",
 		"freeze_after_confirmation",
+		"wizard_catalog_foundation_and_15_domain_packs",
 	}) {
 		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
 	}
 	wantDeferred := []string{
-		"canonical_round_default_under_L-CONFIG", "dossier_generation",
+		"dossier_generation", "full_universal_question_catalog",
 		"full_wizard_i18n_catalog", "roadmap_promotion",
-		"seal_and_receipt", "templates_and_domain_packs", "web_surface",
+		"seal_and_receipt", "template_wiring", "web_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
 	}
-	if fixture.NextDependency != "canonical_round_default_and_wizard_catalog" {
+	if fixture.NextDependency != "intake_decisions_and_stage_templates" {
 		t.Fatalf("invalid next dependency: %q", fixture.NextDependency)
 	}
 	wantCandidateFiles := []string{
@@ -520,12 +532,21 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/adapters/state/sqlite/recovery_validation_v23_dossier.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23.go",
 		"internal/bootstrap/command_registry_upgrade_e2e_test.go",
+		"internal/bootstrap/command_surfaces.go",
 		"internal/bootstrap/intake_e2e_test.go",
 		"internal/commands/handlers_intake.go",
 		"internal/commands/registry.json",
 		"internal/commands/registry_admission_identity.go",
+		"internal/config/integer_test.go",
+		"internal/config/keys_generated.go",
 		"internal/i18n/catalogs/en.json",
 		"internal/i18n/catalogs/es.json",
+		"internal/wizard/catalog/builtin.go",
+		"internal/wizard/catalog/catalog.go",
+		"internal/wizard/catalog/catalog_test.go",
+		"internal/wizard/catalog/errors.go",
+		"internal/wizard/catalog/model.go",
+		"internal/wizard/catalog/validation.go",
 	}
 	if !reflect.DeepEqual(fixture.IntegrationFiles, wantIntegrationFiles) {
 		t.Fatalf("invalid integration files: %+v", fixture.IntegrationFiles)
