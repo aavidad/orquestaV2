@@ -106,6 +106,25 @@ Solo refs, versión y digests entran en política/receipt; el secreto y el proof
 permanecen en el callback de credenciales y en memoria transitoria. Política,
 plan efectivo, autorización y receipt llevan digests independientes.
 
+El CID guest tampoco es una identidad ni se elige libremente en el launcher.
+Un puerto neutral reserva por lease un CID `>= 3`, un backend content-addressed
+y un fencing token monotónico. La reserva liga pool, scope causal completo,
+ejecución, agente, owner de lanzamiento e idempotency key. El ledger conserva
+las generaciones después de liberar o expirar una reserva: si el mismo CID se
+reutiliza, obtiene otro fencing token y otro `lease_ref`, por lo que una
+liberación antigua no puede afectar al nuevo dueño (ABA). Renovar exige revisión
+esperada; recuperar exige owner, scope y fencing exactos; liberar exige además
+la revisión vigente. Los reintentos semánticamente distintos bajo la misma
+idempotency key se rechazan.
+
+El receipt de lease sigue sin ser autoridad por posesión. La composición que
+pueda hacer alcanzable un backend debe consultar la reserva activa
+inmediatamente antes del efecto y comparar `lease_ref`, fencing y revisión. El
+plan renderizado conserva esos valores para evidenciar el vínculo, no para
+sustituir la consulta. Expiración usa límite inclusivo (`now >= expires_at`) y
+jamás revive una reserva; otra adquisición con la misma clave después de
+expirar queda denegada como replay.
+
 Este corte es una composición/adaptador alternativo de `AGT-01`/`AGT-03`, con
 la evidencia de aislamiento exigida por `EVD-13` y el broker futuro relacionado
 con `ORC-15`. No añade una capacidad 258 ni cambia el estado acreditado de esos
@@ -134,9 +153,15 @@ El corte 2026-07-26 implementa:
   idéntica queda denegada sin consultar los ledgers. Proof, atestación,
   credencial o apertura fallidos gastan el challenge. Un reinicio invalida los
   challenges pendientes (fail-closed);
+- contrato neutral de reserva CID con ownership, lease, revisión, fencing,
+  recuperación, liberación e idempotencia; adaptador SQL transaccional
+  Firecracker que usa la base canónica entregada por composición, conserva
+  tombstones/generaciones y soporta concurrencia entre instancias y restart;
+  el schema está descrito por el adaptador pero aún no pertenece a una
+  migración canónica ni está cableado;
 - render determinista `planned_not_applied` con cero interfaces, TAP, bridge,
-  NAT, inbound, east-west o Internet directo, allowlist vsock exacta y recibo
-  ligado también a los bytes exactos del documento renderizado.
+  NAT, inbound, east-west o Internet directo, allowlist vsock exacta, lease CID
+  y recibo ligado también a los bytes exactos del documento renderizado.
 
 No implementa ni simula conectividad física. La siguiente dependencia causal
 es un corte separado con:
@@ -145,8 +170,10 @@ es un corte separado con:
    `AgentMicroVMLaunchAuthorizer` ya implementado, de modo que solo una
    transacción autorizada pueda hacer `Commit` de cada sesión del broker y del
    proxy;
-2. reserva content-addressed de un backend vsock distinto por VM y composición
-   Firecracker que materialice el plan sin NIC;
+2. incorporar las tablas de reserva CID a la migración de la fuente de estado
+   canónica, cablear el allocator y exigir `Recover` vigente dentro de la
+   transacción física que materialice un backend vsock distinto por VM, sin
+   NIC;
 3. bridge HTTP guest loopback→vsock y proxy host-side con política SSRF,
    resolución/redirect/puerto/cuota y receipts;
 4. E2E multi-microVM físico con negativos y cleanup antes de cambiar
@@ -164,6 +191,10 @@ arranque. Debe incluir, como mínimo:
 - pruebas de allowlist: solo los puertos vsock exactos del gateway y del
   proxy/buscador autorizado son alcanzables; inbound, CID/puertos no
   autorizados, Internet directo y cualquier NIC/TAP/NAT se deniegan;
+- pruebas de reserva CID: 16 adquisiciones concurrentes sin duplicados,
+  exclusión de CID `0/1/2` y `VMADDR_CID_ANY`, restart/recovery, expiración
+  inclusiva, idempotencia, revisión de renovación, fencing monotónico, intento
+  de liberación ajena y reutilización ABA;
 - pruebas del gateway: autenticación, ACL por Goal y parentesco, aislamiento
   entre Goals, causalidad, fencing cuando aplique, idempotencia, auditoría y
   entrega de mailbox/CAS por refs opacas;

@@ -25,6 +25,14 @@ y la secuencia física `1 + 16`. Por tanto todavía no hay activación, evidenci
 física ni receipt de activación V2 válido. Ese receipt no sustituye la
 evidencia: ambos son entradas obligatorias de `--activate`.
 
+La reserva concurrente de CID vsock para agentes generales es otro corte y no
+forma parte de este launcher del atestador. Existe contrato y adaptador SQL
+transaccional restart-safe en estado `planned_not_applied`, pero sus tablas aún
+no están integradas en la migración canónica ni hay wiring físico. Ningún paso
+de este runbook debe crear un vsock, elegir un CID, aplicar ese schema
+manualmente o añadir NIC/TAP/NAT. El `TestAttestor` conserva red y vsock
+ausentes.
+
 ## Capacidad fijada
 
 Los valores salen del registro y del perfil vigente
