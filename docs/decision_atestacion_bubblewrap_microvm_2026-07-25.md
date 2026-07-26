@@ -1,9 +1,11 @@
 # Decisión operativa: atestación Bubblewrap y microVM
 
-Fecha: 2026-07-25. Estado: vigente. Autoridad: `AGENTS.md`,
+Fecha: 2026-07-25. Estado: vigente para la frontera técnica; el orden de
+activación fue corregido el 2026-07-26. Autoridad: `AGENTS.md`,
 `product/roadmap.json`, contrato V17 e
 `inventario_bugs_orquesta_2026-06-30.md`. Esta decisión no acredita por sí sola
-un nuevo adaptador ni cambia el lifecycle.
+un nuevo adaptador ni cambia el lifecycle. El corte de alcance vigente está en
+`docs/reconstruccion/corte_alcance_v23_firecracker_diferido_2026-07-26.md`.
 
 ## Decisión
 
@@ -27,19 +29,15 @@ Contrato objetivo de configuración canónica de composición:
 
 ```toml
 [test_attestor]
-# bubblewrap | microvm | auto
-provider = "microvm"
+# disabled | bubblewrap | microvm
+provider = "disabled"
 ```
 
-`bubblewrap` y `microvm` son selección explícita. `auto` solo decide una vez
-durante startup, después de una sonda real, persiste la elección en configuración
-efectiva/digest y falla cerrado si ningún proveedor pasa. Está prohibido hacer
-fallback o cambiar de adaptador a mitad de una atestación: cambiarían el entorno
+La configuración implementada admite `disabled`, `bubblewrap` y `microvm`, con
+`disabled` como default canónico. `bubblewrap` y `microvm` son opt-in
+explícitos. No existe selección `auto` ni fallback entre proveedores. Está
+prohibido cambiar de adaptador a mitad de una atestación: cambiaría el entorno
 real bajo el mismo intento/receipt.
-
-Esta clave todavía no acredita wiring implementado. Antes de leerla desde
-cualquier adaptador debe incorporarse al registro canónico con tipo, default,
-validación, proyección efectiva y requisito de reinicio.
 
 ## Motivo arquitectónico y capacidad
 
@@ -49,17 +47,18 @@ adaptadores reales sin que Firecracker o Bubblewrap entren en dominio.
 
 Bubblewrap es barato en equipos pequeños y sin KVM; Firecracker ofrece una
 frontera de kernel más fuerte cuando KVM y recursos están disponibles. Por eso
-la composición conserva ambos. El frente activo está estrictamente acotado:
-Firecracker sustituye Bubblewrap **solo dentro de `TestAttestor`** para
-desbloquear V23. No autoriza extender Firecracker al runtime general de agentes.
-Bubblewrap queda congelado como deuda técnica hasta que Orquesta sea
-autoprogramable.
+la composición conserva ambos como adaptadores opt-in. Firecracker no
+desbloquea, acredita ni forma parte de V23. Su activación real dentro de
+`TestAttestor` queda como candidata V38, después de cerrar V23 y acreditar
+Orquesta autoprogramable. No autoriza extender Firecracker al runtime general
+de agentes. Bubblewrap queda congelado como deuda técnica hasta ese mismo
+corte.
 
 | Entorno | Selección |
 |---|---|
 | Equipo modesto o sin KVM | Bubblewrap, solo si su ruta ya acreditada pasa la sonda. |
 | Host con KVM RW y guest acreditado | MicroVM/Firecracker. |
-| `auto` | MicroVM si pasa todo el preflight; Bubblewrap solo si también está acreditado; si no, fail-closed. |
+| Proveedor no seleccionado | `disabled`; V23 puede avanzar sin KVM, launcher ni guest. |
 
 ## Bubblewrap: evidencia retenida y congelación explícita
 
@@ -93,20 +92,22 @@ no autorizan trabajo derivado. El criterio único para reanudarlo es
 retomar el frente. Entonces se abrirá un write-set y aceptación propios; hasta
 ese momento no se interpreta esta documentación como orden de instalación.
 
-## Firecracker/microVM activo: frontera y requisitos
+## Firecracker/microVM diferido: frontera y requisitos
 
 Firecracker 1.16.1 y `jailer` están presentes como binarios `root:root 0755`.
 La tag `v1.16.1` resuelve al commit
 `2038188f145fb81b8d098147a10e9d9f392fd22f` (tag object
 `e527ccfc54495dabac96f1835db61a40afa15115`). La línea de trabajo activa es
-únicamente el adaptador microVM de `TestAttestor` de V23; presencia de binarios
-no equivale a acreditar el proveedor ni a habilitar Firecracker para agentes.
+únicamente conserva materiales para la futura activación opt-in V38 de
+`TestAttestor`; presencia de binarios no equivale a acreditar el proveedor ni
+a habilitar Firecracker para agentes.
 
 El startup preflight microVM debe fallar cerrado salvo que pruebe KVM RW para la
 identidad runtime no-root; kernel e imagen guest mínimos digeridos/root-owned;
 `jailer` y cgroup delegados con CPU/memoria/pids y cleanup observable. No hay
-imagen guest acreditada aún. Este mínimo sirve solo para atestar el sujeto V23:
-no define workspaces de agentes, caches de agentes ni un runtime general.
+imagen guest acreditada aún. Este mínimo servirá para atestar sujetos sellados
+cuando V38 se abra: no define workspaces de agentes, caches de agentes ni un
+runtime general.
 
 Firecracker 1.16.1 no soporta virtio-serial. El diseño provisional, todavía por
 acreditar, no habilita red, TAP, DHCP, consola 8250 ni vsock: usa un drive
@@ -124,18 +125,20 @@ acreditado solo para intentos nuevos o detiene fail-closed.
 
 ## Orden de trabajo y deuda deliberadamente diferida
 
-El orden vinculante es:
+El orden vinculante corregido es:
 
 ```text
-TestAttestor Firecracker -> recuperar V23 -> Orquesta autoprogramable
--> evaluar/migrar agentes y RAM/tmpfs
+cerrar V23 por su contrato Wizard -> Orquesta autoprogramable
+-> V38 candidata: activar TestAttestor Firecracker
+-> V39 candidata: evaluar agentes, red acotada y RAM/tmpfs
 ```
 
 Mover todos los agentes a Firecracker no forma parte de V23 ni de este
 adaptador. Tampoco se implementan ahora workspaces, rootfs o caches de agentes
 en RAM/tmpfs, ni checkpoints frecuentes para dichos agentes. Son una deuda
-posterior que solo se evalúa después de recuperar V23 y acreditar «Orquesta
-autoprogramable». Hasta entonces está prohibido ampliar este write-set/objetivo
+posterior V39 que solo se evalúa después de cerrar V23, acreditar «Orquesta
+autoprogramable» y resolver V38. Hasta entonces está prohibido ampliar este
+write-set/objetivo
 a runtime general, launchers de agentes, persistencia de checkpoints o cambios
 de almacenamiento de agentes.
 
@@ -155,8 +158,8 @@ identidad Goal/tarea/parent-child. Cada VM solo podrá alcanzar ese gateway y el
 proxy. La política debe bloquear loopback host, RFC1918, ULA, link-local,
 endpoints de metadata/SSRF y puertos no autorizados. NAT nunca será abierto:
 solo puede existir subordinado al netns de la microVM y a reglas nftables
-exactas. Esto no aplica aún al `TestAttestor` V23, que sigue sin red, ni
-autoriza implementación antes de «Orquesta autoprogramable».
+exactas. Esto no aplica al `TestAttestor`; V38 sigue sin red. Tampoco autoriza
+implementar V39 antes de «Orquesta autoprogramable».
 
 ## Amenazas e invariantes
 

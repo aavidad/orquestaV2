@@ -2,6 +2,12 @@
 
 Fecha de apertura: 2026-06-30.
 
+> **Corte V2 del 2026-07-26:** este fichero se conserva como dataset histórico
+> de incidencias y lecciones; no es backlog ni autoridad de alcance. Las filas
+> Firecracker que nombran V23 describen el frente en el que se observaron, pero
+> ya no convierten Firecracker en gate de V23. Prevalece
+> `docs/reconstruccion/corte_alcance_v23_firecracker_diferido_2026-07-26.md`.
+
 Este documento no sustituye a las incidencias detalladas. Es el indice comun
 para analizarlas como conjunto y detectar deuda de arquitectura. Cada bug nuevo
 observado durante Orquesta, OPES, web, autoprogramacion, MCP, runtime remoto o

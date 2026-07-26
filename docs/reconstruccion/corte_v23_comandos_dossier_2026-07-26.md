@@ -4,7 +4,7 @@ Fecha: 2026-07-26.
 
 Estado: **partial_green_unsealed**. `public_dossier_commands` y la
 confirmación causal quedan implementados y cubiertos por E2E de bootstrap
-SQLite, todavía sin sello V23 ni E2E Firecracker. Este corte no completa V23:
+SQLite, todavía sin sello V23. Este corte no completa V23:
 permanece pendiente la generación editorial y la acreditación del catálogo y
 los flujos restantes del Wizard.
 
@@ -51,6 +51,7 @@ Los cuatro P1 de confirmación quedan cerrados solo en candidato por
 `TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings`,
 `TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord` y
 `TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration`. No constituyen
-por sí solos un sello V23 ni E2E Firecracker.
+por sí solos un sello V23.
 
-No hay E2E Firecracker verde declarado por este documento.
+Firecracker no es dependencia ni gate de V23. Su activación opt-in pertenece a
+un corte posterior.

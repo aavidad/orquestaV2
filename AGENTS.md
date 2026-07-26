@@ -64,6 +64,11 @@ Corte operativo local del 2026-07-26:
   en solo lectura;
 - la evidencia y el procedimiento reversible están en
   `docs/reconstruccion/separacion_legacy_consulta_2026-07-26.md`.
+- V23 no depende de Firecracker. El backend permanece opt-in y su activación
+  se difiere según
+  `docs/reconstruccion/corte_alcance_v23_firecracker_diferido_2026-07-26.md`;
+  no lo conviertas en gate del Wizard, del sello V23 ni de la promoción
+  SQLite.
 
 Reglas estrictas:
 

@@ -11,7 +11,9 @@ por el wiring de composición, sin compartir la base interna con consumidores.
 
 Este smoke actuó únicamente sobre una copia privada del backup previo. No
 detuvo, reconfiguró, migró ni escribió la unidad o la base viva de `Codex12`.
-Tampoco acredita todavía Firecracker ni autoriza la promoción física.
+Tampoco acredita Firecracker, que no forma parte de V23. La promoción física
+del perfil es una decisión operativa separada y exige su propio contrato
+transaccional y rollback, no un E2E microVM.
 
 ## Sujeto exacto
 
@@ -74,13 +76,16 @@ El recorrido cerró tres clases de error sin debilitar guardas:
 
 Las incidencias están en `BUG-ORQ-20260726-562` a `564`.
 
-## Limpieza y siguiente gate
+## Limpieza y siguiente gate de este frente
 
 Se enviaron a la papelera el build diagnóstico de 239 MiB, su base auxiliar y
 las credenciales ficticias. Se retuvieron la base final, configuración,
 recibo, logs vacíos y evidencias textuales de los intentos.
 
-El siguiente gate sigue siendo el E2E físico Firecracker `1 + 16` del bundle
-congelado. Solo después corresponde promover `Codex12`, usando backup nuevo,
-parada cooperativa, recreación systemd delegada, verificación V16→V19 y
+Este smoke no fija el siguiente gate de V23. V23 continúa por su contrato
+Wizard, generación editorial y flujos restantes. Firecracker `1 + 16` queda
+diferido fuera de V23.
+
+Si se promueve `Codex12`, debe hacerse como operación independiente: backup
+nuevo, parada cooperativa, recreación systemd delegada, verificación V16→V19 y
 rollback por identidad exacta si falla cualquier comprobación.
