@@ -456,7 +456,7 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 		"server_mcp_path_literal": {KeyServerMCPPath},
 		"runtime_paths_disjoint": {
 			KeyStateSQLitePath, KeyArtifactFilesystemRoot, KeyCredentialsLocalPath, KeyRuntimeCodexWorkRoot,
-			KeyRuntimeCodexAccountHomeRoot, KeyWorkspaceLocalRoot,
+			KeyRuntimeCodexCacheRoot, KeyRuntimeCodexAccountHomeRoot, KeyWorkspaceLocalRoot,
 			KeyConfigEffectivePath, KeyIdentityLocalTokenPath,
 		},
 		"identity_provider_requirements": {

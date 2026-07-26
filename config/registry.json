@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-26.31",
+  "revision": "2026-07-26.32",
   "precedence": [
     "default",
     "file",
@@ -64,6 +64,7 @@
         "artifact.filesystem.root",
         "credentials.local.path",
         "runtime.codex.work_root",
+        "runtime.codex.cache_root",
         "runtime.codex.account_home_root",
         "workspace.local.root",
         "config.effective_path",
@@ -461,6 +462,34 @@
       "env_alias": "ORQUESTA_RUNTIME_CODEX_WORK_ROOT",
       "validator_ids": [
         "non_empty_path"
+      ]
+    },
+    {
+      "key": "runtime.codex.cache_root",
+      "go_name": "RuntimeCodexCacheRoot",
+      "semantic_ref": "orquesta.config.runtime.codex.cache_root",
+      "type": "path",
+      "default": "./var/cache/codex-go",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_CACHE_ROOT",
+      "validator_ids": [
+        "non_empty_path"
+      ]
+    },
+    {
+      "key": "runtime.codex.go_toolchain_root",
+      "go_name": "RuntimeCodexGoToolchainRoot",
+      "semantic_ref": "orquesta.config.runtime.codex.go_toolchain_root",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_GO_TOOLCHAIN_ROOT",
+      "validator_ids": [
+        "optional_path"
       ]
     },
     {

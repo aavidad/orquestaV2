@@ -199,6 +199,8 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		{name: "account profile concurrent refresh unsafe", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\""},
 		{name: "account profile format", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \".account\"\nmax_concurrent_executions = 1"},
 		{name: "account root overlaps work", toml: "[runtime.codex]\naccount_home_root = \"./var/work/accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1"},
+		{name: "Go cache overlaps work", toml: "[runtime.codex]\ncache_root = \"./var/work/go-cache\""},
+		{name: "Go cache contains workspace", toml: "[runtime.codex]\ncache_root = \"./var\""},
 		{name: "account profile conflicts with credential authority", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1\ncredential_ref = \"credential:codex\""},
 		{name: "Firecracker vsock lease bounds", toml: "[agent.firecracker.vsock_cid]\nminimum_lease_duration = \"2h\"\nmaximum_lease_duration = \"1h\""},
 		{name: "Firecracker vsock lease ceiling", toml: "[agent.firecracker.vsock_cid]\nmaximum_lease_duration = \"25h\""},
@@ -255,6 +257,31 @@ func TestResolveOwnsAccountProfileConfiguration(t *testing.T) {
 		snapshot.RuntimeCodexAccountAuthMaxDocumentBytes() != 2097152 ||
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 1 {
 		t.Fatalf("account profile snapshot drifted")
+	}
+}
+
+func TestResolveOwnsOptionalCodexGoCapabilityConfiguration(t *testing.T) {
+	defaults, err := Resolve(ResolveOptions{})
+	if err != nil {
+		t.Fatalf("Resolve(defaults) error = %v", err)
+	}
+	if defaults.RuntimeCodexCacheRoot() != "./var/cache/codex-go" ||
+		defaults.RuntimeCodexGoToolchainRoot() != "" {
+		t.Fatalf("default Go capability = cache %q toolchain %q",
+			defaults.RuntimeCodexCacheRoot(), defaults.RuntimeCodexGoToolchainRoot())
+	}
+
+	snapshot, err := Resolve(ResolveOptions{TOML: []byte(
+		"[runtime.codex]\n" +
+			"cache_root = \"/srv/orquesta/cache/codex-go\"\n" +
+			"go_toolchain_root = \"/srv/orquesta/toolchains/go1.25.11\"\n",
+	)})
+	if err != nil {
+		t.Fatalf("Resolve(explicit Go capability) error = %v", err)
+	}
+	if snapshot.RuntimeCodexCacheRoot() != "/srv/orquesta/cache/codex-go" ||
+		snapshot.RuntimeCodexGoToolchainRoot() != "/srv/orquesta/toolchains/go1.25.11" {
+		t.Fatalf("explicit Go capability drifted")
 	}
 }
 

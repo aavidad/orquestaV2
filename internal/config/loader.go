@@ -336,23 +336,30 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 	artifactRoot, artifactOK := canonical(KeyArtifactFilesystemRoot)
 	credentialPath, credentialOK := canonical(KeyCredentialsLocalPath)
 	workRoot, workOK := canonical(KeyRuntimeCodexWorkRoot)
+	cacheRoot, cacheOK := canonical(KeyRuntimeCodexCacheRoot)
 	accountHomeRoot, accountHomeOK := canonical(KeyRuntimeCodexAccountHomeRoot)
 	workspaceRoot, workspaceOK := canonical(KeyWorkspaceLocalRoot)
 	effectivePath, effectiveOK := canonical(KeyConfigEffectivePath)
 	tokenPath, tokenOK := canonical(KeyIdentityLocalTokenPath)
-	if !stateOK || !artifactOK || !credentialOK || !workOK || !workspaceOK || !effectiveOK || !tokenOK {
+	if !stateOK || !artifactOK || !credentialOK || !workOK || !cacheOK ||
+		!workspaceOK || !effectiveOK || !tokenOK {
 		return false
 	}
 	stateDirectory, tokenDirectory := filepath.Dir(statePath), filepath.Dir(tokenPath)
 	pairs := [][2]string{
-		{stateDirectory, artifactRoot}, {stateDirectory, workRoot}, {artifactRoot, workRoot},
+		{stateDirectory, artifactRoot}, {stateDirectory, workRoot}, {stateDirectory, cacheRoot},
+		{artifactRoot, workRoot}, {artifactRoot, cacheRoot}, {workRoot, cacheRoot},
 		{credentialPath, stateDirectory}, {credentialPath, artifactRoot}, {credentialPath, workRoot},
+		{credentialPath, cacheRoot},
 		{credentialPath, effectivePath}, {credentialPath, tokenPath},
 		{effectivePath, statePath}, {effectivePath, artifactRoot}, {effectivePath, workRoot},
+		{effectivePath, cacheRoot},
 		{tokenDirectory, stateDirectory}, {tokenDirectory, artifactRoot}, {tokenDirectory, workRoot},
+		{tokenDirectory, cacheRoot},
 		{tokenDirectory, effectivePath},
 		{workspaceRoot, stateDirectory}, {workspaceRoot, artifactRoot}, {workspaceRoot, credentialPath},
-		{workspaceRoot, workRoot}, {workspaceRoot, effectivePath}, {workspaceRoot, tokenDirectory},
+		{workspaceRoot, workRoot}, {workspaceRoot, cacheRoot}, {workspaceRoot, effectivePath},
+		{workspaceRoot, tokenDirectory},
 	}
 	if accountHomeOK {
 		pairs = append(pairs,
@@ -360,6 +367,7 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 			[2]string{accountHomeRoot, artifactRoot},
 			[2]string{accountHomeRoot, credentialPath},
 			[2]string{accountHomeRoot, workRoot},
+			[2]string{accountHomeRoot, cacheRoot},
 			[2]string{accountHomeRoot, workspaceRoot},
 			[2]string{accountHomeRoot, effectivePath},
 			[2]string{accountHomeRoot, tokenDirectory},
@@ -375,7 +383,10 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		if err != nil {
 			return false
 		}
-		otherPaths := []string{statePath, artifactRoot, credentialPath, workRoot, workspaceRoot, effectivePath, tokenDirectory}
+		otherPaths := []string{
+			statePath, artifactRoot, credentialPath, workRoot, cacheRoot,
+			workspaceRoot, effectivePath, tokenDirectory,
+		}
 		if accountHomeOK {
 			otherPaths = append(otherPaths, accountHomeRoot)
 		}

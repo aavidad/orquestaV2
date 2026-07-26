@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-26.31",
+  "$id": "urn:orquesta:config:2026-07-26.32",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -525,6 +525,19 @@
                 "trimmed_optional_string"
               ]
             },
+            "cache_root": {
+              "default": "./var/cache/codex-go",
+              "minLength": 1,
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_CACHE_ROOT",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.cache_root",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "non_empty_path"
+              ]
+            },
             "cgroup_root": {
               "default": "",
               "type": "string",
@@ -581,6 +594,18 @@
               "x-validator-ids": [
                 "unique_non_empty_string_list",
                 "environment_name_list"
+              ]
+            },
+            "go_toolchain_root": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_GO_TOOLCHAIN_ROOT",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.go_toolchain_root",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "optional_path"
               ]
             },
             "max_concurrent_executions": {
@@ -1214,8 +1239,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-26.31",
-  "x-registry-hash": "sha256:9ef296db333c2271857fc5e3022c66559d777617749eee99695dc0439152045e",
+  "x-registry-revision": "2026-07-26.32",
+  "x-registry-hash": "sha256:7a676618918142d2c286d0feb1686fabd73a6e4817e9849d94f4283f01e0d6ed",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1271,6 +1296,7 @@
         "artifact.filesystem.root",
         "credentials.local.path",
         "runtime.codex.work_root",
+        "runtime.codex.cache_root",
         "runtime.codex.account_home_root",
         "workspace.local.root",
         "config.effective_path",
