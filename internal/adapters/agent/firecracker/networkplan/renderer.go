@@ -1,6 +1,7 @@
 package networkplan
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -137,12 +138,15 @@ func Render(config Config, request RenderRequest) (RenderedPlan, error) {
 	return RenderedPlan{Document: payload, Receipt: receipt}, nil
 }
 
-func ValidateReceipt(request RenderRequest, receipt PlanReceipt) error {
-	rendered, err := Render(Config{AdapterRef: receipt.AdapterRef}, request)
+func ValidateReceipt(request RenderRequest, candidate RenderedPlan) error {
+	if digestBytes(candidate.Document) != candidate.Receipt.PlanDigest {
+		return planError("document_digest_mismatch")
+	}
+	rendered, err := Render(Config{AdapterRef: candidate.Receipt.AdapterRef}, request)
 	if err != nil {
 		return err
 	}
-	if receipt != rendered.Receipt {
+	if !bytes.Equal(candidate.Document, rendered.Document) || candidate.Receipt != rendered.Receipt {
 		return planError("receipt_mismatch")
 	}
 	return nil
