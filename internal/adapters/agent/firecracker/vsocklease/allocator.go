@@ -19,6 +19,10 @@ const (
 	reservationStateActive   = "active"
 	reservationStateExpired  = "expired"
 	reservationStateReleased = "released"
+
+	businessSavepointCreate   = "SAVEPOINT agent_microvm_vsock_business"
+	businessSavepointRollback = "ROLLBACK TO SAVEPOINT agent_microvm_vsock_business"
+	businessSavepointRelease  = "RELEASE SAVEPOINT agent_microvm_vsock_business"
 )
 
 // Config is supplied by composition. DB must be the deployment's canonical
@@ -44,23 +48,88 @@ type Allocator struct {
 type transactionGuard struct {
 	allocator  *Allocator
 	connection *sql.Conn
-	finished   bool
+	phase      transactionPhase
+}
+
+type transactionPhase uint8
+
+const (
+	transactionPhaseOpen transactionPhase = iota
+	transactionPhaseTemporalFrontier
+	transactionPhaseFinished
+)
+
+func (guard *transactionGuard) protectTemporalFrontier(ctx context.Context) error {
+	if guard == nil || guard.phase != transactionPhaseOpen {
+		return allocatorError("transaction_invalid")
+	}
+	if _, err := guard.allocator.execTransaction(
+		ctx, guard.connection, businessSavepointCreate,
+	); err != nil {
+		return allocatorError("store_unavailable")
+	}
+	guard.phase = transactionPhaseTemporalFrontier
+	return nil
 }
 
 func (guard *transactionGuard) commit(ctx context.Context) error {
-	if guard == nil || guard.finished {
+	if guard == nil || guard.phase != transactionPhaseTemporalFrontier {
 		return allocatorError("transaction_invalid")
 	}
-	guard.finished = true
+	guard.phase = transactionPhaseFinished
 	return guard.allocator.commit(ctx, guard.connection)
 }
 
-func (guard *transactionGuard) rollback() {
-	if guard == nil || guard.finished {
-		return
+func (guard *transactionGuard) finishReturn(returned error) error {
+	if guard == nil {
+		if returned != nil {
+			return returned
+		}
+		return allocatorError("transaction_invalid")
 	}
-	guard.finished = true
-	guard.allocator.rollback(guard.connection)
+	switch guard.phase {
+	case transactionPhaseFinished:
+		return returned
+	case transactionPhaseOpen:
+		guard.phase = transactionPhaseFinished
+		guard.allocator.rollback(guard.connection)
+		if returned != nil {
+			return returned
+		}
+		return allocatorError("transaction_invalid")
+	case transactionPhaseTemporalFrontier:
+		if returned == nil {
+			returned = allocatorError("transaction_invalid")
+		}
+		return guard.rollbackBusinessAndCommitFrontier(returned)
+	default:
+		discardConnection(guard.connection)
+		return allocatorError("transaction_invalid")
+	}
+}
+
+func (guard *transactionGuard) rollbackBusinessAndCommitFrontier(returned error) error {
+	if guard == nil || guard.phase != transactionPhaseTemporalFrontier {
+		return allocatorError("transaction_invalid")
+	}
+	guard.phase = transactionPhaseFinished
+	cleanupContext := context.Background()
+	if _, err := guard.allocator.execTransaction(
+		cleanupContext, guard.connection, businessSavepointRollback,
+	); err != nil {
+		discardConnection(guard.connection)
+		return allocatorError("store_unavailable")
+	}
+	if _, err := guard.allocator.execTransaction(
+		cleanupContext, guard.connection, businessSavepointRelease,
+	); err != nil {
+		discardConnection(guard.connection)
+		return allocatorError("store_unavailable")
+	}
+	if err := guard.allocator.commit(cleanupContext, guard.connection); err != nil {
+		return err
+	}
+	return returned
 }
 
 var _ ports.AgentMicroVMVsockCIDAllocator = (*Allocator)(nil)
@@ -127,7 +196,7 @@ func Open(ctx context.Context, config Config) (*Allocator, error) {
 func (allocator *Allocator) Reserve(
 	ctx context.Context,
 	request ports.AgentMicroVMVsockCIDReservationRequest,
-) (ports.AgentMicroVMVsockCIDLease, error) {
+) (_ ports.AgentMicroVMVsockCIDLease, resultErr error) {
 	if allocator == nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("unavailable")
 	}
@@ -150,13 +219,18 @@ func (allocator *Allocator) Reserve(
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	transaction := &transactionGuard{allocator: allocator, connection: connection}
-	defer transaction.rollback()
+	defer func() {
+		resultErr = transaction.finishReturn(resultErr)
+	}()
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
+	}
+	if err := transaction.protectTemporalFrontier(ctx); err != nil {
+		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 
 	operation, found, err := readOperation(ctx, connection, request.PoolRef, request.IdempotencyKey)
@@ -242,7 +316,7 @@ func (allocator *Allocator) Reserve(
 func (allocator *Allocator) Renew(
 	ctx context.Context,
 	request ports.AgentMicroVMVsockCIDRenewalRequest,
-) (ports.AgentMicroVMVsockCIDLease, error) {
+) (_ ports.AgentMicroVMVsockCIDLease, resultErr error) {
 	if allocator == nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("unavailable")
 	}
@@ -258,13 +332,18 @@ func (allocator *Allocator) Renew(
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	transaction := &transactionGuard{allocator: allocator, connection: connection}
-	defer transaction.rollback()
+	defer func() {
+		resultErr = transaction.finishReturn(resultErr)
+	}()
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
+	}
+	if err := transaction.protectTemporalFrontier(ctx); err != nil {
+		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	if operation, found, err := readOperation(
 		ctx, connection, request.PoolRef, request.IdempotencyKey,
@@ -355,7 +434,7 @@ WHERE lease_ref = ? AND state = ? AND revision = ?`,
 func (allocator *Allocator) Recover(
 	ctx context.Context,
 	request ports.AgentMicroVMVsockCIDRecoveryRequest,
-) (ports.AgentMicroVMVsockCIDLease, error) {
+) (_ ports.AgentMicroVMVsockCIDLease, resultErr error) {
 	if allocator == nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("unavailable")
 	}
@@ -368,13 +447,18 @@ func (allocator *Allocator) Recover(
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	transaction := &transactionGuard{allocator: allocator, connection: connection}
-	defer transaction.rollback()
+	defer func() {
+		resultErr = transaction.finishReturn(resultErr)
+	}()
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
+	}
+	if err := transaction.protectTemporalFrontier(ctx); err != nil {
+		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	record, err := readReservationByLease(ctx, connection, request.LeaseRef)
 	if err != nil {
@@ -400,7 +484,7 @@ func (allocator *Allocator) Recover(
 func (allocator *Allocator) Release(
 	ctx context.Context,
 	request ports.AgentMicroVMVsockCIDReleaseRequest,
-) (ports.AgentMicroVMVsockCIDReleaseReceipt, error) {
+) (_ ports.AgentMicroVMVsockCIDReleaseReceipt, resultErr error) {
 	if allocator == nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocatorError("unavailable")
 	}
@@ -414,13 +498,18 @@ func (allocator *Allocator) Release(
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
 	}
 	transaction := &transactionGuard{allocator: allocator, connection: connection}
-	defer transaction.rollback()
+	defer func() {
+		resultErr = transaction.finishReturn(resultErr)
+	}()
 	now, err := durableOperationTime(ctx, connection, request.PoolRef, allocator.now())
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
 	}
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocatorError("store_unavailable")
+	}
+	if err := transaction.protectTemporalFrontier(ctx); err != nil {
+		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
 	}
 	if operation, found, err := readOperation(
 		ctx, connection, request.PoolRef, request.IdempotencyKey,
@@ -873,14 +962,11 @@ func (allocator *Allocator) mapReadErrorAfterClock(
 // operation before returning a semantic rejection. Rolling those changes back
 // could make an expired lease authoritative again after a host clock rollback.
 func (allocator *Allocator) commitRejection(
-	ctx context.Context,
+	_ context.Context,
 	transaction *transactionGuard,
 	rejection error,
 ) error {
-	if err := transaction.commit(ctx); err != nil {
-		return err
-	}
-	return rejection
+	return transaction.rollbackBusinessAndCommitFrontier(rejection)
 }
 
 func mustJSON(value any) []byte {

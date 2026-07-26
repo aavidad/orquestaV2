@@ -629,6 +629,78 @@ WHERE pool_ref = ?`, lease.PoolRef).Scan(&highWater); err != nil {
 	}
 }
 
+func TestAllocatorPreservesTemporalFrontierAfterDownstreamTechnicalFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vsock-downstream-failure.db")
+	database := openTestDatabase(t, path, true)
+	t.Cleanup(func() { _ = database.Close() })
+	start := time.Date(2026, 7, 26, 15, 45, 0, 0, time.UTC)
+	clock := &testClock{now: start}
+	allocator := openTestAllocator(t, database, clock, 138, 138)
+	request := testReservationRequest(t, 1)
+	request.LeaseDuration = time.Minute
+	lease, err := allocator.Reserve(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+CREATE TRIGGER agent_microvm_vsock_cid_fail_generation_update
+BEFORE UPDATE OF fencing_token ON agent_microvm_vsock_cid_generations
+BEGIN
+    SELECT RAISE(ABORT, 'injected downstream generation failure');
+END`); err != nil {
+		t.Fatal(err)
+	}
+
+	clock.Set(start.Add(2 * time.Minute))
+	if _, err := allocator.Reserve(
+		context.Background(), testReservationRequest(t, 2),
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+		t.Fatalf("downstream technical failure = %v", err)
+	}
+
+	var state string
+	if err := database.QueryRow(`
+SELECT state
+FROM agent_microvm_vsock_cid_reservations
+WHERE lease_ref = ?`, lease.LeaseRef).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != reservationStateExpired {
+		t.Fatalf("technical failure revived expired lease: state=%q", state)
+	}
+	var highWater int64
+	if err := database.QueryRow(`
+SELECT high_water_unix_nano
+FROM agent_microvm_vsock_cid_clock
+WHERE pool_ref = ?`, lease.PoolRef).Scan(&highWater); err != nil {
+		t.Fatal(err)
+	}
+	if want := start.Add(2 * time.Minute).UnixNano(); highWater != want {
+		t.Fatalf("high-water = %d, want %d", highWater, want)
+	}
+	var reservations, operations int
+	if err := database.QueryRow(`
+SELECT COUNT(*) FROM agent_microvm_vsock_cid_reservations`).Scan(&reservations); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`
+SELECT COUNT(*) FROM agent_microvm_vsock_cid_operations`).Scan(&operations); err != nil {
+		t.Fatal(err)
+	}
+	if reservations != 1 || operations != 1 {
+		t.Fatalf("partial business survived: reservations=%d operations=%d", reservations, operations)
+	}
+
+	clock.Set(start.Add(time.Minute))
+	if _, err := allocator.Recover(context.Background(), ports.AgentMicroVMVsockCIDRecoveryRequest{
+		PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+		LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+		FencingToken: lease.FencingToken,
+	}); ErrorCode(err) != "agent_firecracker_vsock_cid.clock_regressed" {
+		t.Fatalf("T1 recovery after T2 technical failure = %v", err)
+	}
+}
+
 func TestAllocatorDiscardsConnectionsWhenTransactionCleanupFails(t *testing.T) {
 	t.Run("commit failure rolls back", func(t *testing.T) {
 		testCommitFailureLeavesNoAmbiguousEffects(t, false)
