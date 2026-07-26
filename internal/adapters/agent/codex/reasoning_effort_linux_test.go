@@ -255,7 +255,7 @@ func seedLiveV6Process(
 	if _, err := os.Stat(filepath.Join(
 		config.WorkRoot, filepath.FromSlash(runPath), requestFileName,
 	)); os.IsNotExist(err) {
-		runPath = seedPersistedV6Launch(t, config, request)
+		seedPersistedV6Launch(t, config, request)
 	} else if err != nil {
 		t.Fatal(err)
 	}
