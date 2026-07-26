@@ -21,13 +21,54 @@ import urllib.parse
 
 
 HEX = re.compile(r"^[0-9a-f]{64}$")
+REVISION = re.compile(r"^[0-9a-f]{40}$")
+INVOCATION_ID = re.compile(r"^[0-9a-f]{32}$")
+REACCREDIT_PROFILE = re.compile(r"^SqliteReaccredit[0-9a-f]{16}$")
 BACKUP_SCHEMA = "orquesta_profile_systemd_promotion_backup.v1"
 RECEIPT_SCHEMA = "orquesta_profile_systemd_promotion_receipt.v1"
+UPGRADE_RECEIPT_SCHEMA = "orquesta_sqlite_upgrade_audit.v1"
 FUNCTIONAL_AUDIT_TABLES = {
     "authorization_receipts",
     "command_invocations",
     "command_outcomes",
 }
+CORE_TABLES = ("goals", "executions", "work_items", "outbox", "effect_attempts")
+V23_TABLES = (
+    "intake_states",
+    "intake_receipts",
+    "intake_dossiers",
+    "intake_dossier_generation_receipts",
+    "intake_dossier_confirmations",
+)
+PROFILE_HELPERS = (
+    "firecracker_launcher_probe.py",
+    "pidfd_signal.py",
+    "profile_maintenance_marker.py",
+)
+EVIDENCE_LABELS = (
+    "user-manager-control-group",
+    "binary-buildinfo",
+    "repository-init",
+    "repository-add",
+    "repository-commit",
+    "repository-revision",
+    "preflight-unit",
+    "cycle-1-start",
+    "cycle-1-control-group",
+    "cycle-1-status",
+    "cycle-1-stop",
+    "cycle-1-collect",
+    "cycle-1-unit-collected",
+    "cycle-1-profile-status",
+    "cycle-2-start",
+    "cycle-2-control-group",
+    "cycle-2-status",
+    "cycle-2-stop",
+    "cycle-2-collect",
+    "cycle-2-unit-collected",
+    "cycle-2-profile-status",
+    "final-unit",
+)
 RENAME_NOREPLACE = 1
 AT_FDCWD = -100
 
@@ -106,9 +147,7 @@ def read_json(
 
 
 def read_toml(path: str) -> dict[str, object]:
-    raw, _ = secure_read(
-        path, maximum=4 * 1024 * 1024, expected_uid=os.getuid()
-    )
+    raw, _ = secure_read(path, maximum=4 * 1024 * 1024, expected_uid=os.getuid())
     value = tomllib.loads(raw.decode("utf-8"))
     if not isinstance(value, dict):
         raise ContractError("toml_root")
@@ -124,9 +163,7 @@ def nested(document: dict[str, object], *keys: str) -> object:
     return value
 
 
-def secure_file_sha256(
-    path: str, uid: int
-) -> tuple[str, os.stat_result]:
+def secure_file_sha256(path: str, uid: int) -> tuple[str, os.stat_result]:
     flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
@@ -199,9 +236,7 @@ def sqlite_facts(
         )
     )
     migrations_sha = hashlib.sha256(
-        json.dumps(
-            migrations, separators=(",", ":"), ensure_ascii=True
-        ).encode("ascii")
+        json.dumps(migrations, separators=(",", ":"), ensure_ascii=True).encode("ascii")
     ).hexdigest()
     logical = hashlib.sha256()
     for statement in connection.iterdump():
@@ -265,14 +300,10 @@ def functional_data_sha256(
             digest.update(b"column\0" + column.encode("utf-8") + b"\0")
         selected = ",".join(quote_identifier(column) for column in columns)
         ordering = ",".join(
-            f"typeof({quote_identifier(column)}),"
-            f"quote({quote_identifier(column)})"
+            f"typeof({quote_identifier(column)}),quote({quote_identifier(column)})"
             for column in columns
         )
-        query = (
-            f"SELECT {selected} FROM {quote_identifier(table)} "
-            f"ORDER BY {ordering}"
-        )
+        query = f"SELECT {selected} FROM {quote_identifier(table)} ORDER BY {ordering}"
         try:
             rows = connection.execute(query)
             for row in rows:
@@ -461,8 +492,7 @@ def command_final_receipt(args: argparse.Namespace) -> None:
         or values.get("sqlite_user_version") != "19"
         or values.get("firecracker_config_active") != expected_active
         or values.get("firecracker_root_gate_ref") != args.root_gate_ref
-        or values.get("firecracker_root_evidence_scope")
-        != "operator_reference_only"
+        or values.get("firecracker_root_evidence_scope") != "operator_reference_only"
         or values.get("firecracker_application_attestation") != "pending"
         or values.get("backup_restore_performed") != "false"
         or values.get("old_unit_outcome") != args.old_unit_outcome
@@ -553,6 +583,594 @@ def command_configs(args: argparse.Namespace) -> None:
     print(effective)
 
 
+def require_exact_keys(
+    value: object, expected: set[str], code: str
+) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != expected:
+        raise ContractError(code)
+    return value
+
+
+def require_string(value: object, code: str) -> str:
+    if type(value) is not str or not value:
+        raise ContractError(code)
+    return value
+
+
+def require_hex(value: object, code: str) -> str:
+    text = require_string(value, code)
+    if not HEX.fullmatch(text):
+        raise ContractError(code)
+    return text
+
+
+def require_integer(value: object, code: str) -> int:
+    if type(value) is not int or value < 0:
+        raise ContractError(code)
+    return value
+
+
+def require_count_map(
+    value: object, code: str, expected_keys: set[str] | None = None
+) -> dict[str, int]:
+    if not isinstance(value, dict) or (
+        expected_keys is not None and set(value) != expected_keys
+    ):
+        raise ContractError(code)
+    result: dict[str, int] = {}
+    for key, count in value.items():
+        if (
+            type(key) is not str
+            or not key
+            or "\x00" in key
+            or type(count) is not int
+            or count < 0
+        ):
+            raise ContractError(code)
+        result[key] = count
+    return result
+
+
+def stable_source_sha256(path: pathlib.Path, owner_uid: int) -> str:
+    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_uid not in {0, owner_uid}
+            or stat.S_IMODE(before.st_mode) & 0o022
+            or before.st_nlink != 1
+        ):
+            raise ContractError("upgrade_source_metadata")
+        digest = hashlib.sha256()
+        size = 0
+        while block := os.read(descriptor, 1024 * 1024):
+            digest.update(block)
+            size += len(block)
+        after = os.fstat(descriptor)
+        if (before.st_dev, before.st_ino, before.st_mode, before.st_size) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_mode,
+            after.st_size,
+        ) or size != before.st_size:
+            raise ContractError("upgrade_source_changed")
+        return digest.hexdigest()
+    finally:
+        os.close(descriptor)
+
+
+def private_output_bytes(
+    path: pathlib.Path,
+    owner_uid: int,
+    maximum: int = 1024 * 1024,
+    allowed_modes: tuple[int, ...] = (0o600,),
+) -> bytes:
+    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or stat.S_IMODE(before.st_mode) not in allowed_modes
+            or before.st_uid != owner_uid
+            or before.st_nlink != 1
+            or before.st_size > maximum
+        ):
+            raise ContractError("upgrade_output_file_metadata")
+        content = bytearray()
+        while block := os.read(descriptor, min(1024 * 1024, maximum + 1)):
+            content.extend(block)
+            if len(content) > maximum:
+                raise ContractError("upgrade_output_file_size")
+        after = os.fstat(descriptor)
+        if (
+            before.st_dev,
+            before.st_ino,
+            before.st_mode,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        ) != (
+            after.st_dev,
+            after.st_ino,
+            after.st_mode,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        ) or len(content) != before.st_size:
+            raise ContractError("upgrade_output_file_changed")
+        return bytes(content)
+    finally:
+        os.close(descriptor)
+
+
+def require_private_output_directory(
+    path: pathlib.Path, owner_uid: int
+) -> pathlib.Path:
+    metadata = os.lstat(path)
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+        or metadata.st_uid != owner_uid
+        or path.resolve(strict=True) != path
+    ):
+        raise ContractError("upgrade_output_directory")
+    return path
+
+
+def within(path: pathlib.Path, root: pathlib.Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def output_path(output: pathlib.Path, relative: object, owner_uid: int) -> pathlib.Path:
+    text = require_string(relative, "upgrade_output_relative_path")
+    pure = pathlib.PurePosixPath(text)
+    if (
+        pure.is_absolute()
+        or text != pure.as_posix()
+        or any(part in {"", ".", ".."} for part in pure.parts)
+    ):
+        raise ContractError("upgrade_output_relative_path")
+    candidate = output.joinpath(*pure.parts)
+    if candidate.resolve(strict=True) != candidate or not within(candidate, output):
+        raise ContractError("upgrade_output_path_escape")
+    current = candidate.parent
+    while True:
+        require_private_output_directory(current, owner_uid)
+        if current == output:
+            break
+        current = current.parent
+    return candidate
+
+
+def current_migration_contract(
+    repository: pathlib.Path, owner_uid: int
+) -> tuple[dict[int, dict[str, str]], str]:
+    root = repository / "internal/adapters/state/sqlite/migrations"
+    expected: dict[int, dict[str, str]] = {}
+    for version in range(1, 20):
+        matches = sorted(root.glob(f"{version:03d}_*.sql"))
+        if len(matches) != 1 or matches[0].is_symlink():
+            raise ContractError("upgrade_migration_set")
+        path = matches[0]
+        digest = stable_source_sha256(path, owner_uid)
+        expected[version] = {
+            "name": path.name,
+            "checksum": "sha256:" + digest,
+            "sha256": digest,
+        }
+    for version, name in (
+        (17, "017_intake.sql"),
+        (18, "018_intake_dossiers.sql"),
+        (19, "019_intake_dossier_confirmations.sql"),
+    ):
+        if expected[version]["name"] != name:
+            raise ContractError("upgrade_migration_name")
+    manifest = hashlib.sha256(
+        json.dumps(expected, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return expected, manifest
+
+
+def require_migration_rows(
+    value: object,
+    expected: dict[int, dict[str, str]],
+    final_version: int,
+    code: str,
+) -> list[dict[str, object]]:
+    if not isinstance(value, list) or len(value) != final_version:
+        raise ContractError(code)
+    result: list[dict[str, object]] = []
+    for index, item in enumerate(value, start=1):
+        row = require_exact_keys(item, {"version", "name", "checksum"}, code)
+        if (
+            type(row["version"]) is not int
+            or row["version"] != index
+            or row["name"] != expected[index]["name"]
+            or row["checksum"] != expected[index]["checksum"]
+        ):
+            raise ContractError(code)
+        result.append(row)
+    return result
+
+
+def sqlite_schema_manifest(
+    connection: sqlite3.Connection,
+) -> list[dict[str, object]]:
+    return [
+        {
+            "type": str(row[0]),
+            "name": str(row[1]),
+            "table": str(row[2]),
+            "sql": None if row[3] is None else str(row[3]),
+        }
+        for row in connection.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_schema "
+            "ORDER BY type,name,tbl_name,sql"
+        )
+    ]
+
+
+def expected_v23_schema_manifest(
+    repository: pathlib.Path,
+) -> list[dict[str, object]]:
+    connection = sqlite3.connect(":memory:")
+    try:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        for name in (
+            "017_intake.sql",
+            "018_intake_dossiers.sql",
+            "019_intake_dossier_confirmations.sql",
+        ):
+            connection.executescript(
+                (
+                    repository / "internal/adapters/state/sqlite/migrations" / name
+                ).read_text(encoding="utf-8")
+            )
+        return sqlite_schema_manifest(connection)
+    finally:
+        connection.close()
+
+
+def validate_v23_schema(
+    connection: sqlite3.Connection, repository: pathlib.Path
+) -> None:
+    expected = expected_v23_schema_manifest(repository)
+    expected_names = {item["name"] for item in expected}
+    observed = [
+        item
+        for item in sqlite_schema_manifest(connection)
+        if item["name"] in expected_names or item["table"] in V23_TABLES
+    ]
+    if observed != expected or any(
+        connection.execute(
+            f"SELECT COUNT(*) FROM {quote_identifier(table)}"
+        ).fetchone()[0]
+        != 0
+        for table in V23_TABLES
+    ):
+        raise ContractError("sqlite_v23_schema_changed")
+
+
+def audit_encode_sqlite_value(value: object) -> dict[str, object]:
+    if value is None:
+        return {"type": "null", "value": None}
+    if isinstance(value, bytes):
+        return {"type": "blob", "value": value.hex()}
+    if isinstance(value, int):
+        return {"type": "integer", "value": value}
+    if isinstance(value, float):
+        return {"type": "real", "value": value.hex()}
+    if isinstance(value, str):
+        return {"type": "text", "value": value}
+    raise ContractError("upgrade_sqlite_value")
+
+
+def audit_functional_digest(
+    connection: sqlite3.Connection, source_tables: list[str]
+) -> str:
+    available = {
+        str(row[0])
+        for row in connection.execute(
+            "SELECT name FROM sqlite_schema "
+            "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        )
+    }
+    digest = hashlib.sha256()
+    for table in source_tables:
+        if table not in available:
+            raise ContractError("upgrade_functional_table_missing")
+        columns = [
+            str(row[1])
+            for row in connection.execute(
+                f"PRAGMA table_info({quote_identifier(table)})"
+            )
+        ]
+        if not columns:
+            raise ContractError("upgrade_functional_columns")
+        header = json.dumps(
+            {"table": table, "columns": columns},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        digest.update(len(header).to_bytes(8, "big"))
+        digest.update(header)
+        selected = ",".join(quote_identifier(column) for column in columns)
+        ordering = ",".join(
+            f"{quote_identifier(column)} IS NULL,{quote_identifier(column)}"
+            for column in columns
+        )
+        for row in connection.execute(
+            f"SELECT {selected} FROM {quote_identifier(table)} ORDER BY {ordering}"
+        ):
+            payload = json.dumps(
+                [audit_encode_sqlite_value(item) for item in row],
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+                allow_nan=False,
+            ).encode("utf-8")
+            digest.update(len(payload).to_bytes(8, "big"))
+            digest.update(payload)
+    return digest.hexdigest()
+
+
+def validate_materialized_audit_config(
+    path: pathlib.Path,
+    digest: str,
+    output: pathlib.Path,
+    forbidden: pathlib.Path,
+    harness: dict[str, object],
+    result_database: pathlib.Path,
+    bubblewrap: str,
+    live_profile: str,
+) -> None:
+    content = private_output_bytes(path, os.getuid(), maximum=4 * 1024 * 1024)
+    if hashlib.sha256(content).hexdigest() != digest:
+        raise ContractError("upgrade_materialized_config_hash")
+    config = tomllib.loads(content.decode("utf-8"))
+    profile = require_string(harness["profile"], "upgrade_harness_profile")
+    runtime_root = output / "runtime" / profile
+    exact = (
+        (nested(config, "server", "listen"), harness["listen"]),
+        (nested(config, "state", "sqlite", "path"), str(result_database)),
+        (
+            nested(config, "runtime", "codex", "account_home_root"),
+            str(output / "accounts"),
+        ),
+        (nested(config, "runtime", "codex", "account_profile"), profile),
+        (
+            nested(config, "runtime", "codex", "cgroup_root"),
+            harness["delegated_cgroup_root"],
+        ),
+        (
+            nested(config, "repository", "local", "seed_path"),
+            str(output / "projection/repository"),
+        ),
+        (nested(config, "test_attestor", "provider"), "bubblewrap"),
+        (
+            nested(config, "test_attestor", "bubblewrap", "command"),
+            bubblewrap,
+        ),
+        (
+            nested(config, "test_attestor", "resources", "cgroup_root"),
+            harness["delegated_cgroup_root"],
+        ),
+    )
+    if any(observed != expected for observed, expected in exact):
+        raise ContractError("upgrade_materialized_config_contract")
+    isolated = (
+        ("state", "sqlite", "path"),
+        ("artifact", "filesystem", "root"),
+        ("credentials", "local", "path"),
+        ("runtime", "codex", "work_root"),
+        ("runtime", "codex", "cache_root"),
+        ("workspace", "local", "root"),
+        ("identity", "local_token_path"),
+        ("config", "effective_path"),
+    )
+    credential_paths: list[pathlib.Path] = []
+    for keys in isolated:
+        raw = require_string(nested(config, *keys), "upgrade_materialized_config_path")
+        current = pathlib.Path(raw)
+        if (
+            not current.is_absolute()
+            or pathlib.Path(os.path.normpath(current)) != current
+            or not within(current, runtime_root)
+            or within(current, forbidden)
+        ):
+            raise ContractError("upgrade_materialized_config_isolation")
+        if keys in (
+            ("credentials", "local", "path"),
+            ("identity", "local_token_path"),
+        ):
+            credential_paths.append(current)
+    if any(os.path.lexists(item) for item in credential_paths):
+        raise ContractError("upgrade_credential_projection_present")
+    if live_profile.casefold() in json.dumps(config, sort_keys=True).casefold():
+        raise ContractError("upgrade_live_profile_reference")
+
+
+def validate_upgrade_evidence(
+    value: object,
+    output: pathlib.Path,
+    owner_uid: int,
+    revision: str,
+    harness: dict[str, object],
+) -> None:
+    if not isinstance(value, list) or len(value) != len(EVIDENCE_LABELS):
+        raise ContractError("upgrade_evidence_count")
+    contents: dict[str, str] = {}
+    seen_paths: set[pathlib.Path] = set()
+    for index, (item, expected_label) in enumerate(
+        zip(value, EVIDENCE_LABELS), start=1
+    ):
+        evidence = require_exact_keys(
+            item,
+            {"label", "argv", "returncode", "stdout", "stderr"},
+            "upgrade_evidence_shape",
+        )
+        if evidence["label"] != expected_label:
+            raise ContractError("upgrade_evidence_order")
+        argv = evidence["argv"]
+        if (
+            not isinstance(argv, list)
+            or not argv
+            or any(type(argument) is not str or not argument for argument in argv)
+        ):
+            raise ContractError("upgrade_evidence_argv")
+        expected_return = 3 if expected_label.endswith("profile-status") else 0
+        if (
+            type(evidence["returncode"]) is not int
+            or evidence["returncode"] != expected_return
+        ):
+            raise ContractError("upgrade_evidence_returncode")
+        for stream_name in ("stdout", "stderr"):
+            stream = require_exact_keys(
+                evidence[stream_name],
+                {"path", "sha256", "bytes"},
+                "upgrade_evidence_stream",
+            )
+            expected_relative = f"evidence/{index:02d}-{expected_label}.{stream_name}"
+            if stream["path"] != expected_relative:
+                raise ContractError("upgrade_evidence_path")
+            path = output_path(output, stream["path"], owner_uid)
+            if path in seen_paths:
+                raise ContractError("upgrade_evidence_path_reused")
+            seen_paths.add(path)
+            content = private_output_bytes(path, owner_uid)
+            if (
+                require_integer(stream["bytes"], "upgrade_evidence_bytes")
+                != len(content)
+                or require_hex(stream["sha256"], "upgrade_evidence_hash")
+                != hashlib.sha256(content).hexdigest()
+            ):
+                raise ContractError("upgrade_evidence_content")
+            if stream_name == "stderr" and content:
+                raise ContractError("upgrade_evidence_stderr")
+            if stream_name == "stdout":
+                try:
+                    contents[expected_label] = content.decode("utf-8")
+                except UnicodeDecodeError as error:
+                    raise ContractError("upgrade_evidence_utf8") from error
+    buildinfo = contents["binary-buildinfo"]
+    if (
+        f"\tbuild\tvcs.revision={revision}\n" not in buildinfo
+        or "\tbuild\tvcs.modified=false\n" not in buildinfo
+    ):
+        raise ContractError("upgrade_evidence_buildinfo")
+    if (
+        contents["repository-revision"].strip()
+        != harness["projected_repository_revision"]
+    ):
+        raise ContractError("upgrade_evidence_repository")
+    user_manager_group = contents["user-manager-control-group"].strip()
+    if (
+        not user_manager_group.startswith("/")
+        or user_manager_group in {"", "/"}
+        or not str(harness["delegated_cgroup_root"]).endswith(
+            user_manager_group + "/app.slice/" + str(harness["unit"])
+        )
+    ):
+        raise ContractError("upgrade_evidence_user_manager_cgroup")
+    for label in (
+        "preflight-unit",
+        "cycle-1-unit-collected",
+        "cycle-2-unit-collected",
+        "final-unit",
+    ):
+        if contents[label].strip() != "not-found":
+            raise ContractError("upgrade_evidence_unit_state")
+    invocation_ids: list[str] = []
+    for cycle in (1, 2):
+        observed: list[str] = []
+        for action in ("start", "status"):
+            text = contents[f"cycle-{cycle}-{action}"]
+            expected_action = "start" if action == "start" else "check"
+            match = re.search(r"(?:^| )invocation_id=([0-9a-f]{32})(?:\s|$)", text)
+            if f"status=running action={expected_action}" not in text or match is None:
+                raise ContractError("upgrade_evidence_invocation")
+            if action == "start":
+                for pid_name in ("main_pid", "daemon_pid"):
+                    if (
+                        re.search(rf"(?:^| ){pid_name}=([1-9][0-9]*)(?:\s|$)", text)
+                        is None
+                    ):
+                        raise ContractError("upgrade_evidence_runtime_pid")
+            observed.append(match.group(1))
+        if observed[0] != observed[1]:
+            raise ContractError("upgrade_evidence_invocation_changed")
+        invocation_ids.append(observed[0])
+        control_group = contents[f"cycle-{cycle}-control-group"].strip()
+        if (
+            not control_group.startswith("/")
+            or "/../" in control_group
+            or not str(harness["unit_control_group"]).endswith(
+                control_group + "/orquesta-control"
+            )
+        ):
+            raise ContractError("upgrade_evidence_control_group")
+        if (
+            f"status=stopped profile={harness['profile']}"
+            not in contents[f"cycle-{cycle}-profile-status"]
+        ):
+            raise ContractError("upgrade_evidence_profile_status")
+    if (
+        invocation_ids[0] != harness["_first_invocation_id"]
+        or invocation_ids[1] != harness["_restart_invocation_id"]
+        or invocation_ids[0] == invocation_ids[1]
+    ):
+        raise ContractError("upgrade_evidence_cycle_identity")
+
+
+def process_reference_counts(
+    proc_root: pathlib.Path,
+    binary: pathlib.Path,
+    database: pathlib.Path,
+) -> tuple[int, int]:
+    binary_stat = binary.stat(follow_symlinks=False)
+    database_stat = database.stat(follow_symlinks=False)
+    binary_refs: set[int] = set()
+    database_refs: set[int] = set()
+    for entry in proc_root.iterdir():
+        if not entry.name.isdigit() or not entry.is_dir():
+            continue
+        pid = int(entry.name)
+        try:
+            executable = os.stat(entry / "exe")
+        except OSError:
+            executable = None
+        if executable is not None and (
+            executable.st_dev,
+            executable.st_ino,
+        ) == (binary_stat.st_dev, binary_stat.st_ino):
+            binary_refs.add(pid)
+        descriptors = entry / "fd"
+        try:
+            descriptor_entries = list(descriptors.iterdir())
+        except OSError:
+            descriptor_entries = []
+        for descriptor in descriptor_entries:
+            try:
+                opened = os.stat(descriptor)
+            except OSError:
+                continue
+            if (opened.st_dev, opened.st_ino) == (
+                database_stat.st_dev,
+                database_stat.st_ino,
+            ):
+                database_refs.add(pid)
+                break
+    return len(binary_refs), len(database_refs)
+
+
 def command_upgrade_receipt(args: argparse.Namespace) -> None:
     raw, _ = secure_read(
         args.path,
@@ -563,46 +1181,606 @@ def command_upgrade_receipt(args: argparse.Namespace) -> None:
     if hashlib.sha256(raw).hexdigest() != args.sha:
         raise ContractError("upgrade_receipt_hash")
     document = json.loads(raw, object_pairs_hook=strict_object)
-    candidate = document.get("candidate", {})
-    first = document.get("first_start", {})
-    restart = document.get("restart", {})
-    closure = document.get("closure", {})
-    result_db = document.get("result_database", {})
-    source = document.get("source", {})
-    if not all(
-        isinstance(item, dict)
-        for item in (candidate, first, restart, closure, result_db, source)
-    ):
-        raise ContractError("upgrade_receipt_sections")
-    checks = (
-        document.get("schema_version") == "orquesta_sqlite_upgrade_audit.v0",
-        document.get("result") == "pass",
-        candidate.get("binary_path") == args.binary,
-        candidate.get("binary_sha256") == args.binary_sha,
-        candidate.get("repository_revision") == args.revision,
-        candidate.get("binary_vcs_modified") is False,
-        candidate.get("profile_script_sha256") == args.profile_sha,
-        candidate.get("systemd_adapter_sha256") == args.adapter_sha,
-        candidate.get("systemctl_sha256") == args.systemctl_sha,
-        candidate.get("systemd_run_sha256") == args.systemd_run_sha,
-        source.get("user_version") == 16,
-        first.get("source_user_version") == 16,
-        first.get("result_user_version") == 19,
-        first.get("schema_migrations_added") == [17, 18, 19],
-        first.get("system_status") == "passed",
-        restart.get("result_user_version") == 19,
-        restart.get("schema_migrations_duplicated") is False,
-        restart.get("system_status") == "passed",
-        closure.get("candidate_processes") == 0,
-        closure.get("database_open_processes") == 0,
-        closure.get("live_profile_touched") is False,
-        closure.get("unit_load_state") == "not-found",
-        result_db.get("quick_check") == "ok",
-        result_db.get("foreign_key_check_rows") == 0,
-        result_db.get("user_version") == 19,
+    root = require_exact_keys(
+        document,
+        {
+            "schema_version",
+            "result",
+            "candidate",
+            "source",
+            "first_start",
+            "restart",
+            "result_database",
+            "closure",
+            "harness",
+            "evidence",
+        },
+        "upgrade_receipt_root",
     )
-    if not all(checks):
-        raise ContractError("upgrade_receipt_contract")
+    if root["schema_version"] != UPGRADE_RECEIPT_SCHEMA or root["result"] != "pass":
+        raise ContractError("upgrade_receipt_version")
+    candidate = require_exact_keys(
+        root["candidate"],
+        {
+            "binary_path",
+            "binary_sha256",
+            "repository_revision",
+            "binary_vcs_modified",
+            "profile_script_sha256",
+            "systemd_adapter_sha256",
+            "profile_helper_sha256",
+            "config_template_sha256",
+            "materialized_config_sha256",
+            "migration_manifest_sha256",
+            "go_sha256",
+            "git_sha256",
+            "bubblewrap_sha256",
+            "systemctl_sha256",
+            "systemd_run_sha256",
+            "harness_wrapper_sha256",
+            "harness_helper_sha256",
+        },
+        "upgrade_candidate_shape",
+    )
+    source = require_exact_keys(
+        root["source"],
+        {
+            "database_sha256",
+            "user_version",
+            "quick_check",
+            "foreign_key_check_rows",
+            "functional_data_sha256",
+            "table_counts",
+            "core_counts",
+            "schema_migrations",
+        },
+        "upgrade_source_shape",
+    )
+    first = require_exact_keys(
+        root["first_start"],
+        {
+            "source_user_version",
+            "result_user_version",
+            "schema_migrations_added",
+            "system_status",
+            "invocation_id",
+            "quick_check",
+            "foreign_key_check_rows",
+            "functional_data_sha256",
+            "table_counts",
+            "core_counts",
+            "audit_counts",
+        },
+        "upgrade_first_shape",
+    )
+    restart = require_exact_keys(
+        root["restart"],
+        {
+            "source_user_version",
+            "result_user_version",
+            "schema_migrations_duplicated",
+            "system_status",
+            "invocation_id",
+            "quick_check",
+            "foreign_key_check_rows",
+            "functional_data_sha256",
+            "table_counts",
+            "core_counts",
+            "audit_counts",
+        },
+        "upgrade_restart_shape",
+    )
+    result_db = require_exact_keys(
+        root["result_database"],
+        {
+            "path",
+            "sha256",
+            "quick_check",
+            "foreign_key_check_rows",
+            "user_version",
+            "functional_data_sha256",
+            "table_counts",
+            "core_counts",
+            "schema_migrations",
+        },
+        "upgrade_result_database_shape",
+    )
+    closure = require_exact_keys(
+        root["closure"],
+        {
+            "candidate_processes",
+            "database_open_processes",
+            "live_profile_touched",
+            "unit_load_state",
+            "profile_status",
+            "identity_files",
+            "sqlite_ancillary_files",
+            "credential_projections",
+        },
+        "upgrade_closure_shape",
+    )
+    harness = require_exact_keys(
+        root["harness"],
+        {
+            "created_at",
+            "output_dir",
+            "forbidden_live_root",
+            "profile",
+            "unit",
+            "listen",
+            "delegated_cgroup_root",
+            "unit_control_group",
+            "projected_repository_revision",
+            "directory_mode",
+            "data_file_mode",
+            "executable_projection_mode",
+            "checks",
+        },
+        "upgrade_harness_shape",
+    )
+    checks = require_exact_keys(
+        harness["checks"],
+        {
+            "input_hashes_stable",
+            "source_backup_unchanged",
+            "user_version_16_19_19",
+            "migrations_17_18_19_once",
+            "quick_check_and_foreign_keys",
+            "functional_digest_and_counts_equal",
+            "schema_manifest_exact",
+            "one_status_audit_per_cycle",
+            "invocation_ids_distinct",
+            "config_paths_isolated",
+            "credentials_removed",
+            "zero_residual_resources",
+        },
+        "upgrade_harness_checks_shape",
+    )
+    if any(type(value) is not bool or value is not True for value in checks.values()):
+        raise ContractError("upgrade_harness_checks")
+
+    repository = pathlib.Path(args.repository)
+    forbidden = pathlib.Path(
+        require_string(harness["forbidden_live_root"], "upgrade_forbidden_root")
+    )
+    runtime_base = pathlib.Path(args.runtime_base)
+    output = pathlib.Path(require_string(harness["output_dir"], "upgrade_output_dir"))
+    if (
+        not output.is_absolute()
+        or not forbidden.is_absolute()
+        or forbidden != runtime_base
+        or forbidden.resolve(strict=True) != forbidden
+        or runtime_base.resolve(strict=True) != runtime_base
+        or within(output, forbidden)
+    ):
+        raise ContractError("upgrade_output_isolation")
+    require_private_output_directory(output, args.owner_uid)
+    receipt_path = pathlib.Path(args.path)
+    if receipt_path.parent != output or receipt_path.name != "receipt.json":
+        raise ContractError("upgrade_receipt_location")
+    profile = require_string(harness["profile"], "upgrade_harness_profile")
+    unit = require_string(harness["unit"], "upgrade_harness_unit")
+    if (
+        not REACCREDIT_PROFILE.fullmatch(profile)
+        or unit != f"orquesta-v23-{profile}.service"
+        or not re.fullmatch(
+            r"127\.0\.0\.1:([1-9][0-9]{0,4})",
+            require_string(harness["listen"], "upgrade_harness_listen"),
+        )
+        or int(str(harness["listen"]).rsplit(":", 1)[1]) > 65535
+        or not REVISION.fullmatch(
+            require_string(
+                harness["projected_repository_revision"],
+                "upgrade_harness_revision",
+            )
+        )
+        or not re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z",
+            require_string(harness["created_at"], "upgrade_harness_time"),
+        )
+        or harness["directory_mode"] != "0700"
+        or harness["data_file_mode"] != "0600"
+        or harness["executable_projection_mode"] != "0500"
+    ):
+        raise ContractError("upgrade_harness_contract")
+    control_group = pathlib.Path(
+        require_string(harness["unit_control_group"], "upgrade_harness_control_group")
+    )
+    delegated_group = pathlib.Path(
+        require_string(
+            harness["delegated_cgroup_root"],
+            "upgrade_harness_delegated_cgroup",
+        )
+    )
+    if (
+        not control_group.is_absolute()
+        or pathlib.Path(os.path.normpath(control_group)) != control_group
+        or not delegated_group.is_absolute()
+        or pathlib.Path(os.path.normpath(delegated_group)) != delegated_group
+        or delegated_group.parts[-2:] != ("app.slice", unit)
+        or control_group != delegated_group / "orquesta-control"
+    ):
+        raise ContractError("upgrade_harness_control_group")
+
+    expected_migrations, migration_manifest = current_migration_contract(
+        repository, args.owner_uid
+    )
+    helper_hashes = require_exact_keys(
+        candidate["profile_helper_sha256"],
+        set(PROFILE_HELPERS),
+        "upgrade_profile_helpers_shape",
+    )
+    for helper in PROFILE_HELPERS:
+        expected = stable_source_sha256(
+            repository / "scripts/lib" / helper, args.owner_uid
+        )
+        if helper_hashes[helper] != expected:
+            raise ContractError("upgrade_profile_helper_hash")
+    subject_checks = (
+        candidate["binary_path"] == args.binary,
+        candidate["binary_sha256"] == args.binary_sha,
+        candidate["repository_revision"] == args.revision,
+        candidate["binary_vcs_modified"] is False,
+        candidate["profile_script_sha256"] == args.profile_sha,
+        candidate["systemd_adapter_sha256"] == args.adapter_sha,
+        candidate["config_template_sha256"] == args.config_template_sha,
+        candidate["migration_manifest_sha256"] == migration_manifest,
+        candidate["go_sha256"] == args.go_sha,
+        candidate["git_sha256"] == args.git_sha,
+        candidate["bubblewrap_sha256"] == args.bubblewrap_sha,
+        candidate["systemctl_sha256"] == args.systemctl_sha,
+        candidate["systemd_run_sha256"] == args.systemd_run_sha,
+        candidate["harness_wrapper_sha256"]
+        == stable_source_sha256(
+            repository / "scripts/orquesta_sqlite_v23_reaccredit.sh",
+            args.owner_uid,
+        ),
+        candidate["harness_helper_sha256"]
+        == stable_source_sha256(
+            repository / "scripts/lib/orquesta_sqlite_v23_reaccredit.py",
+            args.owner_uid,
+        ),
+    )
+    if not all(subject_checks):
+        raise ContractError("upgrade_candidate_contract")
+    for key in (
+        "binary_sha256",
+        "profile_script_sha256",
+        "systemd_adapter_sha256",
+        "config_template_sha256",
+        "materialized_config_sha256",
+        "migration_manifest_sha256",
+        "go_sha256",
+        "git_sha256",
+        "bubblewrap_sha256",
+        "systemctl_sha256",
+        "systemd_run_sha256",
+        "harness_wrapper_sha256",
+        "harness_helper_sha256",
+    ):
+        require_hex(candidate[key], "upgrade_candidate_hash")
+    if not REVISION.fullmatch(
+        require_string(candidate["repository_revision"], "upgrade_revision")
+    ):
+        raise ContractError("upgrade_revision")
+
+    projected = output / "projection"
+    projected_hashes = (
+        (projected / "subject/orquesta", args.binary_sha),
+        (
+            projected / "repository/scripts/orquesta_profile_server.sh",
+            args.profile_sha,
+        ),
+        (
+            projected / "repository/scripts/orquesta_profile_systemd_user.sh",
+            args.adapter_sha,
+        ),
+    )
+    for path, expected_sha in projected_hashes:
+        if (
+            output_path(output, str(path.relative_to(output)), args.owner_uid) != path
+            or stat.S_IMODE(path.stat(follow_symlinks=False).st_mode) != 0o500
+            or hashlib.sha256(
+                private_output_bytes(
+                    path,
+                    args.owner_uid,
+                    64 * 1024 * 1024,
+                    allowed_modes=(0o500,),
+                )
+            ).hexdigest()
+            != expected_sha
+        ):
+            raise ContractError("upgrade_projected_subject")
+    for helper in PROFILE_HELPERS:
+        path = projected / "repository/scripts/lib" / helper
+        if (
+            output_path(output, str(path.relative_to(output)), args.owner_uid) != path
+            or stat.S_IMODE(path.stat(follow_symlinks=False).st_mode) != 0o500
+            or hashlib.sha256(
+                private_output_bytes(path, args.owner_uid, allowed_modes=(0o500,))
+            ).hexdigest()
+            != helper_hashes[helper]
+        ):
+            raise ContractError("upgrade_projected_helper")
+    for version, migration in expected_migrations.items():
+        path = (
+            projected
+            / "repository/internal/adapters/state/sqlite/migrations"
+            / migration["name"]
+        )
+        if (
+            output_path(output, str(path.relative_to(output)), args.owner_uid) != path
+            or hashlib.sha256(private_output_bytes(path, args.owner_uid)).hexdigest()
+            != migration["sha256"]
+        ):
+            raise ContractError("upgrade_projected_migration")
+
+    require_hex(source["database_sha256"], "upgrade_source_database_hash")
+    source_counts = require_count_map(
+        source["table_counts"], "upgrade_source_table_counts"
+    )
+    source_core = require_count_map(
+        source["core_counts"], "upgrade_source_core_counts", set(CORE_TABLES)
+    )
+    if source_core != {table: source_counts.get(table) for table in CORE_TABLES}:
+        raise ContractError("upgrade_source_core_counts")
+    require_migration_rows(
+        source["schema_migrations"],
+        expected_migrations,
+        16,
+        "upgrade_source_migrations",
+    )
+    first_counts = require_count_map(
+        first["table_counts"], "upgrade_first_table_counts"
+    )
+    restart_counts = require_count_map(
+        restart["table_counts"], "upgrade_restart_table_counts"
+    )
+    result_counts = require_count_map(
+        result_db["table_counts"], "upgrade_result_table_counts"
+    )
+    first_core = require_count_map(
+        first["core_counts"], "upgrade_first_core_counts", set(CORE_TABLES)
+    )
+    restart_core = require_count_map(
+        restart["core_counts"], "upgrade_restart_core_counts", set(CORE_TABLES)
+    )
+    result_core = require_count_map(
+        result_db["core_counts"], "upgrade_result_core_counts", set(CORE_TABLES)
+    )
+    first_audit = require_count_map(
+        first["audit_counts"],
+        "upgrade_first_audit_counts",
+        FUNCTIONAL_AUDIT_TABLES,
+    )
+    restart_audit = require_count_map(
+        restart["audit_counts"],
+        "upgrade_restart_audit_counts",
+        FUNCTIONAL_AUDIT_TABLES,
+    )
+    if (
+        require_integer(source["user_version"], "upgrade_source_version") != 16
+        or require_string(source["quick_check"], "upgrade_source_quick") != "ok"
+        or require_integer(
+            source["foreign_key_check_rows"], "upgrade_source_foreign_keys"
+        )
+        != 0
+        or require_integer(first["source_user_version"], "upgrade_first_source_version")
+        != 16
+        or require_integer(first["result_user_version"], "upgrade_first_result_version")
+        != 19
+        or first["schema_migrations_added"] != [17, 18, 19]
+        or require_string(first["system_status"], "upgrade_first_status") != "passed"
+        or require_integer(
+            restart["source_user_version"], "upgrade_restart_source_version"
+        )
+        != 19
+        or require_integer(
+            restart["result_user_version"], "upgrade_restart_result_version"
+        )
+        != 19
+        or restart["schema_migrations_duplicated"] is not False
+        or require_string(restart["system_status"], "upgrade_restart_status")
+        != "passed"
+        or require_string(result_db["quick_check"], "upgrade_result_quick") != "ok"
+        or require_integer(
+            result_db["foreign_key_check_rows"], "upgrade_result_foreign_keys"
+        )
+        != 0
+        or require_integer(result_db["user_version"], "upgrade_result_version") != 19
+        or require_string(first["quick_check"], "upgrade_first_quick") != "ok"
+        or require_integer(
+            first["foreign_key_check_rows"], "upgrade_first_foreign_keys"
+        )
+        != 0
+        or require_string(restart["quick_check"], "upgrade_restart_quick") != "ok"
+        or require_integer(
+            restart["foreign_key_check_rows"], "upgrade_restart_foreign_keys"
+        )
+        != 0
+    ):
+        raise ContractError("upgrade_sqlite_versions")
+    first_invocation = require_string(
+        first["invocation_id"], "upgrade_first_invocation"
+    )
+    restart_invocation = require_string(
+        restart["invocation_id"], "upgrade_restart_invocation"
+    )
+    if (
+        not INVOCATION_ID.fullmatch(first_invocation)
+        or not INVOCATION_ID.fullmatch(restart_invocation)
+        or first_invocation == restart_invocation
+    ):
+        raise ContractError("upgrade_invocations")
+    functional_digest = require_hex(
+        source["functional_data_sha256"], "upgrade_functional_digest"
+    )
+    if any(
+        require_hex(item["functional_data_sha256"], "upgrade_functional_digest")
+        != functional_digest
+        for item in (first, restart, result_db)
+    ):
+        raise ContractError("upgrade_functional_digest")
+    if (
+        source_core != first_core
+        or source_core != restart_core
+        or source_core != result_core
+        or result_counts != restart_counts
+        or set(first_counts) != set(restart_counts)
+        or source_counts.get("schema_migrations") != 16
+        or first_counts.get("schema_migrations") != 19
+        or restart_counts.get("schema_migrations") != 19
+        or any(first_counts.get(table) != 0 for table in V23_TABLES)
+        or any(restart_counts.get(table) != 0 for table in V23_TABLES)
+    ):
+        raise ContractError("upgrade_count_contract")
+    for table, count in source_counts.items():
+        if table in FUNCTIONAL_AUDIT_TABLES or table == "schema_migrations":
+            continue
+        if first_counts.get(table) != count or restart_counts.get(table) != count:
+            raise ContractError("upgrade_functional_count_changed")
+    for table in set(first_counts) - set(source_counts):
+        if (
+            table not in FUNCTIONAL_AUDIT_TABLES
+            and first_counts[table] != restart_counts[table]
+        ):
+            raise ContractError("upgrade_new_table_count_changed")
+    for table in FUNCTIONAL_AUDIT_TABLES:
+        source_count = source_counts.get(table)
+        if (
+            source_count is None
+            or first_audit[table] != source_count + 1
+            or restart_audit[table] != source_count + 2
+            or first_counts.get(table) != first_audit[table]
+            or restart_counts.get(table) != restart_audit[table]
+        ):
+            raise ContractError("upgrade_audit_delta")
+    require_migration_rows(
+        result_db["schema_migrations"],
+        expected_migrations,
+        19,
+        "upgrade_result_migrations",
+    )
+
+    result_path = output_path(output, result_db["path"], args.owner_uid)
+    expected_result_path = output / "runtime" / profile / "state/orquesta.sqlite"
+    if result_path != expected_result_path:
+        raise ContractError("upgrade_result_database_path")
+    result_sha, _ = secure_file_sha256(str(result_path), args.owner_uid)
+    if require_hex(result_db["sha256"], "upgrade_result_database_hash") != result_sha:
+        raise ContractError("upgrade_result_database_hash")
+    connection = connect_read_only(str(result_path))
+    try:
+        quick = [str(row[0]) for row in connection.execute("PRAGMA quick_check")]
+        foreign = list(connection.execute("PRAGMA foreign_key_check"))
+        version = connection.execute("PRAGMA user_version").fetchone()[0]
+        tables = [
+            str(row[0])
+            for row in connection.execute(
+                "SELECT name FROM sqlite_schema "
+                "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            )
+        ]
+        actual_counts = {
+            table: connection.execute(
+                f"SELECT COUNT(*) FROM {quote_identifier(table)}"
+            ).fetchone()[0]
+            for table in tables
+        }
+        actual_migrations = [
+            {"version": row[0], "name": row[1], "checksum": row[2]}
+            for row in connection.execute(
+                "SELECT version,name,checksum FROM schema_migrations "
+                "ORDER BY version,name,checksum"
+            )
+        ]
+        source_functional_tables = sorted(
+            set(source_counts) - FUNCTIONAL_AUDIT_TABLES - {"schema_migrations"}
+        )
+        actual_functional = audit_functional_digest(
+            connection, source_functional_tables
+        )
+        validate_v23_schema(connection, repository)
+    finally:
+        connection.close()
+    if (
+        quick != ["ok"]
+        or foreign
+        or version != 19
+        or actual_counts != result_counts
+        or actual_migrations != result_db["schema_migrations"]
+        or {table: actual_counts.get(table) for table in CORE_TABLES} != result_core
+        or actual_functional != functional_digest
+    ):
+        raise ContractError("upgrade_result_database_contract")
+
+    config_path = output_path(output, "config.toml", args.owner_uid)
+    validate_materialized_audit_config(
+        config_path,
+        require_hex(
+            candidate["materialized_config_sha256"],
+            "upgrade_materialized_config_hash",
+        ),
+        output,
+        forbidden,
+        harness,
+        result_path,
+        args.bubblewrap,
+        args.profile,
+    )
+    harness["_first_invocation_id"] = first_invocation
+    harness["_restart_invocation_id"] = restart_invocation
+    validate_upgrade_evidence(
+        root["evidence"], output, args.owner_uid, args.revision, harness
+    )
+    del harness["_first_invocation_id"]
+    del harness["_restart_invocation_id"]
+
+    closure_expected = {
+        "candidate_processes": 0,
+        "database_open_processes": 0,
+        "live_profile_touched": False,
+        "unit_load_state": "not-found",
+        "profile_status": "stopped",
+        "identity_files": 0,
+        "sqlite_ancillary_files": 0,
+        "credential_projections": 0,
+    }
+    if (
+        closure != closure_expected
+        or any(
+            type(closure[key]) is not int
+            for key in (
+                "candidate_processes",
+                "database_open_processes",
+                "identity_files",
+                "sqlite_ancillary_files",
+                "credential_projections",
+            )
+        )
+        or closure["live_profile_touched"] is not False
+        or type(closure["unit_load_state"]) is not str
+        or type(closure["profile_status"]) is not str
+    ):
+        raise ContractError("upgrade_closure_contract")
+    projected_binary = projected / "subject/orquesta"
+    binary_processes, database_processes = process_reference_counts(
+        pathlib.Path(args.proc_root), projected_binary, result_path
+    )
+    if binary_processes or database_processes:
+        raise ContractError("upgrade_closure_processes")
+    for name in (
+        "server.pid",
+        "server.start_ref",
+        "server.binary_id",
+        "server.binary_sha256",
+        "server.config_sha256",
+    ):
+        if os.path.lexists(output / "runtime" / profile / "run" / name):
+            raise ContractError("upgrade_identity_residue")
+    for suffix in ("-wal", "-shm", "-journal"):
+        if os.path.lexists(str(result_path) + suffix):
+            raise ContractError("upgrade_sqlite_residue")
 
 
 def command_sqlite_before(args: argparse.Namespace) -> None:
@@ -661,11 +1839,12 @@ def command_sqlite_after(args: argparse.Namespace) -> None:
             or counts != [1, 1, 1]
         ):
             raise ContractError("sqlite_after")
+        validate_v23_schema(connection, pathlib.Path(args.repository))
         if not args.skip_functional:
             projection = functional_projection(backup)
-            if functional_data_sha256(
-                backup, projection
-            ) != functional_data_sha256(connection, projection):
+            if functional_data_sha256(backup, projection) != functional_data_sha256(
+                connection, projection
+            ):
                 raise ContractError("sqlite_functional_data_changed")
     finally:
         backup.close()
@@ -688,13 +1867,10 @@ def command_functional_digest(args: argparse.Namespace) -> None:
 
 
 def command_effective(args: argparse.Namespace) -> None:
-    document = read_json(
-        args.path, 16 * 1024 * 1024, expected_uid=os.getuid()
-    )
+    document = read_json(args.path, 16 * 1024 * 1024, expected_uid=os.getuid())
     entries = document.get("entries")
-    if (
-        document.get("document_type") != "orquesta.effective_config"
-        or not isinstance(entries, list)
+    if document.get("document_type") != "orquesta.effective_config" or not isinstance(
+        entries, list
     ):
         raise ContractError("effective_root")
     values: dict[str, object] = {}
@@ -715,8 +1891,7 @@ def command_effective(args: argparse.Namespace) -> None:
     if any(values.get(key) != value for key, value in expected.items()):
         raise ContractError("effective_contract")
     if args.provider == "microvm" and (
-        values.get("test_attestor.microvm.launcher_socket")
-        != args.launcher_socket
+        values.get("test_attestor.microvm.launcher_socket") != args.launcher_socket
         or values.get("test_attestor.microvm.expected_asset_digest")
         != args.asset_digest
     ):
@@ -919,9 +2094,7 @@ def command_verify_backup(args: argparse.Namespace) -> None:
         or not HEX.fullmatch(values.get("backup_sha256", ""))
         or not HEX.fullmatch(values.get("schema_migrations_sha256", ""))
         or not re.fullmatch(r"[1-9][0-9]*", values.get("backup_size", ""))
-        or not re.fullmatch(
-            r"(0|[1-9][0-9]*)", values.get("source_user_version", "")
-        )
+        or not re.fullmatch(r"(0|[1-9][0-9]*)", values.get("source_user_version", ""))
         or int(values["backup_size"]) != target_metadata.st_size
         or hashed_metadata.st_size != target_metadata.st_size
         or target_sha != values["backup_sha256"]
@@ -959,8 +2132,17 @@ def parser() -> argparse.ArgumentParser:
         "binary",
         "binary-sha",
         "revision",
+        "repository",
+        "runtime-base",
+        "profile",
+        "proc-root",
         "profile-sha",
         "adapter-sha",
+        "config-template-sha",
+        "go-sha",
+        "git-sha",
+        "bubblewrap",
+        "bubblewrap-sha",
         "systemctl-sha",
         "systemd-run-sha",
     ):

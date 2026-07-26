@@ -56,6 +56,7 @@ contract_usage() {
 --launcher-socket --expected-launcher-socket-uid
 --expected-launcher-socket-gid --expected-asset-digest
 --sqlite-upgrade-receipt --expected-sqlite-upgrade-receipt-sha256
+--expected-sqlite-audit-config-template-sha256
 --expected-primary-max-concurrent-runs --expected-rollback-max-concurrent-runs
 [--readiness-timeout] [--collection-timeout]
 EOF
@@ -95,6 +96,7 @@ while [ "$#" -gt 0 ]; do
     --expected-launcher-socket-uid|\
     --expected-launcher-socket-gid|--expected-asset-digest|\
     --sqlite-upgrade-receipt|--expected-sqlite-upgrade-receipt-sha256|\
+    --expected-sqlite-audit-config-template-sha256|\
     --expected-primary-max-concurrent-runs|\
     --expected-rollback-max-concurrent-runs|--readiness-timeout|\
     --collection-timeout)
@@ -127,6 +129,7 @@ readonly REQUIRED_KEYS=(
   launcher-socket expected-launcher-socket-uid expected-launcher-socket-gid
   expected-asset-digest sqlite-upgrade-receipt
   expected-sqlite-upgrade-receipt-sha256
+  expected-sqlite-audit-config-template-sha256
   expected-primary-max-concurrent-runs
   expected-rollback-max-concurrent-runs
 )
@@ -186,6 +189,7 @@ readonly SHA_KEYS=(
   expected-firecracker-probe-sha256 expected-firecracker-unit-sha256
   expected-asset-digest
   expected-sqlite-upgrade-receipt-sha256
+  expected-sqlite-audit-config-template-sha256
 )
 for key in "${SHA_KEYS[@]}"; do
   [[ "${value[$key]}" =~ ^[0-9a-f]{64}$ ]] ||
@@ -381,8 +385,16 @@ validate_subject() {
     --owner-uid "$current_uid" \
     --binary "$binary" --binary-sha "${value[expected-binary-sha256]}" \
     --revision "$candidate_revision" \
+    --repository "$repository_root" --runtime-base "$runtime_base" \
+    --profile "$profile" --proc-root "$proc_root" \
     --profile-sha "${value[expected-profile-script-sha256]}" \
     --adapter-sha "${value[expected-systemd-adapter-sha256]}" \
+    --config-template-sha \
+      "${value[expected-sqlite-audit-config-template-sha256]}" \
+    --go-sha "${value[expected-go-sha256]}" \
+    --git-sha "${value[expected-git-sha256]}" \
+    --bubblewrap "$bubblewrap" \
+    --bubblewrap-sha "${value[expected-bubblewrap-sha256]}" \
     --systemctl-sha "${value[expected-systemctl-sha256]}" \
     --systemd-run-sha "${value[expected-systemd-run-sha256]}" ||
     fail "sqlite_upgrade_receipt_invalid"

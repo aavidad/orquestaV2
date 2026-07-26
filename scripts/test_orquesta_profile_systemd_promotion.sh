@@ -382,10 +382,15 @@ for version, name in (
 ):
     path = pathlib.Path(repository) / "internal/adapters/state/sqlite/migrations" / name
     checksum = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
-    connection.execute(
-        "INSERT OR IGNORE INTO schema_migrations(version,name,checksum) VALUES(?,?,?)",
-        (version, name, checksum),
-    )
+    exists = connection.execute(
+        "SELECT COUNT(*) FROM schema_migrations WHERE version=?",(version,)
+    ).fetchone()[0]
+    if not exists:
+        connection.executescript(path.read_text())
+        connection.execute(
+            "INSERT INTO schema_migrations(version,name,checksum) VALUES(?,?,?)",
+            (version, name, checksum),
+        )
 connection.execute("PRAGMA user_version=19")
 connection.execute("CREATE TABLE IF NOT EXISTS post_cut(value TEXT NOT NULL)")
 connection.execute("INSERT INTO post_cut(value) SELECT 'preserved' WHERE NOT EXISTS(SELECT 1 FROM post_cut)")
@@ -495,29 +500,412 @@ write_upgrade_receipt() {
   /usr/bin/python3 - "$root" "$target" <<'PY'
 import hashlib
 import json
+import os
 import pathlib
+import shutil
+import sqlite3
 import sys
 root, target = sys.argv[1:]
-sha = lambda name: hashlib.sha256((pathlib.Path(root)/"tools"/name).read_bytes()).hexdigest()
+root = pathlib.Path(root)
+target = pathlib.Path(target)
+output = target.parent
+repository = root / "repository"
+source_database = root / "runtime/Codex12/state/orquesta.sqlite"
+profile = "SqliteReaccredit0123456789abcdef"
+unit = "orquesta-v23-" + profile + ".service"
+listen = "127.0.0.1:39117"
+delegated = (
+    root / "cgroup/user.slice" / f"user-{os.getuid()}.slice"
+    / f"user@{os.getuid()}.service/app.slice" / unit
+)
+control = delegated / "orquesta-control"
+revision = "86dedc1c44e4fa161eb68a70413ae81a3d585622"
+projected_revision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+invocations = (
+    "11111111111111111111111111111111",
+    "22222222222222222222222222222222",
+)
+
+def sha(path):
+    return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
+
+def mkdir(path):
+    pathlib.Path(path).mkdir(mode=0o700, parents=True, exist_ok=True)
+    pathlib.Path(path).chmod(0o700)
+
+def write_private(path, content):
+    path = pathlib.Path(path)
+    path.write_bytes(content)
+    path.chmod(0o600)
+
+def encode(value):
+    if value is None:
+        return {"type":"null","value":None}
+    if isinstance(value, bytes):
+        return {"type":"blob","value":value.hex()}
+    if isinstance(value, int):
+        return {"type":"integer","value":value}
+    if isinstance(value, float):
+        return {"type":"real","value":value.hex()}
+    return {"type":"text","value":value}
+
+def quote(value):
+    return '"' + value.replace('"','""') + '"'
+
+def table_names(connection):
+    return [
+        row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_schema WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+    ]
+
+def counts(connection):
+    return {
+        table: connection.execute(
+            f"SELECT COUNT(*) FROM {quote(table)}"
+        ).fetchone()[0]
+        for table in table_names(connection)
+    }
+
+def migrations(connection):
+    return [
+        {"version":row[0],"name":row[1],"checksum":row[2]}
+        for row in connection.execute(
+            "SELECT version,name,checksum FROM schema_migrations "
+            "ORDER BY version,name,checksum"
+        )
+    ]
+
+def functional_digest(connection, tables):
+    digest = hashlib.sha256()
+    for table in tables:
+        columns = [
+            row[1] for row in connection.execute(
+                f"PRAGMA table_info({quote(table)})"
+            )
+        ]
+        header = json.dumps(
+            {"table":table,"columns":columns},
+            ensure_ascii=False,sort_keys=True,separators=(",",":"),
+        ).encode()
+        digest.update(len(header).to_bytes(8,"big"))
+        digest.update(header)
+        selected = ",".join(quote(column) for column in columns)
+        ordering = ",".join(
+            f"{quote(column)} IS NULL,{quote(column)}" for column in columns
+        )
+        for row in connection.execute(
+            f"SELECT {selected} FROM {quote(table)} ORDER BY {ordering}"
+        ):
+            payload = json.dumps(
+                [encode(value) for value in row],
+                ensure_ascii=False,sort_keys=True,separators=(",",":"),
+            ).encode()
+            digest.update(len(payload).to_bytes(8,"big"))
+            digest.update(payload)
+    return digest.hexdigest()
+
+output.mkdir(mode=0o700)
+for directory in (
+    output / "evidence",
+    output / "runtime" / profile / "state",
+    output / "runtime" / profile,
+    output / "runtime",
+    output / "accounts",
+    output / "projection/subject",
+    output / "projection/repository/scripts/lib",
+    output / "projection/repository/internal/adapters/state/sqlite/migrations",
+):
+    mkdir(directory)
+
+result_database = output / "runtime" / profile / "state/orquesta.sqlite"
+shutil.copyfile(source_database, result_database)
+result_database.chmod(0o600)
+migration_contract = {}
+for version in range(1,20):
+    paths = list(
+        (repository / "internal/adapters/state/sqlite/migrations").glob(
+            f"{version:03d}_*.sql"
+        )
+    )
+    assert len(paths) == 1
+    digest = sha(paths[0])
+    migration_contract[version] = {
+        "name":paths[0].name,
+        "checksum":"sha256:"+digest,
+        "sha256":digest,
+    }
+manifest_sha = hashlib.sha256(json.dumps(
+    migration_contract,sort_keys=True,separators=(",",":")
+).encode()).hexdigest()
+
+database = sqlite3.connect(result_database)
+for version in (17,18,19):
+    item = migration_contract[version]
+    database.executescript(
+        (
+            repository / "internal/adapters/state/sqlite/migrations"
+            / item["name"]
+        ).read_text()
+    )
+    database.execute(
+        "INSERT INTO schema_migrations VALUES(?,?,?)",
+        (version,item["name"],item["checksum"]),
+    )
+for table in (
+    "authorization_receipts","command_invocations","command_outcomes",
+):
+    database.execute(f"INSERT INTO {table}(value) VALUES('cycle-1')")
+    database.execute(f"INSERT INTO {table}(value) VALUES('cycle-2')")
+database.execute("PRAGMA user_version=19")
+database.commit()
+database.close()
+
+source = sqlite3.connect(f"file:{source_database}?mode=ro",uri=True)
+source_counts = counts(source)
+source_migrations = migrations(source)
+functional_tables = [
+    table for table in table_names(source)
+    if table not in {
+        "schema_migrations","authorization_receipts",
+        "command_invocations","command_outcomes",
+    }
+]
+source_digest = functional_digest(source,functional_tables)
+source.close()
+result = sqlite3.connect(f"file:{result_database}?mode=ro",uri=True)
+result_counts = counts(result)
+result_migrations = migrations(result)
+assert functional_digest(result,functional_tables) == source_digest
+result.close()
+core_tables = ("goals","executions","work_items","outbox","effect_attempts")
+audit_tables = (
+    "authorization_receipts","command_invocations","command_outcomes"
+)
+core_counts = {name:source_counts[name] for name in core_tables}
+first_counts = dict(result_counts)
+for name in audit_tables:
+    first_counts[name] = source_counts[name] + 1
+first_audit = {name:first_counts[name] for name in audit_tables}
+restart_audit = {name:result_counts[name] for name in audit_tables}
+
+projected = output / "projection"
+copies = (
+    (root / "tools/binary", projected / "subject/orquesta", 0o500),
+    (root / "tools/profile",
+     projected / "repository/scripts/orquesta_profile_server.sh",0o500),
+    (root / "tools/adapter",
+     projected / "repository/scripts/orquesta_profile_systemd_user.sh",0o500),
+)
+for source_path,destination,mode in copies:
+    shutil.copyfile(source_path,destination)
+    destination.chmod(mode)
+for name in (
+    "firecracker_launcher_probe.py","pidfd_signal.py",
+    "profile_maintenance_marker.py",
+):
+    destination = projected / "repository/scripts/lib" / name
+    shutil.copyfile(repository / "scripts/lib" / name,destination)
+    destination.chmod(0o500)
+for item in migration_contract.values():
+    destination = (
+        projected / "repository/internal/adapters/state/sqlite/migrations"
+        / item["name"]
+    )
+    shutil.copyfile(
+        repository / "internal/adapters/state/sqlite/migrations" / item["name"],
+        destination,
+    )
+    destination.chmod(0o600)
+
+config = f'''
+[server]
+listen = "{listen}"
+[state.sqlite]
+path = "{result_database}"
+[artifact.filesystem]
+root = "{output}/runtime/{profile}/artifacts"
+[credentials.local]
+path = "{output}/runtime/{profile}/credentials.json"
+[runtime.codex]
+account_home_root = "{output}/accounts"
+account_profile = "{profile}"
+cgroup_root = "{delegated}"
+work_root = "{output}/runtime/{profile}/work"
+cache_root = "{output}/runtime/{profile}/cache"
+command = ""
+go_toolchain_root = ""
+[repository.local]
+seed_path = "{output}/projection/repository"
+[test_attestor]
+provider = "bubblewrap"
+[test_attestor.bubblewrap]
+command = "{root}/tools/bubblewrap"
+[test_attestor.resources]
+cgroup_root = "{delegated}"
+[test_attestor.go]
+toolchain_root = ""
+[workspace.local]
+root = "{output}/runtime/{profile}/workspace"
+[identity]
+local_token_path = "{output}/runtime/{profile}/token"
+[config]
+effective_path = "{output}/runtime/{profile}/effective.json"
+'''.lstrip().encode()
+write_private(output / "config.toml",config)
+
+contents = {
+    "user-manager-control-group":(
+        f"/user.slice/user-{os.getuid()}.slice/"
+        f"user@{os.getuid()}.service\n"
+    ),
+    "binary-buildinfo": (
+        "orquesta: go1.25.11\n"
+        "\tbuild\tvcs.revision="+revision+"\n"
+        "\tbuild\tvcs.modified=false\n"
+    ),
+    "repository-revision":projected_revision+"\n",
+    "preflight-unit":"not-found\n",
+    "cycle-1-start":(
+        "status=running action=start main_pid=31001 daemon_pid=31002 "
+        "invocation_id="+invocations[0]+"\n"
+    ),
+    "cycle-1-status":(
+        "status=running action=check invocation_id="+invocations[0]+"\n"
+    ),
+    "cycle-2-start":(
+        "status=running action=start main_pid=32001 daemon_pid=32002 "
+        "invocation_id="+invocations[1]+"\n"
+    ),
+    "cycle-2-status":(
+        "status=running action=check invocation_id="+invocations[1]+"\n"
+    ),
+    "cycle-1-control-group":str(
+        pathlib.PurePosixPath("/") / pathlib.Path(control).relative_to(
+            root / "cgroup"
+        )
+    ).removesuffix("/orquesta-control")+"\n",
+    "cycle-2-control-group":str(
+        pathlib.PurePosixPath("/") / pathlib.Path(control).relative_to(
+            root / "cgroup"
+        )
+    ).removesuffix("/orquesta-control")+"\n",
+    "cycle-1-unit-collected":"not-found\n",
+    "cycle-2-unit-collected":"not-found\n",
+    "cycle-1-profile-status":f"status=stopped profile={profile}\n",
+    "cycle-2-profile-status":f"status=stopped profile={profile}\n",
+    "final-unit":"not-found\n",
+}
+labels = (
+    "user-manager-control-group","binary-buildinfo",
+    "repository-init","repository-add",
+    "repository-commit","repository-revision","preflight-unit",
+    "cycle-1-start","cycle-1-control-group","cycle-1-status",
+    "cycle-1-stop","cycle-1-collect","cycle-1-unit-collected",
+    "cycle-1-profile-status","cycle-2-start","cycle-2-control-group",
+    "cycle-2-status","cycle-2-stop","cycle-2-collect",
+    "cycle-2-unit-collected","cycle-2-profile-status","final-unit",
+)
+evidence = []
+for index,label in enumerate(labels,1):
+    stdout = contents.get(label,"").encode()
+    stderr = b""
+    stdout_path = output / "evidence" / f"{index:02d}-{label}.stdout"
+    stderr_path = output / "evidence" / f"{index:02d}-{label}.stderr"
+    write_private(stdout_path,stdout)
+    write_private(stderr_path,stderr)
+    evidence.append({
+        "label":label,"argv":["/bin/true",label],
+        "returncode":3 if label.endswith("profile-status") else 0,
+        "stdout":{
+            "path":str(stdout_path.relative_to(output)),
+            "sha256":sha(stdout_path),"bytes":len(stdout),
+        },
+        "stderr":{
+            "path":str(stderr_path.relative_to(output)),
+            "sha256":sha(stderr_path),"bytes":0,
+        },
+    })
+
+helper_hashes = {
+    name:sha(repository / "scripts/lib" / name)
+    for name in (
+        "firecracker_launcher_probe.py","pidfd_signal.py",
+        "profile_maintenance_marker.py",
+    )
+}
 document = {
- "schema_version":"orquesta_sqlite_upgrade_audit.v0","result":"pass",
+ "schema_version":"orquesta_sqlite_upgrade_audit.v1","result":"pass",
  "candidate":{
-  "binary_path":root+"/tools/binary","binary_sha256":sha("binary"),
-  "repository_revision":"86dedc1c44e4fa161eb68a70413ae81a3d585622",
-  "binary_vcs_modified":False,"profile_script_sha256":sha("profile"),
-  "systemd_adapter_sha256":sha("adapter"),"systemctl_sha256":sha("systemctl"),
-  "systemd_run_sha256":sha("systemd-run")},
- "source":{"user_version":16},
- "first_start":{"source_user_version":16,"result_user_version":19,
-  "schema_migrations_added":[17,18,19],"system_status":"passed"},
- "restart":{"result_user_version":19,"schema_migrations_duplicated":False,
-  "system_status":"passed"},
+  "binary_path":str(root/"tools/binary"),
+  "binary_sha256":sha(root/"tools/binary"),
+  "repository_revision":revision,"binary_vcs_modified":False,
+  "profile_script_sha256":sha(root/"tools/profile"),
+  "systemd_adapter_sha256":sha(root/"tools/adapter"),
+  "profile_helper_sha256":helper_hashes,
+  "config_template_sha256":sha(root/"audit-template.toml"),
+  "materialized_config_sha256":sha(output/"config.toml"),
+  "migration_manifest_sha256":manifest_sha,
+  "go_sha256":sha(root/"tools/go"),"git_sha256":sha(root/"tools/git"),
+  "bubblewrap_sha256":sha(root/"tools/bubblewrap"),
+  "systemctl_sha256":sha(root/"tools/systemctl"),
+  "systemd_run_sha256":sha(root/"tools/systemd-run"),
+  "harness_wrapper_sha256":sha(
+      repository/"scripts/orquesta_sqlite_v23_reaccredit.sh"),
+  "harness_helper_sha256":sha(
+      repository/"scripts/lib/orquesta_sqlite_v23_reaccredit.py")},
+ "source":{
+  "database_sha256":sha(source_database),"user_version":16,
+  "quick_check":"ok","foreign_key_check_rows":0,
+  "functional_data_sha256":source_digest,"table_counts":source_counts,
+  "core_counts":core_counts,"schema_migrations":source_migrations},
+ "first_start":{
+  "source_user_version":16,"result_user_version":19,
+  "schema_migrations_added":[17,18,19],"system_status":"passed",
+  "invocation_id":invocations[0],"quick_check":"ok",
+  "foreign_key_check_rows":0,"functional_data_sha256":source_digest,
+  "table_counts":first_counts,"core_counts":core_counts,
+  "audit_counts":first_audit},
+ "restart":{
+  "source_user_version":19,"result_user_version":19,
+  "schema_migrations_duplicated":False,"system_status":"passed",
+  "invocation_id":invocations[1],"quick_check":"ok",
+  "foreign_key_check_rows":0,"functional_data_sha256":source_digest,
+  "table_counts":result_counts,"core_counts":core_counts,
+  "audit_counts":restart_audit},
  "closure":{"candidate_processes":0,"database_open_processes":0,
-  "live_profile_touched":False,"unit_load_state":"not-found"},
- "result_database":{"quick_check":"ok","foreign_key_check_rows":0,"user_version":19}}
-pathlib.Path(target).write_text(json.dumps(document,sort_keys=True),encoding="utf-8")
+  "live_profile_touched":False,"unit_load_state":"not-found",
+  "profile_status":"stopped","identity_files":0,
+  "sqlite_ancillary_files":0,"credential_projections":0},
+ "result_database":{
+  "path":str(result_database.relative_to(output)),
+  "sha256":sha(result_database),"quick_check":"ok",
+  "foreign_key_check_rows":0,"user_version":19,
+  "functional_data_sha256":source_digest,"table_counts":result_counts,
+  "core_counts":core_counts,"schema_migrations":result_migrations},
+ "harness":{
+  "created_at":"2026-07-26T12:00:00Z","output_dir":str(output),
+  "forbidden_live_root":str(root/"runtime"),"profile":profile,"unit":unit,
+  "listen":listen,"unit_control_group":str(control),
+  "delegated_cgroup_root":str(delegated),
+  "projected_repository_revision":projected_revision,
+  "directory_mode":"0700","data_file_mode":"0600",
+  "executable_projection_mode":"0500",
+  "checks":{
+   "input_hashes_stable":True,"source_backup_unchanged":True,
+   "user_version_16_19_19":True,"migrations_17_18_19_once":True,
+   "quick_check_and_foreign_keys":True,
+   "functional_digest_and_counts_equal":True,
+   "schema_manifest_exact":True,
+   "one_status_audit_per_cycle":True,"invocation_ids_distinct":True,
+   "config_paths_isolated":True,"credentials_removed":True,
+   "zero_residual_resources":True}},
+ "evidence":evidence}
+write_private(target,(json.dumps(
+    document,sort_keys=True,separators=(",",":")
+)+"\n").encode())
 PY
-  chmod 600 "$target"
 }
 
 start_socket() {
@@ -580,6 +968,7 @@ new_fixture() {
     "$root/promotion" "$root/proc" "$root/cgroup"
   mkdir -p \
     "$root/repository/internal/adapters/state/sqlite/migrations" \
+    "$root/repository/scripts/lib" \
     "$root/runtime/.profile-locks" \
     "$root/runtime/$PROFILE/state/backups" "$root/runtime/$PROFILE/run" \
     "$root/cgroup/orquesta-v23-Codex12.service/orquesta-control" \
@@ -587,12 +976,23 @@ new_fixture() {
     "$root/proc/$DAEMON_PID"
   chmod 700 \
     "$root/repository/internal/adapters/state/sqlite/migrations" \
+    "$root/repository/scripts" "$root/repository/scripts/lib" \
     "$root/runtime/.profile-locks" \
     "$root/runtime/$PROFILE/state/backups" "$root/runtime/$PROFILE/run" \
     "$root/cgroup/orquesta-v23-Codex12.service/orquesta-control" \
     "$root/proc/$MAIN_PID" "$root/proc/$DAEMON_PID"
-  cp "$SCRIPT_DIR/../internal/adapters/state/sqlite/migrations/"0{17,18,19}_*.sql \
+  cp "$SCRIPT_DIR/../internal/adapters/state/sqlite/migrations/"[0-9][0-9][0-9]_*.sql \
     "$root/repository/internal/adapters/state/sqlite/migrations/"
+  cp "$SCRIPT_DIR/lib/"pidfd_signal.py \
+    "$SCRIPT_DIR/lib/"firecracker_launcher_probe.py \
+    "$SCRIPT_DIR/lib/"profile_maintenance_marker.py \
+    "$root/repository/scripts/lib/"
+  printf '%s\n' '#!/bin/true' \
+    >"$root/repository/scripts/orquesta_sqlite_v23_reaccredit.sh"
+  printf '%s\n' '#!/usr/bin/env python3' \
+    >"$root/repository/scripts/lib/orquesta_sqlite_v23_reaccredit.py"
+  chmod 500 "$root/repository/scripts/orquesta_sqlite_v23_reaccredit.sh" \
+    "$root/repository/scripts/lib/"*.py
   printf '%s\n' "$REPOSITORY_HEAD" >"$root/state/repository-head"
   printf '%s\n' "$CANDIDATE_REVISION" >"$root/state/candidate-revision"
   : >"$root/state/candidate-is-ancestor"
@@ -635,18 +1035,42 @@ new_fixture() {
     >"$root/runtime/$PROFILE/run/server.binary_sha256"
   printf '%064d\n' 0 >"$root/runtime/$PROFILE/run/server.config_sha256"
   chmod 600 "$root/runtime/$PROFILE/run/"*
-  /usr/bin/python3 - "$root/runtime/$PROFILE/state/orquesta.sqlite" <<'PY'
+  /usr/bin/python3 - "$root/runtime/$PROFILE/state/orquesta.sqlite" \
+    "$root/repository/internal/adapters/state/sqlite/migrations" <<'PY'
+import hashlib
+import pathlib
 import sqlite3
 import sys
-db=sqlite3.connect(sys.argv[1])
+database, migrations = sys.argv[1:]
+db=sqlite3.connect(database)
 db.execute("CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY,name TEXT UNIQUE NOT NULL,checksum TEXT NOT NULL)")
 for version in range(1,17):
-    db.execute("INSERT INTO schema_migrations VALUES(?,?,?)",(version,f"{version:03d}_old.sql","sha256:"+"0"*64))
+    paths=list(pathlib.Path(migrations).glob(f"{version:03d}_*.sql"))
+    assert len(paths) == 1
+    checksum="sha256:"+hashlib.sha256(paths[0].read_bytes()).hexdigest()
+    db.execute(
+        "INSERT INTO schema_migrations VALUES(?,?,?)",
+        (version,paths[0].name,checksum),
+    )
 db.execute("CREATE TABLE durable(value TEXT NOT NULL)")
 db.execute("INSERT INTO durable VALUES('before-cut')")
-db.execute("CREATE TABLE goals(id INTEGER PRIMARY KEY,value TEXT NOT NULL)")
-db.execute("INSERT INTO goals VALUES(1,'preserved-goal')")
-for table in ("authorization_receipts", "command_invocations", "command_outcomes"):
+db.execute(
+    "CREATE TABLE goals("
+    "id INTEGER PRIMARY KEY,value TEXT NOT NULL,ref TEXT UNIQUE)"
+)
+db.execute("INSERT INTO goals VALUES(1,'preserved-goal','goal:1')")
+for table in ("executions","work_items","outbox","effect_attempts"):
+    db.execute(f"CREATE TABLE {table}(value TEXT NOT NULL)")
+db.execute("CREATE TABLE projects(ref TEXT PRIMARY KEY)")
+db.execute("CREATE TABLE principals(ref TEXT PRIMARY KEY,actor_ref TEXT)")
+db.execute("CREATE TABLE app_specs(ref TEXT PRIMARY KEY)")
+db.execute("CREATE TABLE intents(ref TEXT PRIMARY KEY)")
+db.execute(
+    "CREATE TABLE authorization_receipts("
+    "ref TEXT UNIQUE,value TEXT,principal_ref TEXT,request_ref TEXT,"
+    "project_ref TEXT,permission TEXT,resource_ref TEXT,outcome TEXT)"
+)
+for table in ("command_invocations", "command_outcomes"):
     db.execute(f"CREATE TABLE {table}(value TEXT NOT NULL)")
 db.execute("PRAGMA user_version=16")
 db.commit()
@@ -659,10 +1083,13 @@ PY
   chmod 600 "$root/token"
   printf '%s\n' '{"token":"fixture"}' >"$root/source-home/auth.json"
   chmod 600 "$root/source-home/auth.json"
+  printf '%s\n' 'plantilla privada de reacreditación' \
+    >"$root/audit-template.toml"
+  chmod 600 "$root/audit-template.toml"
   printf '%s\n' '[Service]' 'Type=exec' >"$root/firecracker.unit"
   chmod 644 "$root/firecracker.unit"
   FIRECRACKER_UNIT_SHA="$(sha256_of "$root/firecracker.unit")"
-  write_upgrade_receipt "$root" "$root/upgrade.json"
+  write_upgrade_receipt "$root" "$root/audit-output/receipt.json"
   start_socket "$root"
   CURRENT_UID="$(id -u)"
   CURRENT_GID="$(id -g)"
@@ -713,8 +1140,11 @@ PY
     --expected-launcher-socket-uid "$CURRENT_UID"
     --expected-launcher-socket-gid "$CURRENT_GID"
     --expected-asset-digest "$ASSET_DIGEST"
-    --sqlite-upgrade-receipt "$root/upgrade.json"
-    --expected-sqlite-upgrade-receipt-sha256 "$(sha256_of "$root/upgrade.json")"
+    --sqlite-upgrade-receipt "$root/audit-output/receipt.json"
+    --expected-sqlite-upgrade-receipt-sha256 \
+    "$(sha256_of "$root/audit-output/receipt.json")"
+    --expected-sqlite-audit-config-template-sha256 \
+    "$(sha256_of "$root/audit-template.toml")"
     --expected-primary-max-concurrent-runs 16
     --expected-rollback-max-concurrent-runs 2
     --readiness-timeout 1 --collection-timeout 1
@@ -787,6 +1217,93 @@ run_ok "status=ready action=check" "$SUBJECT" "${CONTRACT[@]}"
   [ ! -s "$FIXTURE/log/adapter" ] && [ ! -s "$FIXTURE/log/profile" ] &&
   [ "$(sha256_of "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite")" = \
     "$db_sha_before" ] || fail_test "check_mutated"
+
+new_fixture upgrade-v0-rejected
+/usr/bin/python3 - "$FIXTURE/audit-output/receipt.json" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+receipt = json.loads(path.read_text())
+receipt["schema_version"] = "orquesta_sqlite_upgrade_audit.v0"
+path.write_text(json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n")
+PY
+set_contract_value --expected-sqlite-upgrade-receipt-sha256 \
+  "$(sha256_of "$FIXTURE/audit-output/receipt.json")"
+run_fails "sqlite_upgrade_receipt_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
+new_fixture upgrade-evidence-tampered
+printf '%s\n' tampered \
+  >>"$FIXTURE/audit-output/evidence/02-binary-buildinfo.stdout"
+run_fails "sqlite_upgrade_receipt_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
+new_fixture upgrade-schema-tampered
+/usr/bin/python3 - "$FIXTURE/audit-output/receipt.json" \
+  "$FIXTURE/audit-output/runtime/SqliteReaccredit0123456789abcdef/state/orquesta.sqlite" <<'PY'
+import hashlib
+import json
+import pathlib
+import sqlite3
+import sys
+receipt_path, database_path = map(pathlib.Path,sys.argv[1:])
+database = sqlite3.connect(database_path)
+database.execute("DROP INDEX intake_states_scope_idx")
+database.commit()
+database.close()
+receipt = json.loads(receipt_path.read_text())
+receipt["result_database"]["sha256"] = hashlib.sha256(
+    database_path.read_bytes()
+).hexdigest()
+receipt_path.write_text(
+    json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n"
+)
+PY
+set_contract_value --expected-sqlite-upgrade-receipt-sha256 \
+  "$(sha256_of "$FIXTURE/audit-output/receipt.json")"
+run_fails "sqlite_upgrade_receipt_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
+new_fixture upgrade-new-table-data
+/usr/bin/python3 - "$FIXTURE/audit-output/receipt.json" \
+  "$FIXTURE/audit-output/runtime/SqliteReaccredit0123456789abcdef/state/orquesta.sqlite" <<'PY'
+import hashlib
+import json
+import pathlib
+import sqlite3
+import sys
+receipt_path, database_path = map(pathlib.Path,sys.argv[1:])
+database = sqlite3.connect(database_path)
+trigger_sql = database.execute(
+    "SELECT sql FROM sqlite_schema "
+    "WHERE type='trigger' AND name='intake_states_insert_receipt_guard'"
+).fetchone()[0]
+database.execute("DROP TRIGGER intake_states_insert_receipt_guard")
+database.execute(
+    "INSERT INTO intake_states VALUES(?,?,?,?,?,?,?,?,?,?)",
+    (
+        "intake:unexpected","actor","project",
+        "orquesta.intake.state.v1",1,1,0,"0"*64,"{}","receipt",
+    ),
+)
+database.execute(trigger_sql)
+database.commit()
+database.close()
+receipt = json.loads(receipt_path.read_text())
+for section in ("first_start","restart","result_database"):
+    receipt[section]["table_counts"]["intake_states"] = 1
+receipt["result_database"]["sha256"] = hashlib.sha256(
+    database_path.read_bytes()
+).hexdigest()
+receipt_path.write_text(
+    json.dumps(receipt,sort_keys=True,separators=(",",":"))+"\n"
+)
+PY
+set_contract_value --expected-sqlite-upgrade-receipt-sha256 \
+  "$(sha256_of "$FIXTURE/audit-output/receipt.json")"
+run_fails "sqlite_upgrade_receipt_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
 
 new_fixture firecracker-before-stop
 rm -f "$FIXTURE/state/firecracker-ready"
@@ -905,7 +1422,9 @@ sed -i \
 import sqlite3
 import sys
 database = sqlite3.connect(sys.argv[1])
-database.execute("INSERT INTO goals VALUES(2,'legitimate-post-cut')")
+database.execute(
+    "INSERT INTO goals VALUES(2,'legitimate-post-cut','goal:2')"
+)
 database.commit()
 database.close()
 PY
