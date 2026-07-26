@@ -126,7 +126,14 @@ alargar indebidamente la exclusividad. High-water y expiraciones observadas se
 confirman también antes de devolver un rechazo semántico: hacer rollback de
 ambos permitiría resucitar un lease expirado tras un retroceso posterior. Esto
 incluye `fencing_exhausted`: el agotamiento no concede un CID, pero confirma la
-frontera temporal y los tombstones observados antes de detectarlo. Los
+frontera temporal y los tombstones observados antes de detectarlo. La
+transacción no libera `BEGIN IMMEDIATE` entre reloj y negocio. Antes de tocar el
+reloj entra en fase `temporal-only`; si falla el reloj, la expiración o la
+creación del savepoint, confirma el `BEGIN` porque aún no existe negocio. Tras
+crear el savepoint, cualquier rechazo o error técnico hace rollback solo hasta
+esa frontera, libera el savepoint y confirma high-water/expiraciones. Solo el
+éxito confirma conjuntamente frontera y negocio. Una respuesta ambigua de
+savepoint o cleanup descarta la conexión física. Los
 límites mínimo y máximo de duración pertenecen al registro canónico
 (`agent.firecracker.vsock_cid.*_lease_duration`) y Reserve/Renew rechazan fuera
 de esos límites en la frontera. El registro acota el máximo operativo a `24h`;
@@ -162,7 +169,9 @@ una conexión ya cerrada o descartada. Si SQLite aplicó el COMMIT pero su
 respuesta se perdió, el resultado externo es ambiguo por definición: la
 conexión se descarta y el mismo request debe reintentarse con su idempotency
 key. El ledger durable devuelve entonces el receipt exacto sin duplicar
-efectos. Failpoints separan el fallo de COMMIT previo a aplicar —cero filas— del
+efectos, tanto en reserva como en renovación y liberación. Estas dos últimas
+exigen además que su `UPDATE` afecte exactamente una fila antes de crear el
+receipt. Failpoints separan el fallo de COMMIT previo a aplicar —cero filas— del
 fallo de respuesta posterior —una única operación recuperable por replay— y
 prueban además ausencia de locks vivos.
 
@@ -207,9 +216,10 @@ El corte 2026-07-26 implementa:
   Firecracker que usa la base canónica entregada por composición, conserva
   tombstones/generaciones/high-water, aplica duración mínima y soporta
   concurrencia entre instancias, restart, descarte de transacciones ambiguas,
-  tiempos extremos representables, agotamiento irreversible de fencing y
-  rechazo de rollback o wrap del reloj; el schema está descrito por el
-  adaptador pero aún no pertenece a una migración canónica ni está cableado;
+  frontera temporal protegida por savepoint sin interleaving, tiempos extremos
+  representables, agotamiento irreversible de fencing y rechazo de rollback o
+  wrap del reloj; el schema está descrito por el adaptador pero aún no pertenece
+  a una migración canónica ni está cableado;
 - render determinista `planned_not_applied` con cero interfaces, TAP, bridge,
   NAT, inbound, east-west o Internet directo, allowlist vsock exacta, lease CID
   y recibo ligado también a los bytes exactos del documento renderizado.
@@ -248,13 +258,18 @@ arranque. Debe incluir, como mínimo:
   de liberación ajena, reutilización ABA, duración mínima, high-water tras
   restart, agotamiento de fencing con tombstone/high-water confirmados, límites
   extremos de Reserve/Renew, rechazo de wrap `UnixNano` positivo y rechazo de
-  las cuatro operaciones con reloj regresivo;
+  las cuatro operaciones con reloj regresivo; `RowsAffected == 1` obligatorio
+  para renovación y liberación;
 - negativos file-backed de schema y PRAGMA: drift durable del índice único,
   journal distinto de WAL, synchronous inferior a FULL, foreign keys apagadas
   y busy timeout nulo;
 - failpoints file-backed de COMMIT antes y después de aplicar, ROLLBACK
   compensatorio y ROLLBACK diferido: cero lock residual, cero efectos en el
-  fallo pre-apply y receipt durable único por replay en respuesta post-apply;
+  fallo pre-apply y receipt durable único de reserva, renovación y liberación
+  por replay en respuesta post-apply;
+- failpoints antes y después de la frontera de negocio: fallo de expiración,
+  respuesta perdida al crear savepoint y fallo downstream tras expirar en T2
+  conservan high-water, revierten cualquier negocio parcial y bloquean T1;
 - pruebas del gateway: autenticación, ACL por Goal y parentesco, aislamiento
   entre Goals, causalidad, fencing cuando aplique, idempotencia, auditoría y
   entrega de mailbox/CAS por refs opacas;
