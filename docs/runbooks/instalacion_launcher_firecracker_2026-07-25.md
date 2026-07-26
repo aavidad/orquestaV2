@@ -19,10 +19,11 @@ ruta existente que no cumpla el contrato se rechaza para revisión operativa.
 El ejecutor canónico ya existe en
 `cmd/orquesta-firecracker-attestor-e2e`. A fecha de este corte **no se ha
 ejecutado físicamente**. El toolchain fijado
-`/srv/orquesta-self/toolchains/go1.25.11` ya está instalado; quedan el build
-final, el stage privilegiado y la secuencia física `1 + 16`. Por tanto todavía
-no hay activación ni receipt válido. El receipt no sustituye la evidencia:
-ambos son entradas obligatorias de `--activate`.
+`/srv/orquesta-self/toolchains/go1.25.11` ya está instalado y el build host
+reproducible dispone de su receipt de procedencia. Quedan el stage privilegiado
+y la secuencia física `1 + 16`. Por tanto todavía no hay activación, evidencia
+física ni receipt de activación V2 válido. Ese receipt no sustituye la
+evidencia: ambos son entradas obligatorias de `--activate`.
 
 ## Capacidad fijada
 
