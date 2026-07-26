@@ -106,7 +106,12 @@ func retryFitsIrreversibleGoalBudget(
 			}
 			currentSeen = true
 		}
-		charged, err = governance.Add(charged, prior.Charged)
+		durableCharge := prior.Charged
+		// Process slots are concurrent capacity, not cumulative consumption.
+		// A settled reservation releases its slot even when telemetry was
+		// unknown and reconciliation conservatively recorded it as charged.
+		durableCharge.ProcessSlots = 0
+		charged, err = governance.Add(charged, durableCharge)
 		if err != nil {
 			return false, err
 		}
@@ -117,7 +122,9 @@ func retryFitsIrreversibleGoalBudget(
 			settlement.Reserved != reservation.Resources {
 			return false, errors.New("application.execution_retry_budget_invalid")
 		}
-		charged, err = governance.Add(charged, settlement.Charged)
+		durableCharge := settlement.Charged
+		durableCharge.ProcessSlots = 0
+		charged, err = governance.Add(charged, durableCharge)
 		if err != nil {
 			return false, err
 		}
