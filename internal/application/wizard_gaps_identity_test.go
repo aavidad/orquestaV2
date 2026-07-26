@@ -372,6 +372,122 @@ func TestWizardGapsRejectsExistingRefWhoseCompletePayloadDiffers(t *testing.T) {
 	}
 }
 
+func TestWizardGapsReconciliationWindowRejectsUnrelatedFactsProjection(
+	t *testing.T,
+) {
+	system, service := newWizardGapsTestSystem(t)
+	first, err := service.ApplyWizardGaps(
+		context.Background(),
+		wizardGapsRequest(
+			t,
+			system,
+			"request:wizard-gaps-scoped-window-base",
+			1,
+		),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := mustWizardDimensionQuestion(t, first.Evaluation, gaps.DimensionU1)
+	child := mustWizardDimensionQuestion(t, first.Evaluation, gaps.DimensionU3)
+	parentChoice, _ := parent.RecommendedOption()
+	childChoice, _ := child.RecommendedOption()
+	answered, err := system.service.ApplyIntake(
+		context.Background(),
+		ApplyIntakeRequest{
+			RequestRef: "request:wizard-gaps-scoped-window-answer",
+			ActorRef:   system.actor, ProjectRef: system.project,
+			Change: intake.Change{
+				StateRef: "intake:shared", ExpectedRevision: first.Record.State.Revision(),
+				Origin: intake.OriginForm,
+				Choices: []intake.Choice{
+					{
+						QuestionRef: intake.QuestionRef(parent.Ref()),
+						OptionRef:   intake.OptionRef(parentChoice.Ref()),
+					},
+					{
+						QuestionRef: intake.QuestionRef(child.Ref()),
+						OptionRef:   intake.OptionRef(childChoice.Ref()),
+					},
+				},
+			},
+			AuthorizationReceipt: system.authorizationFor(
+				t,
+				IntakeOperationApply,
+				"request:wizard-gaps-scoped-window-answer",
+			),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var alternative gaps.Option
+	for _, option := range parent.Options() {
+		if option.Kind() == gaps.OptionPreset && option.Ref() != parentChoice.Ref() {
+			alternative = option
+			break
+		}
+	}
+	if alternative.Ref() == "" {
+		t.Fatal("U1 alternative missing")
+	}
+	changed, err := system.service.ApplyIntake(
+		context.Background(),
+		ApplyIntakeRequest{
+			RequestRef: "request:wizard-gaps-scoped-window-parent",
+			ActorRef:   system.actor, ProjectRef: system.project,
+			Change: intake.Change{
+				StateRef: "intake:shared", ExpectedRevision: answered.Record.State.Revision(),
+				Origin: intake.OriginChat,
+				Choices: []intake.Choice{{
+					QuestionRef: intake.QuestionRef(parent.Ref()),
+					OptionRef:   intake.OptionRef(alternative.Ref()),
+				}},
+			},
+			AuthorizationReceipt: system.authorizationFor(
+				t,
+				IntakeOperationApply,
+				"request:wizard-gaps-scoped-window-parent",
+			),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := SnapshotIntake(changed.Record.State)
+	applyCalls := system.store.applyCalls
+	request := wizardGapsRequest(
+		t,
+		system,
+		"request:wizard-gaps-scoped-window-evaluate",
+		changed.Record.State.Revision(),
+	)
+	request.Facts.Surface = gaps.SurfaceServerService
+	_, err = service.ApplyWizardGaps(context.Background(), request)
+	if !IsStateError(err, StateConflict) ||
+		!errors.Is(err, ErrWizardGapsProjectionConflict) {
+		t.Fatalf("unrelated facts projection err=%v", err)
+	}
+	current, getErr := system.service.GetIntake(
+		context.Background(),
+		GetIntakeRequest{
+			ActorRef: system.actor, ProjectRef: system.project,
+			StateRef: "intake:shared",
+		},
+	)
+	if getErr != nil || system.store.applyCalls != applyCalls ||
+		!reflectIntakeSnapshotEqual(SnapshotIntake(current.State), before) {
+		t.Fatalf(
+			"get_err=%v calls=%d/%d current=%+v before=%+v",
+			getErr,
+			system.store.applyCalls,
+			applyCalls,
+			SnapshotIntake(current.State),
+			before,
+		)
+	}
+}
+
 func TestWizardGapsNoOpDoesNotReserveRequestRef(t *testing.T) {
 	system, service := newWizardGapsTestSystem(t)
 	first, err := service.ApplyWizardGaps(

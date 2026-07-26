@@ -174,7 +174,7 @@ func preflightWizardGapsDimensionPayloads(
 		if expected.Ref == "" ||
 			preflight.questionDerivations[questionRef] != evaluator.Identity() ||
 			!wizardGapsQuestionPayloadEqual(actual, expected) {
-			if _, causallyReopened := preflight.reopened[questionRef]; causallyReopened && expected.Ref != "" &&
+			if _, causallyAffected := preflight.reopened[questionRef]; causallyAffected &&
 				preflight.questionDerivations[questionRef] == evaluator.Identity() {
 				continue
 			}
@@ -268,9 +268,12 @@ func wizardGapsArtifactDerivations(
 	)
 	issueOffset, questionVersionOffset := 0, 0
 	for _, mutation := range state.History() {
-		versionCount := mutation.QuestionsAdded + mutation.QuestionsRevised
+		versionCount := mutation.QuestionsAdded +
+			mutation.QuestionsRevised +
+			mutation.QuestionsRetired
 		if mutation.IssuesAdded < 0 || mutation.QuestionsAdded < 0 ||
 			mutation.QuestionsRevised < 0 ||
+			mutation.QuestionsRetired < 0 ||
 			mutation.IssuesAdded > len(issues)-issueOffset ||
 			versionCount > len(questionVersions)-questionVersionOffset {
 			return nil, nil, wizardGapsProjectionConflict(
