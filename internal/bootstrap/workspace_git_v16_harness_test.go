@@ -154,37 +154,6 @@ func (harness *v16Harness) restartAfterLease(t *testing.T) {
 	harness.build(t)
 }
 
-func (harness *v16Harness) submit(
-	t *testing.T,
-	access application.Access,
-	requestRef, objective string,
-	writeSet []string,
-) goal.GoalRef {
-	t.Helper()
-	result, err := harness.runtime.Orchestrator().Submit(context.Background(), access, application.SubmitRequest{
-		RequestRef: requestRef, Statement: objective, Confirm: true,
-		Plan: &application.PlanSpec{
-			Phases: []application.PhaseSpec{{
-				Ref: "phase-instance:v16-workspace", Key: "phase:v16-workspace",
-				TemplateRef: "phase-template:v16-workspace",
-			}},
-			WorkItems: []application.WorkItemSpec{{
-				Key: "writer", Objective: objective, Phase: "phase:v16-workspace", Role: "role:writer",
-				WriteSet: append([]string(nil), writeSet...),
-				RequiredTests: []application.RequiredTestSpec{{
-					Ref: "required-test:v16-go", ToolRef: "tool:go",
-					Arguments: []string{"test", "./..."}, WorkingDirectory: ".",
-				}},
-				OutputContract: goal.OutputContractEvidenceBundle,
-			}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("submit %s: %v", objective, err)
-	}
-	return result.Record.Goal.Ref()
-}
-
 func (harness *v16Harness) process(t *testing.T, expected ...application.ActionKind) {
 	t.Helper()
 	for _, want := range expected {
