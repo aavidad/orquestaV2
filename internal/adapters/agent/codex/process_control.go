@@ -442,23 +442,28 @@ func (adapter *Adapter) discoverShutdownProcessLocked(ctx context.Context, runPa
 	if err != nil {
 		return err
 	}
-	if !found || expectedPath != runPath || launch.RequestHash != process.RequestHash {
+	if !found || expectedPath != runPath {
 		return &Error{Code: CodeProcessOwnershipInvalid}
 	}
+	terminalRequestHash := launch.RequestHash
+	effectiveLaunch, err := adapter.persistedProcessLaunch(runPath, launch, process.RequestHash)
+	if err != nil {
+		return err
+	}
 	if _, terminalFound, err := adapter.loadCausalTerminal(
-		runPath, launch.RequestHash, launch.SpecHash, launch.MaxOutputBytes,
+		runPath, terminalRequestHash, effectiveLaunch.SpecHash, effectiveLaunch.MaxOutputBytes,
 	); err != nil {
 		return err
 	} else if terminalFound {
 		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
 	}
-	receipt, err := launch.receipt(executionRef)
+	receipt, err := effectiveLaunch.receipt(executionRef)
 	if err != nil {
 		return err
 	}
 	state := &executionState{
-		requestHash: launch.RequestHash, terminalRequestHash: launch.RequestHash,
-		receipt: receipt, maxOutput: launch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
+		requestHash: effectiveLaunch.RequestHash, terminalRequestHash: terminalRequestHash,
+		receipt: receipt, maxOutput: effectiveLaunch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
 	if _, _, err := adapter.ownProcessLocked(state); err != nil {
 		return err
@@ -489,23 +494,30 @@ func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runP
 	if err != nil {
 		return err
 	}
-	if !found || expectedPath != runPath || launch.RequestHash != process.RequestHash {
+	if !found || expectedPath != runPath {
 		return &Error{Code: CodeProcessOwnershipInvalid}
 	}
-	receipt, err := launch.receipt(executionRef)
+	terminalRequestHash := launch.RequestHash
+	effectiveLaunch, err := adapter.persistedProcessLaunch(runPath, launch, process.RequestHash)
 	if err != nil {
 		return err
 	}
-	if _, terminalFound, err := adapter.loadCausalTerminal(runPath, launch.RequestHash, launch.SpecHash, launch.MaxOutputBytes); err != nil {
+	receipt, err := effectiveLaunch.receipt(executionRef)
+	if err != nil {
+		return err
+	}
+	if _, terminalFound, err := adapter.loadCausalTerminal(
+		runPath, terminalRequestHash, effectiveLaunch.SpecHash, effectiveLaunch.MaxOutputBytes,
+	); err != nil {
 		return err
 	} else if terminalFound {
 		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
 	}
 	state := &executionState{
-		requestHash: launch.RequestHash, terminalRequestHash: launch.RequestHash,
-		receipt: receipt, maxOutput: launch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
+		requestHash: effectiveLaunch.RequestHash, terminalRequestHash: terminalRequestHash,
+		receipt: receipt, maxOutput: effectiveLaunch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
-	if recoveryErr := adapter.recoverExecutionGuards(ctx, launch, state); recoveryErr != nil {
+	if recoveryErr := adapter.recoverExecutionGuards(ctx, effectiveLaunch, state); recoveryErr != nil {
 		if recoveryAuthorityFailure(recoveryErr) {
 			recoveryErr = adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
 		}
@@ -522,6 +534,33 @@ func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runP
 		destroyExecutionGuards(state)
 	}
 	return nil
+}
+
+func (adapter *Adapter) persistedProcessLaunch(
+	runPath string,
+	launch launchRecord,
+	processRequestHash string,
+) (launchRecord, error) {
+	if launch.SchemaVersion == stateSchemaVersion {
+		if processRequestHash != launch.RequestHash {
+			return launchRecord{}, &Error{Code: CodeProcessOwnershipInvalid}
+		}
+		return launch, nil
+	}
+	source, bound, upgraded, err := adapter.loadLegacyBoundLaunchRecord(runPath, launch)
+	if err != nil {
+		return launchRecord{}, err
+	}
+	effective := source
+	if upgraded {
+		effective = bound
+	}
+	if processRequestHash != launch.RequestHash &&
+		processRequestHash != source.RequestHash &&
+		processRequestHash != effective.RequestHash {
+		return launchRecord{}, &Error{Code: CodeProcessOwnershipInvalid}
+	}
+	return effective, nil
 }
 
 func pendingStopReceipt(request ports.AgentStopRequest) ports.AgentStopReceipt {

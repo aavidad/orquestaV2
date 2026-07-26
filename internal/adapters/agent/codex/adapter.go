@@ -327,12 +327,9 @@ func (adapter *Adapter) BindRuntimeScope(ctx context.Context, scope string) erro
 		return &Error{Code: CodeRuntimeScopeInvalid}
 	}
 	if platformCgroupRequired() && adapter.cgroups == nil {
-		if adapter.config.allowLegacyProcessControlForTests {
-			adapter.config.RuntimeScope = scope
-			adapter.runtimeScopeReady = true
-			return nil
+		if !adapter.config.allowLegacyProcessControlForTests {
+			return &Error{Code: CodeCgroupRootRequired}
 		}
-		return &Error{Code: CodeCgroupRootRequired}
 	}
 	adapter.config.RuntimeScope = scope
 	if err := adapter.discoverPersistedProcessesLocked(ctx); err != nil {
@@ -422,7 +419,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	}
 	if existing, found := adapter.executions[executionKey]; found {
 		if existing.requestHash != requestHash {
-			return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
+			return adapter.bindCachedLegacyLaunchLocked(existing, request, requestHash)
 		}
 		return existing.receipt, nil
 	}
@@ -522,6 +519,44 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	environment := adapter.environmentWithSession(adapter.environment, session)
 	defer clearEnvironment(environment)
 	return adapter.resumeLaunchRecordLocked(ctx, callerContext, request, requestHash, record, runPath, recordCreated, environment, nil, session)
+}
+
+func (adapter *Adapter) bindCachedLegacyLaunchLocked(
+	state *executionState,
+	request ports.AgentLaunchRequest,
+	requestHash string,
+) (ports.AgentLaunchReceipt, error) {
+	legacy, runPath, found, err := adapter.loadLaunchRecord(request.ExecutionRef)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	if !found || legacy.SchemaVersion == stateSchemaVersion {
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
+	}
+	source, bound, upgraded, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	durableState := state.requestHash == legacy.RequestHash || state.requestHash == source.RequestHash
+	if upgraded {
+		durableState = durableState || state.requestHash == bound.RequestHash
+	}
+	if state.runPath != runPath || state.terminalRequestHash != legacy.RequestHash || !durableState {
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid}
+	}
+	bound, err = adapter.bindLegacyLaunchRecord(runPath, legacy, request, requestHash)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	bound, receipt, _, err := adapter.validateLaunchReplay(runPath, bound, request, requestHash)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	state.requestHash = bound.RequestHash
+	state.receipt = receipt
+	state.maxOutput = bound.MaxOutputBytes
+	state.artifactMediaType = request.ArtifactMediaType
+	return receipt, nil
 }
 
 func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord, request ports.AgentLaunchRequest, requestHash string) (launchRecord, ports.AgentLaunchReceipt, bool, error) {

@@ -64,6 +64,7 @@ func TestV7LaunchRecordRejectsMissingOrInvalidReasoningEffort(t *testing.T) {
 
 func TestV6ReplayBindsOneExactReasoningEffortDurably(t *testing.T) {
 	config := testConfig(t)
+	config.ReasoningEffort = string(governance.ReasoningEffortHigh)
 	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
 	config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
 	high := testRequest(t, "reasoning-v6-replay", "helper:success", 1024)
@@ -71,6 +72,16 @@ func TestV6ReplayBindsOneExactReasoningEffortDurably(t *testing.T) {
 	runPath := seedPersistedV6Launch(t, config, high)
 
 	first := openTestAdapter(t, config)
+	xhigh := high
+	xhigh.ReasoningEffort = governance.ReasoningEffortXHigh
+	if _, err := first.Launch(context.Background(), xhigh); ErrorCode(err) != CodeExecutionConflict {
+		t.Fatalf("V6 replay changed historical effort: error=%v code=%q", err, ErrorCode(err))
+	}
+	if _, err := os.Stat(filepath.Join(
+		config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName,
+	)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("conflicting effort persisted V7 binding: %v", err)
+	}
 	firstReceipt, err := first.Launch(context.Background(), high)
 	if err != nil {
 		t.Fatalf("Launch(V6 high) error = %v", err)
@@ -106,8 +117,6 @@ func TestV6ReplayBindsOneExactReasoningEffortDurably(t *testing.T) {
 		t.Fatalf("V7 restart observation=%+v want=%+v", replayedObservation, firstObservation)
 	}
 
-	xhigh := high
-	xhigh.ReasoningEffort = governance.ReasoningEffortXHigh
 	if _, err := second.Launch(context.Background(), xhigh); ErrorCode(err) != CodeExecutionConflict {
 		t.Fatalf("conflicting xhigh replay error=%v code=%q", err, ErrorCode(err))
 	}
