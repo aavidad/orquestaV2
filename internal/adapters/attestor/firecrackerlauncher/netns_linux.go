@@ -5,17 +5,22 @@ package firecrackerlauncher
 import (
 	"bytes"
 	"context"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
 
-const netNamespaceProbeArgument = "--orquesta-firecracker-probe-empty-netns"
+const (
+	netNamespaceProbeArgument = "--orquesta-firecracker-probe-empty-netns"
+	maxIPv6RouteFileBytes     = 4096
+)
 
 type pinnedNetNamespace struct {
 	file     *os.File
@@ -152,7 +157,7 @@ func verifyCurrentEmptyNetNamespace() error {
 	}
 	addresses, err := interfaces[0].Addrs()
 	if err != nil || len(addresses) != 0 ||
-		!ipv4RoutesEmpty() || !procFileEmpty("/proc/net/ipv6_route") ||
+		!ipv4RoutesEmpty() || !ipv6RoutesSafe() ||
 		!procFileEmpty("/proc/net/if_inet6") {
 		return launcherError(CodeNetworkUnsafe)
 	}
@@ -173,6 +178,76 @@ func ipv4RoutesEmpty() bool {
 	}
 	lines := bytes.Split(bytes.TrimSpace(content), []byte{'\n'})
 	return len(lines) == 1 && bytes.HasPrefix(lines[0], []byte("Iface"))
+}
+
+func ipv6RoutesSafe() bool {
+	file, err := os.Open("/proc/net/ipv6_route")
+	if err != nil {
+		return false
+	}
+	content, readErr := io.ReadAll(io.LimitReader(file, maxIPv6RouteFileBytes+1))
+	closeErr := file.Close()
+	return readErr == nil && closeErr == nil &&
+		ipv6RouteContentSafe(content)
+}
+
+func ipv6RouteContentSafe(content []byte) bool {
+	if len(content) > maxIPv6RouteFileBytes {
+		return false
+	}
+	content = bytes.TrimSpace(content)
+	if len(content) == 0 {
+		return true
+	}
+	for _, line := range bytes.Split(content, []byte{'\n'}) {
+		fields := bytes.Fields(line)
+		if len(fields) != 10 ||
+			!fixedZeroHex(fields[0], 32) ||
+			!fixedHexEquals(fields[1], 2, 0) ||
+			!fixedZeroHex(fields[2], 32) ||
+			!fixedHexEquals(fields[3], 2, 0) ||
+			!fixedZeroHex(fields[4], 32) ||
+			!fixedHexEquals(fields[5], 8, uint64(^uint32(0))) ||
+			!validFixedHex(fields[6], 8) ||
+			!validFixedHex(fields[7], 8) ||
+			!fixedHexEquals(
+				fields[8],
+				8,
+				uint64(unix.RTF_NONEXTHOP|unix.RTF_REJECT),
+			) ||
+			!bytes.Equal(fields[9], []byte("lo")) {
+			return false
+		}
+	}
+	return true
+}
+
+func fixedZeroHex(field []byte, width int) bool {
+	if len(field) != width {
+		return false
+	}
+	for _, character := range field {
+		if character != '0' {
+			return false
+		}
+	}
+	return true
+}
+
+func fixedHexEquals(field []byte, width int, want uint64) bool {
+	if len(field) != width {
+		return false
+	}
+	value, err := strconv.ParseUint(string(field), 16, 64)
+	return err == nil && value == want
+}
+
+func validFixedHex(field []byte, width int) bool {
+	if len(field) != width {
+		return false
+	}
+	_, err := strconv.ParseUint(string(field), 16, 64)
+	return err == nil
 }
 
 func procFileEmpty(path string) bool {

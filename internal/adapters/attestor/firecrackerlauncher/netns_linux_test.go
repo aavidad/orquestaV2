@@ -5,11 +5,171 @@ package firecrackerlauncher
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+func TestIPv6RouteContentAcceptsOnlyEmptyOrCanonicalRejectSentinels(t *testing.T) {
+	zero := strings.Repeat("0", 32)
+	route := func(
+		destination, destinationPrefix, source, sourcePrefix, nextHop,
+		metric, referenceCount, useCount, flags, device string,
+	) string {
+		return strings.Join([]string{
+			destination, destinationPrefix, source, sourcePrefix, nextHop,
+			metric, referenceCount, useCount, flags, device,
+		}, " ")
+	}
+	canonical := route(
+		zero, "00", zero, "00", zero,
+		"ffffffff", "00000001", "00000000", "00200200", "lo",
+	)
+	tests := map[string]struct {
+		content string
+		safe    bool
+	}{
+		"empty": {
+			safe: true,
+		},
+		"whitespace_only": {
+			content: " \n\t",
+			safe:    true,
+		},
+		"one_canonical_sentinel": {
+			content: canonical + "\n",
+			safe:    true,
+		},
+		"multiple_canonical_sentinels": {
+			content: canonical + "\n" + canonical + "\n",
+			safe:    true,
+		},
+		"well_formed_runtime_counters": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"ffffffff", "abcdef01", "12345678", "00200200", "lo",
+			),
+			safe: true,
+		},
+		"destination_nonzero": {
+			content: route(
+				"1"+zero[1:], "00", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"destination_malformed": {
+			content: route(
+				"g"+zero[1:], "00", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"destination_short": {
+			content: route(
+				zero[1:], "00", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"destination_prefix_nonzero": {
+			content: route(
+				zero, "01", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"destination_prefix_malformed": {
+			content: route(
+				zero, "0g", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"source_nonzero": {
+			content: route(
+				zero, "00", "1"+zero[1:], "00", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"source_prefix_nonzero": {
+			content: route(
+				zero, "00", zero, "01", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"next_hop_nonzero": {
+			content: route(
+				zero, "00", zero, "00", "1"+zero[1:],
+				"ffffffff", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"metric_noncanonical": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"fffffffe", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"metric_malformed": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"fffffffz", "00000001", "00000000", "00200200", "lo",
+			),
+		},
+		"reference_count_malformed": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"ffffffff", "0000000z", "00000000", "00200200", "lo",
+			),
+		},
+		"use_count_wrong_width": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"ffffffff", "00000001", "0000000", "00200200", "lo",
+			),
+		},
+		"missing_reject_flag": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200000", "lo",
+			),
+		},
+		"extra_flag": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200201", "lo",
+			),
+		},
+		"flags_malformed": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "0020020z", "lo",
+			),
+		},
+		"other_device": {
+			content: route(
+				zero, "00", zero, "00", zero,
+				"ffffffff", "00000001", "00000000", "00200200", "eth0",
+			),
+		},
+		"missing_field": {
+			content: strings.TrimSuffix(canonical, " lo"),
+		},
+		"extra_field": {
+			content: canonical + " extra",
+		},
+		"blank_record": {
+			content: canonical + "\n\n" + canonical,
+		},
+		"bounded_input": {
+			content: strings.Repeat(" ", maxIPv6RouteFileBytes+1),
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := ipv6RouteContentSafe([]byte(test.content)); got != test.safe {
+				t.Fatalf("safe=%t, want %t", got, test.safe)
+			}
+		})
+	}
+}
 
 func TestNetNamespaceMetadataAcceptsSecureNSFSRepresentations(t *testing.T) {
 	for _, mode := range []uint32{
