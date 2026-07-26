@@ -6,6 +6,7 @@ type ErrorCode string
 
 const (
 	ErrorInvalidArgument       ErrorCode = "wizard.stages.invalid_argument"
+	ErrorInvalidDigest         ErrorCode = "wizard.stages.invalid_digest"
 	ErrorInvalidRef            ErrorCode = "wizard.stages.invalid_ref"
 	ErrorDuplicateRef          ErrorCode = "wizard.stages.duplicate_ref"
 	ErrorReferenceNotFound     ErrorCode = "wizard.stages.reference_not_found"
@@ -14,6 +15,8 @@ const (
 	ErrorWriteSetConflict      ErrorCode = "wizard.stages.write_set_conflict"
 	ErrorIncompleteCatalog     ErrorCode = "wizard.stages.incomplete_catalog"
 	ErrorConflictingDefinition ErrorCode = "wizard.stages.conflicting_definition"
+	ErrorCatalogVersionUnknown ErrorCode = "wizard.stages.catalog_version_unknown"
+	ErrorCatalogDigestMismatch ErrorCode = "wizard.stages.catalog_digest_mismatch"
 )
 
 type DomainError struct {

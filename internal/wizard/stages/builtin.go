@@ -1,9 +1,22 @@
 package stages
 
-const currentVersionValue = "orquesta.wizard.stages.v1"
+const (
+	v1VersionValue      = "orquesta.wizard.stages.v1"
+	currentVersionValue = v1VersionValue
+)
+
+// frozenV1CatalogDigestValue prevents semantic edits from being published
+// under an already durable catalog version. Additive revisions must introduce
+// a new version and preserve this builder and digest.
+const frozenV1CatalogDigestValue = "087d3ef59a49fdf5553b381d90dde60c8af58e0c9c5bcd099bda09953a913df4"
 
 func CurrentVersion() CatalogVersion {
 	return mustCatalogVersion(currentVersionValue)
+}
+
+// VersionV1 remains addressable after CurrentVersion advances.
+func VersionV1() CatalogVersion {
+	return mustCatalogVersion(v1VersionValue)
 }
 
 func TemplateRefs() []TemplateRef {
@@ -14,9 +27,42 @@ func TemplateRefs() []TemplateRef {
 	return values
 }
 
-// BuiltIn returns the canonical pure V23 catalog. Invalid built-in data is a
-// programming defect and therefore panics during construction.
+// BuiltIn returns the current canonical pure V23 catalog. Invalid or
+// version-drifting built-in data is a programming defect and therefore panics.
 func BuiltIn() Catalog {
+	value, err := BuiltInVersion(CurrentVersion())
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+// BuiltInVersion resolves immutable built-in catalog history. New versions
+// are added as new switch branches; an existing builder and frozen digest are
+// never replaced.
+func BuiltInVersion(version CatalogVersion) (Catalog, error) {
+	var value Catalog
+	var frozen string
+	switch version.value {
+	case v1VersionValue:
+		value = builtInV1()
+		frozen = frozenV1CatalogDigestValue
+	default:
+		return Catalog{}, domainError(
+			ErrorCatalogVersionUnknown,
+			"catalog.version",
+		)
+	}
+	if value.Digest().value != frozen {
+		return Catalog{}, domainError(
+			ErrorCatalogDigestMismatch,
+			"catalog.digest",
+		)
+	}
+	return value, nil
+}
+
+func builtInV1() Catalog {
 	templates := []Template{
 		researchTemplate(),
 		buildAppTemplate(),
@@ -26,7 +72,7 @@ func BuiltIn() Catalog {
 		selfChangeTemplate(),
 	}
 	value, err := NewCatalog(CatalogInput{
-		Version: CurrentVersion(), Templates: templates,
+		Version: VersionV1(), Templates: templates,
 	})
 	if err != nil {
 		panic(err)
