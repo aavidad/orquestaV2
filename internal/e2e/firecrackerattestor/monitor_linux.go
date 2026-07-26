@@ -172,13 +172,17 @@ func (monitor *LinuxMonitor) sample(
 	}
 	stable := unitIdentityMatches(baseline, current)
 	runs, err := openDirectoryNoLinks(monitor.config.Candidate.RuntimeRoot, "runs")
-	if err != nil {
+	runsAbsentAfterStop := errors.Is(err, unix.ENOENT) && !baseline.Active
+	if err != nil && !runsAbsentAfterStop {
 		return linuxSample{}, false, err
 	}
-	defer runs.Close()
-	entries, err := readBoundedDirectory(runs, maxObservedEntries)
-	if err != nil {
-		return linuxSample{}, false, err
+	var entries []os.DirEntry
+	if runs != nil {
+		defer runs.Close()
+		entries, err = readBoundedDirectory(runs, maxObservedEntries)
+		if err != nil {
+			return linuxSample{}, false, err
+		}
 	}
 	sample := linuxSample{
 		count: uint32(len(entries)), limitsExact: true, swapZero: true,

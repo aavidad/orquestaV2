@@ -3,14 +3,63 @@
 package firecrackerattestor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
+
+func TestWaitQuiescentAcceptsMissingRunsOnlyAfterStop(t *testing.T) {
+	runtimeRoot := t.TempDir()
+	cgroupRoot := t.TempDir()
+	const parentCgroup = "orquesta-firecracker-attestor-test"
+	if err := os.Mkdir(filepath.Join(cgroupRoot, parentCgroup), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	config := validSupervisorConfig()
+	config.Candidate.RuntimeRoot = runtimeRoot
+	config.Candidate.CgroupRoot = cgroupRoot
+	config.Candidate.ParentCgroup = parentCgroup
+	config.Candidate.LauncherSocketPath = filepath.Join(
+		runtimeRoot, "firecracker-launcher.sock",
+	)
+	config.StableFor = time.Millisecond
+	config.PollInterval = time.Millisecond
+
+	stoppedUnit := &fakeUnit{
+		stopped: true, fragmentPath: config.Candidate.UnitPath,
+	}
+	stopped := UnitIdentity{
+		UnitName: config.Candidate.UnitName, FragmentPath: config.Candidate.UnitPath,
+		Loaded: true,
+	}
+	monitor := &LinuxMonitor{config: config, unit: stoppedUnit}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	cleanup, err := monitor.WaitQuiescent(ctx, stopped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cleanAfterStop(cleanup) {
+		t.Fatalf("missing stopped runs not clean: %+v", cleanup)
+	}
+
+	activeUnit := &fakeUnit{fragmentPath: config.Candidate.UnitPath}
+	active, err := activeUnit.Observe(context.Background(), config.Candidate.UnitName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	activeMonitor := &LinuxMonitor{config: config, unit: activeUnit}
+	if _, err := activeMonitor.WaitQuiescent(context.Background(), active); err == nil {
+		t.Fatal("missing active runs accepted")
+	}
+}
 
 func TestUnitIdentityMatchesStoppedBaselineWithoutLiveIdentity(t *testing.T) {
 	stopped := UnitIdentity{
