@@ -97,7 +97,7 @@ func validIntakeChain(t *testing.T) []IntakeRecord {
 		ActorRef:             system.actor,
 		ProjectRef:           system.project,
 		Change:               intakeQuestionChange(1, intake.OriginChat),
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-chain-chat"),
 	}
 	first, err := system.service.ApplyIntake(context.Background(), firstRequest)
 	if err != nil {
@@ -116,7 +116,7 @@ func validIntakeChain(t *testing.T) []IntakeRecord {
 				OptionRef:   "intake-option:audience-personal",
 			}},
 		},
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-chain-form"),
 	})
 	if err != nil {
 		t.Fatal(err)

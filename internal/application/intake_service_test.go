@@ -130,7 +130,7 @@ func TestIntakeServiceCreatesAndAppliesChatAndFormToOneState(t *testing.T) {
 		RequestRef: "request:intake-create", ActorRef: system.actor,
 		ProjectRef: system.project, StateRef: "intake:shared",
 		Policy:               intake.Policy{MaxQuestionRounds: 3},
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationCreate, "request:intake-create"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -144,7 +144,7 @@ func TestIntakeServiceCreatesAndAppliesChatAndFormToOneState(t *testing.T) {
 	chat, err := system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
 		RequestRef: "request:intake-chat", ActorRef: system.actor,
 		ProjectRef: system.project, Change: intakeQuestionChange(1, intake.OriginChat),
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-chat"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func TestIntakeServiceCreatesAndAppliesChatAndFormToOneState(t *testing.T) {
 	form, err := system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
 		RequestRef: "request:intake-form", ActorRef: system.actor,
 		ProjectRef: system.project, Change: formChange,
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-form"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -189,7 +189,7 @@ func TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation(t *testing.T) 
 	request := ApplyIntakeRequest{
 		RequestRef: "request:intake-replay", ActorRef: system.actor,
 		ProjectRef: system.project, Change: intakeQuestionChange(1, intake.OriginChat),
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-replay"),
 	}
 	first, err := system.service.ApplyIntake(context.Background(), request)
 	if err != nil {
@@ -205,7 +205,7 @@ func TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation(t *testing.T) 
 				OptionRef:   "intake-option:audience-team",
 			}},
 		},
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-later"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +229,7 @@ func TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite(t *testing.T)
 	_, err := system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
 		RequestRef: "request:intake-original", ActorRef: system.actor,
 		ProjectRef: system.project, Change: intakeQuestionChange(1, intake.OriginChat),
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-original"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +238,7 @@ func TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite(t *testing.T)
 	_, err = system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
 		RequestRef: "request:intake-stale", ActorRef: system.actor,
 		ProjectRef: system.project, Change: intakeQuestionChange(1, intake.OriginForm),
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-stale"),
 	})
 	if intake.ErrorCodeOf(err) != intake.ErrorRevisionConflict ||
 		system.store.applyCalls != applyCalls {
@@ -250,7 +250,7 @@ func TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite(t *testing.T)
 	_, err = system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
 		RequestRef: "request:intake-original", ActorRef: system.actor,
 		ProjectRef: system.project, Change: divergent,
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-original"),
 	})
 	if !IsStateError(err, StateConflict) || system.store.applyCalls != applyCalls {
 		t.Fatalf("divergent err=%v apply_calls=%d/%d", err, applyCalls, system.store.applyCalls)
@@ -262,7 +262,7 @@ func TestIntakeServiceValidatesCompleteMutationBeforeStore(t *testing.T) {
 	_, err := system.service.CreateIntake(context.Background(), CreateIntakeRequest{
 		RequestRef: "request:invalid-policy", ActorRef: system.actor,
 		ProjectRef: system.project, StateRef: "intake:invalid", Policy: intake.Policy{},
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationCreate, "request:invalid-policy"),
 	})
 	if intake.ErrorCodeOf(err) != intake.ErrorInvalidArgument ||
 		system.store.replayCalls != 0 || system.store.createCalls != 0 {
@@ -277,7 +277,7 @@ func TestIntakeServiceValidatesCompleteMutationBeforeStore(t *testing.T) {
 	_, err = system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
 		RequestRef: "request:invalid-question", ActorRef: system.actor,
 		ProjectRef: system.project, Change: invalid,
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:invalid-question"),
 	})
 	if intake.ErrorCodeOf(err) != intake.ErrorRecommendationCount ||
 		system.store.applyCalls != applyCalls {
@@ -302,12 +302,48 @@ func TestIntakeServiceRejectsAuthorizationOutsideExactActorProjectScope(t *testi
 		RequestRef: "request:foreign-authorization", ActorRef: otherActor,
 		ProjectRef: system.project, StateRef: "intake:foreign",
 		Policy:               intake.Policy{MaxQuestionRounds: 3},
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationCreate, "request:foreign-authorization"),
 	})
 	if !errors.Is(err, ErrForbidden) ||
 		system.store.replayCalls != 0 || system.store.createCalls != 0 {
 		t.Fatalf("foreign authorization err=%v replay=%d create=%d",
 			err, system.store.replayCalls, system.store.createCalls)
+	}
+}
+
+func TestIntakeServiceRejectsAuthorizationForAnotherMutationBeforeStore(t *testing.T) {
+	system := newIntakeTestSystem(t)
+	authorization := system.authorizationFor(
+		t, IntakeOperationCreate, "request:intake-another-mutation",
+	)
+	_, err := system.service.CreateIntake(context.Background(), CreateIntakeRequest{
+		RequestRef: "request:intake-bound-mutation", ActorRef: system.actor,
+		ProjectRef: system.project, StateRef: "intake:bound-mutation",
+		Policy:               intake.Policy{MaxQuestionRounds: 3},
+		AuthorizationReceipt: authorization,
+	})
+	if !errors.Is(err, ErrForbidden) ||
+		system.store.replayCalls != 0 ||
+		system.store.createCalls != 0 ||
+		system.store.applyCalls != 0 {
+		t.Fatalf("foreign mutation authorization err=%v replay=%d create=%d apply=%d",
+			err, system.store.replayCalls, system.store.createCalls, system.store.applyCalls)
+	}
+
+	authorization = system.authorizationFor(
+		t, IntakeOperationCreate, "request:intake-bound-apply",
+	)
+	_, err = system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
+		RequestRef: "request:intake-bound-apply", ActorRef: system.actor,
+		ProjectRef: system.project, Change: intakeQuestionChange(1, intake.OriginChat),
+		AuthorizationReceipt: authorization,
+	})
+	if !errors.Is(err, ErrForbidden) ||
+		system.store.replayCalls != 0 ||
+		system.store.createCalls != 0 ||
+		system.store.applyCalls != 0 {
+		t.Fatalf("foreign operation authorization err=%v replay=%d create=%d apply=%d",
+			err, system.store.replayCalls, system.store.createCalls, system.store.applyCalls)
 	}
 }
 
@@ -328,7 +364,7 @@ func TestIntakeSnapshotRestoresOnlyThroughValidatedReplay(t *testing.T) {
 	result, err := system.service.ApplyIntake(context.Background(), ApplyIntakeRequest{
 		RequestRef: "request:intake-snapshot", ActorRef: system.actor,
 		ProjectRef: system.project, Change: intakeQuestionChange(1, intake.OriginChat),
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationApply, "request:intake-snapshot"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -353,11 +389,10 @@ func TestIntakeSnapshotRestoresOnlyThroughValidatedReplay(t *testing.T) {
 }
 
 type intakeTestSystem struct {
-	store         *memoryIntakeStore
-	service       *IntakeService
-	actor         goal.ActorRef
-	project       goal.ProjectRef
-	authorization identity.AuthorizationReceipt
+	store   *memoryIntakeStore
+	service *IntakeService
+	actor   goal.ActorRef
+	project goal.ProjectRef
 }
 
 func newIntakeTestSystem(t *testing.T) intakeTestSystem {
@@ -375,11 +410,18 @@ func newIntakeTestSystem(t *testing.T) intakeTestSystem {
 	if err != nil {
 		t.Fatal(err)
 	}
-	authorization := intakeAuthorization(t, actor, project)
 	return intakeTestSystem{
 		store: store, service: service, actor: actor, project: project,
-		authorization: authorization,
 	}
+}
+
+func (system intakeTestSystem) authorizationFor(
+	t *testing.T,
+	operation IntakeOperation,
+	requestRef string,
+) identity.AuthorizationReceipt {
+	t.Helper()
+	return intakeAuthorization(t, system.actor, system.project, operation, requestRef)
 }
 
 func mustCreateIntake(t *testing.T, system intakeTestSystem) IntakeResult {
@@ -388,7 +430,7 @@ func mustCreateIntake(t *testing.T, system intakeTestSystem) IntakeResult {
 		RequestRef: "request:intake-create", ActorRef: system.actor,
 		ProjectRef: system.project, StateRef: "intake:shared",
 		Policy:               intake.Policy{MaxQuestionRounds: 3},
-		AuthorizationReceipt: system.authorization,
+		AuthorizationReceipt: system.authorizationFor(t, IntakeOperationCreate, "request:intake-create"),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -447,6 +489,8 @@ func intakeAuthorization(
 	t *testing.T,
 	actorRef goal.ActorRef,
 	projectRef goal.ProjectRef,
+	operation IntakeOperation,
+	mutationRequestRef string,
 ) identity.AuthorizationReceipt {
 	t.Helper()
 	principalRef, err := identity.NewPrincipalRef("principal:intake-test")
@@ -460,8 +504,12 @@ func intakeAuthorization(
 		t.Fatal(err)
 	}
 	at := time.Date(2026, 7, 26, 8, 0, 0, 0, time.UTC)
+	authorizationRequestRef, err := IntakeAuthorizationRequestRef(operation, mutationRequestRef)
+	if err != nil {
+		t.Fatal(err)
+	}
 	request, err := identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{
-		RequestRef: "authorization-request:intake-test",
+		RequestRef: authorizationRequestRef,
 		Principal:  principal, ProjectRef: projectRef,
 		Permission:  identity.PermissionGoalsCreate,
 		ResourceRef: projectRef.String(), RequestedAt: at,
@@ -478,7 +526,7 @@ func intakeAuthorization(
 		t.Fatal(err)
 	}
 	receipt, err := identity.NewAuthorizationReceipt(identity.AuthorizationReceiptInput{
-		Ref:      "authorization-receipt:intake-test",
+		Ref:      "authorization-receipt:" + authorizationRequestRef,
 		Decision: decision, RecordedAt: at,
 	})
 	if err != nil {

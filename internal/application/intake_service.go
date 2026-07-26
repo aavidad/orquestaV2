@@ -33,8 +33,15 @@ func (service *IntakeService) CreateIntake(
 	if err := validateIntakeRequestScope(request.RequestRef, request.ActorRef, request.ProjectRef); err != nil {
 		return IntakeResult{}, err
 	}
+	authorizationRequestRef, err := IntakeAuthorizationRequestRef(
+		IntakeOperationCreate, request.RequestRef,
+	)
+	if err != nil {
+		return IntakeResult{}, err
+	}
 	if err := validateIntakeAuthorization(
 		request.AuthorizationReceipt, request.ActorRef, request.ProjectRef,
+		authorizationRequestRef,
 	); err != nil {
 		return IntakeResult{}, err
 	}
@@ -120,8 +127,15 @@ func (service *IntakeService) ApplyIntake(
 	if err := validateIntakeRequestScope(request.RequestRef, request.ActorRef, request.ProjectRef); err != nil {
 		return IntakeResult{}, err
 	}
+	authorizationRequestRef, err := IntakeAuthorizationRequestRef(
+		IntakeOperationApply, request.RequestRef,
+	)
+	if err != nil {
+		return IntakeResult{}, err
+	}
 	if err := validateIntakeAuthorization(
 		request.AuthorizationReceipt, request.ActorRef, request.ProjectRef,
+		authorizationRequestRef,
 	); err != nil {
 		return IntakeResult{}, err
 	}
@@ -299,6 +313,7 @@ func validateIntakeAuthorization(
 	receipt identity.AuthorizationReceipt,
 	actorRef goal.ActorRef,
 	projectRef goal.ProjectRef,
+	authorizationRequestRef string,
 ) error {
 	decision := receipt.Decision()
 	request := decision.Request()
@@ -309,6 +324,7 @@ func validateIntakeAuthorization(
 		request.Permission() != identity.PermissionGoalsCreate ||
 		request.ProjectRef() != projectRef ||
 		request.ResourceRef() != projectRef.String() ||
+		request.RequestRef() != authorizationRequestRef ||
 		principal.ActorRef != actorRef ||
 		receipt.RecordedAt().Before(decision.DecidedAt()) {
 		return ErrForbidden
