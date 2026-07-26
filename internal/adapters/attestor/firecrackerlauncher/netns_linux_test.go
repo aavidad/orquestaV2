@@ -12,6 +12,71 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+func TestIPv4RouteContentAcceptsOnlyEmptyOrCanonicalHeader(t *testing.T) {
+	header := strings.Join([]string{
+		"Iface", "Destination", "Gateway", "Flags", "RefCnt", "Use",
+		"Metric", "Mask", "MTU", "Window", "IRTT",
+	}, "\t")
+	route := "lo\t00000000\t00000000\t0001\t0\t0\t0\t00000000\t0\t0\t0"
+	tests := map[string]struct {
+		content string
+		safe    bool
+	}{
+		"empty": {
+			safe: true,
+		},
+		"whitespace_only": {
+			content: " \n\t",
+			safe:    true,
+		},
+		"canonical_header": {
+			content: header + "\n",
+			safe:    true,
+		},
+		"header_with_kernel_spacing": {
+			content: strings.ReplaceAll(header, "\t", "\t ") + " \n",
+			safe:    true,
+		},
+		"route_without_header": {
+			content: route + "\n",
+		},
+		"route_after_header": {
+			content: header + "\n" + route + "\n",
+		},
+		"duplicate_header": {
+			content: header + "\n" + header + "\n",
+		},
+		"header_split_across_lines": {
+			content: strings.Replace(header, "\tGateway", "\nGateway", 1),
+		},
+		"header_prefix_only": {
+			content: "Iface",
+		},
+		"header_name_with_suffix": {
+			content: strings.Replace(header, "Iface", "IfaceUnsafe", 1),
+		},
+		"header_missing_field": {
+			content: strings.TrimSuffix(header, "\tIRTT"),
+		},
+		"header_extra_field": {
+			content: header + "\tExtra",
+		},
+		"header_reordered": {
+			content: strings.Replace(header, "Destination\tGateway", "Gateway\tDestination", 1),
+		},
+		"bounded_input": {
+			content: strings.Repeat(" ", maxIPv4RouteFileBytes+1),
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := ipv4RouteContentEmpty([]byte(test.content)); got != test.safe {
+				t.Fatalf("safe=%t, want %t", got, test.safe)
+			}
+		})
+	}
+}
+
 func TestIPv6RouteContentAcceptsOnlyEmptyOrCanonicalRejectSentinels(t *testing.T) {
 	zero := strings.Repeat("0", 32)
 	route := func(

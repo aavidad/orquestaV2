@@ -19,6 +19,7 @@ import (
 
 const (
 	netNamespaceProbeArgument = "--orquesta-firecracker-probe-empty-netns"
+	maxIPv4RouteFileBytes     = 4096
 	maxIPv6RouteFileBytes     = 4096
 )
 
@@ -172,12 +173,41 @@ func sameNamespaceFD(left, right int) bool {
 }
 
 func ipv4RoutesEmpty() bool {
-	content, err := os.ReadFile("/proc/net/route")
+	file, err := os.Open("/proc/net/route")
 	if err != nil {
 		return false
 	}
-	lines := bytes.Split(bytes.TrimSpace(content), []byte{'\n'})
-	return len(lines) == 1 && bytes.HasPrefix(lines[0], []byte("Iface"))
+	content, readErr := io.ReadAll(io.LimitReader(file, maxIPv4RouteFileBytes+1))
+	closeErr := file.Close()
+	return readErr == nil && closeErr == nil &&
+		ipv4RouteContentEmpty(content)
+}
+
+func ipv4RouteContentEmpty(content []byte) bool {
+	if len(content) > maxIPv4RouteFileBytes {
+		return false
+	}
+	content = bytes.TrimSpace(content)
+	if len(content) == 0 {
+		return true
+	}
+	if bytes.ContainsAny(content, "\r\n") {
+		return false
+	}
+	fields := bytes.Fields(content)
+	header := [...]string{
+		"Iface", "Destination", "Gateway", "Flags", "RefCnt", "Use",
+		"Metric", "Mask", "MTU", "Window", "IRTT",
+	}
+	if len(fields) != len(header) {
+		return false
+	}
+	for index := range header {
+		if string(fields[index]) != header[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func ipv6RoutesSafe() bool {
