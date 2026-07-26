@@ -87,7 +87,7 @@ func TestRenderProducesDeterministicVsockOnlyPlan(t *testing.T) {
 	if !bytes.Equal(first.Document, second.Document) || first.Receipt != second.Receipt {
 		t.Fatalf("render is not deterministic:\nfirst=%s\nsecond=%s", first.Document, second.Document)
 	}
-	if err := ValidateReceipt(request, first.Receipt); err != nil {
+	if err := ValidateReceipt(request, first); err != nil {
 		t.Fatalf("receipt rejected: %v", err)
 	}
 
@@ -214,9 +214,16 @@ func TestRenderReceiptBindsBackendAndRejectsMutation(t *testing.T) {
 		other.Receipt.BackendBindingDigest == rendered.Receipt.BackendBindingDigest {
 		t.Fatal("backend mutation reused plan or binding digest")
 	}
-	tampered := rendered.Receipt
-	tampered.AgentRef = "agent:other"
+	tampered := rendered
+	tampered.Receipt.AgentRef = "agent:other"
 	if code := ErrorCode(ValidateReceipt(request, tampered)); code != "agent_firecracker_network_plan.receipt_mismatch" {
 		t.Fatalf("tampered receipt code = %q", code)
+	}
+	tampered = rendered
+	tampered.Document = append([]byte(nil), rendered.Document...)
+	tampered.Document[len(tampered.Document)-1] ^= 1
+	if code := ErrorCode(ValidateReceipt(request, tampered)); code !=
+		"agent_firecracker_network_plan.document_digest_mismatch" {
+		t.Fatalf("tampered document code = %q", code)
 	}
 }
