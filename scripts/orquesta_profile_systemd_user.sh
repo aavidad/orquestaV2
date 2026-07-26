@@ -9,7 +9,10 @@ umask 077
 PATH=/usr/bin:/bin
 export PATH
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+readonly SCRIPT_DIR
 readonly PROGRAM="orquesta_profile_systemd_user"
+readonly PROFILE_MAINTENANCE_MARKER_READER="$SCRIPT_DIR/lib/profile_maintenance_marker.py"
 readonly CONTROL_GROUP_NAME="orquesta-control"
 readonly PROFILE_STATUS_PREFIX="orquesta_profile_server:"
 readonly READINESS_DEFAULT=30
@@ -58,6 +61,7 @@ CONTRATO:
   --systemd-run RUTA --expected-systemd-run-sha256 SHA256
   --proc-root RUTA
   --cgroup-mount RUTA
+  [--maintenance-ref SHA256]
   [--readiness-timeout SEGUNDOS]
   [--collection-timeout SEGUNDOS]
 
@@ -108,6 +112,7 @@ systemd_run_command=""
 expected_systemd_run_sha=""
 proc_root=""
 cgroup_mount=""
+maintenance_ref=""
 readiness_timeout="$READINESS_DEFAULT"
 collection_timeout="$COLLECTION_DEFAULT"
 
@@ -222,6 +227,12 @@ while [ "$#" -gt 0 ]; do
       cgroup_mount="$2"
       shift 2
       ;;
+    --maintenance-ref)
+      require_option_value "$@"
+      [ -z "$maintenance_ref" ] || fail "argument_repeated" 2
+      maintenance_ref="$2"
+      shift 2
+      ;;
     --readiness-timeout)
       require_option_value "$@"
       readiness_timeout="$2"
@@ -260,6 +271,9 @@ done
   [[ "$expected_systemctl_sha" =~ ^[0-9a-f]{64}$ ]] &&
   [[ "$expected_systemd_run_sha" =~ ^[0-9a-f]{64}$ ]] ||
   fail "expected_sha256_invalid" 2
+[ -z "$maintenance_ref" ] ||
+  [[ "$maintenance_ref" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "maintenance_ref_invalid" 2
 [[ "$readiness_timeout" =~ ^[1-9][0-9]{0,2}$ ]] &&
   [ "$readiness_timeout" -le 300 ] ||
   fail "readiness_timeout_invalid" 2
@@ -364,6 +378,30 @@ readonly RUN_ROOT="$RUNTIME_ROOT/run"
 readonly PID_FILE="$RUN_ROOT/server.pid"
 readonly BINARY_SHA_FILE="$RUN_ROOT/server.binary_sha256"
 readonly CONFIG_SHA_FILE="$RUN_ROOT/server.config_sha256"
+readonly GLOBAL_LOCK_ROOT="$runtime_base/.profile-locks"
+readonly GLOBAL_MAINTENANCE_MARKER="$GLOBAL_LOCK_ROOT/$profile.maintenance"
+
+read_maintenance_marker() {
+  trusted_executable "$PROFILE_MAINTENANCE_MARKER_READER" || return 1
+  "$PROFILE_MAINTENANCE_MARKER_READER" \
+    "$GLOBAL_MAINTENANCE_MARKER" \
+    "$CURRENT_UID"
+}
+
+authorize_adapter_mutation() {
+  if [ ! -e "$GLOBAL_MAINTENANCE_MARKER" ] &&
+    [ ! -L "$GLOBAL_MAINTENANCE_MARKER" ]; then
+    [ -z "$maintenance_ref" ] || fail "maintenance_marker_missing"
+    return
+  fi
+  private_directory "$GLOBAL_LOCK_ROOT" ||
+    fail "profile_lock_root_not_private"
+  observed_maintenance_ref="$(read_maintenance_marker 2>/dev/null)" ||
+    fail "maintenance_marker_invalid"
+  [ -n "$maintenance_ref" ] || fail "profile_maintenance_active"
+  [ "$maintenance_ref" = "$observed_maintenance_ref" ] ||
+    fail "maintenance_ref_mismatch"
+}
 
 declare -A UNIT_PROPERTIES=()
 
@@ -577,6 +615,9 @@ case "$operation" in
     ;;
 
   start)
+    # El adaptador no toma control.lock: el promotor conserva lease.lock
+    # durante backup+collect. Profile-server revalida bajo control→lease.
+    authorize_adapter_mutation
     [ "$(unit_load_state)" = "not-found" ] ||
       fail "unit_name_conflict"
     # El cuerpo debe llegar literal; los únicos valores variables son argv.
@@ -596,6 +637,7 @@ config="$9"
 exec_path="${10}"
 expected_binary_sha="${11}"
 expected_config_sha="${12}"
+maintenance_ref="${13}"
 self_line="$(</proc/self/cgroup)"
 [[ "$self_line" == 0::/* ]] || exit 70
 self_cgroup="${self_line#0::}"
@@ -621,13 +663,19 @@ done
 printf "%s" "+cpu +memory +pids" >"$parent/cgroup.subtree_control"
 [ "$(xargs <"$parent/cgroup.subtree_control")" = "cpu memory pids" ] || exit 76
 cd -- "$repository_root"
-"$profile_script" start \
-  --profile "$profile" \
-  --runtime-base "$runtime_base" \
-  --source-codex-home "$source_codex_home" \
-  --binary "$binary" \
-  --config "$config" \
+profile_arguments=(
+  start
+  --profile "$profile"
+  --runtime-base "$runtime_base"
+  --source-codex-home "$source_codex_home"
+  --binary "$binary"
+  --config "$config"
   --exec-path "$exec_path"
+)
+if [ -n "$maintenance_ref" ]; then
+  profile_arguments+=(--maintenance-ref "$maintenance_ref")
+fi
+"$profile_script" "${profile_arguments[@]}"
 [ "$(<"$runtime_base/$profile/run/server.binary_sha256")" = "$expected_binary_sha" ] || exit 77
 [ "$(<"$runtime_base/$profile/run/server.config_sha256")" = "$expected_config_sha" ] || exit 78
 exec /usr/bin/sleep infinity
@@ -646,7 +694,7 @@ exec /usr/bin/sleep infinity
       /bin/bash -c "$bash_body" "$PROGRAM"
       "$unit" "$cgroup_mount" "$repository_root" "$profile_script" "$profile"
       "$runtime_base" "$source_codex_home" "$binary" "$config" "$exec_path"
-      "$expected_binary_sha" "$expected_config_sha"
+      "$expected_binary_sha" "$expected_config_sha" "$maintenance_ref"
     )
     "$systemd_run_command" "${systemd_run_args[@]}" >/dev/null ||
       fail "systemd_run_failed"
@@ -687,12 +735,19 @@ exec /usr/bin/sleep infinity
     ;;
 
   stop-profile)
+    authorize_adapter_mutation
     load_unit_properties
     require_running_profile_contract
     daemon_pid_before_stop="$observed_daemon_pid"
-    stop_output="$("$profile_script" stop \
-      --profile "$profile" \
-      --runtime-base "$runtime_base" 2>&1)" ||
+    profile_arguments=(
+      stop
+      --profile "$profile"
+      --runtime-base "$runtime_base"
+    )
+    if [ -n "$maintenance_ref" ]; then
+      profile_arguments+=(--maintenance-ref "$maintenance_ref")
+    fi
+    stop_output="$("$profile_script" "${profile_arguments[@]}" 2>&1)" ||
       fail "profile_stop_failed"
     [[ "$stop_output" == "$PROFILE_STATUS_PREFIX status=stopped profile="* ]] ||
       fail "profile_stop_contract_invalid"
@@ -706,6 +761,7 @@ exec /usr/bin/sleep infinity
     ;;
 
   collect)
+    authorize_adapter_mutation
     load_unit_properties
     if [ "${UNIT_PROPERTIES[LoadState]}" = "not-found" ]; then
       printf '%s: status=collected action=collect unit=%s profile=%s\n' \

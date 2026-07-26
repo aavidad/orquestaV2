@@ -15,6 +15,8 @@ readonly UNIT="orquesta-v23-Codex12.service"
 readonly MAIN_PID="30001"
 readonly DAEMON_PID="30002"
 readonly CONTROL_GROUP="/user.slice/user-1000.slice/user@1000.service/app.slice/$UNIT"
+readonly MAINTENANCE_REF="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+readonly OTHER_MAINTENANCE_REF="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
 cleanup() {
   find "$TEST_ROOT" -depth -mindepth 1 -delete 2>/dev/null || true
@@ -110,6 +112,7 @@ EOF
 set -euo pipefail
 root="${ORQUESTA_SYSTEMD_FAKE_ROOT:?}"
 action="${1:-}"
+printf '%s\0' "$@" >"$root/log/profile-$action.argv"
 shift
 profile=""
 runtime_base=""
@@ -265,6 +268,14 @@ new_fixture() {
   )
 }
 
+write_maintenance_marker() {
+  marker_root="$FIXTURE/runtime/.profile-locks"
+  mkdir -m 700 -- "$marker_root"
+  printf 'maintenance_ref=%s\n' "$1" \
+    >"$marker_root/$PROFILE.maintenance"
+  chmod 600 -- "$marker_root/$PROFILE.maintenance"
+}
+
 run_ok() {
   expected="$1"
   shift
@@ -309,6 +320,15 @@ run_ok "status=running action=check" "$SUBJECT" "${CONTRACT[@]}"
 run_fails "argument_unknown" "$SUBJECT" start "${CONTRACT[@]}"
 run_fails "check_must_be_read_only" "$SUBJECT" --apply check "${CONTRACT[@]}"
 
+new_fixture check-maintenance-read-only
+write_maintenance_marker "$MAINTENANCE_REF"
+rm -f -- "$FIXTURE/log/systemd-run.argv" "$FIXTURE/log/systemctl-stop"
+run_ok "status=running action=check" "$SUBJECT" "${CONTRACT[@]}"
+[ ! -e "$FIXTURE/log/systemd-run.argv" ] &&
+  [ ! -e "$FIXTURE/log/systemctl-stop" ] &&
+  [ -f "$FIXTURE/runtime/.profile-locks/$PROFILE.maintenance" ] ||
+  fail_test "check_maintenance_mutated"
+
 new_fixture start-success
 printf '%s\n' "not-found" >"$FIXTURE/state/load_state"
 printf '%s\n' "LoadState=not-found" >"$FIXTURE/state/properties"
@@ -336,10 +356,72 @@ if decoded.count("--expand-environment=no") != 1:
 if sys.argv[2] not in decoded:
     raise SystemExit("config was not passed as one positional argument")
 body = decoded[decoded.index("-c") + 1]
-if '"$profile_script" start' not in body or "bash -lc" in body:
+if (
+    'profile_arguments=(' not in body
+    or '"$profile_script" "${profile_arguments[@]}"' not in body
+    or "bash -lc" in body
+):
     raise SystemExit("unsafe or missing profile invocation")
 PY
   fail_test "start_argv_contract"
+
+new_fixture maintenance-start-missing
+printf '%s\n' "not-found" >"$FIXTURE/state/load_state"
+printf '%s\n' "LoadState=not-found" >"$FIXTURE/state/properties"
+run_fails "maintenance_marker_missing" \
+  "$SUBJECT" --apply start "${CONTRACT[@]}" \
+  --maintenance-ref "$MAINTENANCE_REF"
+[ ! -e "$FIXTURE/log/systemd-run.argv" ] ||
+  fail_test "maintenance_start_missing_mutated"
+
+new_fixture maintenance-start-active
+write_maintenance_marker "$MAINTENANCE_REF"
+printf '%s\n' "not-found" >"$FIXTURE/state/load_state"
+printf '%s\n' "LoadState=not-found" >"$FIXTURE/state/properties"
+run_fails "profile_maintenance_active" \
+  "$SUBJECT" --apply start "${CONTRACT[@]}"
+[ ! -e "$FIXTURE/log/systemd-run.argv" ] ||
+  fail_test "maintenance_start_active_mutated"
+run_fails "maintenance_ref_mismatch" \
+  "$SUBJECT" --apply start "${CONTRACT[@]}" \
+  --maintenance-ref "$OTHER_MAINTENANCE_REF"
+[ ! -e "$FIXTURE/log/systemd-run.argv" ] ||
+  fail_test "maintenance_start_mismatch_mutated"
+run_ok "status=running action=start" env \
+  ORQUESTA_SYSTEMD_FAKE_RUN_MODE=success \
+  "$SUBJECT" --apply start "${CONTRACT[@]}" \
+  --maintenance-ref "$MAINTENANCE_REF"
+python3 - "$FIXTURE/log/systemd-run.argv" "$MAINTENANCE_REF" <<'PY' ||
+import re
+import sys
+
+values = open(sys.argv[1], "rb").read().split(b"\0")
+if values[-1] == b"":
+    values.pop()
+decoded = [value.decode() for value in values]
+maintenance_ref = sys.argv[2]
+if re.fullmatch(r"[0-9a-f]{64}", maintenance_ref) is None:
+    raise SystemExit("maintenance ref is not a public digest")
+if decoded.count(maintenance_ref) != 1:
+    raise SystemExit("maintenance ref was not forwarded exactly once")
+if any(f"maintenance_ref={maintenance_ref}" in value for value in decoded):
+    raise SystemExit("marker framing leaked into argv")
+body = decoded[decoded.index("-c") + 1]
+if 'profile_arguments+=(--maintenance-ref "$maintenance_ref")' not in body:
+    raise SystemExit("profile start does not forward maintenance ref")
+PY
+  fail_test "maintenance_start_forwarding"
+
+new_fixture maintenance-marker-tamper
+write_maintenance_marker "$MAINTENANCE_REF"
+chmod 640 -- "$FIXTURE/runtime/.profile-locks/$PROFILE.maintenance"
+printf '%s\n' "not-found" >"$FIXTURE/state/load_state"
+printf '%s\n' "LoadState=not-found" >"$FIXTURE/state/properties"
+run_fails "maintenance_marker_invalid" \
+  "$SUBJECT" --apply start "${CONTRACT[@]}" \
+  --maintenance-ref "$MAINTENANCE_REF"
+[ ! -e "$FIXTURE/log/systemd-run.argv" ] ||
+  fail_test "maintenance_tamper_mutated"
 
 new_fixture readiness-transient-success
 printf '%s\n' "not-found" >"$FIXTURE/state/load_state"
@@ -407,12 +489,64 @@ run_ok "status=profile_stopped action=stop-profile" \
   [ "$(cat "$FIXTURE/state/load_state")" = "loaded" ] ||
   fail_test "stop_profile_boundary"
 
+new_fixture maintenance-stop-profile
+write_maintenance_marker "$MAINTENANCE_REF"
+run_fails "profile_maintenance_active" \
+  "$SUBJECT" --apply stop-profile "${CONTRACT[@]}"
+[ -e "$FIXTURE/runtime/$PROFILE/run/server.pid" ] &&
+  [ ! -e "$FIXTURE/log/profile-stop.argv" ] ||
+  fail_test "maintenance_stop_active_mutated"
+run_fails "maintenance_ref_mismatch" \
+  "$SUBJECT" --apply stop-profile "${CONTRACT[@]}" \
+  --maintenance-ref "$OTHER_MAINTENANCE_REF"
+[ -e "$FIXTURE/runtime/$PROFILE/run/server.pid" ] &&
+  [ ! -e "$FIXTURE/log/profile-stop.argv" ] ||
+  fail_test "maintenance_stop_mismatch_mutated"
+run_ok "status=profile_stopped action=stop-profile" \
+  "$SUBJECT" --apply stop-profile "${CONTRACT[@]}" \
+  --maintenance-ref "$MAINTENANCE_REF"
+python3 - "$FIXTURE/log/profile-stop.argv" "$MAINTENANCE_REF" <<'PY' ||
+import sys
+
+values = open(sys.argv[1], "rb").read().split(b"\0")
+if values[-1] == b"":
+    values.pop()
+decoded = [value.decode() for value in values]
+if decoded[-2:] != ["--maintenance-ref", sys.argv[2]]:
+    raise SystemExit(f"maintenance ref not forwarded to stop: {decoded!r}")
+if decoded.count(sys.argv[2]) != 1:
+    raise SystemExit("maintenance ref forwarded more than once")
+PY
+  fail_test "maintenance_stop_forwarding"
+[ -f "$FIXTURE/runtime/.profile-locks/$PROFILE.maintenance" ] ||
+  fail_test "maintenance_stop_removed_marker"
+
 new_fixture collect
 rm -f -- "$FIXTURE/runtime/$PROFILE/run/server.pid"
 run_ok "status=collected action=collect" \
   "$SUBJECT" --apply collect "${CONTRACT[@]}"
 [ "$(cat "$FIXTURE/state/load_state")" = "not-found" ] ||
   fail_test "collect_state"
+
+new_fixture maintenance-collect
+write_maintenance_marker "$MAINTENANCE_REF"
+rm -f -- "$FIXTURE/runtime/$PROFILE/run/server.pid"
+rm -f -- "$FIXTURE/log/systemctl-stop"
+run_fails "profile_maintenance_active" \
+  "$SUBJECT" --apply collect "${CONTRACT[@]}"
+[ ! -e "$FIXTURE/log/systemctl-stop" ] ||
+  fail_test "maintenance_collect_active_mutated"
+run_fails "maintenance_ref_mismatch" \
+  "$SUBJECT" --apply collect "${CONTRACT[@]}" \
+  --maintenance-ref "$OTHER_MAINTENANCE_REF"
+[ ! -e "$FIXTURE/log/systemctl-stop" ] ||
+  fail_test "maintenance_collect_mismatch_mutated"
+run_ok "status=collected action=collect" \
+  "$SUBJECT" --apply collect "${CONTRACT[@]}" \
+  --maintenance-ref "$MAINTENANCE_REF"
+[ "$(cat "$FIXTURE/state/load_state")" = "not-found" ] &&
+  [ -f "$FIXTURE/runtime/.profile-locks/$PROFILE.maintenance" ] ||
+  fail_test "maintenance_collect_boundary"
 
 new_fixture collect-timeout
 rm -f -- "$FIXTURE/runtime/$PROFILE/run/server.pid"
