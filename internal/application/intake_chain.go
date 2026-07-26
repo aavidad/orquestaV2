@@ -103,7 +103,7 @@ func validateIntakeChainRecord(
 	requestFingerprint string,
 ) error {
 	receipt := record.Receipt
-	if !validApplicationRef(receipt.RequestRef) ||
+	if !validIntakeRequestRef(receipt.RequestRef) ||
 		receipt.Operation != operation ||
 		receipt.PreviousRevision != previousRevision ||
 		receipt.Revision != record.State.Revision() ||

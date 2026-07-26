@@ -292,8 +292,8 @@ func validateIntakeRequestScope(
 	actorRef goal.ActorRef,
 	projectRef goal.ProjectRef,
 ) error {
-	if !validApplicationRef(requestRef) {
-		return errors.New("application.request_ref_invalid")
+	if !validIntakeRequestRef(requestRef) {
+		return invalidIntakeRequestRefError()
 	}
 	return validateIntakeScope(actorRef, projectRef)
 }

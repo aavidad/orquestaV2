@@ -1,6 +1,11 @@
 package application
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"orquesta/internal/intake"
+)
 
 func TestIntakeAuthorizationRequestRefBindsOperationAndMutation(t *testing.T) {
 	tests := []struct {
@@ -36,9 +41,14 @@ func TestIntakeAuthorizationRequestRefRejectsInvalidInput(t *testing.T) {
 		{operation: IntakeOperation("delete"), requestRef: "request:intake"},
 		{operation: IntakeOperationCreate, requestRef: ""},
 		{operation: IntakeOperationApply, requestRef: " request:intake"},
+		{operation: IntakeOperationApply, requestRef: strings.Repeat("a", 513)},
+		{operation: IntakeOperationApply, requestRef: "request:\x00intake"},
+		{operation: IntakeOperationApply, requestRef: "request:\nintake"},
+		{operation: IntakeOperationApply, requestRef: "request:\rintake"},
 	}
 	for _, test := range tests {
-		if got, err := IntakeAuthorizationRequestRef(test.operation, test.requestRef); err == nil || got != "" {
+		if got, err := IntakeAuthorizationRequestRef(test.operation, test.requestRef); err == nil ||
+			got != "" || intake.ErrorCodeOf(err) != intake.ErrorInvalidArgument {
 			t.Fatalf("ref(%q, %q) = %q, %v", test.operation, test.requestRef, got, err)
 		}
 	}
