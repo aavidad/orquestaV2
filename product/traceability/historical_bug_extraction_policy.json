@@ -33,17 +33,17 @@
     "sources_with_explicit_id": 80,
     "sources_without_explicit_id": 80,
     "sources_without_id_lessons_sha256": "sha256:38e96147b204ba570ac873771ee8969c6c24ed6a1bfdc900b0a78c3a578c1dd9",
-    "rich_row_count": 239,
-    "occurrence_count": 1295,
-    "id_count": 337,
-    "row_covered_id_count": 197,
+    "rich_row_count": 241,
+    "occurrence_count": 1297,
+    "id_count": 339,
+    "row_covered_id_count": 199,
     "narrative_only_id_count": 140,
     "narrative_review_binding_count": 140,
     "rich_row_enrichment_count": 4,
-    "rows_sha256": "sha256:2ef08e63eabe4bce2755a3e669a6401f2e63703395789bbd69bba89736ebb824",
-    "occurrences_sha256": "sha256:9e9b678cf5257933932543ff913be75002d5dd19e719095f15b7c38aeebb69e4",
+    "rows_sha256": "sha256:0b78e48ae9f71a146c5c7273d529f4b83dbaee0589ecceb0f65af0153962de0e",
+    "occurrences_sha256": "sha256:bebc54c7b71583cc40c7f4f903967441d8ab10b04df58f62dab1c26d1edf2513",
     "narrative_review_bindings_sha256": "sha256:23c9ff104c848f8997c484da1ae7b0b32474d6f2048bb4858c04a2f9e6b34a53",
     "rich_row_enrichments_sha256": "sha256:cb23222242a6902106a6d51267894827a633df9a74fa104404ef2011ea67010e",
-    "ids_sha256": "sha256:6d3f98497bb07e8989f55b3ce48bb18c4fe2d149d1a7ea1598802412f05f2aef"
+    "ids_sha256": "sha256:492fab23c619b2dfa997b850efaa395c6965e9f2b49b1211effd7719ff68b967"
   }
 }
