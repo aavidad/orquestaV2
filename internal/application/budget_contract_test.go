@@ -157,6 +157,58 @@ func TestHistoricalGoalBudgetPolicySurvivesRuntimeRotation(t *testing.T) {
 	}
 }
 
+func TestRetryBudgetReleasesSettledUnknownProcessSlot(t *testing.T) {
+	base := time.Date(2026, 7, 18, 18, 0, 0, 0, time.UTC)
+	clock := &mutableClock{now: base}
+	repository := newMemoryRepository()
+	orchestrator, _ := newTestOrchestrator(t, repository, clock, &scriptedAgent{now: clock.Now})
+	orchestrator.budgetPolicy.GoalEnvelopeTemplate.Limit.ProcessSlots = 1
+	actor, project := testScope(t)
+	submitted, err := orchestrator.Submit(context.Background(), accessForScope(t, actor, project), SubmitRequest{
+		RequestRef: "request:retry-settled-slot", Statement: "reuse settled process slot", Confirm: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := submitted.Record
+	item, execution := record.Goal.WorkItems()[0], record.Executions[0]
+	reservation := func(marker string, resources governance.ResourceVector, fence uint64) governance.BudgetReservation {
+		return governance.BudgetReservation{
+			Ref: "budget-reservation:" + marker, DemandRef: "budget-demand:" + marker,
+			ActionRef: "action:" + marker, EffectIntentRef: "effect-intent:" + marker,
+			ProjectRef: project.String(), GoalRef: record.Goal.Ref().String(), WorkItemRef: item.Ref().String(),
+			ExecutionRef: execution.Ref.String(), PlanGeneration: uint64(execution.PlanGeneration),
+			AppSpecGeneration: uint64(execution.AppSpecGeneration), WorkItemGeneration: uint64(item.Revision()),
+			Fence: fence, SpecHash: record.Goal.SpecHash(), PolicyHash: orchestrator.budgetPolicy.PolicyHash,
+			Resources: resources, ReservedAt: base,
+		}
+	}
+	prior := reservation("prior-slot", governance.ResourceVector{ProcessSlots: 1}, 1)
+	current := reservation("current-release", item.BudgetDemand().Resources, 2)
+	for _, value := range []governance.BudgetReservation{prior, current} {
+		if err := governance.ValidateBudgetReservation(value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	priorSettlement, err := governance.Reconcile(prior, governance.ResourceUsage{Quality: governance.UsageQualityUnknown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	zero := governance.ResourceVector{Currency: current.Resources.Currency}
+	currentSettlement, err := governance.Reconcile(current, governance.ResourceUsage{
+		Resources: zero, Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.BudgetReservations = append(record.BudgetReservations, prior, current)
+	record.BudgetSettlements = append(record.BudgetSettlements, priorSettlement)
+	fits, err := retryFitsIrreversibleGoalBudget(record, &currentSettlement, item.BudgetDemand())
+	if err != nil || !fits {
+		t.Fatalf("settled process slot remained cumulative: fits=%v err=%v", fits, err)
+	}
+}
+
 func budgetPolicyVariant(
 	policy BudgetPolicy,
 	marker string,
