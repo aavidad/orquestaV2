@@ -56,10 +56,7 @@ func (repository *Repository) RecordReviewExecutionReplaced(ctx context.Context,
 	state application.ReviewExecutionReplacedState,
 ) error {
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(tx *sql.Tx) error {
-		expected := application.ExecutionRunning
-		if state.Claim.Action.Kind == application.ActionLaunchAgent {
-			expected = application.ExecutionDispatching
-		}
+		expected := failedClaimExpectedExecutionState(state.Claim)
 		if err := updateExecutionCAS(ctx, tx, state.FailedExecution, expected); err != nil {
 			return err
 		}
@@ -104,10 +101,7 @@ func (repository *Repository) RecordReviewExecutionFailed(ctx context.Context,
 				return err
 			}
 		}
-		expected := application.ExecutionRunning
-		if state.Claim.Action.Kind == application.ActionLaunchAgent {
-			expected = application.ExecutionDispatching
-		}
+		expected := failedClaimExpectedExecutionState(state.Claim)
 		if err := updateExecutionCAS(ctx, tx, state.Execution, expected); err != nil {
 			return err
 		}

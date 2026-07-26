@@ -18,20 +18,9 @@ func requireEffectAdmission(
 	candidate claimCandidate,
 	now time.Time,
 ) (application.EffectIntent, application.EffectApproval, bool, error) {
-	intent, err := readEffectIntent(ctx, transaction, candidate.action.EffectIntentRef)
-	if err != nil {
-		if application.IsStateError(err, application.StateNotFound) {
-			return application.EffectIntent{}, application.EffectApproval{}, false, nil
-		}
+	intent, found, err := requireCandidateEffectIntent(ctx, transaction, candidate)
+	if err != nil || !found {
 		return application.EffectIntent{}, application.EffectApproval{}, false, err
-	}
-	if intent.ActionRef != candidate.action.Ref || intent.ActionKind != candidate.action.Kind ||
-		intent.Subject.ProjectRef != candidate.projectRef || intent.Subject.GoalRef != candidate.action.GoalRef ||
-		intent.Subject.WorkItemRef != candidate.action.WorkItemRef ||
-		intent.Subject.ExecutionRef != candidate.action.ExecutionRef ||
-		intent.Subject.PlanGeneration != candidate.action.PlanGeneration {
-		return application.EffectIntent{}, application.EffectApproval{}, false,
-			invalid(errors.New("sqlite.claim_effect_intent_causal_invalid"))
 	}
 	var approvalRef string
 	err = transaction.QueryRowContext(ctx, `
@@ -74,6 +63,29 @@ LIMIT 1`, intent.Ref).Scan(&approvalRef)
 		return intent, approval, false, nil
 	}
 	return intent, approval, true, nil
+}
+
+func requireCandidateEffectIntent(
+	ctx context.Context,
+	transaction *sql.Tx,
+	candidate claimCandidate,
+) (application.EffectIntent, bool, error) {
+	intent, err := readEffectIntent(ctx, transaction, candidate.action.EffectIntentRef)
+	if err != nil {
+		if application.IsStateError(err, application.StateNotFound) {
+			return application.EffectIntent{}, false, nil
+		}
+		return application.EffectIntent{}, false, err
+	}
+	if intent.ActionRef != candidate.action.Ref || intent.ActionKind != candidate.action.Kind ||
+		intent.Subject.ProjectRef != candidate.projectRef || intent.Subject.GoalRef != candidate.action.GoalRef ||
+		intent.Subject.WorkItemRef != candidate.action.WorkItemRef ||
+		intent.Subject.ExecutionRef != candidate.action.ExecutionRef ||
+		intent.Subject.PlanGeneration != candidate.action.PlanGeneration {
+		return application.EffectIntent{}, false,
+			invalid(errors.New("sqlite.claim_effect_intent_causal_invalid"))
+	}
+	return intent, true, nil
 }
 
 func authorizationMembershipCurrent(

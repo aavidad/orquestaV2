@@ -194,10 +194,7 @@ func (repository *Repository) RecordExecutionInterrupted(
 		if err := updateWorkItemCAS(ctx, transaction, item, state.ExpectedItemRevision); err != nil {
 			return err
 		}
-		expected := application.ExecutionRunning
-		if state.Claim.Action.Kind == application.ActionLaunchAgent {
-			expected = application.ExecutionDispatching
-		}
+		expected := failedClaimExpectedExecutionState(state.Claim)
 		if err := updateExecutionCAS(ctx, transaction, state.Execution, expected); err != nil {
 			return err
 		}
@@ -231,6 +228,16 @@ UPDATE executions SET recipient_mailbox_retired = 1 WHERE ref = ?`, state.Execut
 		}
 		return insertEvents(ctx, transaction, state.Events)
 	})
+}
+
+func failedClaimExpectedExecutionState(claim application.ActionClaim) application.ExecutionState {
+	if claim.Disposition == application.ActionClaimDispositionRetryBudgetIrreversible {
+		return application.ExecutionQueued
+	}
+	if claim.Action.Kind == application.ActionLaunchAgent {
+		return application.ExecutionDispatching
+	}
+	return application.ExecutionRunning
 }
 
 func (repository *Repository) RecordPostArtifactMailboxAdmitted(

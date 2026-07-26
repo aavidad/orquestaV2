@@ -99,10 +99,7 @@ func (repository *Repository) RecordCouncilExecutionReplaced(
 		if !validCouncilReplacement(current, state) {
 			return invalid(errors.New("sqlite.council_replacement_invalid"))
 		}
-		expected := application.ExecutionRunning
-		if state.Claim.Action.Kind == application.ActionLaunchAgent {
-			expected = application.ExecutionDispatching
-		}
+		expected := failedClaimExpectedExecutionState(state.Claim)
 		if err := updateExecutionCAS(ctx, tx, state.FailedExecution, expected); err != nil {
 			return err
 		}
@@ -135,10 +132,7 @@ func (repository *Repository) RecordCouncilExecutionFailed(
 		}
 		role, ok := councilExecutionRole(state.Execution)
 		round, found := councilRoundFor(current.CouncilRounds, state.Execution.CouncilSubjectDigest)
-		expected := application.ExecutionRunning
-		if state.Claim.Action.Kind == application.ActionLaunchAgent {
-			expected = application.ExecutionDispatching
-		}
+		expected := failedClaimExpectedExecutionState(state.Claim)
 		stored, exists := executionFor(current.Executions, state.Execution.Ref)
 		if !ok || !found || role == "" || !exists || stored.State != expected ||
 			state.Execution.Ref != state.Claim.Action.ExecutionRef ||
