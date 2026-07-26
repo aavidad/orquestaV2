@@ -446,17 +446,14 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 	runPath string,
 	legacy launchRecord,
 	request ports.AgentLaunchRequest,
-	requestHash string,
+	_ string,
 ) (launchRecord, error) {
-	source, bound, found, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
+	source, _, found, err := adapter.loadLegacyLaunchBinding(runPath, legacy)
 	if err != nil {
 		return launchRecord{}, err
 	}
 	if found {
-		if bound.RequestHash != requestHash {
-			return launchRecord{}, &Error{Code: CodeExecutionConflict}
-		}
-		return bound, nil
+		return launchRecord{}, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
 	}
 	if err := adapter.validateLegacyLaunchRequest(source, request); err != nil {
 		return launchRecord{}, err
@@ -468,17 +465,14 @@ func (adapter *Adapter) previewLegacyLaunchRecord(
 	runPath string,
 	legacy launchRecord,
 	request ports.AgentLaunchRequest,
-	requestHash string,
+	_ string,
 ) (launchRecord, bool, error) {
-	source, bound, found, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
+	source, _, found, err := adapter.loadLegacyLaunchBinding(runPath, legacy)
 	if err != nil {
 		return launchRecord{}, false, err
 	}
 	if found {
-		if bound.RequestHash != requestHash {
-			return launchRecord{}, false, &Error{Code: CodeExecutionConflict}
-		}
-		return bound, true, nil
+		return launchRecord{}, false, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
 	}
 	if err := adapter.validateLegacyLaunchRequest(source, request); err != nil {
 		return launchRecord{}, false, err
@@ -486,27 +480,27 @@ func (adapter *Adapter) previewLegacyLaunchRecord(
 	return launchRecord{}, false, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
 }
 
-// loadLegacyBoundLaunchRecord resolves the complete immutable upgrade chain
-// without manufacturing fields that were absent from the historical request.
-// The returned source is the last pre-V7 identity. When a durable V7 binding
-// exists, bound is authoritative even if the adapter's current defaults differ.
-func (adapter *Adapter) loadLegacyBoundLaunchRecord(
+// loadLegacyLaunchBinding resolves the last pre-V7 identity. A V7 sidecar may
+// have been emitted by the retired 7401 migration, which copied reasoning
+// effort from a replay request without durable provenance. Its hash is exposed
+// only so process control can quarantine that exact historical process.
+func (adapter *Adapter) loadLegacyLaunchBinding(
 	runPath string,
 	legacy launchRecord,
-) (source launchRecord, bound launchRecord, found bool, err error) {
+) (source launchRecord, untrustedRequestHash string, found bool, err error) {
 	source, err = adapter.legacyLaunchSource(runPath, legacy)
 	if err != nil {
-		return launchRecord{}, launchRecord{}, false, err
+		return launchRecord{}, "", false, err
 	}
 	var upgrade launchUpgradeRecord
 	found, err = adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
 	if err != nil || !found {
-		return source, launchRecord{}, false, err
+		return source, "", false, err
 	}
 	if err := validateLegacyLaunchUpgrade(upgrade, source); err != nil {
-		return launchRecord{}, launchRecord{}, false, err
+		return launchRecord{}, "", false, err
 	}
-	return source, upgrade.Launch, true, nil
+	return source, upgrade.Launch.RequestHash, true, nil
 }
 
 func (adapter *Adapter) legacyLaunchSource(runPath string, original launchRecord) (launchRecord, error) {

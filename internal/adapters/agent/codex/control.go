@@ -177,6 +177,7 @@ func (adapter *Adapter) controlTargetLocked(request ports.AgentStopRequest) (*ex
 		return nil, runPath, &Error{Code: CodeExecutionNotFound}
 	}
 	terminalRequestHash := record.RequestHash
+	stateRequestHash := record.RequestHash
 	if state, ok := adapter.executions[request.ExecutionRef.String()]; ok {
 		if err := ports.ValidateAgentStopTarget(state.receipt, request); err != nil {
 			return nil, runPath, err
@@ -184,17 +185,20 @@ func (adapter *Adapter) controlTargetLocked(request ports.AgentStopRequest) (*ex
 		return state, runPath, nil
 	}
 	if record.SchemaVersion != stateSchemaVersion {
-		source, bound, upgraded, loadErr := adapter.loadLegacyBoundLaunchRecord(runPath, record)
+		source, untrustedRequestHash, upgraded, loadErr := adapter.loadLegacyLaunchBinding(
+			runPath, record,
+		)
 		if loadErr != nil {
 			return nil, runPath, loadErr
 		}
 		record = source
+		stateRequestHash = source.RequestHash
 		process, processFound, processErr := adapter.readProcessRecord(runPath)
 		if processErr != nil {
 			return nil, runPath, processErr
 		}
-		if upgraded && processFound && process.RequestHash == bound.RequestHash {
-			record = bound
+		if upgraded && processFound && process.RequestHash == untrustedRequestHash {
+			stateRequestHash = process.RequestHash
 		}
 	}
 	launch, err := adapter.controlLaunchReceipt(record, request)
@@ -205,7 +209,7 @@ func (adapter *Adapter) controlTargetLocked(request ports.AgentStopRequest) (*ex
 		return nil, runPath, err
 	}
 	state := &executionState{
-		requestHash: record.RequestHash, terminalRequestHash: terminalRequestHash,
+		requestHash: stateRequestHash, terminalRequestHash: terminalRequestHash,
 		receipt: launch, maxOutput: record.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
 	if terminal, terminalFound, loadErr := adapter.loadCausalTerminal(

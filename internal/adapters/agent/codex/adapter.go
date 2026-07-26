@@ -540,17 +540,13 @@ func (adapter *Adapter) retireCachedLegacyLaunchLocked(
 	if !found || legacy.SchemaVersion == stateSchemaVersion {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
 	}
-	source, bound, upgraded, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
+	source, untrustedRequestHash, upgraded, err := adapter.loadLegacyLaunchBinding(runPath, legacy)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
-	if upgraded && state.requestHash == bound.RequestHash {
-		if bound.RequestHash != requestHash {
-			return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
-		}
-		return state.receipt, nil
-	}
-	durableState := state.requestHash == legacy.RequestHash || state.requestHash == source.RequestHash
+	durableState := state.requestHash == legacy.RequestHash ||
+		state.requestHash == source.RequestHash ||
+		upgraded && state.requestHash == untrustedRequestHash
 	if state.runPath != runPath || state.terminalRequestHash != legacy.RequestHash || !durableState {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid}
 	}
@@ -572,7 +568,7 @@ func (adapter *Adapter) retireLegacyLaunchRecordLocked(
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (ports.AgentLaunchReceipt, error) {
-	source, bound, upgraded, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
+	source, untrustedRequestHash, upgraded, err := adapter.loadLegacyLaunchBinding(runPath, legacy)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
@@ -583,18 +579,16 @@ func (adapter *Adapter) retireLegacyLaunchRecordLocked(
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
-	if upgraded && processFound && process.RequestHash == bound.RequestHash {
-		if bound.RequestHash != requestHash {
-			return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
-		}
-		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid}
-	}
 	receipt, err := adapter.observationReceipt(source, request.ExecutionRef)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
+	stateRequestHash := source.RequestHash
+	if upgraded && processFound && process.RequestHash == untrustedRequestHash {
+		stateRequestHash = process.RequestHash
+	}
 	state := &executionState{
-		requestHash: source.RequestHash, terminalRequestHash: legacy.RequestHash,
+		requestHash: stateRequestHash, terminalRequestHash: legacy.RequestHash,
 		receipt: receipt, maxOutput: source.MaxOutputBytes,
 		artifactMediaType: request.ArtifactMediaType,
 		runPath:           runPath, status: ports.AgentPending,
