@@ -117,6 +117,18 @@ esperada; recuperar exige owner, scope y fencing exactos; liberar exige además
 la revisión vigente. Los reintentos semánticamente distintos bajo la misma
 idempotency key se rechazan.
 
+El adaptador SQL mantiene además un high-water temporal durable por pool. Lo
+lee y avanza dentro del mismo `BEGIN IMMEDIATE`, después de adquirir el lock;
+un reloj de host anterior al high-water devuelve `clock_regressed` y no concede,
+renueva, recupera ni libera autoridad. No se usa `max(now, high_water)` como
+reloj lógico porque congelaría la expiración durante el retroceso y podría
+alargar indebidamente la exclusividad. High-water y expiraciones observadas se
+confirman también antes de devolver un rechazo semántico: hacer rollback de
+ambos permitiría resucitar un lease expirado tras un retroceso posterior. Los
+límites mínimo y máximo de duración pertenecen al registro canónico
+(`agent.firecracker.vsock_cid.*_lease_duration`) y Reserve/Renew rechazan fuera
+de esos límites en la frontera.
+
 El receipt de lease sigue sin ser autoridad por posesión. La composición que
 pueda hacer alcanzable un backend debe consultar la reserva activa
 inmediatamente antes del efecto y comparar `lease_ref`, fencing y revisión. El
@@ -124,6 +136,21 @@ plan renderizado conserva esos valores para evidenciar el vínculo, no para
 sustituir la consulta. Expiración usa límite inclusivo (`now >= expires_at`) y
 jamás revive una reserva; otra adquisición con la misma clave después de
 expirar queda denegada como replay.
+
+La base debe ser file-backed, `journal_mode=WAL`, `synchronous>=FULL`,
+`foreign_keys=ON` y `busy_timeout>0`. El adaptador valida el schema exacto al
+abrir y vuelve a validar esos PRAGMA sobre cada conexión antes de la
+transacción. Los negativos persistentes cubren drift del índice único tras
+restart, cambio durable a journal DELETE y manipulación connection-local de
+synchronous, foreign keys y busy timeout.
+
+No hay GC ni retención destructiva en este corte. Borrar operaciones,
+tombstones, generaciones o high-water sin otro ancla durable reabriría replay,
+ABA o rollback de reloj. La retención queda como deuda explícita de composición:
+antes de producción prolongada debe fijar horizonte/capacidad y demostrar que
+cualquier compactación conserva indefinidamente fencing/high-water y conserva
+la idempotencia durante todo el horizonte contractual. Hasta entonces se
+prefiere crecimiento visible a una limpieza insegura.
 
 Este corte es una composición/adaptador alternativo de `AGT-01`/`AGT-03`, con
 la evidencia de aislamiento exigida por `EVD-13` y el broker futuro relacionado
@@ -156,9 +183,10 @@ El corte 2026-07-26 implementa:
 - contrato neutral de reserva CID con ownership, lease, revisión, fencing,
   recuperación, liberación e idempotencia; adaptador SQL transaccional
   Firecracker que usa la base canónica entregada por composición, conserva
-  tombstones/generaciones y soporta concurrencia entre instancias y restart;
-  el schema está descrito por el adaptador pero aún no pertenece a una
-  migración canónica ni está cableado;
+  tombstones/generaciones/high-water, aplica duración mínima y soporta
+  concurrencia entre instancias, restart y rechazo de rollback de reloj; el
+  schema está descrito por el adaptador pero aún no pertenece a una migración
+  canónica ni está cableado;
 - render determinista `planned_not_applied` con cero interfaces, TAP, bridge,
   NAT, inbound, east-west o Internet directo, allowlist vsock exacta, lease CID
   y recibo ligado también a los bytes exactos del documento renderizado.
@@ -194,7 +222,11 @@ arranque. Debe incluir, como mínimo:
 - pruebas de reserva CID: 16 adquisiciones concurrentes sin duplicados,
   exclusión de CID `0/1/2` y `VMADDR_CID_ANY`, restart/recovery, expiración
   inclusiva, idempotencia, revisión de renovación, fencing monotónico, intento
-  de liberación ajena y reutilización ABA;
+  de liberación ajena, reutilización ABA, duración mínima, high-water tras
+  restart y rechazo de Reserve/Renew/Recover/Release con reloj regresivo;
+- negativos file-backed de schema y PRAGMA: drift durable del índice único,
+  journal distinto de WAL, synchronous inferior a FULL, foreign keys apagadas
+  y busy timeout nulo;
 - pruebas del gateway: autenticación, ACL por Goal y parentesco, aislamiento
   entre Goals, causalidad, fencing cuando aplique, idempotencia, auditoría y
   entrega de mailbox/CAS por refs opacas;
