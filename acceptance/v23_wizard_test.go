@@ -250,6 +250,73 @@ func TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset(t *testing.T
 	assertV23StateUnchanged(t, state, 2, 1, 1, 1)
 }
 
+func TestV23WizardRecommendationContextAndDependencyPrimitives(t *testing.T) {
+	const stateRef intake.Ref = "intake:v23-interactions"
+	state, err := intake.NewState(stateRef, intake.Policy{MaxQuestionRounds: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	audience := v23AudienceQuestion(true, false)
+	delivery := v23DeliveryQuestion(audience.Ref)
+	state, err = intake.Apply(state, intake.Change{
+		StateRef: stateRef, ExpectedRevision: 1, Origin: intake.OriginChat,
+		Issues: []intake.Issue{
+			v23AudienceGap(),
+			{
+				Ref: "intake-issue:delivery-gap", Kind: intake.IssueGap,
+				Field: "delivery", DetailKey: "intake.issue.delivery.missing",
+			},
+		},
+		Questions: []intake.Question{audience, delivery},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	change, err := intake.BuildAcceptRecommendationsChange(
+		state,
+		intake.AcceptRecommendationsRequest{
+			StateRef: stateRef, ExpectedRevision: 2,
+			Origin: intake.OriginForm, QuestionRound: 1,
+		},
+	)
+	if err != nil || len(change.Choices) != 2 {
+		t.Fatalf("recommendation change=%+v err=%v", change, err)
+	}
+	state, err = intake.Apply(state, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeContext := state
+	contextView, err := intake.ReemitContext(state, intake.ContextRequest{
+		StateRef: stateRef, ExpectedRevision: 3,
+		Origin: intake.OriginChat, Kind: intake.ContextHelp,
+		QuestionRefs: []intake.QuestionRef{delivery.Ref},
+	})
+	if err != nil || len(contextView.Questions) != 1 ||
+		contextView.Questions[0].CurrentDecision == nil ||
+		!reflect.DeepEqual(state, beforeContext) {
+		t.Fatalf("pure context=%+v err=%v", contextView, err)
+	}
+
+	state, err = intake.Apply(state, intake.Change{
+		StateRef: stateRef, ExpectedRevision: 3, Origin: intake.OriginForm,
+		Choices: []intake.Choice{{
+			QuestionRef: audience.Ref,
+			OptionRef:   audience.Options[1].Ref,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reopened := state.ReopenedDecisions()
+	if len(reopened) != 1 || reopened[0].QuestionRef != delivery.Ref ||
+		len(reopened[0].InvalidatedBy) != 1 ||
+		reopened[0].InvalidatedBy[0].QuestionRef != audience.Ref {
+		t.Fatalf("reopened decisions=%+v", reopened)
+	}
+}
+
 func loadV23WizardFixture(t *testing.T, root string) v23WizardFixture {
 	t.Helper()
 	file, err := os.Open(filepath.Join(root, v23WizardFixturePath))
@@ -380,16 +447,22 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	}
 	wantErrors := []string{
 		string(intake.ErrorChannelStateCreation), string(intake.ErrorChoiceConflict),
+		string(intake.ErrorDependencyCycle), string(intake.ErrorDependencyPending),
 		string(intake.ErrorDuplicateRef), string(intake.ErrorInvalidArgument),
 		string(intake.ErrorInvalidOrigin), string(intake.ErrorInvalidRef),
 		string(intake.ErrorIssueNotFound), string(intake.ErrorMessageKeyInvalid),
 		string(intake.ErrorOptionNotFound), string(intake.ErrorQuestionNotFound),
+		string(intake.ErrorQuestionRound),
 		string(intake.ErrorRecommendationCount), string(intake.ErrorRevisionConflict),
+		string(intake.ErrorRecommendationsDone),
 		string(intake.ErrorRoundLimit), string(intake.ErrorStateMismatch),
 	}
 	wantAssertions := []string{
+		"accept_all_recommendations_compiles_one_atomic_change",
 		"chat_and_form_advance_one_ref_and_revision_sequence",
+		"dependency_changes_reopen_transitive_decisions",
 		"failed_change_does_not_mutate_the_current_snapshot",
+		"help_and_clarification_do_not_consume_round_or_revision",
 		"question_references_at_least_one_recorded_gap_or_contradiction",
 		"exact_dossier_confirmation_freezes_it_and_creates_one_causal_goal",
 		"required_test_runs_named_contract_and_two_negatives",
@@ -401,10 +474,11 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid stable codes/assertions: %+v", fixture)
 	}
 	wantRequiredTest := v23WizardRequiredTest{
-		Command: "go test -mod=vendor -race -count=1 -v ./acceptance -run '^(TestAcceptanceV23WizardIntakeContract|TestV23WizardIntakeNegativeAndAtomicContract|TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset)$'",
+		Command: "go test -mod=vendor -race -count=1 -v ./acceptance -run '^(TestAcceptanceV23WizardIntakeContract|TestV23WizardIntakeNegativeAndAtomicContract|TestV23WizardRecommendationContextAndDependencyPrimitives|TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset)$'",
 		TestNames: []string{
 			"TestAcceptanceV23WizardIntakeContract",
 			"TestV23WizardIntakeNegativeAndAtomicContract",
+			"TestV23WizardRecommendationContextAndDependencyPrimitives",
 			"TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset",
 		},
 		RejectNoTestsToRun: true,
@@ -472,6 +546,9 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"canonical_round_default",
 		"explicit_confirmation",
 		"freeze_after_confirmation",
+		"intake_dependency_reopen_projection",
+		"intake_pure_context_reemission",
+		"intake_recommendation_batch_compiler",
 		"wizard_catalog_foundation_and_15_domain_packs",
 	}) {
 		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
@@ -492,7 +569,11 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"acceptance/v23_wizard_test.go",
 		"docs/reconstruccion/analisis_y_contrato_v23_wizard.md",
 		"internal/intake/errors.go",
+		"internal/intake/dependencies.go",
+		"internal/intake/dependencies_test.go",
 		"internal/intake/intake_test.go",
+		"internal/intake/interactions.go",
+		"internal/intake/interactions_test.go",
 		"internal/intake/model.go",
 		"internal/intake/state.go",
 	}
@@ -525,6 +606,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/adapters/state/sqlite/intake_dossier_confirmation.go",
 		"internal/adapters/state/sqlite/intake_dossier_confirmation_test.go",
 		"internal/adapters/state/sqlite/intake_dossier_test.go",
+		"internal/adapters/state/sqlite/intake_dependencies_test.go",
 		"internal/adapters/state/sqlite/intake.go",
 		"internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
 		"internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql",
@@ -720,6 +802,26 @@ func v23AudienceQuestion(recommendTeam, recommendPersonal bool) intake.Question 
 			{
 				Ref: "intake-option:audience-personal", LabelKey: "intake.option.audience.personal.label",
 				RationaleKey: "intake.option.audience.personal.rationale", Recommended: recommendPersonal,
+			},
+		},
+	}
+}
+
+func v23DeliveryQuestion(dependency intake.QuestionRef) intake.Question {
+	return intake.Question{
+		Ref:         "intake-question:delivery",
+		DerivedFrom: []intake.IssueRef{"intake-issue:delivery-gap"},
+		DependsOn:   []intake.QuestionRef{dependency},
+		PromptKey:   "intake.question.delivery.prompt",
+		WhyKey:      "intake.question.delivery.why",
+		Options: []intake.Option{
+			{
+				Ref: "intake-option:delivery-local", LabelKey: "intake.option.delivery.local.label",
+				RationaleKey: "intake.option.delivery.local.rationale", Recommended: true,
+			},
+			{
+				Ref: "intake-option:delivery-cloud", LabelKey: "intake.option.delivery.cloud.label",
+				RationaleKey: "intake.option.delivery.cloud.rationale",
 			},
 		},
 	}
