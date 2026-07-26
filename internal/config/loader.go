@@ -150,6 +150,12 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 				profile != "" && (maxConcurrent != 1 || credentialRef != "" || !validCodexAccountProfile(profile)) {
 				return fail(validator.ID)
 			}
+		case "agent_firecracker_vsock_cid_lease_bounds":
+			minimum, minimumOK := values[KeyAgentFirecrackerVsockCIDMinimumLeaseDuration].value.(time.Duration)
+			maximum, maximumOK := values[KeyAgentFirecrackerVsockCIDMaximumLeaseDuration].value.(time.Duration)
+			if !minimumOK || !maximumOK || minimum <= 0 || maximum < minimum {
+				return fail(validator.ID)
+			}
 		case "identity_provider_requirements":
 			provider, providerOK := values[KeyIdentityProvider].value.(string)
 			issuer, issuerOK := values[KeyIdentityOIDCIssuer].value.(string)

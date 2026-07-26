@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-25.30`
+Registry revision: `2026-07-26.31`
 
-Registry hash: `sha256:3df2bb315eb9a45f9c0812e90ee91ae65d1943e7ffdafe13e97f082d9a4e7c6c`
+Registry hash: `sha256:1c39bbe0244319fa44925a752535a985d00666ac4546e68aa168959cae833e93`
 
 Precedence: `default < file < env`
 
@@ -47,6 +47,8 @@ Source limit: `1048576` bytes
 | `runtime.codex.account_auth_max_document_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_AUTH_MAX_DOCUMENT_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.mcp_bearer_token_env_var` | `string` | `"ORQUESTA_MCP_BEARER_TOKEN"` | `ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR` | `true` | `environment_name` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
+| `agent.firecracker.vsock_cid.minimum_lease_duration` | `duration` | `"5s"` | `ORQUESTA_AGENT_FIRECRACKER_VSOCK_CID_MINIMUM_LEASE_DURATION` | `true` | `positive_duration` |
+| `agent.firecracker.vsock_cid.maximum_lease_duration` | `duration` | `"1h"` | `ORQUESTA_AGENT_FIRECRACKER_VSOCK_CID_MAXIMUM_LEASE_DURATION` | `true` | `positive_duration` |
 | `workspace.local.root` | `path` | `"./var/workspaces"` | `ORQUESTA_WORKSPACE_LOCAL_ROOT` | `true` | `non_empty_path` |
 | `repository.local.seed_path` | `optional_path` | `""` | `ORQUESTA_REPOSITORY_LOCAL_SEED_PATH` | `true` | `optional_path` |
 | `repository.local.target_ref` | `string` | `"refs/heads/main"` | `ORQUESTA_REPOSITORY_LOCAL_TARGET_REF` | `true` | `trimmed_non_empty_string` |
@@ -97,6 +99,7 @@ Source limit: `1048576` bytes
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`; maximum duration `30s`
 - `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
+- `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
 - `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.account_home_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`

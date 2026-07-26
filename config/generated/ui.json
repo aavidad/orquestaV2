@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-25.30",
-  "registry_hash": "sha256:3df2bb315eb9a45f9c0812e90ee91ae65d1943e7ffdafe13e97f082d9a4e7c6c",
+  "registry_revision": "2026-07-26.31",
+  "registry_hash": "sha256:1c39bbe0244319fa44925a752535a985d00666ac4546e68aa168959cae833e93",
   "aliases": [],
   "cross_validators": [
     {
@@ -28,6 +28,13 @@
         "runtime.codex.account_profile",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
+      ]
+    },
+    {
+      "id": "agent_firecracker_vsock_cid_lease_bounds",
+      "keys": [
+        "agent.firecracker.vsock_cid.minimum_lease_duration",
+        "agent.firecracker.vsock_cid.maximum_lease_duration"
       ]
     },
     {
@@ -485,6 +492,30 @@
       "restart_required": true,
       "validator_ids": [
         "credential_ref"
+      ]
+    },
+    {
+      "key": "agent.firecracker.vsock_cid.minimum_lease_duration",
+      "semantic_ref": "orquesta.config.agent.firecracker.vsock_cid.minimum_lease_duration",
+      "label_key": "config.field.agent.firecracker.vsock_cid.minimum_lease_duration",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "agent",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "agent.firecracker.vsock_cid.maximum_lease_duration",
+      "semantic_ref": "orquesta.config.agent.firecracker.vsock_cid.maximum_lease_duration",
+      "label_key": "config.field.agent.firecracker.vsock_cid.maximum_lease_duration",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "agent",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
       ]
     },
     {
