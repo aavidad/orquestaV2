@@ -127,7 +127,12 @@ confirman también antes de devolver un rechazo semántico: hacer rollback de
 ambos permitiría resucitar un lease expirado tras un retroceso posterior. Los
 límites mínimo y máximo de duración pertenecen al registro canónico
 (`agent.firecracker.vsock_cid.*_lease_duration`) y Reserve/Renew rechazan fuera
-de esos límites en la frontera.
+de esos límites en la frontera. El registro acota el máximo operativo a `24h`;
+el adaptador no duplica ese default/policy, pero valida siempre la suma exacta
+en nanosegundos y rechaza `lease_time_unrepresentable` antes de que
+`time.Add`/`UnixNano` puedan desbordar el límite de SQLite. El schema exige
+tiempos positivos, expiración posterior a adquisición y coherencia entre
+estado y tiempo de liberación.
 
 El receipt de lease sigue sin ser autoridad por posesión. La composición que
 pueda hacer alcanzable un backend debe consultar la reserva activa
@@ -143,6 +148,13 @@ abrir y vuelve a validar esos PRAGMA sobre cada conexión antes de la
 transacción. Los negativos persistentes cubren drift del índice único tras
 restart, cambio durable a journal DELETE y manipulación connection-local de
 synchronous, foreign keys y busy timeout.
+
+Una conexión solo vuelve al pool tras `COMMIT` o `ROLLBACK` acreditado. Si
+falla el rollback manual o el rollback compensatorio posterior a un COMMIT
+fallido, el adaptador marca la conexión física como `driver.ErrBadConn` para
+que `database/sql` la descarte. Failpoints de COMMIT/ROLLBACK prueban que no
+quedan filas ambiguas ni locks vivos y que el mismo request puede reintentarse
+en una conexión nueva.
 
 No hay GC ni retención destructiva en este corte. Borrar operaciones,
 tombstones, generaciones o high-water sin otro ancla durable reabriría replay,
@@ -184,9 +196,10 @@ El corte 2026-07-26 implementa:
   recuperación, liberación e idempotencia; adaptador SQL transaccional
   Firecracker que usa la base canónica entregada por composición, conserva
   tombstones/generaciones/high-water, aplica duración mínima y soporta
-  concurrencia entre instancias, restart y rechazo de rollback de reloj; el
-  schema está descrito por el adaptador pero aún no pertenece a una migración
-  canónica ni está cableado;
+  concurrencia entre instancias, restart, descarte de transacciones ambiguas,
+  tiempos extremos representables y rechazo de rollback de reloj; el schema
+  está descrito por el adaptador pero aún no pertenece a una migración canónica
+  ni está cableado;
 - render determinista `planned_not_applied` con cero interfaces, TAP, bridge,
   NAT, inbound, east-west o Internet directo, allowlist vsock exacta, lease CID
   y recibo ligado también a los bytes exactos del documento renderizado.
@@ -223,10 +236,13 @@ arranque. Debe incluir, como mínimo:
   exclusión de CID `0/1/2` y `VMADDR_CID_ANY`, restart/recovery, expiración
   inclusiva, idempotencia, revisión de renovación, fencing monotónico, intento
   de liberación ajena, reutilización ABA, duración mínima, high-water tras
-  restart y rechazo de Reserve/Renew/Recover/Release con reloj regresivo;
+  restart, límites extremos de Reserve/Renew y rechazo de las cuatro operaciones
+  con reloj regresivo;
 - negativos file-backed de schema y PRAGMA: drift durable del índice único,
   journal distinto de WAL, synchronous inferior a FULL, foreign keys apagadas
   y busy timeout nulo;
+- failpoints file-backed de COMMIT, ROLLBACK compensatorio y ROLLBACK diferido:
+  cero efectos ambiguos, cero lock residual y retry idempotente posterior;
 - pruebas del gateway: autenticación, ACL por Goal y parentesco, aislamiento
   entre Goals, causalidad, fencing cuando aplique, idempotencia, auditoría y
   entrega de mailbox/CAS por refs opacas;
