@@ -41,6 +41,9 @@ Las tres superficies apuntan al corte de producto
 - `ARQUITECTURA.md`;
 - `CODEX_LEEME.md`;
 - `REVISION_ARQUITECTURA_HALLAZGOS_2026-06-28.md`.
+- 26 scripts de operación, smoke y tests ligados al antiguo
+  `cmd/orquesta-server`, al loop Goal-first clásico o a la autoprogramación
+  anterior. El manifiesto exacto aparece en la sección siguiente.
 
 `cmd/orquesta/**` permanece visible porque es el único binario productivo de la
 reconstrucción. El antiguo `README.md` se sustituyó por la entrada vigente de
@@ -69,6 +72,32 @@ El worktree activo usa estos patrones locales:
 !/ARQUITECTURA.md
 !/CODEX_LEEME.md
 !/REVISION_ARQUITECTURA_HALLAZGOS_2026-06-28.md
+!/scripts/inicio_agente.sh
+!/scripts/orquesta_server_ctl.sh
+!/scripts/orquesta_server_deploy.sh
+!/scripts/orquesta_server_drain.sh
+!/scripts/orquesta_status_now.sh
+!/scripts/orquesta_smoke_nightly.sh
+!/scripts/smoke_autoprogramming_bolsa_real.sh
+!/scripts/smoke_autoprogramming_supervised.sh
+!/scripts/smoke_codex_director_recursive_wave.sh
+!/scripts/smoke_codex_real_operational_wave.sh
+!/scripts/smoke_codex_real_recursive_tree.sh
+!/scripts/smoke_codex_real_required_test_runner.sh
+!/scripts/smoke_codex_required_test_runner_state_file.sh
+!/scripts/smoke_external_domain_fake_real.sh
+!/scripts/smoke_external_domain_non_opes_real.sh
+!/scripts/smoke_goal_first_app_server_real.sh
+!/scripts/smoke_goal_first_claude_process_server_real.sh
+!/scripts/smoke_opes_plan_temario_operadores.sh
+!/scripts/smoke_opes_reviews_providers_real.sh
+!/scripts/smoke_orquesta_server_rest_director.sh
+!/scripts/smoke_orquesta_server_restart_state.sh
+!/scripts/smoke_self_programming_composite_goal_first.sh
+!/scripts/test_orquesta_server_ctl.sh
+!/scripts/test_orquesta_server_deploy.sh
+!/scripts/test_orquesta_server_drain.sh
+!/scripts/test_orquesta_smoke_nightly.sh
 ```
 
 Esto no crea una eliminación en Git y mantiene limpio `git status`. `rg`,
