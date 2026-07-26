@@ -12,7 +12,6 @@ import (
 
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
-	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -97,18 +96,11 @@ func (adapter *Adapter) recoveryRequest(record launchRecord, receipt ports.Agent
 	actorRef, _ := goal.NewActorRef(record.ActorRef)
 	projectRef, _ := goal.NewProjectRef(record.ProjectRef)
 	sessionRef, _ := ports.NewExecutionSessionRef(record.ExecutionSessionRef)
-	reasoningEffort := record.ReasoningEffort
-	if record.SchemaVersion < stateSchemaVersion {
-		// Before V7 effort belonged to the immutable adapter configuration,
-		// not to the request journal. Recover that exact effective value so
-		// authority checks never receive an empty or newly invented effort.
-		reasoningEffort = governance.ReasoningEffort(adapter.config.ReasoningEffort)
-	}
 	return ports.AgentLaunchRequest{SessionRef: sessionRef, ProjectRef: projectRef, ActorRef: actorRef,
 		GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef, ExecutionRef: receipt.ExecutionRef,
 		ExecutionAttempt: receipt.ExecutionAttempt, PlanGeneration: receipt.PlanGeneration,
 		AppSpecGeneration: receipt.AppSpecGeneration, SpecHash: record.SpecHash,
-		ReasoningEffort: reasoningEffort}
+		ReasoningEffort: record.ReasoningEffort}
 }
 
 func (adapter *Adapter) recoverExecutionGuards(ctx context.Context, record launchRecord, state *executionState) error {
@@ -197,9 +189,17 @@ func (adapter *Adapter) quarantineRecoveryFailureLocked(ctx context.Context, sta
 	if !recoveryAuthorityFailure(cause) {
 		return cause
 	}
-	adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
-	if adoptErr != nil {
-		return errors.Join(adoptErr, cause)
+	return adapter.quarantineExecutionLocked(ctx, state, cause)
+}
+
+func (adapter *Adapter) quarantineExecutionLocked(ctx context.Context, state *executionState, cause error) error {
+	adopted := state != nil && state.process != nil && state.ownerLock != nil
+	if !adopted {
+		var adoptErr error
+		adopted, adoptErr = adapter.adoptPersistedProcessLocked(state)
+		if adoptErr != nil {
+			return errors.Join(adoptErr, cause)
+		}
 	}
 	if !adopted && state.terminal == nil {
 		record, found, inspectErr := adapter.processRecordForState(state)

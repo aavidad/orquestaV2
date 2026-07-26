@@ -25,64 +25,66 @@ const (
 )
 
 const (
-	CodeUnavailable                   = "codex.unavailable"
-	CodeCapacityUnavailable           = "codex.capacity_unavailable"
-	CodeExecutionConflict             = "codex.execution_conflict"
-	CodeExecutionNotFound             = "codex.execution_not_found"
-	CodeExecutionInterrupted          = "codex.execution_interrupted"
-	CodeExecutionCanceled             = "codex.execution_canceled"
-	CodeExecutionStopped              = "codex.execution_stopped"
-	CodeExecutionTimeout              = "codex.execution_timeout"
-	CodeProcessStartFailed            = "codex.process_start_failed"
-	CodeProcessFailed                 = "codex.process_failed"
-	CodeProcessCleanupFailed          = "codex.process_cleanup_failed"
-	CodeOutputMissing                 = "codex.output_missing"
-	CodeOutputTooLarge                = "codex.output_too_large"
-	CodeOutputInvalid                 = "codex.output_invalid"
-	CodeStateInvalid                  = "codex.state_invalid"
-	CodeStatePersistenceFailed        = "codex.state_persistence_failed"
-	CodeClockInvalid                  = "codex.clock_invalid"
-	CodeCommandRequired               = "codex.command_required"
-	CodeCommandInvalid                = "codex.command_invalid"
-	CodeCommandNotFound               = "codex.command_not_found"
-	CodeWorkRootRequired              = "codex.work_root_required"
-	CodeWorkRootCreateFailed          = "codex.work_root_create_failed"
-	CodeWorkRootInvalid               = "codex.work_root_invalid"
-	CodeWorkRootPermissions           = "codex.work_root_permissions"
-	CodeWorkRootOpenFailed            = "codex.work_root_open_failed"
-	CodeRuntimeScopeInvalid           = "codex.runtime_scope_invalid"
-	CodeReasoningEffortInvalid        = "codex.reasoning_effort_invalid"
-	CodeTimeoutInvalid                = "codex.timeout_invalid"
-	CodeProcessPipeDrainInvalid       = "codex.process_pipe_drain_delay_invalid"
-	CodeSupervisorStartTimeoutInvalid = "codex.supervisor_start_timeout_invalid"
-	CodeDiagnosticLimitInvalid        = "codex.max_diagnostic_bytes_invalid"
-	CodeMaxConcurrentInvalid          = "codex.max_concurrent_executions_invalid"
-	CodeEnvironmentInvalid            = "codex.environment_invalid"
-	CodeAccountProfileInvalid         = "codex.account_profile_invalid"
-	CodeAccountProfileUnavailable     = "codex.account_profile_unavailable"
-	CodeCredentialInvalid             = "codex.credential_invalid"
-	CodeCredentialUnavailable         = "codex.credential_unavailable"
-	CodeCredentialOutputUnverifiable  = "codex.credential_output_unverifiable"
-	CodePromptRendererInvalid         = "codex.prompt_renderer_invalid"
-	CodePromptRenderFailed            = "codex.prompt_render_failed"
-	CodeSessionInvalid                = "codex.session_invalid"
-	CodeSessionUnavailable            = "codex.session_unavailable"
-	CodeWorkspaceResolverInvalid      = "codex.workspace_resolver_invalid"
-	CodeWorkspaceUnavailable          = "codex.workspace_unavailable"
-	CodeWorkspaceUnsafe               = "codex.workspace_unsafe"
-	CodeSecretLeak                    = "codex.secret_leak"
-	CodeControlUnsupported            = "codex.control_unsupported"
-	CodeProcessOwnershipBusy          = "codex.process_ownership_busy"
-	CodeProcessOwnershipInvalid       = "codex.process_ownership_invalid"
-	CodeProcessIdentityMismatch       = "codex.process_identity_mismatch"
-	CodeProcessInspectionFailed       = "codex.process_inspection_failed"
-	CodeProcessSignalFailed           = "codex.process_signal_failed"
-	CodeStopConflict                  = "codex.stop_conflict"
-	CodeCgroupRootRequired            = "codex.cgroup_root_required"
-	CodeCgroupRootInvalid             = "codex.cgroup_root_invalid"
-	CodeCgroupCreateFailed            = "codex.cgroup_create_failed"
-	CodeCgroupIdentityMismatch        = "codex.cgroup_identity_mismatch"
-	CodeCgroupDrainFailed             = "codex.cgroup_drain_failed"
+	CodeUnavailable                       = "codex.unavailable"
+	CodeCapacityUnavailable               = "codex.capacity_unavailable"
+	CodeExecutionConflict                 = "codex.execution_conflict"
+	CodeExecutionNotFound                 = "codex.execution_not_found"
+	CodeLegacyExecutionRequiresNewAttempt = "codex.legacy_execution_requires_new_attempt"
+	CodeLegacyControlMetadataUnknown      = "codex.legacy_control_metadata_unknown"
+	CodeExecutionInterrupted              = "codex.execution_interrupted"
+	CodeExecutionCanceled                 = "codex.execution_canceled"
+	CodeExecutionStopped                  = "codex.execution_stopped"
+	CodeExecutionTimeout                  = "codex.execution_timeout"
+	CodeProcessStartFailed                = "codex.process_start_failed"
+	CodeProcessFailed                     = "codex.process_failed"
+	CodeProcessCleanupFailed              = "codex.process_cleanup_failed"
+	CodeOutputMissing                     = "codex.output_missing"
+	CodeOutputTooLarge                    = "codex.output_too_large"
+	CodeOutputInvalid                     = "codex.output_invalid"
+	CodeStateInvalid                      = "codex.state_invalid"
+	CodeStatePersistenceFailed            = "codex.state_persistence_failed"
+	CodeClockInvalid                      = "codex.clock_invalid"
+	CodeCommandRequired                   = "codex.command_required"
+	CodeCommandInvalid                    = "codex.command_invalid"
+	CodeCommandNotFound                   = "codex.command_not_found"
+	CodeWorkRootRequired                  = "codex.work_root_required"
+	CodeWorkRootCreateFailed              = "codex.work_root_create_failed"
+	CodeWorkRootInvalid                   = "codex.work_root_invalid"
+	CodeWorkRootPermissions               = "codex.work_root_permissions"
+	CodeWorkRootOpenFailed                = "codex.work_root_open_failed"
+	CodeRuntimeScopeInvalid               = "codex.runtime_scope_invalid"
+	CodeReasoningEffortInvalid            = "codex.reasoning_effort_invalid"
+	CodeTimeoutInvalid                    = "codex.timeout_invalid"
+	CodeProcessPipeDrainInvalid           = "codex.process_pipe_drain_delay_invalid"
+	CodeSupervisorStartTimeoutInvalid     = "codex.supervisor_start_timeout_invalid"
+	CodeDiagnosticLimitInvalid            = "codex.max_diagnostic_bytes_invalid"
+	CodeMaxConcurrentInvalid              = "codex.max_concurrent_executions_invalid"
+	CodeEnvironmentInvalid                = "codex.environment_invalid"
+	CodeAccountProfileInvalid             = "codex.account_profile_invalid"
+	CodeAccountProfileUnavailable         = "codex.account_profile_unavailable"
+	CodeCredentialInvalid                 = "codex.credential_invalid"
+	CodeCredentialUnavailable             = "codex.credential_unavailable"
+	CodeCredentialOutputUnverifiable      = "codex.credential_output_unverifiable"
+	CodePromptRendererInvalid             = "codex.prompt_renderer_invalid"
+	CodePromptRenderFailed                = "codex.prompt_render_failed"
+	CodeSessionInvalid                    = "codex.session_invalid"
+	CodeSessionUnavailable                = "codex.session_unavailable"
+	CodeWorkspaceResolverInvalid          = "codex.workspace_resolver_invalid"
+	CodeWorkspaceUnavailable              = "codex.workspace_unavailable"
+	CodeWorkspaceUnsafe                   = "codex.workspace_unsafe"
+	CodeSecretLeak                        = "codex.secret_leak"
+	CodeControlUnsupported                = "codex.control_unsupported"
+	CodeProcessOwnershipBusy              = "codex.process_ownership_busy"
+	CodeProcessOwnershipInvalid           = "codex.process_ownership_invalid"
+	CodeProcessIdentityMismatch           = "codex.process_identity_mismatch"
+	CodeProcessInspectionFailed           = "codex.process_inspection_failed"
+	CodeProcessSignalFailed               = "codex.process_signal_failed"
+	CodeStopConflict                      = "codex.stop_conflict"
+	CodeCgroupRootRequired                = "codex.cgroup_root_required"
+	CodeCgroupRootInvalid                 = "codex.cgroup_root_invalid"
+	CodeCgroupCreateFailed                = "codex.cgroup_create_failed"
+	CodeCgroupIdentityMismatch            = "codex.cgroup_identity_mismatch"
+	CodeCgroupDrainFailed                 = "codex.cgroup_drain_failed"
 )
 
 // WorkspacePathResolver is deliberately adapter-local.  It resolves the
@@ -419,7 +421,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	}
 	if existing, found := adapter.executions[executionKey]; found {
 		if existing.requestHash != requestHash {
-			return adapter.bindCachedLegacyLaunchLocked(existing, request, requestHash)
+			return adapter.retireCachedLegacyLaunchLocked(ctx, existing, request, requestHash)
 		}
 		return existing.receipt, nil
 	}
@@ -429,6 +431,9 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		return ports.AgentLaunchReceipt{}, err
 	}
 	if found {
+		if record.SchemaVersion != stateSchemaVersion {
+			return adapter.retireLegacyLaunchRecordLocked(ctx, record, runPath, request, requestHash)
+		}
 		sourceSchema := record.SchemaVersion
 		validatedRecord, receipt, trustedReplay, replayErr := adapter.validateLaunchReplay(runPath, record, request, requestHash)
 		if replayErr != nil {
@@ -521,7 +526,8 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	return adapter.resumeLaunchRecordLocked(ctx, callerContext, request, requestHash, record, runPath, recordCreated, environment, nil, session)
 }
 
-func (adapter *Adapter) bindCachedLegacyLaunchLocked(
+func (adapter *Adapter) retireCachedLegacyLaunchLocked(
+	ctx context.Context,
 	state *executionState,
 	request ports.AgentLaunchRequest,
 	requestHash string,
@@ -537,26 +543,93 @@ func (adapter *Adapter) bindCachedLegacyLaunchLocked(
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
-	durableState := state.requestHash == legacy.RequestHash || state.requestHash == source.RequestHash
-	if upgraded {
-		durableState = durableState || state.requestHash == bound.RequestHash
+	if upgraded && state.requestHash == bound.RequestHash {
+		if bound.RequestHash != requestHash {
+			return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
+		}
+		return state.receipt, nil
 	}
+	durableState := state.requestHash == legacy.RequestHash || state.requestHash == source.RequestHash
 	if state.runPath != runPath || state.terminalRequestHash != legacy.RequestHash || !durableState {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid}
 	}
-	bound, err = adapter.bindLegacyLaunchRecord(runPath, legacy, request, requestHash)
+	if err := adapter.validateLegacyLaunchRequest(source, request); err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	if state.terminal != nil {
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
+	}
+	return ports.AgentLaunchReceipt{}, adapter.quarantineExecutionLocked(
+		ctx, state, &Error{Code: CodeLegacyExecutionRequiresNewAttempt},
+	)
+}
+
+func (adapter *Adapter) retireLegacyLaunchRecordLocked(
+	ctx context.Context,
+	legacy launchRecord,
+	runPath string,
+	request ports.AgentLaunchRequest,
+	requestHash string,
+) (ports.AgentLaunchReceipt, error) {
+	source, bound, upgraded, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
-	bound, receipt, _, err := adapter.validateLaunchReplay(runPath, bound, request, requestHash)
+	if err := adapter.validateLegacyLaunchRequest(source, request); err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	process, processFound, err := adapter.readProcessRecord(runPath)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
-	state.requestHash = bound.RequestHash
-	state.receipt = receipt
-	state.maxOutput = bound.MaxOutputBytes
-	state.artifactMediaType = request.ArtifactMediaType
-	return receipt, nil
+	if upgraded && processFound && process.RequestHash == bound.RequestHash {
+		if bound.RequestHash != requestHash {
+			return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
+		}
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid}
+	}
+	receipt, err := adapter.observationReceipt(source, request.ExecutionRef)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	state := &executionState{
+		requestHash: source.RequestHash, terminalRequestHash: legacy.RequestHash,
+		receipt: receipt, maxOutput: source.MaxOutputBytes,
+		artifactMediaType: request.ArtifactMediaType,
+		runPath:           runPath, status: ports.AgentPending,
+	}
+	if terminal, found, loadErr := adapter.loadCausalTerminal(
+		runPath, legacy.RequestHash, source.SpecHash, source.MaxOutputBytes,
+	); loadErr != nil {
+		return ports.AgentLaunchReceipt{}, loadErr
+	} else if found {
+		state.status, state.terminal, state.terminalDurable = terminal.Status, &terminal, true
+		adapter.executions[request.ExecutionRef.String()] = state
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
+	}
+	if !processFound {
+		if recoveryErr := adapter.recoverInterruptedExecutionLocked(state); recoveryErr != nil {
+			return ports.AgentLaunchReceipt{}, recoveryErr
+		}
+		adapter.executions[request.ExecutionRef.String()] = state
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
+	}
+	if recoveryErr := adapter.recoverExecutionGuards(ctx, source, state); recoveryErr != nil {
+		if recoveryAuthorityFailure(recoveryErr) {
+			recoveryErr = adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
+		}
+		adapter.executions[request.ExecutionRef.String()] = state
+		if state.terminal != nil && state.terminalDurable {
+			return ports.AgentLaunchReceipt{}, &Error{
+				Code: CodeLegacyExecutionRequiresNewAttempt, Cause: recoveryErr,
+			}
+		}
+		return ports.AgentLaunchReceipt{}, recoveryErr
+	}
+	adapter.executions[request.ExecutionRef.String()] = state
+	return ports.AgentLaunchReceipt{}, adapter.quarantineExecutionLocked(
+		ctx, state, &Error{Code: CodeLegacyExecutionRequiresNewAttempt},
+	)
 }
 
 func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord, request ports.AgentLaunchRequest, requestHash string) (launchRecord, ports.AgentLaunchReceipt, bool, error) {

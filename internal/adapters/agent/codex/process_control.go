@@ -457,7 +457,7 @@ func (adapter *Adapter) discoverShutdownProcessLocked(ctx context.Context, runPa
 	} else if terminalFound {
 		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
 	}
-	receipt, err := effectiveLaunch.receipt(executionRef)
+	receipt, err := adapter.observationReceipt(effectiveLaunch, executionRef)
 	if err != nil {
 		return err
 	}
@@ -502,7 +502,7 @@ func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runP
 	if err != nil {
 		return err
 	}
-	receipt, err := effectiveLaunch.receipt(executionRef)
+	receipt, err := adapter.observationReceipt(effectiveLaunch, executionRef)
 	if err != nil {
 		return err
 	}
@@ -551,16 +551,14 @@ func (adapter *Adapter) persistedProcessLaunch(
 	if err != nil {
 		return launchRecord{}, err
 	}
-	effective := source
-	if upgraded {
-		effective = bound
+	if upgraded && processRequestHash == bound.RequestHash {
+		return bound, nil
 	}
 	if processRequestHash != launch.RequestHash &&
-		processRequestHash != source.RequestHash &&
-		processRequestHash != effective.RequestHash {
+		processRequestHash != source.RequestHash {
 		return launchRecord{}, &Error{Code: CodeProcessOwnershipInvalid}
 	}
-	return effective, nil
+	return source, nil
 }
 
 func pendingStopReceipt(request ports.AgentStopRequest) ports.AgentStopReceipt {
