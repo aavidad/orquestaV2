@@ -82,20 +82,22 @@ func (ids *sqliteV15IDs) NewID(ctx context.Context, prefix string) (string, erro
 }
 
 type sqliteV15External struct {
-	mu               sync.Mutex
-	clock            *sqliteMembershipClock
-	launches         map[string]ports.AgentLaunchReceipt
-	launchRequests   map[goal.ExecutionRef]ports.AgentLaunchRequest
-	content          map[goal.ArtifactRef]ports.ArtifactContent
-	launchErr        error
-	launchStart      chan struct{}
-	launchGate       chan struct{}
-	launchCalls      int
-	stopCalls        int
-	stopStatus       ports.AgentStopStatus
-	observationUsage governance.ResourceUsage
-	reviewContent    []byte
-	reviewVerdict    review.Verdict
+	mu                sync.Mutex
+	clock             *sqliteMembershipClock
+	launches          map[string]ports.AgentLaunchReceipt
+	launchRequests    map[goal.ExecutionRef]ports.AgentLaunchRequest
+	content           map[goal.ArtifactRef]ports.ArtifactContent
+	launchErr         error
+	launchStart       chan struct{}
+	launchGate        chan struct{}
+	launchCalls       int
+	stopCalls         int
+	stopStatus        ports.AgentStopStatus
+	observationStatus ports.AgentStatus
+	observationError  string
+	observationUsage  governance.ResourceUsage
+	reviewContent     []byte
+	reviewVerdict     review.Verdict
 }
 
 type sqliteV15DefinitelyUnapplied struct{}
@@ -210,12 +212,19 @@ func (external *sqliteV15External) Observe(
 					Status: ports.AgentCompleted, MediaType: council.ContributionMediaType, Content: payload,
 					Usage: external.observationUsage, ObservedAt: external.clock.Now()}, nil
 			}
-			return ports.AgentObservation{
-				ExecutionRef: executionRef, SpecHash: receipt.SpecHash, Status: ports.AgentCompleted,
-				MediaType: "text/plain", Content: []byte("v15 evidence"),
-				Usage:      external.observationUsage,
+			status := external.observationStatus
+			if status == "" {
+				status = ports.AgentCompleted
+			}
+			observation := ports.AgentObservation{
+				ExecutionRef: executionRef, SpecHash: receipt.SpecHash, Status: status,
+				ErrorCode: external.observationError, Usage: external.observationUsage,
 				ObservedAt: external.clock.Now(),
-			}, nil
+			}
+			if status == ports.AgentCompleted {
+				observation.MediaType, observation.Content = "text/plain", []byte("v15 evidence")
+			}
+			return observation, nil
 		}
 	}
 	return ports.AgentObservation{}, fmt.Errorf("sqlite.v15.execution_missing")

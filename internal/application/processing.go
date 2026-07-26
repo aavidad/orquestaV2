@@ -842,6 +842,21 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, c
 			ctx, claim, record, execution, item, code, at, usage, diskBytes, definitelyUnapplied,
 		)
 	}
+	settlement, err := settlementForExecutionAttempt(
+		record, claim, execution, usage, diskBytes, at, definitelyUnapplied,
+	)
+	if err != nil {
+		return err
+	}
+	retryFits, err := retryFitsIrreversibleGoalBudget(record, settlement, item.BudgetDemand())
+	if err != nil {
+		return err
+	}
+	if !retryFits {
+		return orchestrator.interruptExhaustedExecution(
+			ctx, claim, record, execution, item, code, at, usage, diskBytes, definitelyUnapplied,
+		)
+	}
 	replacementRef, err := newExecutionRef(ctx, orchestrator.ids)
 	if err != nil {
 		return err
@@ -868,12 +883,6 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, c
 	} else {
 		next, err = orchestrator.launchAction(policy, aggregate, updatedItem, replacement, authority, at, availableAt)
 	}
-	if err != nil {
-		return err
-	}
-	settlement, err := settlementForExecutionAttempt(
-		record, claim, execution, usage, diskBytes, at, definitelyUnapplied,
-	)
 	if err != nil {
 		return err
 	}

@@ -29,7 +29,11 @@ func (orchestrator *Orchestrator) replaceCouncilExecution(ctx context.Context, c
 	default:
 		return errors.New("application.council_retry_policy_invalid")
 	}
-	if retryPolicy == failedExecutionMustTerminate || execution.AttemptNo >= execution.MaxExecutionAttempts {
+	retryFits, err := retryFitsIrreversibleGoalBudget(record, settlement, item.BudgetDemand())
+	if err != nil {
+		return err
+	}
+	if retryPolicy == failedExecutionMustTerminate || execution.AttemptNo >= execution.MaxExecutionAttempts || !retryFits {
 		retired, actionRefs, cleanupControls, cleanupActions, cleanupEvents, cleanupErr :=
 			orchestrator.councilCleanupPlan(record, item, execution.Ref, execution.CouncilSubjectDigest,
 				claim.Action.Ref, at)
