@@ -248,7 +248,7 @@ build_parent="$(mktemp -d /tmp/orquesta-firecracker-host-build.XXXXXX)"
 /home/alberto/Trabajo/orquestaV2/scripts/build_firecracker_host_bundle.sh \
   --confirm-real \
   --source-root /home/alberto/Trabajo/orquestaV2 \
-  --source-commit "$(git -C /home/alberto/Trabajo/orquestaV2 rev-parse HEAD)" \
+  --source-commit 3451d3108c0c14b9539bec1ca134afd07a9beb19 \
   --toolchain-root /srv/orquesta-self/toolchains/go1.25.11 \
   --output-root "$build_parent/bundle" \
   --tmp-parent "$build_parent"
@@ -296,6 +296,47 @@ launcher_sha256=e625d01c0c7298eb36931ca3344625fc3497498bd98967551a8d508d0a906323
 supervisor_sha256=dd335825332730a476130c62629a422fb6d478df2fcc30b006c3645a37dcba3b
 host_build_receipt_sha256=ba367934b520326181662e2e65febd5a21f50d2d3a7d21bc8fdfb2a5cc0ecff9
 ```
+
+El driver exacto de este candidato consume launcher y supervisor únicamente
+desde `host-reproducible-v2`; no conserva `bin-a`/`bin-b` como fuentes de
+staging. Su SHA-256 es
+`d26c35bb52d57755afc20d4838101a4a8c2d958c759994279e35689f080e0024`.
+La frontera de handoff verifica ese digest después de copiar el driver a una
+ruta root-only y antes de ejecutarlo. No se introduce un self-hash dentro del
+propio driver: el sujeto no puede contener establemente su propio digest y la
+acreditación debe vivir fuera del sujeto.
+
+Bloque exacto para el host observado; **no** sustituir rutas, revisión ni
+digests:
+
+```bash
+set -euo pipefail
+readonly driver_source="/tmp/orquesta-firecracker-501.5wcLGs1H/run-root-e2e.sh"
+readonly driver_target="/srv/orquesta-self/operator/firecracker-root-e2e-3451d3108c0c14b9539bec1ca134afd07a9beb19"
+readonly driver_sha256="d26c35bb52d57755afc20d4838101a4a8c2d958c759994279e35689f080e0024"
+
+[[ "$(stat -c '%u:%g:%a:%h' "$driver_source")" == "1000:1000:500:1" ]]
+printf '%s  %s\n' "$driver_sha256" "$driver_source" | sha256sum -c -
+[[ "$(sudo stat -c '%u:%g:%a' /srv)" == "0:0:755" ]]
+[[ "$(sudo stat -c '%u:%g:%a' /srv/orquesta-self)" == "0:0:755" ]]
+[[ "$(sudo stat -c '%u:%g:%a' /srv/orquesta-self/operator)" == "0:0:755" ]]
+
+if sudo test -e "$driver_target" || sudo test -L "$driver_target"; then
+  [[ "$(sudo stat -c '%u:%g:%a:%h' "$driver_target")" == "0:0:500:1" ]]
+  printf '%s  %s\n' "$driver_sha256" "$driver_target" |
+    sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C sha256sum -c -
+fi
+
+sudo install -o root -g root -m 0500 -- "$driver_source" "$driver_target"
+[[ "$(sudo stat -c '%u:%g:%a:%h' "$driver_target")" == "0:0:500:1" ]]
+printf '%s  %s\n' "$driver_sha256" "$driver_target" |
+  sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C sha256sum -c -
+sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C "$driver_target"
+```
+
+Con `set -e`, cualquier diferencia de hash o metadata corta antes del último
+`sudo env -i`; el driver no llega a ejecutarse. Si ya existe un target distinto,
+también se rechaza antes de sobrescribirlo.
 
 El E2E realiza una atestación física y después una ola física de 16; verifica
 límites, `memory.swap.max=0`, red/API/vsock/serial ausentes y deja unidad,
