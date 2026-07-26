@@ -975,6 +975,14 @@ func productionAgentAdapter(
 	if err != nil {
 		return nil, err
 	}
+	environment, err = prepareCodexGoEnvironment(
+		environment,
+		snapshot.RuntimeCodexCacheRoot(),
+		snapshot.RuntimeCodexGoToolchainRoot(),
+	)
+	if err != nil {
+		return nil, err
+	}
 	accountHomeRoot := snapshot.RuntimeCodexAccountHomeRoot()
 	if accountHomeRoot != "" {
 		accountHomeRoot, err = canonicalRuntimePath(accountHomeRoot)
@@ -1052,6 +1060,7 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		{raw: snapshot.StateSQLitePath(), code: "bootstrap.state_path_invalid"},
 		{raw: snapshot.ArtifactFilesystemRoot(), code: "bootstrap.artifact_path_invalid"},
 		{raw: snapshot.RuntimeCodexWorkRoot(), code: "bootstrap.work_path_invalid"},
+		{raw: snapshot.RuntimeCodexCacheRoot(), code: codexGoCacheInvalid},
 		{raw: snapshot.ConfigEffectivePath(), code: "bootstrap.effective_path_invalid"},
 		{raw: snapshot.IdentityLocalTokenPath(), code: "bootstrap.local_token_path_invalid"},
 		{raw: snapshot.CredentialsLocalPath(), code: "bootstrap.credential_path_invalid"},
@@ -1063,8 +1072,8 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 			return errors.New(paths[index].code)
 		}
 	}
-	statePath, artifactRoot, workRoot := paths[0].value, paths[1].value, paths[2].value
-	effectivePath, tokenPath, credentialPath, workspaceRoot := paths[3].value, paths[4].value, paths[5].value, paths[6].value
+	statePath, artifactRoot, workRoot, cacheRoot := paths[0].value, paths[1].value, paths[2].value, paths[3].value
+	effectivePath, tokenPath, credentialPath, workspaceRoot := paths[4].value, paths[5].value, paths[6].value, paths[7].value
 	accountHomeRoot := ""
 	if strings.TrimSpace(snapshot.RuntimeCodexAccountHomeRoot()) != "" {
 		var err error
@@ -1084,19 +1093,23 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 	}
 	tokenDirectory := filepath.Dir(tokenPath)
 	stateDirectory := filepath.Dir(statePath)
-	if overlapsAny(stateDirectory, artifactRoot, workRoot) || overlapsAny(artifactRoot, workRoot) ||
-		overlapsAny(effectivePath, statePath, artifactRoot, workRoot) ||
-		overlapsAny(tokenDirectory, stateDirectory, artifactRoot, workRoot, effectivePath) ||
-		overlapsAny(credentialPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath) ||
-		overlapsAny(workspaceRoot, stateDirectory, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath) {
+	if overlapsAny(stateDirectory, artifactRoot, workRoot, cacheRoot) ||
+		overlapsAny(artifactRoot, workRoot, cacheRoot) ||
+		overlapsAny(workRoot, cacheRoot) ||
+		overlapsAny(effectivePath, statePath, artifactRoot, workRoot, cacheRoot) ||
+		overlapsAny(tokenDirectory, stateDirectory, artifactRoot, workRoot, cacheRoot, effectivePath) ||
+		overlapsAny(credentialPath, stateDirectory, artifactRoot, workRoot, cacheRoot, effectivePath, tokenPath) ||
+		overlapsAny(workspaceRoot, stateDirectory, artifactRoot, workRoot, cacheRoot, effectivePath, tokenDirectory, credentialPath) {
 		return errors.New("bootstrap.runtime_paths_overlap")
 	}
 	if accountHomeRoot != "" &&
-		overlapsAny(accountHomeRoot, stateDirectory, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath, workspaceRoot) {
+		overlapsAny(accountHomeRoot, stateDirectory, artifactRoot, workRoot, cacheRoot,
+			effectivePath, tokenDirectory, credentialPath, workspaceRoot) {
 		return errors.New("bootstrap.runtime_paths_overlap")
 	}
 	for _, reservedPath := range credentialReservedPaths {
-		if overlapsAny(reservedPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath, workspaceRoot, accountHomeRoot) {
+		if overlapsAny(reservedPath, stateDirectory, artifactRoot, workRoot, cacheRoot,
+			effectivePath, tokenPath, workspaceRoot, accountHomeRoot) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 	}
@@ -1105,7 +1118,8 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		if err != nil {
 			return errors.New("bootstrap.config_path_invalid")
 		}
-		if overlapsAny(configPath, statePath, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath, workspaceRoot, accountHomeRoot) {
+		if overlapsAny(configPath, statePath, artifactRoot, workRoot, cacheRoot,
+			effectivePath, tokenDirectory, credentialPath, workspaceRoot, accountHomeRoot) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 		for _, reservedPath := range credentialReservedPaths {
