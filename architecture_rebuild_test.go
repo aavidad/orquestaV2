@@ -292,6 +292,9 @@ func TestRebuildArchitecture(t *testing.T) {
 		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/intake"); reason != "" {
 			t.Errorf("application must accept pure intake domain: %s", reason)
 		}
+		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/wizard/stages"); reason != "" {
+			t.Errorf("application must accept pure Wizard stages domain: %s", reason)
+		}
 		if reason := rebuildArchitectureIntakeImportReason("orquesta/internal/intake"); reason != "" {
 			t.Errorf("intake must accept only its own inward package: %s", reason)
 		}
@@ -698,8 +701,9 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 		importPath != "orquesta/internal/governance" &&
 		importPath != "orquesta/internal/identity" &&
 		importPath != "orquesta/internal/intake" &&
+		importPath != "orquesta/internal/wizard/stages" &&
 		importPath != "orquesta/internal/ports" {
-		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity, internal/intake and internal/ports"
+		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity, internal/intake, internal/wizard/stages and internal/ports"
 	}
 	switch {
 	case importPath == "net/http" || strings.HasPrefix(importPath, "net/http/"):
