@@ -7,6 +7,13 @@ contrato puro de `internal/intake` para `WIZ-03`, `WIZ-04` y `WIZ-15`. No
 acredita `AC-V23-WIZARD`, no crea receipt, no promueve el roadmap y no afirma
 que V23 esté completa.
 
+> Actualización 2026-07-26: este documento conserva el corte puro inicial.
+> La dependencia inmediatamente posterior —writer de aplicación, CAS/restart
+> SQLite y bindings públicos— ya tiene implementación candidata en
+> `docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md`. Las frases
+> posteriores que la enumeran como pendiente describen el baseline del
+> 2026-07-25, no el estado vigente. V23 continúa `partial_green_unsealed`.
+
 Contexto causal:
 
 - proyecto: `project:v23`;
