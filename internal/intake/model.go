@@ -15,6 +15,20 @@ type OptionRef string
 type Revision uint64
 type MessageKey string
 
+// DerivationIdentity identifies the exact deterministic implementation that
+// compiled a mutation. Zero means a historical/operator-authored mutation.
+// It is generic Intake causality: no product, Wizard or provider name is
+// interpreted by this package.
+type DerivationIdentity struct {
+	Schema         string `json:"schema"`
+	Version        string `json:"version"`
+	SemanticDigest string `json:"semantic_digest"`
+}
+
+func (value DerivationIdentity) IsZero() bool {
+	return value.Schema == "" && value.Version == "" && value.SemanticDigest == ""
+}
+
 type Origin string
 
 const (
@@ -77,12 +91,13 @@ type Choice struct {
 // Change is one compare-and-swap mutation against the shared intake state.
 // It cannot create a state; NewState is the sole origin-neutral constructor.
 type Change struct {
-	StateRef         Ref        `json:"state_ref"`
-	ExpectedRevision Revision   `json:"expected_revision"`
-	Origin           Origin     `json:"origin"`
-	Issues           []Issue    `json:"issues,omitempty"`
-	Questions        []Question `json:"questions,omitempty"`
-	Choices          []Choice   `json:"choices,omitempty"`
+	StateRef         Ref                `json:"state_ref"`
+	ExpectedRevision Revision           `json:"expected_revision"`
+	Origin           Origin             `json:"origin"`
+	Issues           []Issue            `json:"issues,omitempty"`
+	Questions        []Question         `json:"questions,omitempty"`
+	Choices          []Choice           `json:"choices,omitempty"`
+	Derivation       DerivationIdentity `json:"derivation,omitempty,omitzero"`
 }
 
 // Decision stores the actual choice and the recommendation as simultaneous
@@ -100,12 +115,13 @@ type Decision struct {
 // Mutation records which view contributed to the single revision sequence.
 // It is evidence about the transition, not a second channel lifecycle.
 type Mutation struct {
-	Origin          Origin   `json:"origin"`
-	Revision        Revision `json:"revision"`
-	IssuesAdded     int      `json:"issues_added"`
-	QuestionsAdded  int      `json:"questions_added"`
-	ChoicesRecorded int      `json:"choices_recorded"`
-	QuestionRound   uint32   `json:"question_round"`
+	Origin          Origin             `json:"origin"`
+	Revision        Revision           `json:"revision"`
+	IssuesAdded     int                `json:"issues_added"`
+	QuestionsAdded  int                `json:"questions_added"`
+	ChoicesRecorded int                `json:"choices_recorded"`
+	QuestionRound   uint32             `json:"question_round"`
+	Derivation      DerivationIdentity `json:"derivation,omitempty,omitzero"`
 }
 
 // AcceptRecommendationsRequest identifies one exact shared-state revision and

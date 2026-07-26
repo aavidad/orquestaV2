@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // State is an immutable intake snapshot. All slices are private and accessors
@@ -29,6 +28,23 @@ func NewState(ref Ref, policy Policy) (State, error) {
 		return State{}, domainError(ErrorInvalidArgument, "policy.max_question_rounds")
 	}
 	return State{ref: ref, revision: 1, policy: policy}, nil
+}
+
+func NewDerivationIdentity(
+	schema string,
+	version string,
+	semanticDigest string,
+) (DerivationIdentity, error) {
+	value := DerivationIdentity{
+		Schema: schema, Version: version, SemanticDigest: semanticDigest,
+	}
+	if err := validateDerivationIdentity(value, "derivation"); err != nil {
+		return DerivationIdentity{}, err
+	}
+	if value.IsZero() {
+		return DerivationIdentity{}, domainError(ErrorInvalidArgument, "derivation")
+	}
+	return value, nil
 }
 
 func (state State) Schema() string         { return StateSchema }
@@ -76,6 +92,12 @@ func Apply(current State, change Change) (State, error) {
 	}
 	if change.Origin != OriginChat && change.Origin != OriginForm {
 		return State{}, domainError(ErrorInvalidOrigin, "change.origin")
+	}
+	if err := validateDerivationIdentity(
+		change.Derivation,
+		"change.derivation",
+	); err != nil {
+		return State{}, err
 	}
 	if len(change.Issues) == 0 && len(change.Questions) == 0 && len(change.Choices) == 0 {
 		return State{}, domainError(ErrorInvalidArgument, "change")
@@ -207,6 +229,7 @@ func Apply(current State, change Change) (State, error) {
 		Origin: change.Origin, Revision: updated.revision,
 		IssuesAdded: len(change.Issues), QuestionsAdded: len(change.Questions),
 		ChoicesRecorded: len(change.Choices), QuestionRound: updated.questionRounds,
+		Derivation: change.Derivation,
 	})
 	return updated, nil
 }
@@ -362,15 +385,27 @@ func validateChoiceAnswer(choice Choice, option Option, index int) error {
 	return nil
 }
 
-// ValidAnswerText validates the reusable free-text value contract without
-// inferring meaning from content.
-func ValidAnswerText(value string) bool {
-	if strings.TrimSpace(value) == "" || !utf8.ValidString(value) ||
-		utf8.RuneCountInString(value) > MaxAnswerTextRunes {
+func validateDerivationIdentity(
+	value DerivationIdentity,
+	field string,
+) error {
+	if value.IsZero() {
+		return nil
+	}
+	if !validMachineKey(value.Schema) || !strings.Contains(value.Schema, ".") ||
+		!validMachineKey(value.Version) ||
+		!validSemanticDigest(value.SemanticDigest) {
+		return domainError(ErrorInvalidArgument, field)
+	}
+	return nil
+}
+
+func validSemanticDigest(value string) bool {
+	if len(value) != 64 {
 		return false
 	}
 	for _, char := range value {
-		if unicode.IsControl(char) && char != '\n' && char != '\r' && char != '\t' {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
 			return false
 		}
 	}

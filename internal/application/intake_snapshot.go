@@ -77,6 +77,7 @@ func RestoreIntake(snapshot IntakeSnapshot) (intake.State, error) {
 			StateRef:         snapshot.Ref,
 			ExpectedRevision: state.Revision(),
 			Origin:           mutation.Origin,
+			Derivation:       mutation.Derivation,
 			Issues: append(
 				[]intake.Issue(nil),
 				snapshot.Issues[issueOffset:issueOffset+mutation.IssuesAdded]...,

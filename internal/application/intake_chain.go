@@ -160,6 +160,7 @@ func intakeChainChange(previous, next intake.State) (intake.Change, error) {
 		StateRef:         previousSnapshot.Ref,
 		ExpectedRevision: previousSnapshot.Revision,
 		Origin:           mutation.Origin,
+		Derivation:       mutation.Derivation,
 		Issues: append(
 			[]intake.Issue(nil),
 			nextSnapshot.Issues[len(previousSnapshot.Issues):]...,

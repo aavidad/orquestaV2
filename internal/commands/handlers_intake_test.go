@@ -40,6 +40,10 @@ func (api *fakeApplication) GetIntake(
 		state, err = intake.Apply(state, intake.Change{
 			StateRef: request.StateRef, ExpectedRevision: 1,
 			Origin: intake.OriginChat,
+			Derivation: intake.DerivationIdentity{
+				Schema: "orquesta.test.deriver", Version: "v1",
+				SemanticDigest: strings.Repeat("a", 64),
+			},
 			Issues: []intake.Issue{
 				{
 					Ref: "intake-issue:root", Kind: intake.IssueGap,
@@ -231,6 +235,19 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 			api.applies[0].Change.Questions,
 		)
 	}
+	var projectedMutation intake.Mutation
+	if len(projected.Intake.History) != 1 ||
+		json.Unmarshal(projected.Intake.History[0], &projectedMutation) != nil ||
+		projectedMutation.Derivation.Schema != "orquesta.test.deriver" ||
+		projectedMutation.Derivation.Version != "v1" ||
+		projectedMutation.Derivation.SemanticDigest != strings.Repeat("a", 64) ||
+		!api.applies[0].Change.Derivation.IsZero() {
+		t.Fatalf(
+			"derivation projection=%s apply=%+v",
+			get.Data,
+			api.applies[0].Change.Derivation,
+		)
+	}
 
 	spoof := invoke(t, dispatcher, "orquesta.intakes.create", "request:intake-spoof", map[string]any{
 		"intake_ref": "intake:test", "max_question_rounds": 2,
@@ -239,6 +256,24 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 	if spoof.Failure == nil || spoof.Failure.Code != CodeInvalidRequest ||
 		len(api.creates) != 1 || audit.admits != 3 {
 		t.Fatalf("spoof=%+v creates=%d admits=%d", spoof, len(api.creates), audit.admits)
+	}
+	derivedApply := canonicalIntakeApplyPayload()
+	derivedApply["derivation"] = map[string]any{
+		"schema": "orquesta.test.deriver", "version": "v1",
+		"semantic_digest": strings.Repeat("a", 64),
+	}
+	rejected := invoke(
+		t,
+		dispatcher,
+		"orquesta.intakes.apply",
+		"request:intake-derived-spoof",
+		derivedApply,
+		false,
+	)
+	if rejected.Failure == nil ||
+		rejected.Failure.Code != CodeInvalidRequest ||
+		len(api.applies) != 1 {
+		t.Fatalf("derived apply=%+v applies=%d", rejected, len(api.applies))
 	}
 }
 
