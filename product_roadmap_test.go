@@ -12,18 +12,31 @@ import (
 )
 
 type roadmapDocument struct {
-	SchemaVersion       int                         `json:"schema_version"`
-	Product             string                      `json:"product"`
-	CatalogSize         int                         `json:"catalog_size"`
-	SourceHashes        map[string]string           `json:"source_hashes"`
-	StatusVocabulary    []string                    `json:"status_vocabulary"`
-	DecisionVocabulary  []string                    `json:"decision_vocabulary"`
-	ReleaseTargets      []string                    `json:"release_targets"`
-	OperatorDecisions   map[string]json.RawMessage  `json:"operator_decisions"`
-	Verticals           []roadmapVertical           `json:"verticals"`
-	AcceptanceContracts []roadmapAcceptanceContract `json:"acceptance_contracts"`
-	CapabilityEntries   []roadmapEntry              `json:"capability_entries"`
-	DeferredMappings    []roadmapMapping            `json:"deferred_mappings"`
+	SchemaVersion           int                             `json:"schema_version"`
+	Product                 string                          `json:"product"`
+	CatalogSize             int                             `json:"catalog_size"`
+	SourceHashes            map[string]string               `json:"source_hashes"`
+	StatusVocabulary        []string                        `json:"status_vocabulary"`
+	DecisionVocabulary      []string                        `json:"decision_vocabulary"`
+	ReleaseTargets          []string                        `json:"release_targets"`
+	OperatorDecisions       map[string]json.RawMessage      `json:"operator_decisions"`
+	ImplementationDecisions []roadmapImplementationDecision `json:"implementation_decisions"`
+	Verticals               []roadmapVertical               `json:"verticals"`
+	AcceptanceContracts     []roadmapAcceptanceContract     `json:"acceptance_contracts"`
+	CapabilityEntries       []roadmapEntry                  `json:"capability_entries"`
+	DeferredMappings        []roadmapMapping                `json:"deferred_mappings"`
+}
+
+type roadmapImplementationDecision struct {
+	ID                    string   `json:"id"`
+	Status                string   `json:"status"`
+	CapabilityRefs        []string `json:"capability_refs"`
+	Transport             string   `json:"transport"`
+	AllowedServices       []string `json:"allowed_services"`
+	ForbiddenConnectivity []string `json:"forbidden_connectivity"`
+	Authentication        string   `json:"authentication"`
+	TestAttestorScope     string   `json:"test_attestor_scope"`
+	TestRefs              []string `json:"test_refs"`
 }
 
 type roadmapVertical struct {
@@ -88,6 +101,7 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 		t.Fatalf("invalid controlled vocabularies")
 	}
 	assertRoadmapOperatorDecisions(t, roadmap.OperatorDecisions)
+	assertRoadmapImplementationDecisions(t, roadmap.ImplementationDecisions)
 
 	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
 	if len(roadmap.Verticals) != 37 {
@@ -1416,6 +1430,32 @@ func assertRoadmapOperatorDecisions(t *testing.T, decisions map[string]json.RawM
 		if json.Unmarshal(decisions[key], &values) != nil || len(values) != 2 {
 			t.Fatalf("operator decision %q = %s, want two adapters", key, decisions[key])
 		}
+	}
+}
+
+func assertRoadmapImplementationDecisions(t *testing.T, decisions []roadmapImplementationDecision) {
+	t.Helper()
+	if len(decisions) != 1 {
+		t.Fatalf("implementation decision count = %d, want 1", len(decisions))
+	}
+	decision := decisions[0]
+	if decision.ID != "agent_microvm_network" || decision.Status != "planned_not_applied" ||
+		decision.Transport != "vsock_only" ||
+		decision.Authentication != "single_use_credential_store_proof_and_attestation" ||
+		decision.TestAttestorScope != "unchanged_no_network_no_vsock" {
+		t.Fatalf("invalid agent microVM implementation decision: %#v", decision)
+	}
+	if !reflect.DeepEqual(decision.CapabilityRefs, []string{"AGT-01", "AGT-03", "EVD-13", "ORC-15"}) ||
+		!reflect.DeepEqual(decision.AllowedServices, []string{"orquesta_broker", "controlled_egress_proxy"}) ||
+		!reflect.DeepEqual(decision.ForbiddenConnectivity,
+			[]string{"guest_ip_network", "tap", "bridge", "nat", "inbound", "east_west", "direct_internet"}) {
+		t.Fatalf("agent microVM implementation scope drifted: %#v", decision)
+	}
+	if len(decision.TestRefs) != 4 {
+		t.Fatalf("agent microVM implementation tests = %v, want 4", decision.TestRefs)
+	}
+	for _, ref := range decision.TestRefs {
+		requireRepositoryFile(t, ".", ref)
 	}
 }
 
