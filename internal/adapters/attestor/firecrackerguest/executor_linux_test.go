@@ -36,22 +36,53 @@ func TestGoJSONCaseDetectionPassFailAndNoTests(t *testing.T) {
 		want    uint64
 	}{
 		{
-			"pass",
+			"passing test",
 			"{\"Action\":\"run\",\"Test\":\"TestA\"}\n{\"Action\":\"pass\",\"Test\":\"TestA\"}\n",
 			1,
 		},
 		{
-			"fail",
+			"failing test still executed",
 			"{\"Action\":\"run\",\"Test\":\"TestA\"}\n{\"Action\":\"fail\",\"Test\":\"TestA\"}\n",
 			1,
 		},
 		{
-			"no tests",
-			"{\"Action\":\"start\",\"Package\":\"example\"}\n{\"Action\":\"pass\",\"Package\":\"example\"}\n",
+			"mixed packages include one executed test",
+			"{\"Action\":\"start\",\"Package\":\"example/empty\"}\n" +
+				"{\"Action\":\"output\",\"Package\":\"example/empty\",\"Output\":\"? example/empty [no test files]\\n\"}\n" +
+				"{\"Action\":\"skip\",\"Package\":\"example/empty\"}\n" +
+				"{\"Action\":\"run\",\"Package\":\"example/tested\",\"Test\":\"TestA\"}\n" +
+				"{\"Action\":\"pass\",\"Package\":\"example/tested\",\"Test\":\"TestA\"}\n",
+			1,
+		},
+		{
+			"output phrase is not execution evidence",
+			"{\"Action\":\"output\",\"Package\":\"example\",\"Test\":\"TestPrinter\"," +
+				"\"Output\":\"user text: [no tests to run]\\n\"}\n" +
+				"{\"Action\":\"pass\",\"Package\":\"example\"}\n",
 			0,
 		},
 		{
-			"TestMain output is not a test case",
+			"skipped test executed",
+			"{\"Action\":\"run\",\"Package\":\"example\",\"Test\":\"TestOptional\"}\n" +
+				"{\"Action\":\"skip\",\"Package\":\"example\",\"Test\":\"TestOptional\"}\n",
+			1,
+		},
+		{
+			"package without test files",
+			"{\"Action\":\"start\",\"Package\":\"example\"}\n" +
+				"{\"Action\":\"output\",\"Package\":\"example\",\"Output\":\"? example [no test files]\\n\"}\n" +
+				"{\"Action\":\"skip\",\"Package\":\"example\"}\n",
+			0,
+		},
+		{
+			"selector matches no tests",
+			"{\"Action\":\"start\",\"Package\":\"example\"}\n" +
+				"{\"Action\":\"output\",\"Package\":\"example\",\"Output\":\"testing: warning: no tests to run\\n\"}\n" +
+				"{\"Action\":\"pass\",\"Package\":\"example\"}\n",
+			0,
+		},
+		{
+			"TestMain without m Run",
 			"{\"Action\":\"output\",\"Package\":\"example\",\"Test\":\"TestMain\",\"Output\":\"setup\\n\"}\n" +
 				"{\"Action\":\"pass\",\"Package\":\"example\"}\n",
 			0,
