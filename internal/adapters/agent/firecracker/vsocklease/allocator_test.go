@@ -3,7 +3,9 @@ package vsocklease
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -448,6 +450,189 @@ func TestAllocatorEnforcesMinimumLeaseDurationAtReserveAndRenew(t *testing.T) {
 		context.Background(), invalidBounds,
 	); ErrorCode(err) != "agent_firecracker_vsock_cid.config_invalid" {
 		t.Fatalf("inverted lease bounds = %v", err)
+	}
+}
+
+func TestAllocatorRejectsUnrepresentableLeaseTimes(t *testing.T) {
+	t.Run("reserve", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-reserve-overflow.db")
+		database := openTestDatabase(t, path, true)
+		t.Cleanup(func() { _ = database.Close() })
+		clock := &testClock{now: time.Unix(0, math.MaxInt64-int64(500*time.Millisecond)).UTC()}
+		allocator := openTestAllocator(t, database, clock, 94, 94)
+		request := testReservationRequest(t, 1)
+		request.LeaseDuration = time.Second
+		if _, err := allocator.Reserve(
+			context.Background(), request,
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.lease_time_unrepresentable" {
+			t.Fatalf("overflowing reservation = %v", err)
+		}
+		var reservations int
+		if err := database.QueryRow(`
+SELECT COUNT(*) FROM agent_microvm_vsock_cid_reservations`).Scan(&reservations); err != nil {
+			t.Fatal(err)
+		}
+		if reservations != 0 {
+			t.Fatalf("overflowing reservation persisted %d rows", reservations)
+		}
+	})
+
+	t.Run("renew and schema order", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-renew-overflow.db")
+		database := openTestDatabase(t, path, true)
+		t.Cleanup(func() { _ = database.Close() })
+		clock := &testClock{now: time.Unix(0, math.MaxInt64-int64(5*time.Second)).UTC()}
+		allocator := openTestAllocator(t, database, clock, 95, 95)
+		request := testReservationRequest(t, 1)
+		request.LeaseDuration = 2 * time.Second
+		lease, err := allocator.Reserve(context.Background(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clock.Set(time.Unix(0, math.MaxInt64-int64(4*time.Second)).UTC())
+		renewal := ports.AgentMicroVMVsockCIDRenewalRequest{
+			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+			FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+			LeaseDuration: 3 * time.Second, IdempotencyKey: "renew-near-time-ceiling",
+		}
+		renewed, err := allocator.Renew(context.Background(), renewal)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if renewed.ExpiresAt.UnixNano() != math.MaxInt64-int64(time.Second) {
+			t.Fatalf("renewal expiry = %v", renewed.ExpiresAt)
+		}
+
+		clock.Set(time.Unix(0, math.MaxInt64-int64(2*time.Second)).UTC())
+		renewal.ExpectedRevision = renewed.Revision
+		renewal.LeaseDuration = 3 * time.Second
+		renewal.IdempotencyKey = "renew-over-time-ceiling"
+		if _, err := allocator.Renew(
+			context.Background(), renewal,
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.lease_time_unrepresentable" {
+			t.Fatalf("overflowing renewal = %v", err)
+		}
+		if _, err := database.Exec(`
+UPDATE agent_microvm_vsock_cid_reservations
+SET expires_at_unix_nano = acquired_at_unix_nano
+WHERE lease_ref = ?`, lease.LeaseRef); err == nil {
+			t.Fatal("schema accepted non-increasing lease timestamps")
+		}
+		if _, err := allocator.Recover(context.Background(), ports.AgentMicroVMVsockCIDRecoveryRequest{
+			PoolRef: renewed.PoolRef, ScopeDigest: renewed.ScopeDigest,
+			LeaseRef: renewed.LeaseRef, OwnerRef: renewed.OwnerRef,
+			FencingToken: renewed.FencingToken,
+		}); err != nil {
+			t.Fatalf("overflow rejection changed active lease: %v", err)
+		}
+	})
+}
+
+func TestAllocatorDiscardsConnectionsWhenTransactionCleanupFails(t *testing.T) {
+	t.Run("commit failure rolls back", func(t *testing.T) {
+		testCommitFailureLeavesNoAmbiguousEffects(t, false)
+	})
+	t.Run("commit and rollback failure discard physical connection", func(t *testing.T) {
+		testCommitFailureLeavesNoAmbiguousEffects(t, true)
+	})
+	t.Run("deferred rollback failure discards physical connection", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-rollback-failure.db")
+		database := openTestDatabase(t, path, true)
+		database.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = database.Close() })
+		start := time.Date(2026, 7, 26, 16, 0, 0, 0, time.UTC)
+		clock := &testClock{now: start}
+		allocator := openTestAllocator(t, database, clock, 132, 133)
+		request := testReservationRequest(t, 1)
+		request.LeaseDuration = time.Minute
+		lease, err := allocator.Reserve(context.Background(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clock.Advance(2 * time.Minute)
+		if _, err := allocator.Recover(context.Background(), ports.AgentMicroVMVsockCIDRecoveryRequest{
+			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+			FencingToken: lease.FencingToken,
+		}); ErrorCode(err) != "agent_firecracker_vsock_cid.lease_inactive" {
+			t.Fatalf("persist expiry = %v", err)
+		}
+
+		clock.Set(start.Add(30 * time.Second))
+		originalExec := allocator.execTransaction
+		allocator.execTransaction = func(
+			ctx context.Context,
+			connection *sql.Conn,
+			statement string,
+		) (sql.Result, error) {
+			if statement == "ROLLBACK" {
+				return nil, errors.New("injected rollback failure")
+			}
+			return originalExec(ctx, connection, statement)
+		}
+		if _, err := allocator.Recover(context.Background(), ports.AgentMicroVMVsockCIDRecoveryRequest{
+			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+			FencingToken: lease.FencingToken,
+		}); ErrorCode(err) != "agent_firecracker_vsock_cid.clock_regressed" {
+			t.Fatalf("clock regression with rollback failure = %v", err)
+		}
+		allocator.execTransaction = originalExec
+		clock.Set(start.Add(2 * time.Minute))
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if _, err := allocator.Reserve(ctx, testReservationRequest(t, 2)); err != nil {
+			t.Fatalf("discarded transaction left database blocked: %v", err)
+		}
+	})
+}
+
+func testCommitFailureLeavesNoAmbiguousEffects(t *testing.T, failRollback bool) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "vsock-commit-failure.db")
+	database := openTestDatabase(t, path, true)
+	database.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = database.Close() })
+	clock := &testClock{now: time.Date(2026, 7, 26, 16, 30, 0, 0, time.UTC)}
+	allocator := openTestAllocator(t, database, clock, 134, 134)
+	originalExec := allocator.execTransaction
+	allocator.execTransaction = func(
+		ctx context.Context,
+		connection *sql.Conn,
+		statement string,
+	) (sql.Result, error) {
+		if statement == "COMMIT" || failRollback && statement == "ROLLBACK" {
+			return nil, errors.New("injected transaction failure")
+		}
+		return originalExec(ctx, connection, statement)
+	}
+	request := testReservationRequest(t, 1)
+	if _, err := allocator.Reserve(
+		context.Background(), request,
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+		t.Fatalf("injected commit failure = %v", err)
+	}
+	allocator.execTransaction = originalExec
+
+	var reservations, operations, clocks int
+	for table, destination := range map[string]*int{
+		"agent_microvm_vsock_cid_reservations": &reservations,
+		"agent_microvm_vsock_cid_operations":   &operations,
+		"agent_microvm_vsock_cid_clock":        &clocks,
+	} {
+		if err := database.QueryRow("SELECT COUNT(*) FROM " + table).Scan(destination); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if reservations != 0 || operations != 0 || clocks != 0 {
+		t.Fatalf("ambiguous effects after commit failure: reservations=%d operations=%d clocks=%d",
+			reservations, operations, clocks)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := allocator.Reserve(ctx, request); err != nil {
+		t.Fatalf("retry after transaction cleanup = %v", err)
 	}
 }
 
