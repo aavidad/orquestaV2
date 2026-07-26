@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -501,79 +500,6 @@ func validateSupervisorFilesystem(envelope supervisorEnvelope) error {
 		return errors.New("completion proof already exists")
 	}
 	return nil
-}
-
-func killProcessGroupMembersExcept(pgid, except int, signal syscall.Signal) error {
-	members, err := linuxProcessGroupMembers(pgid)
-	if err != nil {
-		return err
-	}
-	var result error
-	for _, pid := range members {
-		if pid == except {
-			continue
-		}
-		state, memberPGID, _, readErr := readLinuxProcess(pid)
-		if errors.Is(readErr, os.ErrNotExist) || state == "Z" || state == "X" {
-			continue
-		}
-		if readErr != nil || memberPGID != pgid {
-			result = errors.Join(result, readErr)
-			continue
-		}
-		if err := syscall.Kill(pid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
-			result = errors.Join(result, err)
-		}
-	}
-	return result
-}
-
-func linuxProcessGroupMembers(pgid int) ([]int, error) {
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return nil, err
-	}
-	members := make([]int, 0)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		pid, err := strconv.Atoi(entry.Name())
-		if err != nil {
-			continue
-		}
-		state, memberPGID, _, err := readLinuxProcess(pid)
-		if err == nil && memberPGID == pgid && state != "Z" && state != "X" {
-			members = append(members, pid)
-		}
-	}
-	return members, nil
-}
-
-func drainProcessGroup(pgid, except int, delay time.Duration) error {
-	deadline := time.Now().Add(delay)
-	for {
-		members, err := linuxProcessGroupMembers(pgid)
-		if err != nil {
-			return err
-		}
-		remaining := 0
-		for _, pid := range members {
-			if pid != except {
-				remaining++
-			}
-		}
-		if remaining == 0 {
-			return nil
-		}
-		if err := killProcessGroupMembersExcept(pgid, except, syscall.SIGKILL); err != nil {
-			return err
-		}
-		if !time.Now().Before(deadline) {
-			return errors.New("supervisor process group did not drain")
-		}
-		time.Sleep(time.Millisecond)
-	}
 }
 
 func drainCgroup(work *os.File, delay time.Duration, force bool) error {
