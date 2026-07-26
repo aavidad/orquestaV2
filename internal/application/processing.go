@@ -1163,10 +1163,14 @@ func (orchestrator *Orchestrator) requeueAfter(
 	delay time.Duration,
 ) error {
 	now := orchestrator.clock.Now()
+	errorCode := ""
+	if strings.TrimSpace(code) != "" {
+		errorCode = stableFailureCode(code)
+	}
 	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
 		Claim: claim, Execution: execution,
 		AvailableAt: now.Add(delay), OperationAt: now,
-		ErrorCode: stableFailureCode(code),
+		ErrorCode: errorCode,
 	})
 }
 
