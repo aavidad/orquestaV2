@@ -3,6 +3,7 @@ package vsocklease
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -701,6 +702,245 @@ SELECT COUNT(*) FROM agent_microvm_vsock_cid_operations`).Scan(&operations); err
 	}
 }
 
+func TestAllocatorPreservesTemporalFrontierBeforeBusinessSavepoint(t *testing.T) {
+	t.Run("expiry update fails after clock advance", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-expiry-failure.db")
+		database := openTestDatabase(t, path, true)
+		t.Cleanup(func() { _ = database.Close() })
+		start := time.Date(2026, 7, 26, 15, 46, 0, 0, time.UTC)
+		clock := &testClock{now: start}
+		allocator := openTestAllocator(t, database, clock, 143, 143)
+		request := testReservationRequest(t, 1)
+		request.LeaseDuration = time.Minute
+		lease, err := allocator.Reserve(context.Background(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.Exec(`
+CREATE TRIGGER agent_microvm_vsock_cid_fail_expiry
+BEFORE UPDATE OF state ON agent_microvm_vsock_cid_reservations
+WHEN NEW.state = 'expired'
+BEGIN
+    SELECT RAISE(ABORT, 'injected expiry failure');
+END`); err != nil {
+			t.Fatal(err)
+		}
+
+		clock.Set(start.Add(2 * time.Minute))
+		if _, err := allocator.Recover(
+			context.Background(), recoveryRequest(lease),
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("expiry failure = %v", err)
+		}
+		assertTemporalFrontierBlocksT1(t, database, allocator, clock, lease,
+			start.Add(2*time.Minute), reservationStateActive)
+	})
+
+	t.Run("savepoint response is lost after creation", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-savepoint-response-lost.db")
+		database := openTestDatabase(t, path, true)
+		database.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = database.Close() })
+		start := time.Date(2026, 7, 26, 15, 47, 0, 0, time.UTC)
+		clock := &testClock{now: start}
+		allocator := openTestAllocator(t, database, clock, 144, 144)
+		request := testReservationRequest(t, 1)
+		request.LeaseDuration = time.Minute
+		lease, err := allocator.Reserve(context.Background(), request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		originalExec := allocator.execTransaction
+		var injected bool
+		allocator.execTransaction = func(
+			ctx context.Context,
+			connection *sql.Conn,
+			statement string,
+		) (sql.Result, error) {
+			if statement == businessSavepointCreate && !injected {
+				injected = true
+				result, err := originalExec(ctx, connection, statement)
+				if err != nil {
+					return result, err
+				}
+				return result, errors.New("injected lost savepoint response")
+			}
+			return originalExec(ctx, connection, statement)
+		}
+
+		clock.Set(start.Add(2 * time.Minute))
+		if _, err := allocator.Recover(
+			context.Background(), recoveryRequest(lease),
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("lost savepoint response = %v", err)
+		}
+		if !injected {
+			t.Fatal("savepoint failpoint was not reached")
+		}
+		allocator.execTransaction = originalExec
+		assertTemporalFrontierBlocksT1(t, database, allocator, clock, lease,
+			start.Add(2*time.Minute), reservationStateExpired)
+	})
+}
+
+func assertTemporalFrontierBlocksT1(
+	t *testing.T,
+	database *sql.DB,
+	allocator *Allocator,
+	clock *testClock,
+	lease ports.AgentMicroVMVsockCIDLease,
+	highWaterTime time.Time,
+	wantState string,
+) {
+	t.Helper()
+	var state string
+	if err := database.QueryRow(`
+SELECT state
+FROM agent_microvm_vsock_cid_reservations
+WHERE lease_ref = ?`, lease.LeaseRef).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != wantState {
+		t.Fatalf("reservation state = %q, want %q", state, wantState)
+	}
+	var highWater int64
+	if err := database.QueryRow(`
+SELECT high_water_unix_nano
+FROM agent_microvm_vsock_cid_clock
+WHERE pool_ref = ?`, lease.PoolRef).Scan(&highWater); err != nil {
+		t.Fatal(err)
+	}
+	if want := highWaterTime.UnixNano(); highWater != want {
+		t.Fatalf("high-water = %d, want %d", highWater, want)
+	}
+	clock.Set(lease.AcquiredAt.Add(time.Minute))
+	if _, err := allocator.Recover(
+		context.Background(), recoveryRequest(lease),
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.clock_regressed" {
+		t.Fatalf("T1 recovery after T2 failure = %v", err)
+	}
+}
+
+func recoveryRequest(
+	lease ports.AgentMicroVMVsockCIDLease,
+) ports.AgentMicroVMVsockCIDRecoveryRequest {
+	return ports.AgentMicroVMVsockCIDRecoveryRequest{
+		PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+		LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+		FencingToken: lease.FencingToken,
+	}
+}
+
+func TestAllocatorRequiresExactlyOneRenewOrReleaseWrite(t *testing.T) {
+	t.Run("renew", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-renew-write-skipped.db")
+		database := openTestDatabase(t, path, true)
+		t.Cleanup(func() { _ = database.Close() })
+		clock := &testClock{now: time.Date(2026, 7, 26, 15, 50, 0, 0, time.UTC)}
+		allocator := openTestAllocator(t, database, clock, 141, 141)
+		lease, err := allocator.Reserve(
+			context.Background(), testReservationRequest(t, 1),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.Exec(`
+CREATE TRIGGER agent_microvm_vsock_cid_skip_renew
+BEFORE UPDATE OF revision ON agent_microvm_vsock_cid_reservations
+WHEN NEW.revision > OLD.revision
+BEGIN
+    SELECT RAISE(IGNORE);
+END`); err != nil {
+			t.Fatal(err)
+		}
+		renewal := ports.AgentMicroVMVsockCIDRenewalRequest{
+			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+			FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+			LeaseDuration: 20 * time.Minute, IdempotencyKey: "renew-write-skipped",
+		}
+		if _, err := allocator.Renew(
+			context.Background(), renewal,
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("skipped renewal write = %v", err)
+		}
+		var revision uint64
+		var operationCount int
+		if err := database.QueryRow(`
+SELECT revision
+FROM agent_microvm_vsock_cid_reservations
+WHERE lease_ref = ?`, lease.LeaseRef).Scan(&revision); err != nil {
+			t.Fatal(err)
+		}
+		if err := database.QueryRow(`
+SELECT COUNT(*)
+FROM agent_microvm_vsock_cid_operations
+WHERE pool_ref = ? AND idempotency_key = ?`,
+			renewal.PoolRef, renewal.IdempotencyKey,
+		).Scan(&operationCount); err != nil {
+			t.Fatal(err)
+		}
+		if revision != lease.Revision || operationCount != 0 {
+			t.Fatalf("skipped renewal left partial effects: revision=%d operations=%d",
+				revision, operationCount)
+		}
+	})
+
+	t.Run("release", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-release-write-skipped.db")
+		database := openTestDatabase(t, path, true)
+		t.Cleanup(func() { _ = database.Close() })
+		clock := &testClock{now: time.Date(2026, 7, 26, 15, 55, 0, 0, time.UTC)}
+		allocator := openTestAllocator(t, database, clock, 142, 142)
+		lease, err := allocator.Reserve(
+			context.Background(), testReservationRequest(t, 1),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.Exec(`
+CREATE TRIGGER agent_microvm_vsock_cid_skip_release
+BEFORE UPDATE OF state ON agent_microvm_vsock_cid_reservations
+WHEN NEW.state = 'released'
+BEGIN
+    SELECT RAISE(IGNORE);
+END`); err != nil {
+			t.Fatal(err)
+		}
+		release := ports.AgentMicroVMVsockCIDReleaseRequest{
+			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+			FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+			IdempotencyKey: "release-write-skipped",
+		}
+		if _, err := allocator.Release(
+			context.Background(), release,
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("skipped release write = %v", err)
+		}
+		var state string
+		var operationCount int
+		if err := database.QueryRow(`
+SELECT state
+FROM agent_microvm_vsock_cid_reservations
+WHERE lease_ref = ?`, lease.LeaseRef).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		if err := database.QueryRow(`
+SELECT COUNT(*)
+FROM agent_microvm_vsock_cid_operations
+WHERE pool_ref = ? AND idempotency_key = ?`,
+			release.PoolRef, release.IdempotencyKey,
+		).Scan(&operationCount); err != nil {
+			t.Fatal(err)
+		}
+		if state != reservationStateActive || operationCount != 0 {
+			t.Fatalf("skipped release left partial effects: state=%q operations=%d",
+				state, operationCount)
+		}
+	})
+}
+
 func TestAllocatorDiscardsConnectionsWhenTransactionCleanupFails(t *testing.T) {
 	t.Run("commit failure rolls back", func(t *testing.T) {
 		testCommitFailureLeavesNoAmbiguousEffects(t, false)
@@ -776,7 +1016,129 @@ WHERE pool_ref = ? AND idempotency_key = ?`,
 			t.Fatalf("replayed lease %q != durable lease %q", replayed.LeaseRef, persistedLeaseRef)
 		}
 	})
-	t.Run("deferred rollback failure discards physical connection", func(t *testing.T) {
+	t.Run("lost renewal commit response replays exact durable receipt", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-lost-renew-commit-response.db")
+		database := openTestDatabase(t, path, true)
+		database.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = database.Close() })
+		clock := &testClock{now: time.Date(2026, 7, 26, 16, 20, 0, 0, time.UTC)}
+		allocator := openTestAllocator(t, database, clock, 139, 139)
+		lease, err := allocator.Reserve(
+			context.Background(), testReservationRequest(t, 1),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clock.Advance(time.Minute)
+		renewal := ports.AgentMicroVMVsockCIDRenewalRequest{
+			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+			FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+			LeaseDuration: 20 * time.Minute, IdempotencyKey: "renew-lost-commit-response",
+		}
+		restore := injectLostCommitResponse(t, allocator)
+		if _, err := allocator.Renew(
+			context.Background(), renewal,
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("lost renewal commit response = %v", err)
+		}
+		restore()
+
+		replayed, err := allocator.Renew(context.Background(), renewal)
+		if err != nil {
+			t.Fatalf("renewal replay after lost commit response = %v", err)
+		}
+		var resultJSON []byte
+		var operationCount int
+		if err := database.QueryRow(`
+SELECT result_json
+FROM agent_microvm_vsock_cid_operations
+WHERE pool_ref = ? AND idempotency_key = ? AND operation_kind = 'renew'`,
+			renewal.PoolRef, renewal.IdempotencyKey,
+		).Scan(&resultJSON); err != nil {
+			t.Fatal(err)
+		}
+		var persisted ports.AgentMicroVMVsockCIDLease
+		if err := json.Unmarshal(resultJSON, &persisted); err != nil {
+			t.Fatal(err)
+		}
+		if replayed != persisted {
+			t.Fatalf("renewal replay changed receipt:\nreplayed=%+v\npersisted=%+v", replayed, persisted)
+		}
+		if err := database.QueryRow(`
+SELECT COUNT(*)
+FROM agent_microvm_vsock_cid_operations
+WHERE pool_ref = ? AND idempotency_key = ? AND operation_kind = 'renew'`,
+			renewal.PoolRef, renewal.IdempotencyKey,
+		).Scan(&operationCount); err != nil {
+			t.Fatal(err)
+		}
+		if operationCount != 1 {
+			t.Fatalf("renewal operations = %d, want 1", operationCount)
+		}
+	})
+	t.Run("lost release commit response replays exact durable receipt", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-lost-release-commit-response.db")
+		database := openTestDatabase(t, path, true)
+		database.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = database.Close() })
+		clock := &testClock{now: time.Date(2026, 7, 26, 16, 25, 0, 0, time.UTC)}
+		allocator := openTestAllocator(t, database, clock, 140, 140)
+		lease, err := allocator.Reserve(
+			context.Background(), testReservationRequest(t, 1),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clock.Advance(time.Minute)
+		release := ports.AgentMicroVMVsockCIDReleaseRequest{
+			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+			FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+			IdempotencyKey: "release-lost-commit-response",
+		}
+		restore := injectLostCommitResponse(t, allocator)
+		if _, err := allocator.Release(
+			context.Background(), release,
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("lost release commit response = %v", err)
+		}
+		restore()
+
+		replayed, err := allocator.Release(context.Background(), release)
+		if err != nil {
+			t.Fatalf("release replay after lost commit response = %v", err)
+		}
+		var resultJSON []byte
+		var operationCount int
+		if err := database.QueryRow(`
+SELECT result_json
+FROM agent_microvm_vsock_cid_operations
+WHERE pool_ref = ? AND idempotency_key = ? AND operation_kind = 'release'`,
+			release.PoolRef, release.IdempotencyKey,
+		).Scan(&resultJSON); err != nil {
+			t.Fatal(err)
+		}
+		var persisted ports.AgentMicroVMVsockCIDReleaseReceipt
+		if err := json.Unmarshal(resultJSON, &persisted); err != nil {
+			t.Fatal(err)
+		}
+		if replayed != persisted {
+			t.Fatalf("release replay changed receipt:\nreplayed=%+v\npersisted=%+v", replayed, persisted)
+		}
+		if err := database.QueryRow(`
+SELECT COUNT(*)
+FROM agent_microvm_vsock_cid_operations
+WHERE pool_ref = ? AND idempotency_key = ? AND operation_kind = 'release'`,
+			release.PoolRef, release.IdempotencyKey,
+		).Scan(&operationCount); err != nil {
+			t.Fatal(err)
+		}
+		if operationCount != 1 {
+			t.Fatalf("release operations = %d, want 1", operationCount)
+		}
+	})
+	t.Run("temporal-only commit and rollback failure discard physical connection", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "vsock-rollback-failure.db")
 		database := openTestDatabase(t, path, true)
 		database.SetMaxOpenConns(1)
@@ -806,8 +1168,8 @@ WHERE pool_ref = ? AND idempotency_key = ?`,
 			connection *sql.Conn,
 			statement string,
 		) (sql.Result, error) {
-			if statement == "ROLLBACK" {
-				return nil, errors.New("injected rollback failure")
+			if statement == "COMMIT" || statement == "ROLLBACK" {
+				return nil, errors.New("injected temporal cleanup failure")
 			}
 			return originalExec(ctx, connection, statement)
 		}
@@ -815,8 +1177,8 @@ WHERE pool_ref = ? AND idempotency_key = ?`,
 			PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
 			LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
 			FencingToken: lease.FencingToken,
-		}); ErrorCode(err) != "agent_firecracker_vsock_cid.clock_regressed" {
-			t.Fatalf("clock regression with rollback failure = %v", err)
+		}); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("clock regression with temporal cleanup failure = %v", err)
 		}
 		allocator.execTransaction = originalExec
 		clock.Set(start.Add(2 * time.Minute))
@@ -873,6 +1235,33 @@ func testCommitFailureLeavesNoAmbiguousEffects(t *testing.T, failRollback bool) 
 	defer cancel()
 	if _, err := allocator.Reserve(ctx, request); err != nil {
 		t.Fatalf("retry after transaction cleanup = %v", err)
+	}
+}
+
+func injectLostCommitResponse(t *testing.T, allocator *Allocator) func() {
+	t.Helper()
+	originalExec := allocator.execTransaction
+	var injected bool
+	allocator.execTransaction = func(
+		ctx context.Context,
+		connection *sql.Conn,
+		statement string,
+	) (sql.Result, error) {
+		if statement == "COMMIT" && !injected {
+			injected = true
+			result, err := originalExec(ctx, connection, statement)
+			if err != nil {
+				return result, err
+			}
+			return result, errors.New("injected lost commit response")
+		}
+		return originalExec(ctx, connection, statement)
+	}
+	return func() {
+		allocator.execTransaction = originalExec
+		if !injected {
+			t.Fatal("COMMIT failpoint was not reached")
+		}
 	}
 }
 
