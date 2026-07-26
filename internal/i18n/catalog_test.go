@@ -23,10 +23,11 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	if got := catalog.Locales(); !reflect.DeepEqual(got, []string{"es", "en"}) {
 		t.Fatalf("Locales() = %v", got)
 	}
-	if got := len(catalog.Keys()); got != 53 {
+	if got := len(catalog.Keys()); got != 54 {
 		t.Fatalf("Keys() count = %d", got)
 	}
 	for _, key := range []string{
+		"command.intakes.dossier.confirm.description",
 		"command.intakes.dossier.get.description",
 		"command.intakes.dossier.prepare.description",
 	} {

@@ -50,6 +50,7 @@
         "catalog:command.goals.list.description",
         "catalog:command.intakes.apply.description",
         "catalog:command.intakes.create.description",
+        "catalog:command.intakes.dossier.confirm.description",
         "catalog:command.intakes.dossier.get.description",
         "catalog:command.intakes.dossier.prepare.description",
         "catalog:command.intakes.get.description",

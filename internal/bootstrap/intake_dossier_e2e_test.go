@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	commandcore "orquesta/internal/commands"
@@ -141,6 +142,83 @@ func TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart(t *testing
 		restartedCanonical.GenerationReceipt.ReceiptRef != preparedView.GenerationReceipt.ReceiptRef {
 		t.Fatalf("restarted canonical=%+v first=%+v", restartedCanonical, preparedView)
 	}
+
+	confirmSpoofed := dispatchV23IntakeCommand(
+		t, second, principal, projectRef,
+		"orquesta.intakes.dossier.confirm", "request:v23-dossier-confirm-spoof",
+		map[string]any{
+			"dossier_ref": preparedView.DossierRef,
+			"confirm":     true,
+			"statement":   "contenido sustituido",
+		},
+	)
+	if confirmSpoofed.Failure == nil ||
+		confirmSpoofed.Failure.Code != commandcore.CodeInvalidRequest ||
+		confirmSpoofed.AuditRef != "" || len(confirmSpoofed.Data) != 0 {
+		t.Fatalf("confirmation payload substitution was admitted: %+v", confirmSpoofed)
+	}
+	notConfirmed := dispatchV23IntakeCommand(
+		t, second, principal, projectRef,
+		"orquesta.intakes.dossier.confirm", "request:v23-dossier-confirm-false",
+		map[string]any{
+			"dossier_ref": preparedView.DossierRef,
+			"confirm":     false,
+		},
+	)
+	if notConfirmed.Failure == nil ||
+		notConfirmed.Failure.Code != commandcore.CodeInvalidRequest ||
+		len(notConfirmed.Data) != 0 {
+		t.Fatalf("confirm=false=%+v", notConfirmed)
+	}
+
+	confirmation := dispatchV23IntakeCommand(
+		t, second, principal, projectRef,
+		"orquesta.intakes.dossier.confirm", "request:v23-dossier-confirm",
+		map[string]any{
+			"dossier_ref": preparedView.DossierRef,
+			"confirm":     true,
+		},
+	)
+	confirmationView := decodeV23DossierConfirmation(t, confirmation)
+	if confirmationView.Confirmation.RequestRef != "request:v23-dossier-confirm" ||
+		confirmationView.Confirmation.ActorRef != principal.ActorRef.String() ||
+		confirmationView.Confirmation.ProjectRef != projectRef ||
+		confirmationView.Confirmation.DossierRef != preparedView.DossierRef ||
+		confirmationView.Confirmation.IntakeRef != preparedView.IntakeRef ||
+		confirmationView.Confirmation.IntakeRevision != preparedView.IntakeRevision ||
+		confirmationView.Confirmation.IntakeDigest != preparedView.IntakeDigest ||
+		confirmationView.Confirmation.SourceIntakeReceiptRef !=
+			preparedView.SourceIntakeReceiptRef ||
+		confirmationView.Confirmation.PlanDigest != preparedView.PlanDigest ||
+		confirmationView.Confirmation.GoalRef == "" ||
+		confirmationView.Confirmation.AppSpecRef == "" ||
+		confirmationView.Confirmation.SpecHash == "" ||
+		confirmationView.Confirmation.ConfirmedAt == "" ||
+		confirmationView.Goal.GoalRef != confirmationView.Confirmation.GoalRef ||
+		confirmationView.Goal.ProjectRef != projectRef ||
+		confirmationView.Goal.SpecHash != confirmationView.Confirmation.SpecHash ||
+		!strings.HasPrefix(
+			confirmationView.Confirmation.ReceiptRef,
+			"intake-dossier-confirmation-receipt:",
+		) {
+		t.Fatalf("confirmation=%+v dossier=%+v", confirmationView, preparedView)
+	}
+	replayedConfirmation := dispatchV23IntakeCommand(
+		t, second, principal, projectRef,
+		"orquesta.intakes.dossier.confirm", "request:v23-dossier-confirm",
+		map[string]any{
+			"dossier_ref": preparedView.DossierRef,
+			"confirm":     true,
+		},
+	)
+	if replayedConfirmation.Failure != nil ||
+		replayedConfirmation.AuditRef != confirmation.AuditRef ||
+		!bytes.Equal(replayedConfirmation.Data, confirmation.Data) {
+		t.Fatalf(
+			"confirmation replay=%+v first=%+v",
+			replayedConfirmation, confirmation,
+		)
+	}
 }
 
 type v23DossierView struct {
@@ -164,6 +242,30 @@ type v23DossierView struct {
 	} `json:"generation_receipt"`
 }
 
+type v23DossierConfirmationOutput struct {
+	Goal struct {
+		GoalRef    string `json:"goal_ref"`
+		ProjectRef string `json:"project_ref"`
+		SpecHash   string `json:"spec_hash"`
+	} `json:"goal"`
+	Confirmation struct {
+		ReceiptRef             string `json:"receipt_ref"`
+		RequestRef             string `json:"request_ref"`
+		ActorRef               string `json:"actor_ref"`
+		ProjectRef             string `json:"project_ref"`
+		IntakeRef              string `json:"intake_ref"`
+		IntakeRevision         uint64 `json:"intake_revision"`
+		IntakeDigest           string `json:"intake_digest"`
+		SourceIntakeReceiptRef string `json:"source_intake_receipt_ref"`
+		DossierRef             string `json:"dossier_ref"`
+		PlanDigest             string `json:"plan_digest"`
+		GoalRef                string `json:"goal_ref"`
+		AppSpecRef             string `json:"app_spec_ref"`
+		SpecHash               string `json:"spec_hash"`
+		ConfirmedAt            string `json:"confirmed_at"`
+	} `json:"confirmation"`
+}
+
 func decodeV23Dossier(t *testing.T, result commandcore.Result) v23DossierView {
 	t.Helper()
 	if result.Failure != nil || result.AuditRef == "" {
@@ -176,6 +278,21 @@ func decodeV23Dossier(t *testing.T, result commandcore.Result) v23DossierView {
 		t.Fatalf("decode dossier %s: %v", result.Data, err)
 	}
 	return output.Dossier
+}
+
+func decodeV23DossierConfirmation(
+	t *testing.T,
+	result commandcore.Result,
+) v23DossierConfirmationOutput {
+	t.Helper()
+	if result.Failure != nil || result.AuditRef == "" {
+		t.Fatalf("dossier confirmation command=%+v", result)
+	}
+	var output v23DossierConfirmationOutput
+	if err := json.Unmarshal(result.Data, &output); err != nil {
+		t.Fatalf("decode dossier confirmation %s: %v", result.Data, err)
+	}
+	return output
 }
 
 func getV23Dossier(

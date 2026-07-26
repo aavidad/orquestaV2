@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -82,10 +83,53 @@ func (api *fakeApplication) GetIntakeDossier(
 	})
 }
 
+func (api *fakeApplication) ConfirmIntakeDossier(
+	_ context.Context,
+	_ application.Access,
+	request application.ConfirmIntakeDossierRequest,
+) (application.ConfirmIntakeDossierResult, error) {
+	api.called("ConfirmIntakeDossier")
+	if !request.Confirm {
+		return application.ConfirmIntakeDossierResult{},
+			errors.New("application.confirmation_required")
+	}
+	principalRef, _ := identity.NewPrincipalRef("principal:test")
+	actorRef, _ := goal.NewActorRef("actor:test")
+	projectRef, _ := goal.NewProjectRef("project:test")
+	goalRef, _ := goal.NewGoalRef("goal:command-dossier-confirmed")
+	appSpecRef, _ := goal.NewAppSpecRef("app-spec:command-dossier-confirmed")
+	return application.ConfirmIntakeDossierResult{
+		Confirmation: application.IntakeDossierConfirmation{
+			Ref: "intake-dossier-confirmation-receipt:" +
+				strings.Repeat("a", 64),
+			RequestRef:             request.RequestRef,
+			RequestFingerprint:     strings.Repeat("b", 64),
+			PrincipalRef:           principalRef,
+			ActorRef:               actorRef,
+			ProjectRef:             projectRef,
+			StateRef:               "intake:command-dossier",
+			StateRevision:          2,
+			StateDigest:            strings.Repeat("c", 64),
+			SourceIntakeReceiptRef: "intake-receipt:command-dossier",
+			DossierRef:             request.DossierRef,
+			DossierDigest:          strings.Repeat("d", 64),
+			PlanDigest:             strings.Repeat("e", 64),
+			GoalRef:                goalRef,
+			AppSpecRef:             appSpecRef,
+			SpecHash:               strings.Repeat("f", 64),
+			AuthorizationReceiptRef: "authorization-receipt:" +
+				request.RequestRef,
+			ConfirmedAt: time.Date(2026, 7, 26, 18, 0, 0, 0, time.UTC),
+		},
+		Created: true,
+	}, nil
+}
+
 type captureDossierApplication struct {
 	*fakeApplication
 	prepares []application.PrepareIntakeDossierRequest
 	gets     []application.GetIntakeDossierRequest
+	confirms []application.ConfirmIntakeDossierRequest
 }
 
 func (api *captureDossierApplication) PrepareIntakeDossier(
@@ -104,6 +148,15 @@ func (api *captureDossierApplication) GetIntakeDossier(
 ) (application.IntakeDossierRecord, error) {
 	api.gets = append(api.gets, request)
 	return api.fakeApplication.GetIntakeDossier(ctx, access, request)
+}
+
+func (api *captureDossierApplication) ConfirmIntakeDossier(
+	ctx context.Context,
+	access application.Access,
+	request application.ConfirmIntakeDossierRequest,
+) (application.ConfirmIntakeDossierResult, error) {
+	api.confirms = append(api.confirms, request)
+	return api.fakeApplication.ConfirmIntakeDossier(ctx, access, request)
 }
 
 func TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan(t *testing.T) {
@@ -242,6 +295,113 @@ func TestIntakeDossierInvalidInputKeepsPublicInvalidRequestClass(t *testing.T) {
 	)
 	if result.Failure == nil || result.Failure.Code != CodeInvalidRequest {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt(t *testing.T) {
+	api := &captureDossierApplication{fakeApplication: newFakeApplication()}
+	audit := newMemoryAudit()
+	dispatcher, err := newDispatcher(
+		api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		exactTestExecutionAuthority(t),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const requestRef = "request:dossier-confirm-public"
+	const dossierRef = "intake-dossier:public-confirmation"
+	result := invoke(
+		t, dispatcher, "orquesta.intakes.dossier.confirm", requestRef,
+		map[string]any{"dossier_ref": dossierRef, "confirm": true}, false,
+	)
+	if result.Failure != nil {
+		t.Fatalf("confirm=%+v", result)
+	}
+	if len(api.confirms) != 1 ||
+		api.confirms[0] != (application.ConfirmIntakeDossierRequest{
+			RequestRef: requestRef,
+			DossierRef: dossierRef,
+			Confirm:    true,
+		}) {
+		t.Fatalf("confirmation request=%+v", api.confirms)
+	}
+	var output struct {
+		Goal         goalReceiptView               `json:"goal"`
+		Confirmation intakeDossierConfirmationView `json:"confirmation"`
+	}
+	if err := json.Unmarshal(result.Data, &output); err != nil {
+		t.Fatal(err)
+	}
+	if output.Confirmation.RequestRef != requestRef ||
+		output.Confirmation.DossierRef != dossierRef ||
+		output.Confirmation.ActorRef != "actor:test" ||
+		output.Confirmation.ProjectRef != "project:test" ||
+		output.Confirmation.IntakeRef != "intake:command-dossier" ||
+		output.Confirmation.IntakeRevision != 2 ||
+		output.Confirmation.GoalRef != "goal:command-dossier-confirmed" ||
+		output.Confirmation.AppSpecRef != "app-spec:command-dossier-confirmed" ||
+		output.Confirmation.ConfirmedAt.IsZero() ||
+		strings.Contains(string(result.Data), `"Created"`) ||
+		strings.Contains(string(result.Data), `"Record"`) {
+		t.Fatalf("confirmation projection=%s", result.Data)
+	}
+
+	for _, field := range []string{
+		"actor_ref", "project_ref", "request_ref", "request_fingerprint",
+		"authorization_receipt_ref", "statement", "plan",
+	} {
+		payload := map[string]any{
+			"dossier_ref": dossierRef,
+			"confirm":     true,
+			field:         "spoof",
+		}
+		spoofed := invoke(
+			t, dispatcher, "orquesta.intakes.dossier.confirm",
+			"request:dossier-confirm-spoof:"+field, payload, false,
+		)
+		if spoofed.Failure == nil ||
+			spoofed.Failure.Code != CodeInvalidRequest {
+			t.Errorf("%s=%+v", field, spoofed)
+		}
+	}
+	if len(api.confirms) != 1 || audit.admits != 1 {
+		t.Fatalf(
+			"spoof reached writer: confirms=%d admits=%d",
+			len(api.confirms), audit.admits,
+		)
+	}
+
+	for _, payload := range []map[string]any{
+		{"dossier_ref": dossierRef},
+		{"confirm": true},
+		{"dossier_ref": dossierRef, "confirm": "true"},
+	} {
+		invalid := invoke(
+			t, dispatcher, "orquesta.intakes.dossier.confirm",
+			"request:dossier-confirm-invalid", payload, false,
+		)
+		if invalid.Failure == nil ||
+			invalid.Failure.Code != CodeInvalidRequest {
+			t.Errorf("invalid payload=%v result=%+v", payload, invalid)
+		}
+	}
+	if len(api.confirms) != 1 || audit.admits != 1 {
+		t.Fatalf(
+			"invalid shape reached writer: confirms=%d admits=%d",
+			len(api.confirms), audit.admits,
+		)
+	}
+
+	notConfirmed := invoke(
+		t, dispatcher, "orquesta.intakes.dossier.confirm",
+		"request:dossier-confirm-false",
+		map[string]any{"dossier_ref": dossierRef, "confirm": false}, false,
+	)
+	if notConfirmed.Failure == nil ||
+		notConfirmed.Failure.Code != CodeInvalidRequest ||
+		len(api.confirms) != 2 ||
+		api.confirms[1].Confirm {
+		t.Fatalf("confirm=false=%+v requests=%+v", notConfirmed, api.confirms)
 	}
 }
 

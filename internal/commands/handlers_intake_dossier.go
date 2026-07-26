@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"orquesta/internal/application"
 	"orquesta/internal/intake"
@@ -56,6 +57,27 @@ type intakeDossierGenerationReceiptView struct {
 	DossierDigest           string `json:"dossier_digest"`
 	PlanDigest              string `json:"plan_digest"`
 	AuthorizationReceiptRef string `json:"authorization_receipt_ref"`
+}
+
+type intakeDossierConfirmationView struct {
+	ReceiptRef              string    `json:"receipt_ref"`
+	RequestRef              string    `json:"request_ref"`
+	RequestFingerprint      string    `json:"request_fingerprint"`
+	PrincipalRef            string    `json:"principal_ref"`
+	ActorRef                string    `json:"actor_ref"`
+	ProjectRef              string    `json:"project_ref"`
+	IntakeRef               string    `json:"intake_ref"`
+	IntakeRevision          uint64    `json:"intake_revision"`
+	IntakeDigest            string    `json:"intake_digest"`
+	SourceIntakeReceiptRef  string    `json:"source_intake_receipt_ref"`
+	DossierRef              string    `json:"dossier_ref"`
+	DossierDigest           string    `json:"dossier_digest"`
+	PlanDigest              string    `json:"plan_digest"`
+	GoalRef                 string    `json:"goal_ref"`
+	AppSpecRef              string    `json:"app_spec_ref"`
+	SpecHash                string    `json:"spec_hash"`
+	AuthorizationReceiptRef string    `json:"authorization_receipt_ref"`
+	ConfirmedAt             time.Time `json:"confirmed_at"`
 }
 
 func handlePrepareIntakeDossier(
@@ -122,6 +144,40 @@ func handleGetIntakeDossier(
 			Dossier intakeDossierView `json:"dossier"`
 		}{Dossier: projectIntakeDossier(record)},
 		normalizeIntakeDossierError(err),
+	)
+}
+
+func handleConfirmIntakeDossier(
+	ctx context.Context,
+	api applicationAPI,
+	bound handlerContext,
+	payload json.RawMessage,
+) (json.RawMessage, error) {
+	var input struct {
+		DossierRef string `json:"dossier_ref"`
+		Confirm    bool   `json:"confirm"`
+	}
+	if err := decodePayload(payload, &input); err != nil {
+		return nil, err
+	}
+	result, err := api.ConfirmIntakeDossier(
+		ctx,
+		bound.access,
+		application.ConfirmIntakeDossierRequest{
+			RequestRef: bound.requestRef,
+			DossierRef: application.IntakeDossierRef(input.DossierRef),
+			Confirm:    input.Confirm,
+		},
+	)
+	return marshalApplication(
+		struct {
+			Goal         goalReceiptView               `json:"goal"`
+			Confirmation intakeDossierConfirmationView `json:"confirmation"`
+		}{
+			Goal:         projectGoalReceipt(result.Record.Goal),
+			Confirmation: projectIntakeDossierConfirmation(result.Confirmation),
+		},
+		err,
 	)
 }
 
@@ -208,6 +264,31 @@ func projectIntakeDossierPlan(plan application.PlanSpec) planInput {
 		})
 	}
 	return projected
+}
+
+func projectIntakeDossierConfirmation(
+	confirmation application.IntakeDossierConfirmation,
+) intakeDossierConfirmationView {
+	return intakeDossierConfirmationView{
+		ReceiptRef:              confirmation.Ref,
+		RequestRef:              confirmation.RequestRef,
+		RequestFingerprint:      confirmation.RequestFingerprint,
+		PrincipalRef:            confirmation.PrincipalRef.String(),
+		ActorRef:                confirmation.ActorRef.String(),
+		ProjectRef:              confirmation.ProjectRef.String(),
+		IntakeRef:               string(confirmation.StateRef),
+		IntakeRevision:          uint64(confirmation.StateRevision),
+		IntakeDigest:            confirmation.StateDigest,
+		SourceIntakeReceiptRef:  confirmation.SourceIntakeReceiptRef,
+		DossierRef:              string(confirmation.DossierRef),
+		DossierDigest:           confirmation.DossierDigest,
+		PlanDigest:              confirmation.PlanDigest,
+		GoalRef:                 confirmation.GoalRef.String(),
+		AppSpecRef:              confirmation.AppSpecRef.String(),
+		SpecHash:                confirmation.SpecHash,
+		AuthorizationReceiptRef: confirmation.AuthorizationReceiptRef,
+		ConfirmedAt:             confirmation.ConfirmedAt,
+	}
 }
 
 func normalizeIntakeDossierError(err error) error {

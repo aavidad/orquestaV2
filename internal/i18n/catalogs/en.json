@@ -18,6 +18,7 @@
   "command.goals.list.description": "List Goals visible in the project.",
   "command.intakes.apply.description": "Apply a causal change to the shared intake.",
   "command.intakes.create.description": "Create a durable intake for the selected project.",
+  "command.intakes.dossier.confirm.description": "Confirm one exact immutable intake dossier and create its causal Goal.",
   "command.intakes.dossier.get.description": "Inspect a durable intake dossier by its immutable reference.",
   "command.intakes.dossier.prepare.description": "Prepare and persist an already-authored intake dossier with its causal plan.",
   "command.intakes.get.description": "Inspect the versioned state of an intake.",
