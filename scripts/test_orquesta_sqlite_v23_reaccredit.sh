@@ -848,6 +848,62 @@ grep -q 'reason_code=materialized_config_binding_invalid' \
   fail_test "config_cgroup_adapter_called"
 
 python3 - "$ROOT/scripts/lib/orquesta_sqlite_v23_reaccredit.py" \
+  "$TEST_ROOT/terminal-publication" <<'PY' ||
+import importlib.util
+import os
+import pathlib
+import stat
+import sys
+
+spec = importlib.util.spec_from_file_location("subject_terminal", sys.argv[1])
+subject = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+sys.modules[spec.name] = subject
+spec.loader.exec_module(subject)
+root = pathlib.Path(sys.argv[2])
+root.mkdir(mode=0o700)
+
+fsync_failure = root / "fsync-failure.json"
+real_fsync = subject.os.fsync
+
+def fail_directory_fsync(descriptor):
+    if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+        raise OSError("fixture directory fsync failure")
+    return real_fsync(descriptor)
+
+subject.os.fsync = fail_directory_fsync
+try:
+    try:
+        subject.write_terminal_receipt(fsync_failure, {"result": "pass"})
+    except OSError:
+        pass
+    else:
+        raise AssertionError("directory fsync failure accepted")
+finally:
+    subject.os.fsync = real_fsync
+assert not fsync_failure.exists()
+assert not fsync_failure.with_name(".fsync-failure.json.pending").exists()
+
+existing = root / "existing.json"
+existing.write_text("original\n", encoding="utf-8")
+existing.chmod(0o600)
+try:
+    subject.write_terminal_receipt(existing, {"result": "pass"})
+except FileExistsError:
+    pass
+else:
+    raise AssertionError("terminal receipt overwrite accepted")
+assert existing.read_text(encoding="utf-8") == "original\n"
+assert not existing.with_name(".existing.json.pending").exists()
+
+published = root / "published.json"
+subject.write_terminal_receipt(published, {"result": "pass"})
+assert published.stat().st_nlink == 1
+assert stat.S_IMODE(published.stat().st_mode) == 0o600
+PY
+  fail_test "terminal_receipt_publication"
+
+python3 - "$ROOT/scripts/lib/orquesta_sqlite_v23_reaccredit.py" \
   "$TEST_ROOT/wal-visible.sqlite" <<'PY' ||
 import importlib.util
 import pathlib

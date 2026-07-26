@@ -1137,17 +1137,44 @@ def write_receipt(path: Path, value: dict[str, Any]) -> str:
 
 def write_terminal_receipt(path: Path, value: dict[str, Any]) -> str:
     pending = path.with_name("." + path.name + ".pending")
-    digest = write_receipt(pending, value)
-    os.replace(pending, path)
+    linked = False
     try:
+        digest = write_receipt(pending, value)
+        os.link(pending, path, follow_symlinks=False)
+        linked = True
+        pending.unlink()
+        metadata = path.lstat()
+        if (
+            not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or stat.S_IMODE(metadata.st_mode) != 0o600
+        ):
+            fail("terminal_receipt_contract_failed")
         descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(descriptor)
         finally:
             os.close(descriptor)
-    except OSError:
-        pass
-    return digest
+        return digest
+    except BaseException:
+        for candidate in (path if linked else None, pending):
+            if candidate is None:
+                continue
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+        try:
+            descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        except OSError:
+            pass
+        raise
 
 
 def parser() -> argparse.ArgumentParser:
@@ -2369,7 +2396,7 @@ def main(arguments: Sequence[str]) -> int:
             failure_path = output_root / "failure.json"
             if not failure_path.exists():
                 try:
-                    write_receipt(
+                    write_terminal_receipt(
                         failure_path,
                         {
                             "schema_version": SCHEMA,
