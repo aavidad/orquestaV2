@@ -14,6 +14,7 @@ type wizardGapsPreflight struct {
 	questionDerivations map[intake.QuestionRef]intake.DerivationIdentity
 	issues              map[intake.IssueRef]intake.Issue
 	questions           map[intake.QuestionRef]intake.Question
+	reopened            map[intake.QuestionRef]struct{}
 }
 
 type wizardGapsIssueContract struct {
@@ -102,6 +103,7 @@ func preflightWizardGapsQuestions(
 	}
 
 	questions := make(map[intake.QuestionRef]intake.Question)
+	reopened := wizardGapsReconcilableQuestions(state)
 	for _, question := range state.Questions() {
 		questions[question.Ref] = question
 		if dimension, canonical := contracts[question.Ref]; canonical {
@@ -133,7 +135,7 @@ func preflightWizardGapsQuestions(
 	return wizardGapsPreflight{
 		dimensions: contracts, issueDerivations: issueDerivations,
 		questionDerivations: questionDerivations, issues: issues,
-		questions: questions,
+		questions: questions, reopened: reopened,
 	}, nil
 }
 
@@ -172,6 +174,10 @@ func preflightWizardGapsDimensionPayloads(
 		if expected.Ref == "" ||
 			preflight.questionDerivations[questionRef] != evaluator.Identity() ||
 			!wizardGapsQuestionPayloadEqual(actual, expected) {
+			if _, causallyReopened := preflight.reopened[questionRef]; causallyReopened && expected.Ref != "" &&
+				preflight.questionDerivations[questionRef] == evaluator.Identity() {
+				continue
+			}
 			return wizardGapsProjectionConflict("question", string(questionRef))
 		}
 	}
@@ -225,9 +231,13 @@ func preflightWizardGapsSupplementalQuestions(
 		if !canonical {
 			continue
 		}
-		if preflight.questionDerivations[question.Ref] != identity ||
-			!wizardGapsQuestionPayloadEqual(question, want) {
+		if preflight.questionDerivations[question.Ref] != identity {
 			return wizardGapsProjectionConflict("question", string(question.Ref))
+		}
+		if !wizardGapsQuestionPayloadEqual(question, want) {
+			if _, causallyReopened := preflight.reopened[question.Ref]; !causallyReopened {
+				return wizardGapsProjectionConflict("question", string(question.Ref))
+			}
 		}
 		for _, ref := range want.DerivedFrom {
 			actualIssue, found := preflight.issues[ref]
@@ -250,17 +260,19 @@ func wizardGapsArtifactDerivations(
 	error,
 ) {
 	issues := state.Issues()
-	questions := state.Questions()
+	questionVersions := state.QuestionVersions()
 	issueDerivations := make(map[intake.IssueRef]intake.DerivationIdentity, len(issues))
 	questionDerivations := make(
 		map[intake.QuestionRef]intake.DerivationIdentity,
-		len(questions),
+		len(questionVersions),
 	)
-	issueOffset, questionOffset := 0, 0
+	issueOffset, questionVersionOffset := 0, 0
 	for _, mutation := range state.History() {
+		versionCount := mutation.QuestionsAdded + mutation.QuestionsRevised
 		if mutation.IssuesAdded < 0 || mutation.QuestionsAdded < 0 ||
+			mutation.QuestionsRevised < 0 ||
 			mutation.IssuesAdded > len(issues)-issueOffset ||
-			mutation.QuestionsAdded > len(questions)-questionOffset {
+			versionCount > len(questionVersions)-questionVersionOffset {
 			return nil, nil, wizardGapsProjectionConflict(
 				"history",
 				string(state.Ref()),
@@ -269,13 +281,14 @@ func wizardGapsArtifactDerivations(
 		for _, issue := range issues[issueOffset : issueOffset+mutation.IssuesAdded] {
 			issueDerivations[issue.Ref] = mutation.Derivation
 		}
-		for _, question := range questions[questionOffset : questionOffset+mutation.QuestionsAdded] {
-			questionDerivations[question.Ref] = mutation.Derivation
+		for _, version := range questionVersions[questionVersionOffset : questionVersionOffset+versionCount] {
+			questionDerivations[version.Question.Ref] = mutation.Derivation
 		}
 		issueOffset += mutation.IssuesAdded
-		questionOffset += mutation.QuestionsAdded
+		questionVersionOffset += versionCount
 	}
-	if issueOffset != len(issues) || questionOffset != len(questions) {
+	if issueOffset != len(issues) ||
+		questionVersionOffset != len(questionVersions) {
 		return nil, nil, wizardGapsProjectionConflict("history", string(state.Ref()))
 	}
 	return issueDerivations, questionDerivations, nil
