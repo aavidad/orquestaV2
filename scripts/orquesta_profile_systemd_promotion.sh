@@ -43,7 +43,8 @@ contract_usage() {
 --expected-config-target-ref --git --expected-git-sha256 --go
 --expected-go-sha256 --profile-script --expected-profile-script-sha256
 --systemd-adapter --expected-systemd-adapter-sha256 --promotion-helper
---expected-promotion-helper-sha256 --runtime-base --source-codex-home --binary
+--expected-promotion-helper-sha256 --expected-maintenance-marker-reader-sha256
+--runtime-base --source-codex-home --binary
 --expected-binary-sha256 --primary-config --expected-primary-config-sha256
 --rollback-config --expected-rollback-config-sha256 --bubblewrap
 --expected-bubblewrap-sha256 --sqlite-db --backup-dir --promotion-state-dir
@@ -77,7 +78,9 @@ while [ "$#" -gt 0 ]; do
     --expected-config-target-ref|--git|--expected-git-sha256|--go|\
     --expected-go-sha256|--profile-script|--expected-profile-script-sha256|\
     --systemd-adapter|--expected-systemd-adapter-sha256|--promotion-helper|\
-    --expected-promotion-helper-sha256|--runtime-base|--source-codex-home|\
+    --expected-promotion-helper-sha256|\
+    --expected-maintenance-marker-reader-sha256|--runtime-base|\
+    --source-codex-home|\
     --binary|--expected-binary-sha256|--primary-config|\
     --expected-primary-config-sha256|--rollback-config|\
     --expected-rollback-config-sha256|--bubblewrap|\
@@ -111,7 +114,8 @@ readonly REQUIRED_KEYS=(
   expected-config-target-ref git expected-git-sha256 go expected-go-sha256
   profile-script expected-profile-script-sha256 systemd-adapter
   expected-systemd-adapter-sha256 promotion-helper
-  expected-promotion-helper-sha256 runtime-base source-codex-home binary
+  expected-promotion-helper-sha256 expected-maintenance-marker-reader-sha256
+  runtime-base source-codex-home binary
   expected-binary-sha256 primary-config expected-primary-config-sha256
   rollback-config expected-rollback-config-sha256 bubblewrap
   expected-bubblewrap-sha256 sqlite-db backup-dir promotion-state-dir
@@ -140,6 +144,11 @@ readonly git_command="${value[git]}" go_command="${value[go]}"
 readonly profile_script="${value[profile-script]}"
 readonly systemd_adapter="${value[systemd-adapter]}"
 readonly promotion_helper="${value[promotion-helper]}"
+profile_script_dir="$(dirname "$profile_script")"
+readonly profile_script_dir
+systemd_adapter_dir="$(dirname "$systemd_adapter")"
+readonly systemd_adapter_dir
+readonly maintenance_marker_reader="$profile_script_dir/lib/profile_maintenance_marker.py"
 readonly runtime_base="${value[runtime-base]}"
 readonly source_codex_home="${value[source-codex-home]}"
 readonly binary="${value[binary]}"
@@ -158,6 +167,10 @@ readonly firecracker_unit="${value[firecracker-unit]}"
 readonly firecracker_root_gate_ref="${value[firecracker-root-gate-ref]}"
 readonly launcher_socket="${value[launcher-socket]}"
 readonly sqlite_upgrade_receipt="${value[sqlite-upgrade-receipt]}"
+readonly global_lock_root="$runtime_base/.profile-locks"
+readonly global_control_lock="$global_lock_root/$profile.control.lock"
+readonly global_lease_lock="$global_lock_root/$profile.lease.lock"
+readonly global_maintenance_marker="$global_lock_root/$profile.maintenance"
 readonly readiness_timeout="${value[readiness-timeout]:-30}"
 readonly collection_timeout="${value[collection-timeout]:-10}"
 current_uid="$(id -u)"
@@ -166,6 +179,7 @@ readonly current_uid
 readonly SHA_KEYS=(
   expected-git-sha256 expected-go-sha256 expected-profile-script-sha256
   expected-systemd-adapter-sha256 expected-promotion-helper-sha256
+  expected-maintenance-marker-reader-sha256
   expected-binary-sha256 expected-primary-config-sha256
   expected-rollback-config-sha256 expected-bubblewrap-sha256
   expected-systemctl-sha256 expected-systemd-run-sha256
@@ -268,13 +282,21 @@ validate_paths_and_hashes() {
     trusted_directory "$path" || fail "trusted_directory_invalid"
   done
   for path in "$runtime_base" "$source_codex_home" "$backup_dir" \
-    "$promotion_state_dir"; do
+    "$promotion_state_dir" "$global_lock_root"; do
     private_directory "$path" || fail "private_directory_invalid"
   done
   for path in "$git_command" "$go_command" "$profile_script" \
     "$systemd_adapter" "$promotion_helper" "$bubblewrap" "$systemctl_command" \
-    "$systemd_run_command" "$firecracker_probe"; do
+    "$systemd_run_command" "$firecracker_probe" \
+    "$maintenance_marker_reader"; do
     trusted_executable "$path" || fail "trusted_executable_invalid"
+  done
+  [ "$profile_script_dir" = "$systemd_adapter_dir" ] ||
+    fail "profile_adapter_directory_mismatch"
+  for path in "$global_control_lock" "$global_lease_lock"; do
+    private_file "$path" &&
+      [ "$(stat -Lc '%a' -- "$path")" = 600 ] ||
+      fail "profile_lock_invalid"
   done
   if [ "$(stat -Lc '%u:%a:%h' -- "$binary")" != "$current_uid:500:1" ] ||
     ! canonical_existing "$binary"; then
@@ -301,6 +323,9 @@ validate_paths_and_hashes() {
       expected-profile-script-sha256) path="$profile_script" ;;
       expected-systemd-adapter-sha256) path="$systemd_adapter" ;;
       expected-promotion-helper-sha256) path="$promotion_helper" ;;
+      expected-maintenance-marker-reader-sha256)
+        path="$maintenance_marker_reader"
+        ;;
       expected-binary-sha256) path="$binary" ;;
       expected-primary-config-sha256) path="$primary_config" ;;
       expected-rollback-config-sha256) path="$rollback_config" ;;
@@ -560,7 +585,71 @@ readonly contract_sha
 readonly backup_path="$backup_dir/orquesta-pre-promotion-${contract_sha:0:16}.sqlite"
 readonly backup_receipt="$backup_dir/orquesta-pre-promotion-${contract_sha:0:16}.receipt"
 readonly snapshot_file="$promotion_state_dir/pre-stop.snapshot"
+readonly old_unit_outcome_file="$promotion_state_dir/old-unit.outcome"
+readonly primary_unit_snapshot="$promotion_state_dir/candidate-primary.snapshot"
+readonly rollback_unit_snapshot="$promotion_state_dir/candidate-rollback.snapshot"
 readonly final_receipt="$promotion_state_dir/promotion.receipt"
+
+maintenance_marker_exists() {
+  [ -e "$global_maintenance_marker" ] ||
+    [ -L "$global_maintenance_marker" ]
+}
+
+verify_maintenance_marker() {
+  local observed
+  observed="$("$maintenance_marker_reader" \
+    "$global_maintenance_marker" "$current_uid")" ||
+    fail "maintenance_marker_invalid"
+  [ "$observed" = "$contract_sha" ] ||
+    fail "maintenance_ref_mismatch"
+}
+
+publish_maintenance_marker() {
+  exec 8<>"$global_control_lock"
+  flock -w 10 8 || fail "profile_control_busy"
+  "$promotion_helper" publish-record --path "$global_maintenance_marker" \
+    --directory "$global_lock_root" \
+    --content "maintenance_ref=$contract_sha" ||
+    fail "maintenance_marker_publish_failed"
+  verify_maintenance_marker
+  flock -u 8
+  exec 8>&-
+}
+
+remove_maintenance_marker() {
+  if ! maintenance_marker_exists; then
+    return
+  fi
+  exec 8<>"$global_control_lock"
+  flock -w 10 8 || fail "profile_control_busy"
+  verify_maintenance_marker
+  "$promotion_helper" remove-record --path "$global_maintenance_marker" \
+    --directory "$global_lock_root" \
+    --content "maintenance_ref=$contract_sha" ||
+    fail "maintenance_marker_remove_failed"
+  maintenance_marker_exists && fail "maintenance_marker_remove_failed"
+  flock -u 8
+  exec 8>&-
+}
+
+lease_held=0
+acquire_profile_lease() {
+  if [ "$lease_held" -eq 1 ]; then
+    return 0
+  fi
+  exec 7<>"$global_lease_lock"
+  flock -w 10 7 || fail "profile_lease_busy"
+  lease_held=1
+}
+
+release_profile_lease() {
+  if [ "$lease_held" -eq 0 ]; then
+    return 0
+  fi
+  flock -u 7
+  exec 7>&-
+  lease_held=0
+}
 
 phase_file() { printf '%s/phase.%s\n' "$promotion_state_dir" "$1"; }
 phase_content() {
@@ -636,6 +725,8 @@ write_snapshot() {
   private_atomic_record "$snapshot_file" "$content"
 }
 
+SNAP_INVOCATION_ID=""
+SNAP_MAIN_PID=""
 verify_snapshot() {
   local expected_process_cgroup
   local -a lines=()
@@ -662,6 +753,8 @@ verify_snapshot() {
       "candidate_binary_sha256=${value[expected-binary-sha256]}" ]; then
     fail "pre_stop_snapshot_invalid"
   fi
+  SNAP_INVOCATION_ID="${lines[3]#invocation_id=}"
+  SNAP_MAIN_PID="${lines[4]#main_pid=}"
 }
 
 verify_snapshot_matches_live() {
@@ -669,6 +762,132 @@ verify_snapshot_matches_live() {
   observed="$(snapshot_content)"
   [ "$(<"$snapshot_file")" = "$observed" ] ||
     fail "pre_stop_snapshot_live_mismatch"
+}
+
+verify_snapshot_matches_unit() {
+  [ "$OBS_INVOCATION_ID" = "$SNAP_INVOCATION_ID" ] &&
+    [ "$OBS_MAIN_PID" = "$SNAP_MAIN_PID" ] ||
+    fail "pre_stop_snapshot_unit_mismatch"
+}
+
+OLD_UNIT_OUTCOME=""
+write_old_unit_outcome() {
+  case "$1" in
+    matched|already_absent) ;;
+    *) fail "old_unit_outcome_invalid" ;;
+  esac
+  private_atomic_record "$old_unit_outcome_file" "old_unit_outcome=$1"
+  OLD_UNIT_OUTCOME="$1"
+}
+
+read_old_unit_outcome() {
+  private_file "$old_unit_outcome_file" ||
+    fail "old_unit_outcome_invalid"
+  case "$(<"$old_unit_outcome_file")" in
+    old_unit_outcome=matched) OLD_UNIT_OUTCOME=matched ;;
+    old_unit_outcome=already_absent) OLD_UNIT_OUTCOME=already_absent ;;
+    *) fail "old_unit_outcome_invalid" ;;
+  esac
+}
+
+CANDIDATE_INVOCATION_ID=""
+CANDIDATE_MAIN_PID=""
+candidate_unit_snapshot_path() {
+  case "$1" in
+    primary) printf '%s\n' "$primary_unit_snapshot" ;;
+    rollback) printf '%s\n' "$rollback_unit_snapshot" ;;
+    *) fail "candidate_kind_invalid" ;;
+  esac
+}
+
+candidate_unit_content() {
+  local kind="$1"
+  printf '%s\n' \
+    "schema=orquesta_profile_systemd_promotion_candidate_unit.v1" \
+    "contract_sha256=$contract_sha" "kind=$kind" "unit=$unit" \
+    "invocation_id=$OBS_INVOCATION_ID" "main_pid=$OBS_MAIN_PID" \
+    "daemon_pid=$OBS_DAEMON_PID" \
+    "daemon_start_ref=$OBS_DAEMON_START_REF" \
+    "daemon_binary_id=$OBS_DAEMON_BINARY_ID" \
+    "live_binary_sha256=$OBS_LIVE_BINARY_SHA" \
+    "live_config_sha256=$OBS_LIVE_CONFIG_SHA"
+}
+
+read_candidate_unit_snapshot() {
+  local kind="$1" path expected_config_sha
+  local -a lines=()
+  path="$(candidate_unit_snapshot_path "$kind")"
+  if [ "$kind" = primary ]; then
+    expected_config_sha="${value[expected-primary-config-sha256]}"
+  else
+    expected_config_sha="${value[expected-rollback-config-sha256]}"
+  fi
+  private_file "$path" || fail "candidate_unit_snapshot_invalid"
+  mapfile -t lines <"$path"
+  if [ "${#lines[@]}" -ne 11 ] ||
+    [ "${lines[0]}" != \
+      "schema=orquesta_profile_systemd_promotion_candidate_unit.v1" ] ||
+    [ "${lines[1]}" != "contract_sha256=$contract_sha" ] ||
+    [ "${lines[2]}" != "kind=$kind" ] ||
+    [ "${lines[3]}" != "unit=$unit" ] ||
+    ! [[ "${lines[4]#invocation_id=}" =~ ^[0-9a-f]{32}$ ]] ||
+    ! [[ "${lines[5]#main_pid=}" =~ ^[1-9][0-9]*$ ]] ||
+    ! [[ "${lines[6]#daemon_pid=}" =~ ^[1-9][0-9]*$ ]] ||
+    ! [[ "${lines[7]#daemon_start_ref=}" =~ ^[1-9][0-9]*$ ]] ||
+    ! [[ "${lines[8]#daemon_binary_id=}" =~ ^[0-9]+:[0-9]+$ ]] ||
+    [ "${lines[9]}" != \
+      "live_binary_sha256=${value[expected-binary-sha256]}" ] ||
+    [ "${lines[10]}" != "live_config_sha256=$expected_config_sha" ]; then
+    fail "candidate_unit_snapshot_invalid"
+  fi
+  CANDIDATE_INVOCATION_ID="${lines[4]#invocation_id=}"
+  CANDIDATE_MAIN_PID="${lines[5]#main_pid=}"
+}
+
+capture_candidate_unit() {
+  local kind="$1" path content expected_config_sha
+  observe_live_profile_without_config_target
+  if [ "$kind" = primary ]; then
+    expected_config_sha="${value[expected-primary-config-sha256]}"
+  else
+    expected_config_sha="${value[expected-rollback-config-sha256]}"
+  fi
+  [ "$OBS_LIVE_BINARY_SHA" = "${value[expected-binary-sha256]}" ] &&
+    [ "$OBS_LIVE_CONFIG_SHA" = "$expected_config_sha" ] ||
+    fail "candidate_profile_identity_invalid"
+  path="$(candidate_unit_snapshot_path "$kind")"
+  content="$(candidate_unit_content "$kind")"
+  private_atomic_record "$path" "$content"
+  read_candidate_unit_snapshot "$kind"
+}
+
+verify_candidate_unit_matches_live() {
+  local kind="$1" path observed
+  read_candidate_unit_snapshot "$kind"
+  observe_live_profile_without_config_target
+  path="$(candidate_unit_snapshot_path "$kind")"
+  observed="$(candidate_unit_content "$kind")"
+  [ "$(<"$path")" = "$observed" ] ||
+    fail "candidate_unit_identity_mismatch"
+}
+
+verify_candidate_unit_matches_base() {
+  local kind="$1"
+  read_candidate_unit_snapshot "$kind"
+  require_live_unit_contract
+  [ "$OBS_INVOCATION_ID" = "$CANDIDATE_INVOCATION_ID" ] &&
+    [ "$OBS_MAIN_PID" = "$CANDIDATE_MAIN_PID" ] ||
+    fail "candidate_unit_identity_mismatch"
+}
+
+retire_candidate_unit_snapshot() {
+  local kind="$1" path content
+  path="$(candidate_unit_snapshot_path "$kind")"
+  read_candidate_unit_snapshot "$kind"
+  content="$(<"$path")"
+  "$promotion_helper" remove-record --path "$path" \
+    --directory "$promotion_state_dir" --content "$content" ||
+    fail "candidate_unit_snapshot_retire_failed"
 }
 
 declare -a ADAPTER_ARGS=()
@@ -687,6 +906,7 @@ adapter_args() {
     --systemd-run "$systemd_run_command"
     --expected-systemd-run-sha256 "${value[expected-systemd-run-sha256]}"
     --proc-root "$proc_root" --cgroup-mount "$cgroup_mount"
+    --maintenance-ref "$contract_sha"
     --readiness-timeout "$readiness_timeout"
     --collection-timeout "$collection_timeout"
   )
@@ -714,7 +934,9 @@ profile_stopped() {
 }
 
 verify_candidate() {
-  local kind="$1" config config_sha provider concurrency output
+  local kind="$1" functional_mode="${2:-required}"
+  local config config_sha provider concurrency output
+  local -a sqlite_after_args=()
   if [ "$kind" = primary ]; then
     config="$primary_config"
     config_sha="${value[expected-primary-config-sha256]}"
@@ -738,8 +960,15 @@ verify_candidate() {
     --cgroup "$expected_cgroup_root" --launcher-socket "$launcher_socket" \
     --asset-digest "${value[expected-asset-digest]}" ||
     fail "effective_config_invalid"
-  "$promotion_helper" sqlite-after --path "$sqlite_db" \
-    --repository "$repository_root" || fail "sqlite_post_start_invalid"
+  sqlite_after_args=(
+    --path "$sqlite_db"
+    --repository "$repository_root"
+    --backup "$backup_path"
+  )
+  [ "$functional_mode" = required ] ||
+    sqlite_after_args+=(--skip-functional)
+  "$promotion_helper" sqlite-after "${sqlite_after_args[@]}" ||
+    fail "sqlite_post_start_invalid"
 }
 
 candidate_running() {
@@ -770,13 +999,23 @@ preflight_against_live() {
 }
 
 stop_live_profile() {
+  adapter stop-profile "$primary_config" \
+    "${value[expected-primary-config-sha256]}" >/dev/null ||
+    fail "profile_stop_failed"
+  if [ -e "$proc_root/$OBS_DAEMON_PID/exe" ] || [ -e "$pid_file" ] ||
+    ! profile_stopped; then
+    fail "profile_stop_not_confirmed"
+  fi
+}
+
+stop_profile_idempotent() {
   local output
   output="$("$profile_script" stop --profile "$profile" \
-    --runtime-base "$runtime_base")" || fail "profile_stop_failed"
+    --runtime-base "$runtime_base" --maintenance-ref "$contract_sha")" ||
+    fail "profile_stop_failed"
   if [ "$output" != \
     "orquesta_profile_server: status=stopped profile=$profile" ] ||
-    [ -e "$proc_root/$OBS_DAEMON_PID/exe" ] || [ -e "$pid_file" ] ||
-    ! profile_stopped; then
+    [ -e "$pid_file" ] || ! profile_stopped; then
     fail "profile_stop_not_confirmed"
   fi
 }
@@ -803,6 +1042,15 @@ verify_backup() {
 }
 
 collect_unit() {
+  load_user_unit
+  case "${USER_UNIT[LoadState]}" in
+    loaded)
+      require_live_unit_contract
+      verify_snapshot_matches_unit
+      ;;
+    not-found) ;;
+    *) fail "old_unit_state_invalid" ;;
+  esac
   adapter collect "$primary_config" \
     "${value[expected-primary-config-sha256]}" >/dev/null
   load_user_unit
@@ -810,24 +1058,52 @@ collect_unit() {
 }
 
 prepare_rollback_unit() {
-  local output status
-  set +e
-  output="$("$profile_script" stop --profile "$profile" \
-    --runtime-base "$runtime_base" 2>&1)"
-  status="$?"
-  set -e
-  [ "$status" -eq 0 ] &&
-    [ "$output" = "orquesta_profile_server: status=stopped profile=$profile" ] ||
-    fail "rollback_profile_stop_failed"
-  adapter collect "$rollback_config" \
-    "${value[expected-rollback-config-sha256]}" >/dev/null
+  local stopped_kind="" primary_config_path primary_config_sha
+  if [ -e "$rollback_unit_snapshot" ]; then
+    stopped_kind=rollback
+    primary_config_path="$rollback_config"
+    primary_config_sha="${value[expected-rollback-config-sha256]}"
+  elif [ -e "$primary_unit_snapshot" ]; then
+    stopped_kind=primary
+    primary_config_path="$primary_config"
+    primary_config_sha="${value[expected-primary-config-sha256]}"
+  else
+    primary_config_path="$primary_config"
+    primary_config_sha="${value[expected-primary-config-sha256]}"
+  fi
+  load_user_unit
+  if [ "${USER_UNIT[LoadState]}" = loaded ]; then
+    [ -n "$stopped_kind" ] || fail "candidate_unit_snapshot_missing"
+    verify_candidate_unit_matches_base "$stopped_kind"
+    if profile_stopped; then
+      stop_profile_idempotent
+    else
+      verify_candidate_unit_matches_live "$stopped_kind"
+      adapter stop-profile "$primary_config_path" \
+        "$primary_config_sha" >/dev/null ||
+        fail "rollback_profile_stop_failed"
+    fi
+    load_user_unit
+    verify_candidate_unit_matches_base "$stopped_kind"
+  else
+    [ "${USER_UNIT[LoadState]}" = not-found ] ||
+      fail "rollback_unit_state_invalid"
+    stop_profile_idempotent
+  fi
+  adapter collect "$primary_config_path" "$primary_config_sha" >/dev/null
+  [ "$stopped_kind" != rollback ] ||
+    retire_candidate_unit_snapshot rollback
 }
 
 write_final_receipt() {
-  local result="$1" config_sha active backup_sha content
+  local result="$1" config_sha active backup_sha functional_sha content
+  read_old_unit_outcome
   verify_backup
   backup_sha="$("$promotion_helper" verify-backup --target "$backup_path" \
     --receipt "$backup_receipt" --contract "$contract_sha")"
+  functional_sha="$("$promotion_helper" functional-digest \
+    --path "$sqlite_db" --projection-from "$backup_path")" ||
+    fail "sqlite_functional_data_changed"
   if [ "$result" = primary ]; then
     config_sha="${value[expected-primary-config-sha256]}"
     active=true
@@ -843,24 +1119,41 @@ write_final_receipt() {
       "firecracker_root_gate_ref=$firecracker_root_gate_ref" \
       "firecracker_root_evidence_scope=operator_reference_only" \
       "firecracker_application_attestation=pending" \
-      "backup_restore_performed=false"
+      "backup_restore_performed=false" \
+      "old_unit_outcome=$OLD_UNIT_OUTCOME" \
+      "functional_data_sha256=$functional_sha"
   )"
   private_atomic_record "$final_receipt" "$content"
   write_phase 90-complete
 }
 
 read_final_result() {
-  local backup_sha
+  local functional_mode="${1:-required}" backup_sha functional_sha
+  local -a final_args=()
+  read_old_unit_outcome
   verify_backup
   backup_sha="$("$promotion_helper" verify-backup --target "$backup_path" \
     --receipt "$backup_receipt" --contract "$contract_sha")" ||
     fail "sqlite_backup_invalid"
-  "$promotion_helper" final-receipt --path "$final_receipt" \
+  final_args=(
+    --path "$final_receipt"
     --owner-uid "$current_uid" --contract "$contract_sha" \
     --binary-sha "${value[expected-binary-sha256]}" \
     --primary-config-sha "${value[expected-primary-config-sha256]}" \
     --rollback-config-sha "${value[expected-rollback-config-sha256]}" \
-    --backup-sha "$backup_sha" --root-gate-ref "$firecracker_root_gate_ref" ||
+    --backup-sha "$backup_sha" --root-gate-ref "$firecracker_root_gate_ref" \
+    --old-unit-outcome "$OLD_UNIT_OUTCOME"
+  )
+  functional_sha="$("$promotion_helper" functional-digest \
+    --path "$backup_path" --projection-from "$backup_path")" ||
+    fail "sqlite_backup_functional_data_invalid"
+  if [ "$functional_mode" = required ]; then
+    "$promotion_helper" functional-digest \
+      --path "$sqlite_db" --projection-from "$backup_path" >/dev/null ||
+      fail "sqlite_functional_data_changed"
+  fi
+  final_args+=(--functional-data-sha "$functional_sha")
+  "$promotion_helper" final-receipt "${final_args[@]}" ||
     fail "final_receipt_invalid"
 }
 
@@ -870,19 +1163,34 @@ detect_phase
 
 if [ "$mode" = check ]; then
   if [ "$phase_number" -eq 0 ]; then
-    verify_firecracker_gate
-    observe_live_profile_without_config_target
-    "$promotion_helper" sqlite-before --path "$sqlite_db" ||
-      fail "sqlite_pre_cut_invalid"
-    printf '%s: status=ready action=check phase=preflight profile=%s unit=%s\n' \
-      "$PROGRAM" "$profile" "$unit"
+    if maintenance_marker_exists; then
+      verify_maintenance_marker
+      verify_snapshot
+      printf '%s: status=resumable action=check phase=preflight-published profile=%s unit=%s\n' \
+        "$PROGRAM" "$profile" "$unit"
+    else
+      [ ! -e "$snapshot_file" ] ||
+        fail "maintenance_marker_missing"
+      verify_firecracker_gate
+      observe_live_profile_without_config_target
+      "$promotion_helper" sqlite-before --path "$sqlite_db" ||
+        fail "sqlite_pre_cut_invalid"
+      printf '%s: status=ready action=check phase=preflight profile=%s unit=%s\n' \
+        "$PROGRAM" "$profile" "$unit"
+    fi
   elif [ "$phase_number" -eq 90 ]; then
-    result="$(read_final_result)"
+    functional_mode=post_cut
+    if maintenance_marker_exists; then
+      verify_maintenance_marker
+      functional_mode=required
+    fi
+    result="$(read_final_result "$functional_mode")"
     [ "$result" != primary ] || verify_firecracker_gate
-    verify_candidate "$result"
+    verify_candidate "$result" "$functional_mode"
     printf '%s: status=complete action=check mode=%s profile=%s unit=%s\n' \
       "$PROGRAM" "$result" "$profile" "$unit"
   else
+    verify_maintenance_marker
     [ "$phase_number" -lt 30 ] || verify_backup
     printf '%s: status=resumable action=check phase=%s profile=%s unit=%s\n' \
       "$PROGRAM" "$phase_number" "$profile" "$unit"
@@ -900,6 +1208,28 @@ exec 9<>"$lock_file"
 flock -n 9 || fail "promotion_already_running"
 detect_phase
 
+if [ "$phase_number" -eq 0 ] && maintenance_marker_exists; then
+  verify_maintenance_marker
+  verify_snapshot
+  write_phase 10-preflight
+elif [ "$phase_number" -eq 0 ] && [ -e "$snapshot_file" ]; then
+  verify_snapshot
+  observe_live_profile_without_config_target
+  verify_snapshot_matches_live
+  publish_maintenance_marker
+  write_phase 10-preflight
+elif [ "$phase_number" -eq 0 ]; then
+  :
+elif [ "$phase_number" -lt 90 ]; then
+  verify_maintenance_marker
+else
+  maintenance_marker_exists && verify_maintenance_marker
+fi
+
+if [ "$phase_number" -ge 20 ] && [ "$phase_number" -le 40 ]; then
+  acquire_profile_lease
+fi
+
 if [ "$phase_number" -eq 0 ]; then
   verify_firecracker_gate
   observe_live_profile_without_config_target
@@ -907,25 +1237,65 @@ if [ "$phase_number" -eq 0 ]; then
     fail "sqlite_pre_cut_invalid"
   preflight_against_live
   write_snapshot
+  verify_snapshot
+  publish_maintenance_marker
   write_phase 10-preflight
 fi
 
 if [ "$phase_number" -eq 10 ]; then
-  if [ -e "$pid_file" ]; then
-    observe_live_profile_without_config_target
-    verify_snapshot_matches_live
-    stop_live_profile
-  else
-    profile_stopped || fail "profile_not_stopped_on_reentry"
-  fi
+  [ ! -e "$old_unit_outcome_file" ] || read_old_unit_outcome
+  load_user_unit
+  case "${USER_UNIT[LoadState]}" in
+    loaded)
+      if [ "$OLD_UNIT_OUTCOME" = matched ]; then
+        require_live_unit_contract
+        verify_snapshot_matches_unit
+        if profile_stopped; then
+          stop_profile_idempotent
+        else
+          observe_live_profile_without_config_target
+          verify_snapshot_matches_live
+          stop_live_profile
+        fi
+      elif [ -z "$OLD_UNIT_OUTCOME" ]; then
+        observe_live_profile_without_config_target
+        verify_snapshot_matches_live
+        write_old_unit_outcome matched
+        stop_live_profile
+      else
+        fail "old_unit_outcome_conflict"
+      fi
+      ;;
+    not-found)
+      [ "$OLD_UNIT_OUTCOME" != already_absent ] ||
+        OLD_UNIT_OUTCOME=already_absent
+      [ -n "$OLD_UNIT_OUTCOME" ] ||
+        write_old_unit_outcome already_absent
+      stop_profile_idempotent
+      ;;
+    *) fail "old_unit_state_invalid" ;;
+  esac
+  acquire_profile_lease
   write_phase 20-profile-stopped
 fi
 
 if [ "$phase_number" -eq 20 ]; then
+  read_old_unit_outcome
   load_user_unit
-  require_live_unit_contract
+  case "${USER_UNIT[LoadState]}" in
+    loaded)
+      [ "$OLD_UNIT_OUTCOME" = matched ] ||
+        fail "old_unit_outcome_conflict"
+      require_live_unit_contract
+      verify_snapshot_matches_unit
+      ;;
+    not-found) ;;
+    *) fail "old_unit_state_invalid" ;;
+  esac
   profile_stopped || fail "profile_not_stopped_before_backup"
   ensure_no_sqlite_writer
+  "$promotion_helper" sqlite-before --path "$sqlite_db" ||
+    fail "sqlite_pre_cut_invalid"
   "$promotion_helper" backup --source "$sqlite_db" --target "$backup_path" \
     --directory "$backup_dir" --receipt "$backup_receipt" \
     --contract "$contract_sha" >/dev/null || fail "sqlite_backup_failed"
@@ -944,19 +1314,21 @@ if [ "$phase_number" -eq 40 ]; then
   else
     write_phase 70-rollback-started
   fi
+  release_profile_lease
 fi
 
 if [ "$phase_number" -eq 50 ]; then
   primary_ok=0
   if candidate_running primary; then
-    (verify_candidate primary) && primary_ok=1
+    (capture_candidate_unit primary && verify_candidate primary) &&
+      primary_ok=1
   else
     set +e
     primary_output="$(adapter start "$primary_config" \
       "${value[expected-primary-config-sha256]}" 2>&1)"
-    primary_status="$?"
     set -e
-    if [ "$primary_status" -eq 0 ] && (verify_candidate primary); then
+    if candidate_running primary &&
+      (capture_candidate_unit primary && verify_candidate primary); then
       primary_ok=1
     else
       primary_reason="$(printf '%s\n' "$primary_output" |
@@ -974,8 +1346,13 @@ if [ "$phase_number" -eq 50 ]; then
 fi
 
 if [ "$phase_number" -eq 60 ]; then
-  if (verify_firecracker_gate && verify_candidate primary); then
+  if (
+    verify_firecracker_gate &&
+      verify_candidate_unit_matches_live primary &&
+      verify_candidate primary
+  ); then
     write_final_receipt primary
+    remove_maintenance_marker
     printf '%s: status=primary_ready mode=primary firecracker_application_attestation=pending profile=%s unit=%s\n' \
       "$PROGRAM" "$profile" "$unit"
     exit 0
@@ -990,22 +1367,25 @@ if [ "$phase_number" -eq 70 ]; then
       "${value[expected-rollback-config-sha256]}" >/dev/null ||
       fail "rollback_start_failed"
   fi
-  verify_candidate rollback
-  write_phase 80-rollback-ready
-fi
-
-if [ "$phase_number" -eq 80 ]; then
+  capture_candidate_unit rollback
   verify_candidate rollback
   write_final_receipt rollback
+  remove_maintenance_marker
   printf '%s: status=available mode=rollback firecracker_config_active=false backup_restore_performed=false profile=%s unit=%s\n' \
     "$PROGRAM" "$profile" "$unit"
   exit 0
 fi
 
 if [ "$phase_number" -eq 90 ]; then
-  result="$(read_final_result)"
+  functional_mode=post_cut
+  if maintenance_marker_exists; then
+    verify_maintenance_marker
+    functional_mode=required
+  fi
+  result="$(read_final_result "$functional_mode")"
   [ "$result" != primary ] || verify_firecracker_gate
-  verify_candidate "$result"
+  verify_candidate "$result" "$functional_mode"
+  remove_maintenance_marker
   printf '%s: status=complete mode=%s profile=%s unit=%s\n' \
     "$PROGRAM" "$result" "$profile" "$unit"
   exit 0
