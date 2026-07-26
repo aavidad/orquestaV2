@@ -130,6 +130,26 @@ if operation == "start":
                     (version, migration.name, checksum),
                 )
             connection.execute("PRAGMA user_version=19")
+            if (systemctl.parent / "seed-new-functional-row").exists():
+                connection.execute(
+                    "CREATE TABLE unexpected_v19_data(value TEXT)"
+                )
+                connection.execute(
+                    "INSERT INTO unexpected_v19_data VALUES('unexpected')"
+                )
+            if (systemctl.parent / "rewrite-audit-history").exists():
+                connection.execute(
+                    "UPDATE command_invocations "
+                    "SET ref='tampered:0' WHERE ref='status:0'"
+                )
+                connection.execute(
+                    "UPDATE command_outcomes "
+                    "SET ref='tampered:0' WHERE ref='status:0'"
+                )
+                connection.execute(
+                    "UPDATE authorization_receipts "
+                    "SET ref='tampered:0' WHERE ref='status:0'"
+                )
         count = connection.execute(
             "SELECT COUNT(*) FROM command_invocations"
         ).fetchone()[0] + 1
@@ -308,6 +328,10 @@ with sqlite3.connect(database) as connection:
         INSERT INTO work_items VALUES('work-item:fixture');
         INSERT INTO outbox VALUES('action:fixture');
         INSERT INTO effect_attempts VALUES('attempt:fixture');
+        INSERT INTO command_invocations
+          VALUES('status:0','orquesta.system.status');
+        INSERT INTO command_outcomes VALUES('status:0');
+        INSERT INTO authorization_receipts VALUES('status:0');
         """
     )
     migration_root = repository / "internal/adapters/state/sqlite/migrations"
@@ -397,6 +421,7 @@ assert receipt["closure"]["database_open_processes"] == 0
 assert receipt["closure"]["unit_load_state"] == "not-found"
 assert receipt["closure"]["credential_projections"] == 0
 assert receipt["candidate"]["binary_vcs_modified"] is False
+assert "audit_row_fingerprints" not in receipt_path.read_text(encoding="utf-8")
 assert set(receipt["candidate"]["profile_helper_sha256"]) == {
     "firecracker_launcher_probe.py",
     "pidfd_signal.py",
@@ -525,6 +550,28 @@ grep -q 'reason_code=command_failed' "$FIXTURE/stderr" ||
 if find "$OUTPUT/accounts" -type f -name auth.json -print -quit | grep -q .; then
   fail_test "start_failure_auth_residue"
 fi
+
+write_fixture new-functional-row
+: >"$COMMANDS/seed-new-functional-row"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "new_functional_row_accepted"
+fi
+grep -q 'reason_code=functional_counts_changed' "$FIXTURE/stderr" ||
+  fail_test "new_functional_row_reason"
+[ "$("$COMMANDS/systemctl" --user show ignored.service \
+  --property=LoadState --value)" = "not-found" ] ||
+  fail_test "new_functional_row_unit_residue"
+
+write_fixture rewritten-audit-history
+: >"$COMMANDS/rewrite-audit-history"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "rewritten_audit_history_accepted"
+fi
+grep -q 'reason_code=status_audit_delta_invalid' "$FIXTURE/stderr" ||
+  fail_test "rewritten_audit_history_reason"
+[ "$("$COMMANDS/systemctl" --user show ignored.service \
+  --property=LoadState --value)" = "not-found" ] ||
+  fail_test "rewritten_audit_history_unit_residue"
 
 write_fixture config-live
 python3 - "$PRIVATE/config-template.toml" "$LIVE/tool" <<'PY'

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import datetime as dt
 import hashlib
 import json
@@ -462,6 +463,26 @@ def functional_digest(
     return digest.hexdigest()
 
 
+def table_row_fingerprints(
+    connection: sqlite3.Connection, table: str
+) -> list[str]:
+    columns = table_columns(connection, table)
+    selected = ",".join(quote_identifier(column) for column in columns)
+    result: list[str] = []
+    for row in connection.execute(
+        f"SELECT {selected} FROM {quote_identifier(table)}"
+    ):
+        encoded = json.dumps(
+            [encode_sqlite_value(value) for value in row],
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
+        ).encode("utf-8")
+        result.append(sha256_bytes(encoded))
+    return sorted(result)
+
+
 def migration_rows(connection: sqlite3.Connection) -> list[dict[str, Any]]:
     try:
         rows = connection.execute(
@@ -547,6 +568,10 @@ def sqlite_snapshot(
                 """
             ).fetchall()
         ]
+        audit_row_fingerprints = {
+            table: table_row_fingerprints(connection, table)
+            for table in AUDIT_TABLES
+        }
     except sqlite3.Error as error:
         fail("sqlite_snapshot_failed", str(error))
     finally:
@@ -573,6 +598,7 @@ def sqlite_snapshot(
             "table_counts": counts,
             "core_counts": {table: counts[table] for table in CORE_TABLES},
             "audit_counts": {table: counts[table] for table in AUDIT_TABLES},
+            "audit_row_fingerprints": audit_row_fingerprints,
             "status_invocation_refs": status_refs,
             "migration_counts": migration_counts,
             "migrations": migrations,
@@ -787,6 +813,13 @@ def audit_delta_valid(
             != source["audit_counts"][table] + cycle
         ):
             return False
+        source_rows = Counter(source["audit_row_fingerprints"][table])
+        observed_rows = Counter(observed["audit_row_fingerprints"][table])
+        if any(
+            observed_rows[fingerprint] < count
+            for fingerprint, count in source_rows.items()
+        ):
+            return False
     if len(observed["status_invocation_refs"]) != len(
         source["status_invocation_refs"]
     ) + cycle:
@@ -801,6 +834,14 @@ def functional_counts_equal(
         if table in EXCLUDED_FUNCTIONAL_TABLES:
             continue
         if observed["table_counts"].get(table) != count:
+            return False
+    baseline_tables = set(source["table_counts"])
+    for table, count in observed["table_counts"].items():
+        if (
+            table not in baseline_tables
+            and table not in EXCLUDED_FUNCTIONAL_TABLES
+            and count != 0
+        ):
             return False
     return True
 
