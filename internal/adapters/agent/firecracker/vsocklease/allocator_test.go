@@ -33,6 +33,12 @@ func (clock *testClock) Advance(duration time.Duration) {
 	clock.mu.Unlock()
 }
 
+func (clock *testClock) Set(now time.Time) {
+	clock.mu.Lock()
+	clock.now = now
+	clock.mu.Unlock()
+}
+
 func openTestDatabase(t *testing.T, path string, installSchema bool) *sql.DB {
 	t.Helper()
 	dsn := fmt.Sprintf(
@@ -68,8 +74,9 @@ func testConfig(
 	return Config{
 		DB: database, AdapterRef: "adapter:firecracker-vsock-cid",
 		PoolRef: "vsock-pool:host-128g-16", MinimumGuestCID: minimumCID,
-		MaximumGuestCID: maximumCID, MaximumLeaseDuration: time.Hour,
-		Now: clock.Now,
+		MaximumGuestCID: maximumCID, MinimumLeaseDuration: time.Second,
+		MaximumLeaseDuration: time.Hour,
+		Now:                  clock.Now,
 	}
 }
 
@@ -298,6 +305,152 @@ func TestAllocatorRestartRecoveryExpiryAndABAProtection(t *testing.T) {
 	}
 }
 
+func TestAllocatorFailsClosedOnDurableClockRegressionAfterRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vsock-clock.db")
+	start := time.Date(2026, 7, 26, 11, 30, 0, 0, time.UTC)
+	clock := &testClock{now: start}
+	firstDB := openTestDatabase(t, path, true)
+	first := openTestAllocator(t, firstDB, clock, 92, 92)
+	request := testReservationRequest(t, 1)
+	request.LeaseDuration = time.Minute
+	lease, err := first.Reserve(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.Advance(2 * time.Minute)
+	recovery := ports.AgentMicroVMVsockCIDRecoveryRequest{
+		PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+		LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+		FencingToken: lease.FencingToken,
+	}
+	if _, err := first.Recover(
+		context.Background(), recovery,
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.lease_inactive" {
+		t.Fatalf("expiry observation = %v", err)
+	}
+	if err := firstDB.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	clock.Set(start.Add(30 * time.Second))
+	secondDB := openTestDatabase(t, path, false)
+	t.Cleanup(func() { _ = secondDB.Close() })
+	second := openTestAllocator(t, secondDB, clock, 92, 92)
+	regressedOperations := map[string]func() error{
+		"reserve": func() error {
+			_, err := second.Reserve(context.Background(), testReservationRequest(t, 2))
+			return err
+		},
+		"renew": func() error {
+			_, err := second.Renew(context.Background(), ports.AgentMicroVMVsockCIDRenewalRequest{
+				PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+				LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+				FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+				LeaseDuration: 2 * time.Minute, IdempotencyKey: "renew-regressed-clock",
+			})
+			return err
+		},
+		"recover": func() error {
+			_, err := second.Recover(context.Background(), recovery)
+			return err
+		},
+		"release": func() error {
+			_, err := second.Release(context.Background(), ports.AgentMicroVMVsockCIDReleaseRequest{
+				PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+				LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+				FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+				IdempotencyKey: "release-regressed-clock",
+			})
+			return err
+		},
+	}
+	for name, operation := range regressedOperations {
+		t.Run(name, func(t *testing.T) {
+			if err := operation(); ErrorCode(err) !=
+				"agent_firecracker_vsock_cid.clock_regressed" {
+				t.Fatalf("regressed clock = %v", err)
+			}
+		})
+	}
+
+	var highWater int64
+	if err := secondDB.QueryRow(`
+SELECT high_water_unix_nano
+FROM agent_microvm_vsock_cid_clock
+WHERE pool_ref = ?`, lease.PoolRef).Scan(&highWater); err != nil {
+		t.Fatal(err)
+	}
+	if want := start.Add(2 * time.Minute).UnixNano(); highWater != want {
+		t.Fatalf("high-water = %d, want %d", highWater, want)
+	}
+	var state string
+	if err := secondDB.QueryRow(`
+SELECT state
+FROM agent_microvm_vsock_cid_reservations
+WHERE lease_ref = ?`, lease.LeaseRef).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != reservationStateExpired {
+		t.Fatalf("expired tombstone rolled back: state=%q", state)
+	}
+
+	clock.Set(start.Add(2 * time.Minute))
+	replacement, err := second.Reserve(
+		context.Background(), testReservationRequest(t, 2),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.GuestCID != lease.GuestCID ||
+		replacement.FencingToken <= lease.FencingToken {
+		t.Fatalf("replacement lost ABA fence: old=%+v new=%+v", lease, replacement)
+	}
+}
+
+func TestAllocatorEnforcesMinimumLeaseDurationAtReserveAndRenew(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vsock-minimum-lease.db")
+	database := openTestDatabase(t, path, true)
+	t.Cleanup(func() { _ = database.Close() })
+	clock := &testClock{now: time.Date(2026, 7, 26, 11, 45, 0, 0, time.UTC)}
+	config := testConfig(database, clock, 93, 93)
+	config.MinimumLeaseDuration = 5 * time.Second
+	allocator, err := Open(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tooShort := testReservationRequest(t, 1)
+	tooShort.LeaseDuration = config.MinimumLeaseDuration - time.Nanosecond
+	if _, err := allocator.Reserve(
+		context.Background(), tooShort,
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.reservation_request_invalid" {
+		t.Fatalf("short reservation = %v", err)
+	}
+
+	valid := testReservationRequest(t, 2)
+	valid.LeaseDuration = time.Minute
+	lease, err := allocator.Reserve(context.Background(), valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := allocator.Renew(context.Background(), ports.AgentMicroVMVsockCIDRenewalRequest{
+		PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+		LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+		FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+		LeaseDuration:  config.MinimumLeaseDuration - time.Nanosecond,
+		IdempotencyKey: "renew-too-short",
+	}); ErrorCode(err) != "agent_firecracker_vsock_cid.renewal_request_invalid" {
+		t.Fatalf("short renewal = %v", err)
+	}
+
+	invalidBounds := config
+	invalidBounds.MaximumLeaseDuration = invalidBounds.MinimumLeaseDuration - time.Nanosecond
+	if _, err := Open(
+		context.Background(), invalidBounds,
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.config_invalid" {
+		t.Fatalf("inverted lease bounds = %v", err)
+	}
+}
+
 func TestAllocatorRejectsForeignReleaseAndKeepsReleaseIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "vsock-cids.db")
 	database := openTestDatabase(t, path, true)
@@ -390,13 +543,17 @@ func TestAllocatorRequiresCanonicalSchemaAndSafeCIDRange(t *testing.T) {
 
 	driftPath := filepath.Join(t.TempDir(), "schema-drift.db")
 	driftDatabase := openTestDatabase(t, driftPath, true)
-	t.Cleanup(func() { _ = driftDatabase.Close() })
 	if _, err := driftDatabase.Exec(`
 DROP INDEX agent_microvm_vsock_cid_one_active;
 CREATE INDEX agent_microvm_vsock_cid_one_active
 ON agent_microvm_vsock_cid_reservations (pool_ref, guest_cid)`); err != nil {
 		t.Fatal(err)
 	}
+	if err := driftDatabase.Close(); err != nil {
+		t.Fatal(err)
+	}
+	driftDatabase = openTestDatabase(t, driftPath, false)
+	t.Cleanup(func() { _ = driftDatabase.Close() })
 	if _, err := Open(
 		context.Background(), testConfig(driftDatabase, clock, 32, 47),
 	); ErrorCode(err) != "agent_firecracker_vsock_cid.schema_mismatch" {
@@ -418,6 +575,70 @@ ON agent_microvm_vsock_cid_reservations (pool_ref, guest_cid)`); err != nil {
 	); ErrorCode(err) != "agent_firecracker_vsock_cid.durability_unavailable" {
 		t.Fatalf("in-memory store = %v", err)
 	}
+}
+
+func TestAllocatorRejectsFileBackedDurabilityPragmaManipulation(t *testing.T) {
+	tests := map[string]string{
+		"synchronous disabled":  "PRAGMA synchronous = OFF",
+		"foreign keys disabled": "PRAGMA foreign_keys = OFF",
+		"busy timeout disabled": "PRAGMA busy_timeout = 0",
+	}
+	for name, statement := range tests {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "vsock-pragma.db")
+			database := openTestDatabase(t, path, true)
+			t.Cleanup(func() { _ = database.Close() })
+			database.SetMaxOpenConns(1)
+			clock := &testClock{now: time.Date(2026, 7, 26, 14, 30, 0, 0, time.UTC)}
+			allocator := openTestAllocator(t, database, clock, 32, 47)
+			if _, err := database.ExecContext(context.Background(), statement); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := allocator.Reserve(
+				context.Background(), testReservationRequest(t, 1),
+			); ErrorCode(err) != "agent_firecracker_vsock_cid.durability_unavailable" {
+				t.Fatalf("manipulated %q = %v", statement, err)
+			}
+		})
+	}
+
+	t.Run("journal mode persists across restart", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-journal.db")
+		database := openTestDatabase(t, path, true)
+		if _, err := database.ExecContext(
+			context.Background(), "PRAGMA journal_mode = DELETE",
+		); err != nil {
+			_ = database.Close()
+			t.Fatal(err)
+		}
+		if err := database.Close(); err != nil {
+			t.Fatal(err)
+		}
+		dsn := fmt.Sprintf(
+			"file:%s?_pragma=busy_timeout(10000)&_pragma=synchronous(FULL)&_pragma=foreign_keys(1)",
+			path,
+		)
+		database, err := sql.Open("sqlite", dsn)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = database.Close() })
+		var journalMode string
+		if err := database.QueryRowContext(
+			context.Background(), "PRAGMA journal_mode",
+		).Scan(&journalMode); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.EqualFold(journalMode, "delete") {
+			t.Fatalf("journal manipulation did not persist: %q", journalMode)
+		}
+		clock := &testClock{now: time.Date(2026, 7, 26, 14, 45, 0, 0, time.UTC)}
+		if _, err := Open(
+			context.Background(), testConfig(database, clock, 32, 47),
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.durability_unavailable" {
+			t.Fatalf("persistent journal manipulation = %v", err)
+		}
+	})
 }
 
 func TestAllocatorEvaluatesTimeAfterContendedBegin(t *testing.T) {
