@@ -14,6 +14,9 @@ Lee en este orden:
 4. `product/capabilities.json` y `product/evidence/**`;
 5. `docs/reconstruccion/ruta_total_100.md`.
 
+Último handoff:
+`docs/reconstruccion/HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
+
 V1-V22 son verticales acreditadas de esta reconstrucción. V23 permanece abierto
 hasta que su contrato y su receipt queden sellados; no se declara terminado por
 documentación ni por un smoke parcial.

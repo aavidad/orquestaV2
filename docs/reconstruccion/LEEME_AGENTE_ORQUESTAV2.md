@@ -2,6 +2,9 @@
 
 Fecha: 2026-07-26.
 
+Handoff vigente:
+`HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
+
 ## Regla de un minuto
 
 Este directorio contiene la reconstrucción nueva. No continúes, arregles ni

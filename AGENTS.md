@@ -7,6 +7,8 @@ continúa el runtime anterior.
 Antes de inspeccionar código, lee
 `docs/reconstruccion/LEEME_AGENTE_ORQUESTAV2.md`. Es el corte breve que evita
 confundir producto nuevo, trazabilidad histórica y copia legacy.
+El último estado de parada y reanudación vive en
+`docs/reconstruccion/HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
 
 ## Misión y estado honesto
 
