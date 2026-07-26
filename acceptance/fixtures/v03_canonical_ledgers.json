@@ -145,9 +145,9 @@
     "product/traceability/task_source_capability_map.jsonl"
   ],
   "source_dispositions": {
-    "total": 334,
+    "total": 335,
     "task": 164,
-    "bug": 151,
+    "bug": 152,
     "skill": 19
   },
   "tasks": {
@@ -168,12 +168,12 @@
     "reviewed_block_entry_count": 68
   },
   "bugs": {
-    "source_count": 159,
+    "source_count": 160,
     "rich_row_count": 239,
-    "occurrence_count": 1293,
-    "id_count": 335,
+    "occurrence_count": 1295,
+    "id_count": 337,
     "row_covered_id_count": 197,
-    "narrative_only_id_count": 138
+    "narrative_only_id_count": 140
   },
   "closure_inferred_count": 0,
   "rejected_task": {
