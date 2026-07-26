@@ -12,6 +12,7 @@ import (
 
 type retiredActionRow struct {
 	kind, goalRef, itemRef, executionRef, changeRef        string
+	effectIntentRef                                        string
 	planGeneration, itemGeneration, deliveryAttempt, fence int64
 	governanceVersion                                      int64
 	token, worker                                          sql.NullString
@@ -56,6 +57,38 @@ func consumeRetiredAction(
 		row.deliveryAttempt > 0 && row.fence > 0) {
 		return conflict(errors.New("sqlite.action_retirement_claim_invalid"))
 	}
+	started, err := retiredAttestationHasStartedEffect(ctx, transaction, actionRef, row)
+	if err != nil {
+		return err
+	}
+	if started {
+		const quarantineCode = "application.effect_unknown_applied"
+		result, err := transaction.ExecContext(ctx, `
+UPDATE outbox
+SET completed_at = ?, quarantined_at = ?, last_error_code = ?
+WHERE ref = ? AND effect_intent_ref = ? AND claim_token = ? AND claimed_by = ?
+  AND claimed_until = ? AND delivery_attempt = ? AND fence = ?
+  AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL
+  AND EXISTS (
+      SELECT 1 FROM effect_attempts
+      WHERE action_ref = outbox.ref AND intent_ref = outbox.effect_intent_ref
+        AND action_fence = outbox.fence
+  )`,
+			requiredTime(at), requiredTime(at), quarantineCode,
+			actionRef, row.effectIntentRef, row.token.String, row.worker.String,
+			row.leaseUntil.Int64, row.deliveryAttempt, row.fence,
+		)
+		if err != nil {
+			return mapDatabaseError(err)
+		}
+		if err := requireOneRow(result); err != nil {
+			return err
+		}
+		return insertRetirementReceipt(
+			ctx, transaction, actionRef, row, governancePersisted,
+			application.ActionConsumedQuarantined, quarantineCode, at,
+		)
+	}
 	if !claimed {
 		if row.deliveryAttempt >= int64(maxSQLiteInteger) {
 			return invalid(errors.New("sqlite.action_retirement_attempt_overflow"))
@@ -89,7 +122,41 @@ WHERE ref = ? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at
 	if err := requireOneRow(result); err != nil {
 		return err
 	}
-	return insertRetirementReceipt(ctx, transaction, actionRef, row, governancePersisted, retirementCode, at)
+	return insertRetirementReceipt(
+		ctx, transaction, actionRef, row, governancePersisted,
+		application.ActionConsumedCompleted, retirementCode, at,
+	)
+}
+
+func retiredAttestationHasStartedEffect(
+	ctx context.Context,
+	transaction *sql.Tx,
+	actionRef string,
+	row retiredActionRow,
+) (bool, error) {
+	if row.kind != string(application.ActionAttestTest) {
+		return false, nil
+	}
+	if row.effectIntentRef == "" {
+		return false, conflict(errors.New("sqlite.action_retirement_attestation_intent_missing"))
+	}
+	var total, exact int
+	if err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*),
+       COALESCE(SUM(CASE WHEN intent_ref = ? AND action_fence = ? THEN 1 ELSE 0 END), 0)
+FROM effect_attempts
+WHERE action_ref = ?`,
+		row.effectIntentRef, row.fence, actionRef,
+	).Scan(&total, &exact); err != nil {
+		return false, mapDatabaseError(err)
+	}
+	if total == 0 {
+		return false, nil
+	}
+	if total != 1 || exact != 1 {
+		return false, conflict(errors.New("sqlite.action_retirement_attestation_attempt_ambiguous"))
+	}
+	return true, nil
 }
 
 func readRetiredAction(
@@ -102,16 +169,18 @@ func readRetiredAction(
 	}
 	query := `
 SELECT kind, goal_ref, work_item_ref, execution_ref,
-       change_ref, plan_generation, work_item_generation, delivery_attempt, fence,
+       change_ref, '', plan_generation, work_item_generation, delivery_attempt, fence,
        claim_token, claimed_by, claimed_until, completed_at, retired_at, quarantined_at
 FROM outbox WHERE ref = ?`
 	destinations := []any{&row.kind, &row.goalRef, &row.itemRef, &row.executionRef,
-		&row.changeRef, &row.planGeneration, &row.itemGeneration, &row.deliveryAttempt, &row.fence,
+		&row.changeRef, &row.effectIntentRef,
+		&row.planGeneration, &row.itemGeneration, &row.deliveryAttempt, &row.fence,
 		&row.token, &row.worker, &row.leaseUntil, &row.completedAt, &row.retiredAt, &row.quarantinedAt}
 	if governed {
 		query = `
 SELECT kind, goal_ref, work_item_ref, execution_ref,
-       change_ref, plan_generation, work_item_generation, delivery_attempt, fence,
+       change_ref, COALESCE(effect_intent_ref, ''),
+       plan_generation, work_item_generation, delivery_attempt, fence,
        claim_token, claimed_by, claimed_until, completed_at, retired_at, quarantined_at,
        governance_version
 FROM outbox WHERE ref = ?`
@@ -126,7 +195,7 @@ FROM outbox WHERE ref = ?`
 
 func insertRetirementReceipt(
 	ctx context.Context, transaction *sql.Tx, actionRef string, row retiredActionRow,
-	governed bool, retirementCode string, at time.Time,
+	governed bool, outcome application.ActionConsumptionOutcome, code string, at time.Time,
 ) error {
 	if governed {
 		_, err := transaction.ExecContext(ctx, `
@@ -134,10 +203,10 @@ INSERT INTO action_consumption_receipts(
     action_ref, governance_version, kind, goal_ref, work_item_ref, execution_ref, change_ref,
     plan_generation, work_item_generation, fence, delivery_attempt,
     claim_token, worker_ref, outcome, error_code, consumed_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			actionRef, row.governanceVersion, row.kind, row.goalRef, row.itemRef, row.executionRef,
 			row.changeRef, row.planGeneration, row.itemGeneration, row.fence, row.deliveryAttempt,
-			row.token.String, row.worker.String, retirementCode, requiredTime(at),
+			row.token.String, row.worker.String, string(outcome), code, requiredTime(at),
 		)
 		if err != nil {
 			return mapDatabaseError(fmt.Errorf("sqlite.action_retirement_receipt: %w", err))
@@ -149,10 +218,10 @@ INSERT INTO action_consumption_receipts(
     action_ref, kind, goal_ref, work_item_ref, execution_ref, change_ref,
     plan_generation, work_item_generation, fence, delivery_attempt,
     claim_token, worker_ref, outcome, error_code, consumed_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		actionRef, row.kind, row.goalRef, row.itemRef, row.executionRef,
 		row.changeRef, row.planGeneration, row.itemGeneration, row.fence, row.deliveryAttempt,
-		row.token.String, row.worker.String, retirementCode, requiredTime(at),
+		row.token.String, row.worker.String, string(outcome), code, requiredTime(at),
 	)
 	if err != nil {
 		return mapDatabaseError(fmt.Errorf("sqlite.action_retirement_receipt: %w", err))
