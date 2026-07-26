@@ -186,3 +186,46 @@ func seedPersistedV6Launch(t *testing.T, config Config, request ports.AgentLaunc
 	}
 	return runPath
 }
+
+// seed7401V7Upgrade reproduces the complete sidecar format emitted by 7401dcf2:
+// it has no provenance beyond the legacy source identity and the copied V7
+// replay fields.
+func seed7401V7Upgrade(
+	t *testing.T,
+	config Config,
+	request ports.AgentLaunchRequest,
+) (string, launchRecord, string) {
+	t.Helper()
+	runPath := seedPersistedV6Launch(t, config, request)
+	adapter, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, _, found, err := adapter.loadLaunchRecord(request.ExecutionRef)
+	if err != nil || !found {
+		t.Fatalf("load V6 source found=%v error=%v", found, err)
+	}
+	requestHash, err := adapter.hashLaunchRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound := source
+	bound.SchemaVersion = stateSchemaVersion
+	bound.RequestHash = requestHash
+	bound.ReasoningEffort = request.ReasoningEffort
+	upgrade := launchUpgradeRecord{
+		SchemaVersion:       stateSchemaVersion,
+		SourceSchemaVersion: source.SchemaVersion,
+		SourceRequestHash:   source.RequestHash,
+		Launch:              bound,
+	}
+	if created, err := adapter.publishJSON(
+		runPath, launchUpgradeFileName, upgrade,
+	); err != nil || !created {
+		t.Fatalf("publish 7401 V7 upgrade created=%v error=%v", created, err)
+	}
+	if err := adapter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return runPath, source, requestHash
+}

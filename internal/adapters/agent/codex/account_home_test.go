@@ -474,115 +474,68 @@ func TestAccountProfileRemovalFailsBeforeReplay(t *testing.T) {
 	}
 }
 
-func TestExistingV7UpgradePreservesDurableV6CausalSource(t *testing.T) {
+func Test7401V7UpgradeIsQuarantinedAndNeverReplayedAfterRestart(t *testing.T) {
 	config := testConfig(t)
-	request := testRequest(t, "v6-v7-upgrade-chain", "helper:success", 1024)
-	seedAccountlessLaunchRecord(t, config, request, legacyStateSchemaVersion)
-	seeder, err := New(config)
+	request := testRequest(t, "7401-v6-v7-binding", "helper:block", 1024)
+	request.ReasoningEffort = governance.ReasoningEffortHigh
+	runPath, source, untrustedRequestHash := seed7401V7Upgrade(t, config, request)
+	command, process, _ := seedLivePersistedProcessWithRequestHash(
+		t, config, request, untrustedRequestHash,
+	)
+	t.Cleanup(func() { _ = platformSignalProcess(process, ports.AgentStopForced) })
+
+	recoveryConfig := config
+	recoveryConfig.RuntimeScope = ""
+	first, err := New(recoveryConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	legacy, runPath, found, err := seeder.loadLaunchRecord(request.ExecutionRef)
-	if err != nil || !found {
-		t.Fatalf("load legacy found=%v error=%v", found, err)
+	if err := first.BindRuntimeScope(context.Background(), config.RuntimeScope); err != nil {
+		t.Fatalf("BindRuntimeScope(first): %v", err)
 	}
-	v5 := accountlessV5Record(t, legacy, request)
-	oldUpgrade := launchUpgradeRecord{
-		SchemaVersion:       accountlessStateSchemaVersion,
-		SourceSchemaVersion: legacy.SchemaVersion,
-		SourceRequestHash:   legacy.RequestHash,
-		Launch:              v5,
+	_ = command.Wait()
+	if identity, err := platformInspectProcess(process); err != nil || identity != processIdentityGone {
+		t.Fatalf("7401 process survived quarantine identity=%v error=%v", identity, err)
 	}
-	if created, err := seeder.publishJSON(runPath, legacyLaunchUpgradeFileName, oldUpgrade); err != nil || !created {
-		t.Fatalf("publish old upgrade created=%v error=%v", created, err)
+	first.mu.Lock()
+	state := first.executions[request.ExecutionRef.String()]
+	adopted := state != nil && state.ownerLock != nil
+	first.mu.Unlock()
+	if state == nil || adopted || state.terminal == nil || !state.terminalDurable ||
+		state.terminal.ErrorCode != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("7401 binding was adopted instead of quarantined: %+v", state)
 	}
-	v6 := profileV6Record(t, v5, request)
-	v6Upgrade := launchUpgradeRecord{
-		SchemaVersion:       profileStateSchemaVersion,
-		SourceSchemaVersion: v5.SchemaVersion,
-		SourceRequestHash:   v5.RequestHash,
-		Launch:              v6,
+	terminal := readPersistedTerminal(t, recoveryConfig, runPath)
+	if terminal.RequestHash != source.RequestHash ||
+		terminal.RequestHash == untrustedRequestHash ||
+		terminal.ErrorCode != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("7401 quarantine trusted V7 binding: %+v", terminal)
 	}
-	if created, err := seeder.publishJSON(runPath, profileLaunchUpgradeFileName, v6Upgrade); err != nil || !created {
-		t.Fatalf("publish V6 upgrade created=%v error=%v", created, err)
-	}
-	currentHash, err := hashLaunchRequest(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v7 := v6
-	v7.SchemaVersion = stateSchemaVersion
-	v7.RequestHash = currentHash
-	v7.ReasoningEffort = request.ReasoningEffort
-	v7Upgrade := launchUpgradeRecord{
-		SchemaVersion:       stateSchemaVersion,
-		SourceSchemaVersion: v6.SchemaVersion,
-		SourceRequestHash:   v6.RequestHash,
-		Launch:              v7,
-	}
-	if created, err := seeder.publishJSON(
-		runPath, launchUpgradeFileName, v7Upgrade,
-	); err != nil || !created {
-		t.Fatalf("publish preexisting V7 upgrade created=%v error=%v", created, err)
-	}
-	if err := seeder.Close(); err != nil {
+	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	adapter := openTestAdapter(t, config)
-	var upgrade launchUpgradeRecord
-	found, err = adapter.readPrivateJSON(filepath.ToSlash(filepath.Join(runPath, launchUpgradeFileName)), &upgrade)
-	if err != nil || !found {
-		t.Fatalf("read V7 upgrade found=%v error=%v", found, err)
-	}
-	if upgrade.SourceSchemaVersion != profileStateSchemaVersion ||
-		upgrade.SourceRequestHash != v6.RequestHash ||
-		upgrade.Launch.SchemaVersion != stateSchemaVersion ||
-		upgrade.Launch.ReasoningEffort != request.ReasoningEffort {
-		t.Fatalf("V6 -> V7 causal chain lost: %+v", upgrade)
-	}
-}
-
-func accountlessV5Record(t *testing.T, legacy launchRecord, request ports.AgentLaunchRequest) launchRecord {
-	t.Helper()
-	requestHash, err := hashV5LaunchRequest(request)
+	second, err := New(recoveryConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return launchRecord{
-		SchemaVersion:         accountlessStateSchemaVersion,
-		RequestHash:           requestHash,
-		ExecutionRef:          legacy.ExecutionRef,
-		ExecutionSessionRef:   request.SessionRef.String(),
-		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
-		ActorRef:              request.ActorRef.String(),
-		ProjectRef:            request.ProjectRef.String(),
-		GoalRef:               request.GoalRef.String(),
-		WorkItemRef:           request.WorkItemRef.String(),
-		PlanGeneration:        request.PlanGeneration,
-		AppSpecGeneration:     request.AppSpecGeneration,
-		ExecutionAttempt:      request.ExecutionAttempt,
-		SpecHash:              legacy.SpecHash,
-		ProviderRef:           legacy.ProviderRef,
-		ModelRef:              DefaultModelRef,
-		AgentRef:              AgentRef,
-		ExternalRef:           legacy.ExternalRef,
-		IdempotencyKey:        legacy.IdempotencyKey,
-		AcceptedAt:            legacy.AcceptedAt,
-		MaxOutputBytes:        legacy.MaxOutputBytes,
+	defer second.Close()
+	if err := second.BindRuntimeScope(context.Background(), config.RuntimeScope); err != nil {
+		t.Fatalf("BindRuntimeScope(second): %v", err)
 	}
-}
-
-func profileV6Record(t *testing.T, legacy launchRecord, request ports.AgentLaunchRequest) launchRecord {
-	t.Helper()
-	requestHash, err := hashV6LaunchRequest(request, "")
+	if _, err := second.Launch(
+		context.Background(), request,
+	); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("Launch(second) replayed 7401 binding error=%v code=%q", err, ErrorCode(err))
+	}
+	observation, err := second.Observe(context.Background(), request.ExecutionRef)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Observe(second): %v", err)
 	}
-	record := accountlessV5Record(t, legacy, request)
-	record.SchemaVersion = profileStateSchemaVersion
-	record.RequestHash = requestHash
-	return record
+	if observation.Status != ports.AgentFailed ||
+		observation.ErrorCode != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("Observe(second) replayed 7401 binding: %+v", observation)
+	}
 }
 
 func seedAccountlessLaunchRecord(

@@ -446,7 +446,9 @@ func (adapter *Adapter) discoverShutdownProcessLocked(ctx context.Context, runPa
 		return &Error{Code: CodeProcessOwnershipInvalid}
 	}
 	terminalRequestHash := launch.RequestHash
-	effectiveLaunch, err := adapter.persistedProcessLaunch(runPath, launch, process.RequestHash)
+	effectiveLaunch, untrustedV7, err := adapter.persistedProcessLaunch(
+		runPath, launch, process.RequestHash,
+	)
 	if err != nil {
 		return err
 	}
@@ -461,8 +463,12 @@ func (adapter *Adapter) discoverShutdownProcessLocked(ctx context.Context, runPa
 	if err != nil {
 		return err
 	}
+	stateRequestHash := effectiveLaunch.RequestHash
+	if untrustedV7 {
+		stateRequestHash = process.RequestHash
+	}
 	state := &executionState{
-		requestHash: effectiveLaunch.RequestHash, terminalRequestHash: terminalRequestHash,
+		requestHash: stateRequestHash, terminalRequestHash: terminalRequestHash,
 		receipt: receipt, maxOutput: effectiveLaunch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
 	if _, _, err := adapter.ownProcessLocked(state); err != nil {
@@ -498,7 +504,9 @@ func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runP
 		return &Error{Code: CodeProcessOwnershipInvalid}
 	}
 	terminalRequestHash := launch.RequestHash
-	effectiveLaunch, err := adapter.persistedProcessLaunch(runPath, launch, process.RequestHash)
+	effectiveLaunch, untrustedV7, err := adapter.persistedProcessLaunch(
+		runPath, launch, process.RequestHash,
+	)
 	if err != nil {
 		return err
 	}
@@ -513,8 +521,12 @@ func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runP
 	} else if terminalFound {
 		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
 	}
+	stateRequestHash := effectiveLaunch.RequestHash
+	if untrustedV7 {
+		stateRequestHash = process.RequestHash
+	}
 	state := &executionState{
-		requestHash: effectiveLaunch.RequestHash, terminalRequestHash: terminalRequestHash,
+		requestHash: stateRequestHash, terminalRequestHash: terminalRequestHash,
 		receipt: receipt, maxOutput: effectiveLaunch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
 	if intent, found, loadErr := adapter.loadQuarantineIntent(runPath, process); loadErr != nil {
@@ -526,6 +538,17 @@ func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runP
 		)
 		if state.terminal != nil && state.terminalDurable &&
 			state.terminal.ErrorCode == intent.ErrorCode {
+			return nil
+		}
+		return quarantineErr
+	}
+	if untrustedV7 {
+		adapter.executions[executionRef.String()] = state
+		quarantineErr := adapter.quarantineExecutionLocked(
+			ctx, state, &Error{Code: CodeLegacyExecutionRequiresNewAttempt},
+		)
+		if state.terminal != nil && state.terminalDurable &&
+			state.terminal.ErrorCode == CodeLegacyExecutionRequiresNewAttempt {
 			return nil
 		}
 		return quarantineErr
@@ -559,25 +582,25 @@ func (adapter *Adapter) persistedProcessLaunch(
 	runPath string,
 	launch launchRecord,
 	processRequestHash string,
-) (launchRecord, error) {
+) (launchRecord, bool, error) {
 	if launch.SchemaVersion == stateSchemaVersion {
 		if processRequestHash != launch.RequestHash {
-			return launchRecord{}, &Error{Code: CodeProcessOwnershipInvalid}
+			return launchRecord{}, false, &Error{Code: CodeProcessOwnershipInvalid}
 		}
-		return launch, nil
+		return launch, false, nil
 	}
-	source, bound, upgraded, err := adapter.loadLegacyBoundLaunchRecord(runPath, launch)
+	source, untrustedRequestHash, upgraded, err := adapter.loadLegacyLaunchBinding(runPath, launch)
 	if err != nil {
-		return launchRecord{}, err
+		return launchRecord{}, false, err
 	}
-	if upgraded && processRequestHash == bound.RequestHash {
-		return bound, nil
+	if upgraded && processRequestHash == untrustedRequestHash {
+		return source, true, nil
 	}
 	if processRequestHash != launch.RequestHash &&
 		processRequestHash != source.RequestHash {
-		return launchRecord{}, &Error{Code: CodeProcessOwnershipInvalid}
+		return launchRecord{}, false, &Error{Code: CodeProcessOwnershipInvalid}
 	}
-	return source, nil
+	return source, false, nil
 }
 
 func pendingStopReceipt(request ports.AgentStopRequest) ports.AgentStopReceipt {

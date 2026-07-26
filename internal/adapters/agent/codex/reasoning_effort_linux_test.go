@@ -267,6 +267,15 @@ func seedLivePersistedProcess(
 	config Config,
 	request ports.AgentLaunchRequest,
 ) (*exec.Cmd, processRecord, string) {
+	return seedLivePersistedProcessWithRequestHash(t, config, request, "")
+}
+
+func seedLivePersistedProcessWithRequestHash(
+	t *testing.T,
+	config Config,
+	request ports.AgentLaunchRequest,
+	processRequestHash string,
+) (*exec.Cmd, processRecord, string) {
 	t.Helper()
 	runPath := executionPath(request.ExecutionRef)
 	adapter, err := New(config)
@@ -310,6 +319,9 @@ func seedLivePersistedProcess(
 		SchemaVersion: processSchemaVersion, ExecutionRef: request.ExecutionRef.String(),
 		RequestHash: record.RequestHash, RuntimeScope: config.RuntimeScope,
 		PID: command.Process.Pid, PGID: pgid, BootID: bootID, BirthMarker: birthMarker,
+	}
+	if processRequestHash != "" {
+		process.RequestHash = processRequestHash
 	}
 	if err := adapter.persistProcessRecord(runPath, process); err != nil {
 		releaseOwnerLock(owner)
