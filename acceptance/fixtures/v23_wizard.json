@@ -27,6 +27,35 @@
     "chat",
     "form"
   ],
+  "public_command_bindings": [
+    {
+      "id": "orquesta.intakes.create",
+      "handler": "CreateIntake",
+      "permission": "goals.create",
+      "kind": "command",
+      "replay_mode": "application_receipt",
+      "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "required_output_fields": ["intake_ref", "project_ref", "revision", "receipt_ref"]
+    },
+    {
+      "id": "orquesta.intakes.get",
+      "handler": "GetIntake",
+      "permission": "goals.get",
+      "kind": "query",
+      "replay_mode": "read_reexecute",
+      "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "required_output_fields": ["state_schema", "intake_ref", "actor_ref", "project_ref", "revision", "max_question_rounds", "question_rounds", "issues", "questions", "decisions", "history"]
+    },
+    {
+      "id": "orquesta.intakes.apply",
+      "handler": "ApplyIntake",
+      "permission": "goals.create",
+      "kind": "command",
+      "replay_mode": "application_receipt",
+      "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "required_output_fields": ["intake_ref", "project_ref", "revision", "receipt_ref"]
+    }
+  ],
   "typed_round_policy": {
     "field": "max_question_rounds",
     "example_value": 2,
@@ -67,6 +96,21 @@
     ],
     "reject_no_tests_to_run": true
   },
+  "integration_gate": {
+    "command": "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
+    "test_names": [
+      "TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation",
+      "TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite",
+      "TestIntakeSQLiteRestartAndHistoricalReplay",
+      "TestIntakeSQLiteConcurrentCASAdmitsOneReceipt",
+      "TestV23RecoveryRejectsDivergentIntakeBranch",
+      "TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState",
+      "TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade",
+      "TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite",
+      "TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart"
+    ],
+    "reject_no_tests_to_run": true
+  },
   "candidate_files": [
     "acceptance/fixtures/v23_wizard.json",
     "acceptance/v23_wizard_test.go",
@@ -75,6 +119,22 @@
     "internal/intake/intake_test.go",
     "internal/intake/model.go",
     "internal/intake/state.go"
+  ],
+  "integration_files": [
+    "docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
+    "internal/application/intake_chain.go",
+    "internal/application/intake_orchestrator.go",
+    "internal/application/intake_service.go",
+    "internal/adapters/state/sqlite/intake.go",
+    "internal/adapters/state/sqlite/migrations/017_intake.sql",
+    "internal/adapters/state/sqlite/recovery_validation_v23.go",
+    "internal/bootstrap/command_registry_upgrade_e2e_test.go",
+    "internal/bootstrap/intake_e2e_test.go",
+    "internal/commands/handlers_intake.go",
+    "internal/commands/registry.json",
+    "internal/commands/registry_admission_identity.go",
+    "internal/i18n/catalogs/en.json",
+    "internal/i18n/catalogs/es.json"
   ],
   "forbidden_import_boundaries": [
     "adapters",
@@ -176,13 +236,15 @@
       "status": "pending"
     }
   ],
-  "deferred_scopes": [
+  "completed_integration_scopes": [
     "application_idempotency",
+    "command_registry_binding",
+    "durable_cas_persistence_and_restart"
+  ],
+  "deferred_scopes": [
     "canonical_round_default_under_L-CONFIG",
     "causal_plan_creation",
-    "command_registry_binding",
     "dossier_generation",
-    "durable_cas_persistence_and_restart",
     "explicit_confirmation",
     "freeze_after_confirmation",
     "full_wizard_i18n_catalog",
@@ -193,5 +255,5 @@
   ],
   "seal_status": "not_sealed",
   "receipt_path": "",
-  "next_causal_dependency": "application_owned_persistence_and_command_binding_using_the_same_expected_revision_contract"
+  "next_causal_dependency": "dossier_confirmation_freeze_and_causal_plan_creation"
 }

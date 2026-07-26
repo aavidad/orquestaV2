@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"orquesta/internal/commands"
 	"orquesta/internal/intake"
 )
 
@@ -29,13 +30,17 @@ type v23WizardFixture struct {
 	PackagePath          string                `json:"package_path"`
 	StateSchema          string                `json:"state_schema"`
 	AllowedOrigins       []string              `json:"allowed_origins"`
+	PublicBindings       []v23WizardBinding    `json:"public_command_bindings"`
 	TypedRoundPolicy     v23WizardRoundPolicy  `json:"typed_round_policy"`
 	StableErrorCodes     []string              `json:"stable_error_codes"`
 	RequiredAssertions   []string              `json:"required_assertions"`
 	RequiredTest         v23WizardRequiredTest `json:"required_test"`
+	IntegrationGate      v23WizardRequiredTest `json:"integration_gate"`
 	CandidateFiles       []string              `json:"candidate_files"`
+	IntegrationFiles     []string              `json:"integration_files"`
 	ForbiddenImports     []string              `json:"forbidden_import_boundaries"`
 	RemainingWIZ         []v23WizardCapability `json:"remaining_wiz"`
+	CompletedScopes      []string              `json:"completed_integration_scopes"`
 	DeferredScopes       []string              `json:"deferred_scopes"`
 	SealStatus           string                `json:"seal_status"`
 	ReceiptPath          string                `json:"receipt_path"`
@@ -59,6 +64,16 @@ type v23WizardRoundPolicy struct {
 	CanonicalConfiguration string `json:"canonical_configuration"`
 }
 
+type v23WizardBinding struct {
+	ID                     string   `json:"id"`
+	Handler                string   `json:"handler"`
+	Permission             string   `json:"permission"`
+	Kind                   string   `json:"kind"`
+	ReplayMode             string   `json:"replay_mode"`
+	ForbiddenPayloadFields []string `json:"forbidden_payload_fields"`
+	RequiredOutputFields   []string `json:"required_output_fields"`
+}
+
 type v23WizardRequiredTest struct {
 	Command            string   `json:"command"`
 	TestNames          []string `json:"test_names"`
@@ -75,6 +90,7 @@ func TestAcceptanceV23WizardIntakeContract(t *testing.T) {
 	fixture := loadV23WizardFixture(t, root)
 	assertV23WizardFixture(t, root, fixture)
 	assertV23IntakeImportBoundary(t, root, fixture.ForbiddenImports)
+	assertV23PublicCommandBindings(t, fixture.PublicBindings)
 
 	const stateRef intake.Ref = "intake:v23-acceptance"
 	state, err := intake.NewState(stateRef, intake.Policy{
@@ -269,6 +285,34 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		!reflect.DeepEqual(fixture.AllowedOrigins, []string{"chat", "form"}) {
 		t.Fatalf("invalid capability/criterion scope: %+v", fixture)
 	}
+	wantForbidden := []string{"actor_ref", "project_ref", "request_ref", "request_fingerprint"}
+	wantBindings := []v23WizardBinding{
+		{
+			ID: "orquesta.intakes.create", Handler: "CreateIntake",
+			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
+			ForbiddenPayloadFields: wantForbidden,
+			RequiredOutputFields:   []string{"intake_ref", "project_ref", "revision", "receipt_ref"},
+		},
+		{
+			ID: "orquesta.intakes.get", Handler: "GetIntake",
+			Permission: "goals.get", Kind: "query", ReplayMode: "read_reexecute",
+			ForbiddenPayloadFields: wantForbidden,
+			RequiredOutputFields: []string{
+				"state_schema", "intake_ref", "actor_ref", "project_ref", "revision",
+				"max_question_rounds", "question_rounds", "issues", "questions",
+				"decisions", "history",
+			},
+		},
+		{
+			ID: "orquesta.intakes.apply", Handler: "ApplyIntake",
+			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
+			ForbiddenPayloadFields: wantForbidden,
+			RequiredOutputFields:   []string{"intake_ref", "project_ref", "revision", "receipt_ref"},
+		},
+	}
+	if !reflect.DeepEqual(fixture.PublicBindings, wantBindings) {
+		t.Fatalf("invalid public bindings: %+v", fixture.PublicBindings)
+	}
 	if fixture.TypedRoundPolicy != (v23WizardRoundPolicy{
 		Field: "max_question_rounds", ExampleValue: 2, ZeroIsInvalid: true,
 		PackageDefault: "none", CanonicalConfiguration: "pending_goal_with_lease_L-CONFIG",
@@ -308,6 +352,24 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	if !reflect.DeepEqual(fixture.RequiredTest, wantRequiredTest) {
 		t.Fatalf("invalid required test: %+v", fixture.RequiredTest)
 	}
+	wantIntegrationGate := v23WizardRequiredTest{
+		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
+		TestNames: []string{
+			"TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation",
+			"TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite",
+			"TestIntakeSQLiteRestartAndHistoricalReplay",
+			"TestIntakeSQLiteConcurrentCASAdmitsOneReceipt",
+			"TestV23RecoveryRejectsDivergentIntakeBranch",
+			"TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState",
+			"TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade",
+			"TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite",
+			"TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart",
+		},
+		RejectNoTestsToRun: true,
+	}
+	if !reflect.DeepEqual(fixture.IntegrationGate, wantIntegrationGate) {
+		t.Fatalf("invalid integration gate: %+v", fixture.IntegrationGate)
+	}
 	if !reflect.DeepEqual(fixture.ForbiddenImports, []string{
 		"adapters", "bootstrap", "database", "filesystem", "interfaces",
 		"legacy", "orquesta/modulos", "provider",
@@ -315,16 +377,24 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid import boundary: %+v", fixture.ForbiddenImports)
 	}
 	assertV23RemainingCapabilities(t, fixture.RemainingWIZ)
+	if !reflect.DeepEqual(fixture.CompletedScopes, []string{
+		"application_idempotency",
+		"command_registry_binding",
+		"durable_cas_persistence_and_restart",
+	}) {
+		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
+	}
 	wantDeferred := []string{
-		"application_idempotency", "canonical_round_default_under_L-CONFIG",
-		"causal_plan_creation", "command_registry_binding", "dossier_generation",
-		"durable_cas_persistence_and_restart", "explicit_confirmation",
-		"freeze_after_confirmation", "full_wizard_i18n_catalog",
-		"roadmap_promotion", "seal_and_receipt", "templates_and_domain_packs",
-		"web_surface",
+		"canonical_round_default_under_L-CONFIG", "causal_plan_creation",
+		"dossier_generation", "explicit_confirmation", "freeze_after_confirmation",
+		"full_wizard_i18n_catalog", "roadmap_promotion", "seal_and_receipt",
+		"templates_and_domain_packs", "web_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
+	}
+	if fixture.NextDependency != "dossier_confirmation_freeze_and_causal_plan_creation" {
+		t.Fatalf("invalid next dependency: %q", fixture.NextDependency)
 	}
 	wantCandidateFiles := []string{
 		"acceptance/fixtures/v23_wizard.json",
@@ -341,6 +411,72 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	for _, name := range wantCandidateFiles {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(name))); err != nil {
 			t.Fatalf("candidate %q: %v", name, err)
+		}
+	}
+	wantIntegrationFiles := []string{
+		"docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
+		"internal/application/intake_chain.go",
+		"internal/application/intake_orchestrator.go",
+		"internal/application/intake_service.go",
+		"internal/adapters/state/sqlite/intake.go",
+		"internal/adapters/state/sqlite/migrations/017_intake.sql",
+		"internal/adapters/state/sqlite/recovery_validation_v23.go",
+		"internal/bootstrap/command_registry_upgrade_e2e_test.go",
+		"internal/bootstrap/intake_e2e_test.go",
+		"internal/commands/handlers_intake.go",
+		"internal/commands/registry.json",
+		"internal/commands/registry_admission_identity.go",
+		"internal/i18n/catalogs/en.json",
+		"internal/i18n/catalogs/es.json",
+	}
+	if !reflect.DeepEqual(fixture.IntegrationFiles, wantIntegrationFiles) {
+		t.Fatalf("invalid integration files: %+v", fixture.IntegrationFiles)
+	}
+	for _, name := range wantIntegrationFiles {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(name))); err != nil {
+			t.Fatalf("integration file %q: %v", name, err)
+		}
+	}
+}
+
+func assertV23PublicCommandBindings(t *testing.T, bindings []v23WizardBinding) {
+	t.Helper()
+	definitions := make(map[string]commands.Definition)
+	for _, definition := range commands.CanonicalDefinitions() {
+		definitions[definition.ID] = definition
+	}
+	for _, binding := range bindings {
+		definition, found := definitions[binding.ID]
+		if !found || definition.Handler != binding.Handler ||
+			definition.Permission != binding.Permission ||
+			string(definition.Kind) != binding.Kind ||
+			string(definition.ReplayMode) != binding.ReplayMode {
+			t.Fatalf("binding %q mismatch: %+v found=%v", binding.ID, definition, found)
+		}
+		var input struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		if err := json.Unmarshal(definition.InputSchema, &input); err != nil {
+			t.Fatalf("%s input schema: %v", binding.ID, err)
+		}
+		for _, forbidden := range binding.ForbiddenPayloadFields {
+			if _, exists := input.Properties[forbidden]; exists {
+				t.Fatalf("%s payload exposes authority field %q", binding.ID, forbidden)
+			}
+		}
+		var output struct {
+			Properties map[string]struct {
+				Properties map[string]json.RawMessage `json:"properties"`
+				Required   []string                   `json:"required"`
+			} `json:"properties"`
+		}
+		if err := json.Unmarshal(definition.OutputSchema, &output); err != nil {
+			t.Fatalf("%s output schema: %v", binding.ID, err)
+		}
+		intakeOutput, exists := output.Properties["intake"]
+		if !exists || !reflect.DeepEqual(intakeOutput.Required, binding.RequiredOutputFields) {
+			t.Fatalf("%s output fields=%v want=%v", binding.ID,
+				intakeOutput.Required, binding.RequiredOutputFields)
 		}
 	}
 }
