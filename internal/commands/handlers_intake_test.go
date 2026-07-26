@@ -97,6 +97,20 @@ func (api *fakeApplication) GetIntake(
 			},
 		})
 	}
+	if err == nil {
+		revised := state.Questions()[1]
+		revised.Options[0].Recommended = false
+		revised.Options[1].Recommended = true
+		state, err = intake.Apply(state, intake.Change{
+			StateRef: request.StateRef, ExpectedRevision: state.Revision(),
+			Origin: intake.OriginForm,
+			Derivation: intake.DerivationIdentity{
+				Schema: "orquesta.test.deriver", Version: "v1",
+				SemanticDigest: strings.Repeat("a", 64),
+			},
+			QuestionRevisions: []intake.Question{revised},
+		})
+	}
 	return application.IntakeRecord{
 		ActorRef: request.ActorRef, ProjectRef: request.ProjectRef, State: state,
 	}, err
@@ -219,6 +233,16 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 		projected.Intake.Decisions == nil || projected.Intake.History == nil {
 		t.Fatalf("public intake=%s", get.Data)
 	}
+	var latestHistory map[string]json.RawMessage
+	if err := json.Unmarshal(
+		projected.Intake.History[len(projected.Intake.History)-1],
+		&latestHistory,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if string(latestHistory["questions_revised"]) != "1" {
+		t.Fatalf("questions_revised missing from public history: %s", get.Data)
+	}
 	if len(projected.Intake.Questions) != 2 ||
 		!reflect.DeepEqual(
 			projected.Intake.Questions[1].DependsOn,
@@ -236,7 +260,7 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 		)
 	}
 	var projectedMutation intake.Mutation
-	if len(projected.Intake.History) != 1 ||
+	if len(projected.Intake.History) != 2 ||
 		json.Unmarshal(projected.Intake.History[0], &projectedMutation) != nil ||
 		projectedMutation.Derivation.Schema != "orquesta.test.deriver" ||
 		projectedMutation.Derivation.Version != "v1" ||
