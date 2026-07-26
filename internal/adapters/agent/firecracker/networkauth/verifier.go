@@ -34,6 +34,7 @@ type Config struct {
 	Attestations       LaunchAttestationVerifier
 	Challenges         ChallengeConsumer
 	Now                func() time.Time
+	CleanupTimeout     time.Duration
 	VerifierRef        string
 	CredentialActorRef string
 }
@@ -63,7 +64,8 @@ func ErrorCode(err error) string {
 
 func New(config Config) (*Verifier, error) {
 	if config.CredentialStore == nil || config.Attestations == nil || config.Challenges == nil ||
-		config.Now == nil || !validRef(config.VerifierRef) || !validRef(config.CredentialActorRef) {
+		config.Now == nil || config.CleanupTimeout <= 0 ||
+		!validRef(config.VerifierRef) || !validRef(config.CredentialActorRef) {
 		return nil, authError("config_invalid")
 	}
 	return &Verifier{config: config}, nil
@@ -72,13 +74,16 @@ func New(config Config) (*Verifier, error) {
 func (verifier *Verifier) Authorize(
 	ctx context.Context,
 	request ports.AgentMicroVMLaunchProofRequest,
-	open ports.AgentMicroVMLaunchOpen,
-) (ports.AgentMicroVMLaunchAuthorizationReceipt, error) {
+	factory ports.AgentMicroVMLaunchTransactionFactory,
+) (
+	receipt ports.AgentMicroVMLaunchAuthorizationReceipt,
+	resultErr error,
+) {
 	if verifier == nil || ctx == nil || ctx.Err() != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("unavailable")
 	}
-	if open == nil {
-		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("opening_required")
+	if factory == nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("transaction_factory_required")
 	}
 	if err := ports.ValidateAgentMicroVMLaunchProofRequest(request); err != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("request_invalid")
@@ -152,7 +157,7 @@ func (verifier *Verifier) Authorize(
 	if authorizedAt.IsZero() || authorizedAt.Before(request.RequestedAt) {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("clock_invalid")
 	}
-	receipt := ports.AgentMicroVMLaunchAuthorizationReceipt{
+	receipt = ports.AgentMicroVMLaunchAuthorizationReceipt{
 		ProjectRef: policy.Scope.ProjectRef.String(), GoalRef: policy.Scope.GoalRef.String(),
 		WorkItemRef: policy.Scope.WorkItemRef.String(), ExecutionRef: policy.Scope.ExecutionRef.String(),
 		AgentRef: policy.Scope.AgentRef, PolicyRef: policy.Ref,
@@ -173,9 +178,38 @@ func (verifier *Verifier) Authorize(
 	if ctx.Err() != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("unavailable")
 	}
-	if err := open(ctx); err != nil {
+	transaction, err := factory.Begin(ctx)
+	if err != nil || transaction == nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("transaction_begin_failed")
+	}
+	committed := false
+	defer func() {
+		if committed {
+			return
+		}
+		cleanupCtx, cancelCleanup := context.WithTimeout(
+			context.WithoutCancel(ctx),
+			verifier.config.CleanupTimeout,
+		)
+		defer cancelCleanup()
+		if err := transaction.Rollback(cleanupCtx); err != nil {
+			receipt = ports.AgentMicroVMLaunchAuthorizationReceipt{}
+			resultErr = authError("cleanup_failed")
+		}
+	}()
+	if ctx.Err() != nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("unavailable")
+	}
+	if err := transaction.Open(ctx); err != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("opening_failed")
 	}
+	if ctx.Err() != nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("unavailable")
+	}
+	if err := transaction.Commit(ctx); err != nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("commit_failed")
+	}
+	committed = true
 	return receipt, nil
 }
 

@@ -58,11 +58,11 @@ type AgentMicroVMLaunchProofRequest struct {
 	RequestedAt          time.Time
 }
 
-// AgentMicroVMLaunchAuthorizationReceipt is audit evidence for an opening that
-// already happened through AgentMicroVMLaunchAuthorizer. It is never an
-// authority token and must not be accepted later to open broker or proxy
-// access. It deliberately contains no challenge or proof material.
-// ChallengeDigest supports audit without making the nonce reusable.
+// AgentMicroVMLaunchAuthorizationReceipt is audit evidence for an opening
+// committed through AgentMicroVMLaunchAuthorizer. It is never an authority
+// token and must not be accepted later to open broker or proxy access. It
+// deliberately contains no challenge or proof material. ChallengeDigest
+// supports audit without making the nonce reusable.
 type AgentMicroVMLaunchAuthorizationReceipt struct {
 	ProjectRef              string
 	GoalRef                 string
@@ -85,21 +85,36 @@ type AgentMicroVMLaunchAuthorizationReceipt struct {
 	ReceiptRef              string
 }
 
-// AgentMicroVMLaunchOpen is the control-flow capability that opens one broker
-// or proxy session. It is called at most once and only while Authorize owns the
-// verified launch request. Implementations must not persist or replay it.
-type AgentMicroVMLaunchOpen func(context.Context) error
+// AgentMicroVMLaunchTransaction prepares one broker or proxy session without
+// exposing it until Commit. Open may allocate partial internal resources, but
+// Commit is the only operation allowed to make the service externally
+// reachable and must do so atomically: an error means it remains unreachable.
+// Rollback must clean any internal resource left by Begin, Open or a failed
+// Commit and honor its bounded cleanup context.
+type AgentMicroVMLaunchTransaction interface {
+	Open(context.Context) error
+	Commit(context.Context) error
+	Rollback(context.Context) error
+}
+
+// AgentMicroVMLaunchTransactionFactory starts an isolated opening
+// transaction. Begin must not make the service externally reachable and must
+// either return a usable transaction or return an error with zero effects.
+type AgentMicroVMLaunchTransactionFactory interface {
+	Begin(context.Context) (AgentMicroVMLaunchTransaction, error)
+}
 
 // AgentMicroVMLaunchAuthorizer is the mandatory gate in front of both the
 // Orquesta broker and the controlled egress proxy. It consumes the challenge
 // before crossing an attestation or credential ledger, verifies the exact
-// launch and proof, and invokes open within the same call. The returned receipt
-// is evidence only: possession of it never authorizes a later opening.
+// launch and proof, and owns the opening transaction through Commit or
+// Rollback. The returned receipt is evidence only: possession of it never
+// authorizes a later opening.
 type AgentMicroVMLaunchAuthorizer interface {
 	Authorize(
 		context.Context,
 		AgentMicroVMLaunchProofRequest,
-		AgentMicroVMLaunchOpen,
+		AgentMicroVMLaunchTransactionFactory,
 	) (AgentMicroVMLaunchAuthorizationReceipt, error)
 }
 
