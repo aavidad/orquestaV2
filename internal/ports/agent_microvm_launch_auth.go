@@ -16,7 +16,7 @@ const (
 )
 
 // AgentMicroVMLaunchProof is callback-scoped proof material, not a durable
-// credential. The future host verifier obtains the credential through its
+// credential. The host authorizer obtains the credential through its
 // CredentialStore adapter and compares this proof without crossing that
 // adapter boundary with secret material.
 type AgentMicroVMLaunchProof struct {
@@ -58,9 +58,11 @@ type AgentMicroVMLaunchProofRequest struct {
 	RequestedAt          time.Time
 }
 
-// AgentMicroVMLaunchAuthorizationReceipt proves only that the broker gate
-// authorized this exact launch. It deliberately contains no challenge or proof
-// material. ChallengeDigest supports audit without making the nonce reusable.
+// AgentMicroVMLaunchAuthorizationReceipt is audit evidence for an opening that
+// already happened through AgentMicroVMLaunchAuthorizer. It is never an
+// authority token and must not be accepted later to open broker or proxy
+// access. It deliberately contains no challenge or proof material.
+// ChallengeDigest supports audit without making the nonce reusable.
 type AgentMicroVMLaunchAuthorizationReceipt struct {
 	ProjectRef              string
 	GoalRef                 string
@@ -83,13 +85,22 @@ type AgentMicroVMLaunchAuthorizationReceipt struct {
 	ReceiptRef              string
 }
 
-// AgentMicroVMLaunchProofVerifier is the mandatory gate in front of both the
-// Orquesta broker and the controlled egress proxy. An implementation must
-// consume a single-use challenge, read the exact credential version through
-// CredentialStore, verify the proof in callback scope and verify the launch
-// attestation. No service may be exposed when this port is absent or fails.
-type AgentMicroVMLaunchProofVerifier interface {
-	Verify(context.Context, AgentMicroVMLaunchProofRequest) (AgentMicroVMLaunchAuthorizationReceipt, error)
+// AgentMicroVMLaunchOpen is the control-flow capability that opens one broker
+// or proxy session. It is called at most once and only while Authorize owns the
+// verified launch request. Implementations must not persist or replay it.
+type AgentMicroVMLaunchOpen func(context.Context) error
+
+// AgentMicroVMLaunchAuthorizer is the mandatory gate in front of both the
+// Orquesta broker and the controlled egress proxy. It consumes the challenge
+// before crossing an attestation or credential ledger, verifies the exact
+// launch and proof, and invokes open within the same call. The returned receipt
+// is evidence only: possession of it never authorizes a later opening.
+type AgentMicroVMLaunchAuthorizer interface {
+	Authorize(
+		context.Context,
+		AgentMicroVMLaunchProofRequest,
+		AgentMicroVMLaunchOpen,
+	) (AgentMicroVMLaunchAuthorizationReceipt, error)
 }
 
 func ValidateAgentMicroVMLaunchProofRequest(request AgentMicroVMLaunchProofRequest) error {

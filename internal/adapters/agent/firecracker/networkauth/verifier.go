@@ -69,17 +69,28 @@ func New(config Config) (*Verifier, error) {
 	return &Verifier{config: config}, nil
 }
 
-func (verifier *Verifier) Verify(
+func (verifier *Verifier) Authorize(
 	ctx context.Context,
 	request ports.AgentMicroVMLaunchProofRequest,
+	open ports.AgentMicroVMLaunchOpen,
 ) (ports.AgentMicroVMLaunchAuthorizationReceipt, error) {
 	if verifier == nil || ctx == nil || ctx.Err() != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("unavailable")
+	}
+	if open == nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("opening_required")
 	}
 	if err := ports.ValidateAgentMicroVMLaunchProofRequest(request); err != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("request_invalid")
 	}
 	policy := request.Policy
+	if err := verifier.config.Challenges.Consume(ctx, ChallengeConsumeRequest{
+		Ref: request.ChallengeRef, Value: request.Challenge,
+		PolicyDigest: request.ExpectedPolicyDigest, LaunchBindingDigest: policy.LaunchBindingDigest,
+		ExecutionRef: policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
+	}); err != nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("challenge_denied")
+	}
 	check := LaunchAttestationCheck{
 		AttestationRef: policy.LaunchAttestationRef.String(),
 		PolicyDigest:   request.ExpectedPolicyDigest, LaunchBindingDigest: policy.LaunchBindingDigest,
@@ -137,13 +148,6 @@ func (verifier *Verifier) Verify(
 	if !callbackCalled || !proofMatched || !validCredentialUseReceipt(useRequest, useReceipt) {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("credential_receipt_invalid")
 	}
-	if err := verifier.config.Challenges.Consume(ctx, ChallengeConsumeRequest{
-		Ref: request.ChallengeRef, Value: request.Challenge,
-		PolicyDigest: request.ExpectedPolicyDigest, LaunchBindingDigest: policy.LaunchBindingDigest,
-		ExecutionRef: policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
-	}); err != nil {
-		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("challenge_denied")
-	}
 	authorizedAt := verifier.config.Now().UTC()
 	if authorizedAt.IsZero() || authorizedAt.Before(request.RequestedAt) {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("clock_invalid")
@@ -165,6 +169,12 @@ func (verifier *Verifier) Verify(
 	receipt.ReceiptRef = ports.AgentMicroVMLaunchAuthorizationReceiptRef(receipt)
 	if err := ports.ValidateAgentMicroVMLaunchAuthorizationReceipt(request, receipt); err != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("receipt_invalid")
+	}
+	if ctx.Err() != nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("unavailable")
+	}
+	if err := open(ctx); err != nil {
+		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("opening_failed")
 	}
 	return receipt, nil
 }
@@ -202,4 +212,4 @@ func authError(suffix string) error {
 	return &Error{Code: "agent_firecracker_network_auth." + suffix}
 }
 
-var _ ports.AgentMicroVMLaunchProofVerifier = (*Verifier)(nil)
+var _ ports.AgentMicroVMLaunchAuthorizer = (*Verifier)(nil)

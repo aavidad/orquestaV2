@@ -137,7 +137,7 @@ func (store *MemoryChallengeStore) Consume(
 	if !found {
 		return authError("challenge_missing_or_consumed")
 	}
-	if now.After(record.expiresAt) {
+	if !now.Before(record.expiresAt) {
 		delete(store.active, request.Ref)
 		clear(record.value[:])
 		return authError("challenge_expired")
@@ -157,7 +157,7 @@ func (store *MemoryChallengeStore) Consume(
 
 func (store *MemoryChallengeStore) pruneExpired(now time.Time) {
 	for ref, record := range store.active {
-		if now.After(record.expiresAt) {
+		if !now.Before(record.expiresAt) {
 			delete(store.active, ref)
 			clear(record.value[:])
 		}
