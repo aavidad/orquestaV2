@@ -62,6 +62,12 @@ func consumeRetiredAction(
 		return err
 	}
 	if started {
+		row, err = takeOverExpiredAttestationRetirement(
+			ctx, transaction, actionRef, authorityRef, at, row,
+		)
+		if err != nil {
+			return err
+		}
 		const quarantineCode = "application.effect_unknown_applied"
 		result, err := transaction.ExecContext(ctx, `
 UPDATE outbox
@@ -72,7 +78,7 @@ WHERE ref = ? AND effect_intent_ref = ? AND claim_token = ? AND claimed_by = ?
   AND EXISTS (
       SELECT 1 FROM effect_attempts
       WHERE action_ref = outbox.ref AND intent_ref = outbox.effect_intent_ref
-        AND action_fence = outbox.fence
+        AND action_fence <= outbox.fence
   )`,
 			requiredTime(at), requiredTime(at), quarantineCode,
 			actionRef, row.effectIntentRef, row.token.String, row.worker.String,
@@ -140,23 +146,81 @@ func retiredAttestationHasStartedEffect(
 	if row.effectIntentRef == "" {
 		return false, conflict(errors.New("sqlite.action_retirement_attestation_intent_missing"))
 	}
-	var total, exact int
+	var total, causal int
 	if err := transaction.QueryRowContext(ctx, `
 SELECT COUNT(*),
-       COALESCE(SUM(CASE WHEN intent_ref = ? AND action_fence = ? THEN 1 ELSE 0 END), 0)
+       COALESCE(SUM(CASE WHEN intent_ref = ? AND action_fence <= ? THEN 1 ELSE 0 END), 0)
 FROM effect_attempts
 WHERE action_ref = ?`,
 		row.effectIntentRef, row.fence, actionRef,
-	).Scan(&total, &exact); err != nil {
+	).Scan(&total, &causal); err != nil {
 		return false, mapDatabaseError(err)
 	}
 	if total == 0 {
 		return false, nil
 	}
-	if total != 1 || exact != 1 {
+	if total != 1 || causal != 1 {
 		return false, conflict(errors.New("sqlite.action_retirement_attestation_attempt_ambiguous"))
 	}
 	return true, nil
+}
+
+func takeOverExpiredAttestationRetirement(
+	ctx context.Context,
+	transaction *sql.Tx,
+	actionRef string,
+	authorityRef string,
+	at time.Time,
+	row retiredActionRow,
+) (retiredActionRow, error) {
+	if requiredTime(at) < row.leaseUntil.Int64 {
+		return row, nil
+	}
+	if row.deliveryAttempt >= int64(maxSQLiteInteger) {
+		return row, invalid(errors.New("sqlite.action_retirement_attempt_overflow"))
+	}
+	leaseUntil := at.Add(time.Nanosecond)
+	if !leaseUntil.After(at) || requiredTime(leaseUntil) <= requiredTime(at) {
+		return row, invalid(errors.New("sqlite.action_retirement_lease_overflow"))
+	}
+	token := "retire:" + authorityRef + ":" + actionRef
+	worker := "system:" + authorityRef
+	nextAttempt := row.deliveryAttempt + 1
+	result, err := transaction.ExecContext(ctx, `
+UPDATE outbox
+SET claim_token = ?, claimed_by = ?, claimed_until = ?, delivery_attempt = ?
+WHERE ref = ? AND effect_intent_ref = ?
+  AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
+  AND delivery_attempt = ? AND fence = ? AND claimed_until <= ?
+  AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL
+  AND EXISTS (
+      SELECT 1 FROM work_item_fences current
+      WHERE current.goal_ref = outbox.goal_ref
+        AND current.work_item_ref = outbox.work_item_ref
+        AND current.fence = outbox.fence
+  )
+  AND (SELECT COUNT(*) FROM effect_attempts WHERE action_ref = outbox.ref) = 1
+  AND EXISTS (
+      SELECT 1 FROM effect_attempts
+      WHERE action_ref = outbox.ref AND intent_ref = outbox.effect_intent_ref
+        AND action_fence <= outbox.fence
+  )`,
+		token, worker, requiredTime(leaseUntil), nextAttempt,
+		actionRef, row.effectIntentRef,
+		row.token.String, row.worker.String, row.leaseUntil.Int64,
+		row.deliveryAttempt, row.fence, requiredTime(at),
+	)
+	if err != nil {
+		return row, mapDatabaseError(err)
+	}
+	if err := requireOneRow(result); err != nil {
+		return row, err
+	}
+	row.token = sql.NullString{String: token, Valid: true}
+	row.worker = sql.NullString{String: worker, Valid: true}
+	row.leaseUntil = sql.NullInt64{Int64: requiredTime(leaseUntil), Valid: true}
+	row.deliveryAttempt = nextAttempt
+	return row, nil
 }
 
 func readRetiredAction(
