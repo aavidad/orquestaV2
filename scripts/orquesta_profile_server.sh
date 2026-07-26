@@ -9,6 +9,7 @@ umask 077
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PIDFD_SIGNAL="$SCRIPT_DIR/lib/pidfd_signal.py"
+readonly FIRECRACKER_LAUNCHER_PROBE="$SCRIPT_DIR/lib/firecracker_launcher_probe.py"
 
 fail() {
   printf 'orquesta_profile_server: status=error reason_code=%s\n' "$1" >&2
@@ -195,6 +196,88 @@ private_executable() {
     [ $((8#$(stat -Lc '%a' -- "$candidate") & 8#022)) -eq 0 ]
 }
 
+run_microvm_launcher_probe() {
+  launcher_socket="$1"
+  private_executable "$FIRECRACKER_LAUNCHER_PROBE" || return 44
+  "$FIRECRACKER_LAUNCHER_PROBE" \
+    --socket "$launcher_socket" \
+    --trusted-uid 0 \
+    --trusted-gid 0 >/dev/null 2>&1
+}
+
+fail_microvm_launcher_probe() {
+  case "$1" in
+    0) ;;
+    40)
+      fail_action \
+        "test_attestor_microvm_launcher_config_invalid" \
+        "repair_microvm_launcher_socket_configuration"
+      ;;
+    41)
+      fail_action \
+        "test_attestor_microvm_launcher_unavailable" \
+        "start_or_repair_microvm_launcher"
+      ;;
+    42)
+      fail_action \
+        "test_attestor_microvm_launcher_socket_unsafe" \
+        "repair_microvm_launcher_socket"
+      ;;
+    43)
+      fail_action \
+        "test_attestor_microvm_launcher_identity_mismatch" \
+        "restore_trusted_microvm_launcher"
+      ;;
+    *)
+      fail_action \
+        "test_attestor_microvm_launcher_probe_failed" \
+        "inspect_microvm_launcher"
+      ;;
+  esac
+}
+
+probe_microvm_launcher_socket() {
+  if run_microvm_launcher_probe "$1"; then
+    return
+  else
+    probe_status="$?"
+  fi
+  fail_microvm_launcher_probe "$probe_status"
+}
+
+probe_persisted_microvm_launcher() {
+  private_regular_file "$CONFIG_TARGET" || fail "daemon_contract_invalid"
+  expected_config_sha="$(read_identity_file "$CONFIG_SHA_FILE")" ||
+    fail "daemon_contract_invalid"
+  [ "$(sha256sum -- "$CONFIG_TARGET" | awk '{print $1}')" = \
+    "$expected_config_sha" ] || fail "daemon_contract_invalid"
+  persisted_attestor="$(
+    python3 - "$CONFIG_TARGET" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    document = tomllib.load(handle)
+attestor = document.get("test_attestor", {})
+provider = attestor.get("provider", "disabled") if isinstance(attestor, dict) else ""
+microvm = attestor.get("microvm", {}) if isinstance(attestor, dict) else {}
+socket_path = microvm.get("launcher_socket", "") if isinstance(microvm, dict) else ""
+if not isinstance(provider, str) or not isinstance(socket_path, str):
+    raise SystemExit(1)
+if provider != "microvm":
+    socket_path = "-"
+print(provider)
+print(socket_path)
+PY
+  )" 2>/dev/null || fail "daemon_contract_invalid"
+  mapfile -t persisted_attestor_lines <<<"$persisted_attestor"
+  [ "${#persisted_attestor_lines[@]}" -eq 2 ] ||
+    fail "daemon_contract_invalid"
+  if [ "${persisted_attestor_lines[0]}" = "microvm" ]; then
+    probe_microvm_launcher_socket "${persisted_attestor_lines[1]}"
+  fi
+}
+
 private_directory "$runtime_base" || fail "runtime_base_not_private"
 readonly RUNTIME_ROOT="$runtime_base/$profile"
 
@@ -361,6 +444,7 @@ case "$ACTION" in
       running)
         [ ! -e "$START_FAILED_FILE" ] ||
           fail "daemon_previous_start_not_ready"
+        probe_persisted_microvm_launcher
         pid="$(read_identity_file "$PID_FILE")"
         printf 'orquesta_profile_server: status=running profile=%s pid=%s\n' \
           "$profile" "$pid"
@@ -713,12 +797,27 @@ if attestor_provider == "bubblewrap":
         or bubblewrap_metadata.st_mode & 0o022
     ):
         raise ValueError("test_attestor")
+    launcher_socket = "-"
+elif attestor_provider == "microvm":
+    microvm = test_attestor.get("microvm")
+    launcher_socket = (
+        microvm.get("launcher_socket")
+        if isinstance(microvm, dict)
+        else None
+    )
+    if not isinstance(launcher_socket, str) or not launcher_socket:
+        raise ValueError("test_attestor")
+    attestor_max_concurrent = 0
+    attestor_max_subject_bytes = 0
+    bubblewrap_command = "-"
+    repository_seed_path = "-"
 else:
     attestor_provider = "other"
     attestor_max_concurrent = 0
     attestor_max_subject_bytes = 0
     bubblewrap_command = "-"
     repository_seed_path = "-"
+    launcher_socket = "-"
 print(listen)
 print(token_path)
 print(project_ref)
@@ -728,11 +827,12 @@ print(attestor_max_concurrent)
 print(attestor_max_subject_bytes)
 print(bubblewrap_command)
 print(repository_seed_path)
+print(launcher_socket)
 PY
 )" 2>/dev/null || fail "orquesta_config_invalid"
 
 mapfile -t validation_lines <<<"$validation_output"
-[ "${#validation_lines[@]}" -eq 9 ] || fail "orquesta_config_invalid"
+[ "${#validation_lines[@]}" -eq 10 ] || fail "orquesta_config_invalid"
 listen="${validation_lines[0]}"
 token_path="${validation_lines[1]}"
 project_ref="${validation_lines[2]}"
@@ -742,6 +842,7 @@ attestor_max_concurrent="${validation_lines[5]}"
 attestor_max_subject_bytes="${validation_lines[6]}"
 bubblewrap_command="${validation_lines[7]}"
 repository_seed_path="${validation_lines[8]}"
+launcher_socket="${validation_lines[9]}"
 [ -n "$listen" ] &&
   [ -n "$token_path" ] &&
   [ -n "$project_ref" ] &&
@@ -774,6 +875,9 @@ case "$state" in
     [ "$running_binary_sha" = "$REQUESTED_BINARY_SHA" ] &&
       [ "$running_config_sha" = "$REQUESTED_CONFIG_SHA" ] ||
       fail "daemon_already_running_different_contract"
+    if [ "$attestor_provider" = "microvm" ]; then
+      probe_microvm_launcher_socket "$launcher_socket"
+    fi
     rm -f -- "$config_temporary"
     pid="$(read_identity_file "$PID_FILE")"
     printf 'orquesta_profile_server: status=running profile=%s pid=%s\n' \
@@ -1074,6 +1178,8 @@ PY
 
 if [ "$attestor_provider" = "bubblewrap" ]; then
   preflight_bubblewrap_capacity
+elif [ "$attestor_provider" = "microvm" ]; then
+  probe_microvm_launcher_socket "$launcher_socket"
 fi
 
 exec 9<>"$GLOBAL_LEASE_LOCK"
@@ -1141,6 +1247,7 @@ safe_write_value "$BINARY_SHA_FILE" "$REQUESTED_BINARY_SHA"
 safe_write_value "$CONFIG_SHA_FILE" "$REQUESTED_CONFIG_SHA"
 
 ready=0
+microvm_readiness_failure=0
 for _ in $(seq 1 100); do
   if ! pid_alive "$started_pid"; then
     break
@@ -1204,6 +1311,14 @@ if (
     raise SystemExit(1)
 PY
   then
+    if [ "$attestor_provider" = "microvm" ]; then
+      if run_microvm_launcher_probe "$launcher_socket"; then
+        microvm_readiness_failure=0
+      else
+        microvm_readiness_failure="$?"
+        break
+      fi
+    fi
     ready=1
     break
   fi
@@ -1221,6 +1336,9 @@ if [ "$ready" -ne 1 ]; then
   for _ in $(seq 1 300); do
     pid_alive "$started_pid" || {
       remove_stale_identity
+      if [ "$microvm_readiness_failure" -ne 0 ]; then
+        fail_microvm_launcher_probe "$microvm_readiness_failure"
+      fi
       fail "daemon_not_ready"
     }
     sleep 0.1
