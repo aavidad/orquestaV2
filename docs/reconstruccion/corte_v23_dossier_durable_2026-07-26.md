@@ -4,6 +4,12 @@ Fecha: 2026-07-26.
 
 Estado: **partial_green_unsealed**.
 
+> Actualización posterior: prepare/get públicos y la transición atómica
+> confirmación/freeze/Goal quedaron integrados por `29198652`,
+> `c4a1ae9a`, `2f21ddc8` y `3540a7b0`; la aceptación parcial se actualizó en
+> `3c24f113`. La lista de pendiente causal inferior conserva la foto de este
+> corte y no debe usarse como estado vigente.
+
 Este corte conserva una propuesta de dossier completa, content-addressed y
 ligada al `IntakeRecord` y `PlanSpec` exactos. No genera el contenido editorial
 del dossier, no expone todavía comandos públicos, no confirma ni congela el

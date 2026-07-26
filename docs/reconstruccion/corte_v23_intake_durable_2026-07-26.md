@@ -4,6 +4,11 @@ Fecha: 2026-07-26.
 
 Estado: **partial_green_unsealed**.
 
+> Actualización posterior: dossier durable, comandos públicos y la transición
+> atómica confirmación/freeze/Goal ya están integrados y acreditados de forma
+> parcial por `3c24f113`. El resto de este documento conserva el alcance y los
+> límites del corte durable inicial.
+
 Este corte cierra la primera integración vertical del intake de Wizard:
 dominio puro, writer de aplicación, autorización causal, CAS y replay
 durables en SQLite, comandos públicos y reinicio real de la composición. No
@@ -86,7 +91,7 @@ application/SQLite/commands/bootstrap.
 
 ## Límites y siguiente dependencia
 
-Continúan pendientes:
+Al cerrar este corte quedaban pendientes:
 
 - default canónico de rondas bajo `L-CONFIG`;
 - dossier, confirmación explícita y freeze;
@@ -94,8 +99,8 @@ Continúan pendientes:
 - catálogo Wizard completo, templates/domain packs y superficie web;
 - sello, receipt y promoción del roadmap.
 
-La siguiente dependencia sigue siendo
-`dossier_confirmation_freeze_and_causal_plan_creation`.
+La dependencia indicada al cerrar este corte ya fue resuelta. La siguiente
+dependencia vigente es `canonical_round_default_and_wizard_catalog`.
 
 Deuda no bloqueante: cada apply relee y revalida la cadena histórica completa;
 el coste acumulado es O(N²) si un intake alcanza muchas revisiones. Antes de

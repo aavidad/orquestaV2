@@ -2,6 +2,35 @@
 
 Estado: **superado para abrir siguiente tramo; no acredita V23**.
 
+## Actualización dirigida del 2026-07-26
+
+La comparación del Wizard de `/home/alberto/Trabajo/orquesta` y
+`/home/alberto/Trabajo/orquesta-rebuild` confirma que ambos contienen la misma
+implementación útil; `orquesta-autonomia-clean` no aporta otra variante más
+avanzada. No existe una solución V23 posterior escondida.
+
+Se reutilizan como diseño y casos de prueba, no como lifecycle ni estado:
+
+- el catálogo U1–U12, T1–T8 y las reglas cruzadas R1–R8 de
+  `modulos/orquesta-web/nueva_app_wizard_gaps_v0.go`;
+- sus packs combinables de agenda, ecommerce, mapas, inventario, documentos,
+  proyectos, finanzas, CRM, reservas, salud, educación, comunidad, IoT, media
+  y facturación;
+- las etapas y microtareas de `orquesta-factory/backlog_v0.go` y
+  `orquesta-app-planner/plan_large_v0.go`, compiladas al `Goal` vigente;
+- slots repetibles, ayuda, glosario y corpus RAG como proyecciones del único
+  intake;
+- listas editoriales y diagramas de
+  `modulos/orquesta-web/nueva_app_wizard_dossier_v0.go`.
+
+No se copian `WebNuevaAppIntakeSessionV0`, estados web paralelos, defaults
+técnicos silenciosos, normalización de recomendaciones inválidas, activación
+por palabras como rail, refs de dossier no content-addressed, ni planners
+legacy completos. Los tests históricos que se portan como especificación son:
+opciones con ayuda, «qué es» sin avance de ronda, packs combinados sin
+duplicados, bot sin opciones inventadas, slot filling sobre refs permitidas y
+diagramas obligatorios.
+
 ## Evidencia de barrido
 
 Se consultaron `informe_integracion_generaciones_orquesta_2026-07-25.md`,

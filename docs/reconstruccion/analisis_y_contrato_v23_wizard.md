@@ -17,14 +17,17 @@ que V23 esté completa.
 > `IntakeRecord` durable y el `PlanSpec` concreto, recalcula el digest del
 > estado, deriva el del plan y proyecta las decisiones completas. Su
 > persistencia, validación ejecutable por el orquestador y comandos públicos
-> del dossier ya están integrados. Confirmación, freeze y creación atómica del
-> Goal siguen pendientes. V23 continúa
-> `partial_green_unsealed`.
+> del dossier ya están integrados. La confirmación explícita, el freeze y la
+> creación atómica de Goal, AppSpec, plan y outbox se integraron después en
+> `c4a1ae9a`, `2f21ddc8` y `3540a7b0`, y quedaron reflejados en la aceptación
+> parcial por `3c24f113`. V23 continúa `partial_green_unsealed`: esa cadena
+> acredita `WIZ-23`, no el motor Wizard ni el contrato completo.
 >
 > Corte posterior: `docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md`
 > ya acredita persistencia, replay, restart, recovery y comandos públicos del
-> dossier. Siguen pendientes su generación editorial, confirmación, freeze y
-> creación atómica del Goal.
+> dossier. De esa lista solo continúa pendiente su generación editorial; el
+> corte posterior de confirmación está en
+> `docs/reconstruccion/corte_v23_comandos_dossier_2026-07-26.md`.
 
 Contexto causal:
 
@@ -307,10 +310,10 @@ go test -mod=vendor -race -count=1 -v ./acceptance -run '^(TestAcceptanceV23Wiza
 ```
 
 Esta aceptación verde demuestra semántica offline del paquete. La evidencia
-de integración separada añade intake y dossier durables, replay, restart y
-recovery. Todavía no demuestra generación editorial del dossier, comandos
-públicos, confirmación, freeze, creación causal de plan, E2E web, promoción del
-roadmap, receipt ni sello.
+de integración separada añade intake y dossier durables, replay, restart,
+recovery, comandos públicos y confirmación causal por `dossier_ref`. Todavía
+no demuestra generación editorial del dossier, motor Wizard completo, E2E web,
+promoción del roadmap, receipt ni sello.
 
 Verificación ejecutada:
 
