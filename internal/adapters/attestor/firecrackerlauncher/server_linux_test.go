@@ -310,8 +310,13 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	cancel, done := serveForTest(t, server)
-	defer func() { cancel(); <-done }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	defer func() {
+		if err := server.Close(); err != nil {
+			t.Errorf("server close: %v", err)
+		}
+	}()
 
 	request := validLaunchRequestForTest()
 	input, digest, err := NewSealedInput(inputDrivePayloadForTest("input"), config.MaxInputBytes)
@@ -322,8 +327,7 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	request.InputDigest = digest
 	payload, _ := marshalRequest(request)
 	socket := connectForTest(t, config.SocketPath)
-	waitForConnectionsForTest(t, server, 1)
-	missingConnectionOwner := registeredConnectionOwnerForTest(t, server)
+	missingConnection := acceptRegisteredConnectionForTest(t, ctx, server)
 	if _, err := unix.SendmsgN(socket, payload, nil, nil, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -337,14 +341,13 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	if err != nil || response.Code != CodeDescriptorInvalid {
 		t.Fatalf("response=%+v err=%v", response, err)
 	}
-	waitForConnectionsForTest(t, server, 0)
-	waitForDescriptorOwnerCountForTest(t, missingConnectionOwner, 0)
+	waitForFinishedConnectionForTest(t, missingConnection)
+	waitForDescriptorOwnerCountForTest(t, missingConnection.owner, 0)
 
 	inputOwner := descriptorOwnerForFileForTest(t, input)
 	baselineOwned := openDescriptorCountForOwnerForTest(t, inputOwner)
 	socket = connectForTest(t, config.SocketPath)
-	waitForConnectionsForTest(t, server, 1)
-	excessConnectionOwner := registeredConnectionOwnerForTest(t, server)
+	excessConnection := acceptRegisteredConnectionForTest(t, ctx, server)
 	if _, err := unix.SendmsgN(
 		socket,
 		payload,
@@ -364,10 +367,10 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	if err != nil || response.Code != CodeDescriptorInvalid {
 		t.Fatalf("excess descriptor response=%+v err=%v", response, err)
 	}
-	// The response plus empty registry form the causal barrier: finishConnection
-	// must have reclaimed the accepted socket and both received rights.
-	waitForConnectionsForTest(t, server, 0)
-	waitForDescriptorOwnerCountForTest(t, excessConnectionOwner, 0)
+	// The handler completion is the causal barrier: finishConnection must have
+	// reclaimed the accepted socket and both received rights.
+	waitForFinishedConnectionForTest(t, excessConnection)
+	waitForDescriptorOwnerCountForTest(t, excessConnection.owner, 0)
 	waitForDescriptorOwnerCountForTest(t, inputOwner, baselineOwned)
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
@@ -1106,16 +1109,32 @@ func connectForTest(t *testing.T, path string) int {
 
 func waitForConnectionsForTest(t *testing.T, server *Server, want int) {
 	t.Helper()
-	for attempts := 0; attempts < 100; attempts++ {
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	poll := time.NewTicker(time.Millisecond)
+	defer poll.Stop()
+	for {
 		server.mu.Lock()
 		got := len(server.connections)
+		closed := server.closed
+		started := server.started
 		server.mu.Unlock()
 		if got == want {
 			return
 		}
-		time.Sleep(time.Millisecond)
+		select {
+		case <-poll.C:
+		case <-deadline.C:
+			t.Fatalf(
+				"connections did not reach %d: got=%d slots=%d started=%t closed=%t",
+				want,
+				got,
+				len(server.slots),
+				started,
+				closed,
+			)
+		}
 	}
-	t.Fatalf("connections did not reach %d", want)
 }
 
 func assertPathSecurityForTest(
