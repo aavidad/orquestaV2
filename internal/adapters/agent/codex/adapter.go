@@ -237,6 +237,7 @@ type executionState struct {
 	startupRollback     bool
 	startupErrorCode    string
 	stopProof           atomic.Pointer[stopSignalProof]
+	quarantine          *quarantineOperation
 }
 
 func New(config Config) (*Adapter, error) {
@@ -616,7 +617,11 @@ func (adapter *Adapter) retireLegacyLaunchRecordLocked(
 	}
 	if recoveryErr := adapter.recoverExecutionGuards(ctx, source, state); recoveryErr != nil {
 		if recoveryAuthorityFailure(recoveryErr) {
-			recoveryErr = adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
+			recoveryErr = adapter.quarantineExecutionLocked(
+				ctx, state, &Error{
+					Code: CodeLegacyExecutionRequiresNewAttempt, Cause: recoveryErr,
+				},
+			)
 		}
 		adapter.executions[request.ExecutionRef.String()] = state
 		if state.terminal != nil && state.terminalDurable {
@@ -803,10 +808,13 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		return ports.AgentObservation{}, &Error{Code: CodeUnavailable}
 	}
 	if state, found := adapter.executions[executionKey]; found {
-		for state.starting != nil || (state.startupRollback && state.terminal == nil && state.settled != nil) {
+		for state.starting != nil || state.quarantine != nil ||
+			(state.startupRollback && state.terminal == nil && state.settled != nil) {
 			starting := state.settled
 			if state.starting != nil {
 				starting = state.starting.resolved
+			} else if state.quarantine != nil {
+				starting = state.quarantine.done
 			}
 			adapter.mu.Unlock()
 			select {
@@ -854,9 +862,35 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 	} else if terminalFound {
 		state.status, state.terminal, state.terminalDurable = terminal.Status, &terminal, true
 	} else {
+		process, processFound, processErr := adapter.readProcessRecord(runPath)
+		if processErr != nil {
+			return ports.AgentObservation{}, processErr
+		}
+		if processFound {
+			if intent, intentFound, intentErr := adapter.loadQuarantineIntent(
+				runPath, process,
+			); intentErr != nil {
+				return ports.AgentObservation{}, intentErr
+			} else if intentFound {
+				adapter.executions[executionKey] = state
+				quarantineErr := adapter.quarantineExecutionLocked(
+					ctx, state, &Error{Code: intent.ErrorCode},
+				)
+				if state.terminal == nil || !state.terminalDurable {
+					return ports.AgentObservation{}, quarantineErr
+				}
+				return adapter.observeStateLocked(executionKey, executionRef, state)
+			}
+		}
 		if recoveryErr := adapter.recoverExecutionGuards(ctx, record, state); recoveryErr != nil {
 			if recoveryAuthorityFailure(recoveryErr) {
-				recoveryErr = adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
+				quarantineCause := recoveryErr
+				if record.SchemaVersion != stateSchemaVersion {
+					quarantineCause = &Error{
+						Code: CodeLegacyExecutionRequiresNewAttempt, Cause: recoveryErr,
+					}
+				}
+				recoveryErr = adapter.quarantineExecutionLocked(ctx, state, quarantineCause)
 			}
 			return ports.AgentObservation{}, recoveryErr
 		}

@@ -253,6 +253,7 @@ func superviseCodex(
 	var waitErr error
 	waiting := true
 	cooperativeSignal := false
+	quarantined := false
 	var stopIntent *stopSignalIntent
 	for waiting {
 		select {
@@ -273,6 +274,27 @@ func superviseCodex(
 			}
 			waiting = false
 		case received := <-signalChannel:
+			if received == syscall.SIGUSR1 {
+				_, found, err := loadSupervisorQuarantineIntent(
+					envelope.RunDirectory, record,
+				)
+				if err != nil {
+					return err
+				}
+				if found {
+					quarantined = true
+					if err := writeCgroupControl(int(workCgroup.Fd()), "cgroup.kill", "1"); err != nil {
+						return err
+					}
+					select {
+					case waitErr = <-waited:
+					case <-time.After(pipeDrain):
+						return errors.New("supervisor worker wait did not settle after quarantine")
+					}
+					waiting = false
+					continue
+				}
+			}
 			mode := ports.AgentStopCooperative
 			if received == syscall.SIGUSR1 {
 				mode = ports.AgentStopForced
@@ -309,6 +331,9 @@ func superviseCodex(
 	if errors.Is(waitErr, exec.ErrWaitDelay) && command.ProcessState != nil && command.ProcessState.Success() {
 		waitErr = nil
 	}
+	if quarantined {
+		return drainCgroup(workCgroup, pipeDrain, true)
+	}
 	if err := drainCgroup(workCgroup, pipeDrain, !cooperativeSignal); err != nil {
 		return err
 	}
@@ -328,6 +353,41 @@ func superviseCodex(
 	}
 	_, _ = diagnosticOutput.Write(diagnosticPayload)
 	return nil
+}
+
+func loadSupervisorQuarantineIntent(
+	runDirectory string,
+	record processRecord,
+) (quarantineIntent, bool, error) {
+	filePath := filepath.Join(runDirectory, quarantineIntentFileName)
+	info, err := os.Lstat(filePath)
+	if errors.Is(err, os.ErrNotExist) {
+		return quarantineIntent{}, false, nil
+	}
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() ||
+		info.Mode().Perm()&0o077 != 0 || info.Size() <= 0 || info.Size() > 32<<10 {
+		return quarantineIntent{}, false, errors.New("invalid supervisor quarantine intent")
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		return quarantineIntent{}, false, err
+	}
+	var intent quarantineIntent
+	decoder := json.NewDecoder(io.LimitReader(file, 32<<10))
+	decoder.DisallowUnknownFields()
+	decodeErr := decoder.Decode(&intent)
+	eofErr := requireJSONEOF(decoder)
+	closeErr := file.Close()
+	if decodeErr != nil || eofErr != nil || closeErr != nil {
+		return quarantineIntent{}, false, errors.Join(
+			decodeErr, eofErr, closeErr,
+			errors.New("invalid supervisor quarantine intent"),
+		)
+	}
+	if err := validateQuarantineIntent(intent, record); err != nil {
+		return quarantineIntent{}, false, errors.New("invalid supervisor quarantine intent")
+	}
+	return intent, true, nil
 }
 
 func signalExactWorker(pid, pgid int, bootID, birth string, signal syscall.Signal) error {

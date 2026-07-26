@@ -28,6 +28,9 @@ func (adapter *Adapter) prepareStopLocked(
 	if err != nil {
 		return stopPreparation{}, err
 	}
+	if state.quarantine != nil {
+		return stopPreparation{state: state, starting: state.quarantine.done}, nil
+	}
 	_, requested, err := adapter.loadStopRequest(runPath, requestHash, request)
 	if err != nil {
 		return stopPreparation{}, err

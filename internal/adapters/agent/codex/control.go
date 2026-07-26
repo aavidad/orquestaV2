@@ -150,6 +150,14 @@ func (adapter *Adapter) quarantineLegacyV3StopLocked(
 		if err != nil {
 			return true, err
 		}
+		if terminal, found, loadErr := adapter.loadCausalTerminal(
+			runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes,
+		); loadErr != nil {
+			return true, loadErr
+		} else if found {
+			state.status, state.terminal, state.terminalDurable =
+				terminal.Status, &terminal, true
+		}
 	}
 	if state.terminal != nil {
 		return true, &Error{Code: CodeLegacyControlMetadataUnknown}

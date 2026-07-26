@@ -33,6 +33,9 @@ func (root *codexCgroupRoot) drain(processRecord, time.Duration) error {
 func (root *codexCgroupRoot) kill(processRecord) error {
 	return errors.New(CodeControlUnsupported)
 }
+func (root *codexCgroupRoot) leafForRecord(processRecord) (*os.File, error) {
+	return nil, errors.New(CodeControlUnsupported)
+}
 func (root *codexCgroupRoot) populateRecord(*processRecord, *codexCgroupLeaf) {}
 
 func (root *codexCgroupRoot) remove(processRecord) error  { return errors.New(CodeControlUnsupported) }
