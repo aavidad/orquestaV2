@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import ctypes
 import hashlib
 import json
@@ -356,6 +357,21 @@ def command_final_receipt(args: argparse.Namespace) -> None:
 def command_configs(args: argparse.Namespace) -> None:
     primary = read_toml(args.primary)
     rollback = read_toml(args.rollback)
+    primary_shared = copy.deepcopy(primary)
+    rollback_shared = copy.deepcopy(rollback)
+    for document in (primary_shared, rollback_shared):
+        attestor = nested(document, "test_attestor")
+        if not isinstance(attestor, dict):
+            raise ContractError("config_attestor")
+        for key in (
+            "provider",
+            "max_concurrent_runs",
+            "microvm",
+            "bubblewrap",
+        ):
+            attestor.pop(key, None)
+    if primary_shared != rollback_shared:
+        raise ContractError("config_shared_drift")
     shared = (
         ("state", "sqlite", "path"),
         ("runtime", "codex", "cgroup_root"),
