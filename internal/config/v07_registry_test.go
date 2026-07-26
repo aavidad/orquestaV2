@@ -200,6 +200,7 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		{name: "account profile format", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \".account\"\nmax_concurrent_executions = 1"},
 		{name: "account root overlaps work", toml: "[runtime.codex]\naccount_home_root = \"./var/work/accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1"},
 		{name: "account profile conflicts with credential authority", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1\ncredential_ref = \"credential:codex\""},
+		{name: "Firecracker vsock lease bounds", toml: "[agent.firecracker.vsock_cid]\nminimum_lease_duration = \"2h\"\nmaximum_lease_duration = \"1h\""},
 		{name: "non loopback", toml: "[server]\nlisten = \"0.0.0.0:8080\""},
 		{name: "non literal MCP path", toml: "[server]\nmcp_path = \"/mcp/../other\""},
 		{name: "overlapping paths", toml: "[artifact.filesystem]\nroot = \"./var/state\""},
@@ -220,7 +221,7 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 			assertConfigError(t, err, ErrorCrossValidation, "")
 		})
 	}
-	if got := CrossValidators(); len(got) != 8 {
+	if got := CrossValidators(); len(got) != 9 {
 		t.Fatalf("cross validator catalog = %+v", got)
 	} else {
 		got[0].Keys[0] = "mutated"

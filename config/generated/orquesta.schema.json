@@ -1,9 +1,53 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-25.30",
+  "$id": "urn:orquesta:config:2026-07-26.31",
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "agent": {
+      "additionalProperties": false,
+      "properties": {
+        "firecracker": {
+          "additionalProperties": false,
+          "properties": {
+            "vsock_cid": {
+              "additionalProperties": false,
+              "properties": {
+                "maximum_lease_duration": {
+                  "default": "1h",
+                  "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+                  "type": "string",
+                  "x-env-alias": "ORQUESTA_AGENT_FIRECRACKER_VSOCK_CID_MAXIMUM_LEASE_DURATION",
+                  "x-restart-required": true,
+                  "x-scope": "agent",
+                  "x-semantic-ref": "orquesta.config.agent.firecracker.vsock_cid.maximum_lease_duration",
+                  "x-sensitive": false,
+                  "x-validator-ids": [
+                    "positive_duration"
+                  ]
+                },
+                "minimum_lease_duration": {
+                  "default": "5s",
+                  "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+                  "type": "string",
+                  "x-env-alias": "ORQUESTA_AGENT_FIRECRACKER_VSOCK_CID_MINIMUM_LEASE_DURATION",
+                  "x-restart-required": true,
+                  "x-scope": "agent",
+                  "x-semantic-ref": "orquesta.config.agent.firecracker.vsock_cid.minimum_lease_duration",
+                  "x-sensitive": false,
+                  "x-validator-ids": [
+                    "positive_duration"
+                  ]
+                }
+              },
+              "type": "object"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
     "api": {
       "additionalProperties": false,
       "properties": {
@@ -1170,8 +1214,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-25.30",
-  "x-registry-hash": "sha256:3df2bb315eb9a45f9c0812e90ee91ae65d1943e7ffdafe13e97f082d9a4e7c6c",
+  "x-registry-revision": "2026-07-26.31",
+  "x-registry-hash": "sha256:1c39bbe0244319fa44925a752535a985d00666ac4546e68aa168959cae833e93",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1198,6 +1242,13 @@
         "runtime.codex.account_profile",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
+      ]
+    },
+    {
+      "id": "agent_firecracker_vsock_cid_lease_bounds",
+      "keys": [
+        "agent.firecracker.vsock_cid.minimum_lease_duration",
+        "agent.firecracker.vsock_cid.maximum_lease_duration"
       ]
     },
     {

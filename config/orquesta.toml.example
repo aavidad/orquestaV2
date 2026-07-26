@@ -41,6 +41,10 @@ account_auth_max_document_bytes = 1048576
 mcp_bearer_token_env_var = "ORQUESTA_MCP_BEARER_TOKEN"
 credential_ref = ""
 
+[agent.firecracker.vsock_cid]
+minimum_lease_duration = "5s"
+maximum_lease_duration = "1h"
+
 [workspace.local]
 root = "./var/workspaces"
 

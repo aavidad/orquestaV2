@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-25.30",
+  "revision": "2026-07-26.31",
   "precedence": [
     "default",
     "file",
@@ -35,6 +35,13 @@
         "runtime.codex.account_profile",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
+      ]
+    },
+    {
+      "id": "agent_firecracker_vsock_cid_lease_bounds",
+      "keys": [
+        "agent.firecracker.vsock_cid.minimum_lease_duration",
+        "agent.firecracker.vsock_cid.maximum_lease_duration"
       ]
     },
     {
@@ -558,6 +565,34 @@
       "env_alias": "ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF",
       "validator_ids": [
         "credential_ref"
+      ]
+    },
+    {
+      "key": "agent.firecracker.vsock_cid.minimum_lease_duration",
+      "go_name": "AgentFirecrackerVsockCIDMinimumLeaseDuration",
+      "semantic_ref": "orquesta.config.agent.firecracker.vsock_cid.minimum_lease_duration",
+      "type": "duration",
+      "default": "5s",
+      "sensitive": false,
+      "scope": "agent",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_AGENT_FIRECRACKER_VSOCK_CID_MINIMUM_LEASE_DURATION",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "agent.firecracker.vsock_cid.maximum_lease_duration",
+      "go_name": "AgentFirecrackerVsockCIDMaximumLeaseDuration",
+      "semantic_ref": "orquesta.config.agent.firecracker.vsock_cid.maximum_lease_duration",
+      "type": "duration",
+      "default": "1h",
+      "sensitive": false,
+      "scope": "agent",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_AGENT_FIRECRACKER_VSOCK_CID_MAXIMUM_LEASE_DURATION",
+      "validator_ids": [
+        "positive_duration"
       ]
     },
     {

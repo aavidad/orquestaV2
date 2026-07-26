@@ -448,6 +448,10 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeCodexAccountHomeRoot, KeyRuntimeCodexAccountProfile, KeyRuntimeCodexMaxConcurrentExecutions,
 			KeyRuntimeCodexCredentialRef,
 		},
+		"agent_firecracker_vsock_cid_lease_bounds": {
+			KeyAgentFirecrackerVsockCIDMinimumLeaseDuration,
+			KeyAgentFirecrackerVsockCIDMaximumLeaseDuration,
+		},
 		"server_listen_loopback":  {KeyServerListen},
 		"server_mcp_path_literal": {KeyServerMCPPath},
 		"runtime_paths_disjoint": {
