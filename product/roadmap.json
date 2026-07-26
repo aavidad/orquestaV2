@@ -46,6 +46,40 @@
     "opes_games": "rejected_outside_core_production",
     "advanced_retrieval": "conditional_on_versioned_benchmark"
   },
+  "implementation_decisions": [
+    {
+      "id": "agent_microvm_network",
+      "status": "planned_not_applied",
+      "capability_refs": [
+        "AGT-01",
+        "AGT-03",
+        "EVD-13",
+        "ORC-15"
+      ],
+      "transport": "vsock_only",
+      "allowed_services": [
+        "orquesta_broker",
+        "controlled_egress_proxy"
+      ],
+      "forbidden_connectivity": [
+        "guest_ip_network",
+        "tap",
+        "bridge",
+        "nat",
+        "inbound",
+        "east_west",
+        "direct_internet"
+      ],
+      "authentication": "single_use_credential_store_proof_and_attestation",
+      "test_attestor_scope": "unchanged_no_network_no_vsock",
+      "test_refs": [
+        "internal/ports/agent_microvm_network_test.go",
+        "internal/ports/agent_microvm_launch_auth_test.go",
+        "internal/adapters/agent/firecracker/networkplan/renderer_test.go",
+        "internal/adapters/agent/firecracker/networkauth/verifier_test.go"
+      ]
+    }
+  ],
   "verticals": [
     {
       "id": "source_integration",
@@ -4316,7 +4350,7 @@
     {
       "id": "AGT-01",
       "title": "Familia neutral `AgentLauncher`/`AgentObserver` y capabilities opcionales",
-      "source_proposal": "MANTENER, V1; variante Firecracker vsock de agentes aprobada como planned_not_applied, sin NIC/TAP/NAT, solo broker/proxy autenticados y sin cambiar acreditación",
+      "source_proposal": "MANTENER, V1",
       "decision": "accept",
       "kind": "agent_protocol",
       "release_target": "total_v1",
