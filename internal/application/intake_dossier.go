@@ -469,6 +469,12 @@ func hashIntakeDossier(dossier IntakeDossier) string {
 	for _, decision := range dossier.decisions {
 		writeFingerprintField(digest, string(decision.QuestionRef))
 		writeFingerprintField(digest, string(decision.Choice))
+		// Preserve every historical digest when the backward-compatible
+		// optional field is absent, while binding typed free text explicitly.
+		if decision.AnswerText != "" {
+			writeFingerprintField(digest, "answer_text")
+			writeFingerprintField(digest, decision.AnswerText)
+		}
 		writeFingerprintField(digest, string(decision.Recommendation))
 		writeFingerprintField(digest, string(decision.RecommendationRationale))
 		writeFingerprintField(digest, string(decision.Origin))

@@ -70,6 +70,7 @@ func RestoreIntake(snapshot IntakeSnapshot) (intake.State, error) {
 			choices[index] = intake.Choice{
 				QuestionRef: decision.QuestionRef,
 				OptionRef:   decision.Choice,
+				AnswerText:  decision.AnswerText,
 			}
 		}
 		next, applyErr := intake.Apply(state, intake.Change{

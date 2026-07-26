@@ -27,6 +27,8 @@ const (
 	ErrorRecommendationsDone  ErrorCode = "intake.recommendations_already_resolved"
 	ErrorDependencyCycle      ErrorCode = "intake.question_dependency_cycle"
 	ErrorDependencyPending    ErrorCode = "intake.question_dependency_pending"
+	ErrorAnswerTextRequired   ErrorCode = "intake.answer_text_required"
+	ErrorAnswerTextForbidden  ErrorCode = "intake.answer_text_forbidden"
 )
 
 // DomainError deliberately contains no human-facing text. A public surface

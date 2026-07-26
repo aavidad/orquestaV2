@@ -4,6 +4,10 @@ package intake
 
 const StateSchema = "orquesta.intake.state.v1"
 
+// MaxAnswerTextRunes is the single domain contract shared by every intake
+// producer. Transport request-byte limits remain adapter configuration.
+const MaxAnswerTextRunes = 4096
+
 type Ref string
 type IssueRef string
 type QuestionRef string
@@ -47,6 +51,10 @@ type Option struct {
 	LabelKey     MessageKey `json:"label_key"`
 	RationaleKey MessageKey `json:"rationale_key"`
 	Recommended  bool       `json:"recommended"`
+	// AcceptsText marks an option whose selection must carry a non-empty
+	// AnswerText. It is explicit domain metadata, never inferred from refs or
+	// human-facing copy.
+	AcceptsText bool `json:"accepts_text,omitempty"`
 }
 
 // Question is valid only when DerivedFrom refers to one or more recorded gaps
@@ -63,6 +71,7 @@ type Question struct {
 type Choice struct {
 	QuestionRef QuestionRef `json:"question_ref"`
 	OptionRef   OptionRef   `json:"option_ref"`
+	AnswerText  string      `json:"answer_text,omitempty"`
 }
 
 // Change is one compare-and-swap mutation against the shared intake state.
@@ -81,6 +90,7 @@ type Change struct {
 type Decision struct {
 	QuestionRef             QuestionRef `json:"question_ref"`
 	Choice                  OptionRef   `json:"choice"`
+	AnswerText              string      `json:"answer_text,omitempty"`
 	Recommendation          OptionRef   `json:"recommendation"`
 	RecommendationRationale MessageKey  `json:"recommendation_rationale_key"`
 	Origin                  Origin      `json:"origin"`
@@ -132,8 +142,8 @@ type QuestionContext struct {
 	ReopenedDecision *ReopenedDecision `json:"reopened_decision,omitempty"`
 }
 
-// Context is a deterministic re-emission of already recorded intake facts.
-// It contains no free-form answer and grants no mutation authority.
+// Context is a deterministic re-emission of already recorded intake facts,
+// including any durable free-text answer. It grants no mutation authority.
 type Context struct {
 	StateRef  Ref               `json:"state_ref"`
 	Revision  Revision          `json:"revision"`

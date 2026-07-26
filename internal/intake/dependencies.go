@@ -54,7 +54,8 @@ func (state State) projectDecisions() (
 		changedByRef := make(map[QuestionRef]DecisionChange, len(group))
 		for _, decision := range group {
 			previous, active := current[decision.QuestionRef]
-			if !active || previous.Choice != decision.Choice {
+			if !active || previous.Choice != decision.Choice ||
+				previous.AnswerText != decision.AnswerText {
 				changedByRef[decision.QuestionRef] = DecisionChange{
 					QuestionRef: decision.QuestionRef,
 					Revision:    decision.Revision,

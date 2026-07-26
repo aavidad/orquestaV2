@@ -129,10 +129,8 @@ type Selection struct {
 }
 
 // QuestionSelection answers a rule- or explicit-pack question for one pure
-// evaluation. FreeText cannot be projected durably today because intake
-// Choice/Decision persist only OptionRef; callers must not claim otherwise.
-// Keeping it separate prevents an opaque pack ref being mistaken for a U/T
-// dimension.
+// evaluation. Keeping it separate prevents an opaque pack ref being mistaken
+// for a U/T dimension. A caller projects it to the shared intake Choice.
 type QuestionSelection struct {
 	Question QuestionRef
 	Option   OptionRef
@@ -237,10 +235,9 @@ func (value Question) RecommendedOption() (Option, bool) {
 	return found, count == 1
 }
 
-// IntakeQuestion preserves causal refs and recommendation. Presentation help
-// stays available on Question/Option until intake grows that public schema.
-// Free-text payload is deliberately absent from this projection: current
-// intake Choice/Decision have no field capable of persisting it.
+// IntakeQuestion preserves causal refs, recommendation and the explicit
+// free-text capability. Presentation help stays on Question/Option until
+// intake grows that public schema.
 func (value Question) IntakeQuestion() intake.Question {
 	options := make([]intake.Option, len(value.options))
 	for index, option := range value.options {
@@ -249,6 +246,7 @@ func (value Question) IntakeQuestion() intake.Question {
 			LabelKey:     intake.MessageKey(option.labelKey),
 			RationaleKey: intake.MessageKey(option.rationaleKey),
 			Recommended:  option.recommended,
+			AcceptsText:  option.kind == OptionFreeText,
 		}
 	}
 	derivedFrom := make([]intake.IssueRef, len(value.derivedFrom))

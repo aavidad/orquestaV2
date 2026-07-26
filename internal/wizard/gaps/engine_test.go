@@ -2,6 +2,7 @@ package gaps
 
 import (
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 
@@ -713,6 +714,53 @@ func TestEvaluateRejectsOnlyStructurallyInvalidInput(t *testing.T) {
 				t.Fatalf("error = %v, code = %s, want %s", err, ErrorCodeOf(err), test.code)
 			}
 		})
+	}
+}
+
+func TestFreeTextUsesSharedIntakeContractAndProjectsCapability(t *testing.T) {
+	t.Parallel()
+
+	valid := strings.Repeat("á", intake.MaxAnswerTextRunes)
+	result, err := Evaluate(Input{Selections: []Selection{{
+		Dimension: DimensionU1,
+		Option:    optionRef(DimensionU1, "custom"),
+		FreeText:  valid,
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, found := findDimensionQuestion(result.Questions(), DimensionU1); found {
+		t.Fatal("valid 4096-rune answer did not close its dimension")
+	}
+	_, err = Evaluate(Input{Selections: []Selection{{
+		Dimension: DimensionU1,
+		Option:    optionRef(DimensionU1, "custom"),
+		FreeText:  valid + "界",
+	}}})
+	if ErrorCodeOf(err) != ErrorInvalidFreeText {
+		t.Fatalf("4097-rune error=%v", err)
+	}
+
+	open, err := Evaluate(Input{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	question, found := findDimensionQuestion(open.Questions(), DimensionU1)
+	if !found {
+		t.Fatal("U1 question missing")
+	}
+	projected := question.IntakeQuestion()
+	freeTextOptions := 0
+	for _, option := range projected.Options {
+		if option.AcceptsText {
+			freeTextOptions++
+			if option.Ref != intake.OptionRef(optionRef(DimensionU1, "custom")) {
+				t.Fatalf("unexpected projected free-text option=%+v", option)
+			}
+		}
+	}
+	if freeTextOptions != 1 {
+		t.Fatalf("projected free-text options=%d", freeTextOptions)
 	}
 }
 

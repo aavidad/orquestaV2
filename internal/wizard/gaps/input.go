@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
+	"orquesta/internal/intake"
 	"orquesta/internal/wizard/catalog"
 )
 
@@ -155,8 +155,7 @@ func indexQuestionSelections(
 func validateSelectedOption(option Option, freeText, field string) error {
 	switch option.kind {
 	case OptionFreeText:
-		if strings.TrimSpace(freeText) == "" ||
-			utf8.RuneCountInString(freeText) > 4096 {
+		if !intake.ValidAnswerText(freeText) {
 			return domainError(ErrorInvalidFreeText, field)
 		}
 	case OptionPreset:

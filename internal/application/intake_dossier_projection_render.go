@@ -312,6 +312,11 @@ func writeProjectionDecisions(
 		writeProjectionNestedScalar(
 			output, "choice_ref", string(decision.Choice),
 		)
+		if decision.AnswerText != "" {
+			writeProjectionNestedScalar(
+				output, "answer_text", decision.AnswerText,
+			)
+		}
 		writeProjectionNestedScalar(
 			output, "recommendation_ref", string(decision.Recommendation),
 		)

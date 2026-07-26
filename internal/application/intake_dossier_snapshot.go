@@ -166,6 +166,7 @@ func validateIntakeDossierSnapshotDecisions(
 	for _, decision := range decisions {
 		if !validIntakeDossierRef(string(decision.QuestionRef), "intake-question:") ||
 			!validIntakeDossierRef(string(decision.Choice), "intake-option:") ||
+			(decision.AnswerText != "" && !intake.ValidAnswerText(decision.AnswerText)) ||
 			!validIntakeDossierRef(string(decision.Recommendation), "intake-option:") ||
 			!validIntakeDossierMessageKey(decision.RecommendationRationale) ||
 			(decision.Origin != intake.OriginChat && decision.Origin != intake.OriginForm) ||

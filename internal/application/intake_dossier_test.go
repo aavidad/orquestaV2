@@ -66,6 +66,9 @@ func TestIntakeDossierHashProjectsEveryCurrentDecisionField(t *testing.T) {
 		{name: "choice", mutate: func(value *intake.Decision) {
 			value.Choice = "intake-option:audience-team"
 		}},
+		{name: "answer text", mutate: func(value *intake.Decision) {
+			value.AnswerText = "ámbito libre"
+		}},
 		{name: "recommendation", mutate: func(value *intake.Decision) {
 			value.Recommendation = "intake-option:audience-personal"
 		}},

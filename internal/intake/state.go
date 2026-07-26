@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // State is an immutable intake snapshot. All slices are private and accessors
@@ -153,14 +154,20 @@ func Apply(current State, change Change) (State, error) {
 		if !exists {
 			return State{}, domainError(ErrorQuestionNotFound, indexedField("change.choices.question_ref", index))
 		}
-		if !questionHasOption(question, choice.OptionRef) {
+		selected, ok := questionOption(question, choice.OptionRef)
+		if !ok {
 			return State{}, domainError(ErrorOptionNotFound, indexedField("change.choices.option_ref", index))
+		}
+		if err := validateChoiceAnswer(choice, selected, index); err != nil {
+			return State{}, err
 		}
 		recommendation, ok := recommendedOption(question)
 		if !ok {
 			return State{}, domainError(ErrorRecommendationCount, "change.questions.options.recommended")
 		}
-		resolved = append(resolved, resolvedChoice{choice: choice, recommendation: recommendation})
+		resolved = append(resolved, resolvedChoice{
+			choice: choice, recommendation: recommendation,
+		})
 	}
 	currentDecisions, _ := current.projectDecisions()
 	for index, item := range resolved {
@@ -189,6 +196,7 @@ func Apply(current State, change Change) (State, error) {
 		updated.decisions = append(updated.decisions, Decision{
 			QuestionRef:             item.choice.QuestionRef,
 			Choice:                  item.choice.OptionRef,
+			AnswerText:              item.choice.AnswerText,
 			Recommendation:          item.recommendation.Ref,
 			RecommendationRationale: item.recommendation.RationaleKey,
 			Origin:                  change.Origin,
@@ -274,6 +282,12 @@ func validateQuestion(question Question, index int, issues map[IssueRef]struct{}
 			return domainError(ErrorMessageKeyInvalid, indexedField("change.questions.options.rationale_key", optionIndex))
 		}
 		if option.Recommended {
+			if option.AcceptsText {
+				return domainError(
+					ErrorInvalidArgument,
+					indexedField("change.questions.options.accepts_text", optionIndex),
+				)
+			}
 			recommendations++
 		}
 		options[option.Ref] = struct{}{}
@@ -325,13 +339,42 @@ func recommendedOption(question Question) (Option, bool) {
 	return found, count == 1
 }
 
-func questionHasOption(question Question, ref OptionRef) bool {
+func questionOption(question Question, ref OptionRef) (Option, bool) {
 	for _, option := range question.Options {
 		if option.Ref == ref {
-			return true
+			return option, true
 		}
 	}
-	return false
+	return Option{}, false
+}
+
+func validateChoiceAnswer(choice Choice, option Option, index int) error {
+	field := indexedField("change.choices.answer_text", index)
+	if !option.AcceptsText {
+		if choice.AnswerText != "" {
+			return domainError(ErrorAnswerTextForbidden, field)
+		}
+		return nil
+	}
+	if !ValidAnswerText(choice.AnswerText) {
+		return domainError(ErrorAnswerTextRequired, field)
+	}
+	return nil
+}
+
+// ValidAnswerText validates the reusable free-text value contract without
+// inferring meaning from content.
+func ValidAnswerText(value string) bool {
+	if strings.TrimSpace(value) == "" || !utf8.ValidString(value) ||
+		utf8.RuneCountInString(value) > MaxAnswerTextRunes {
+		return false
+	}
+	for _, char := range value {
+		if unicode.IsControl(char) && char != '\n' && char != '\r' && char != '\t' {
+			return false
+		}
+	}
+	return true
 }
 
 func validRef(value, prefix string) bool {

@@ -153,6 +153,7 @@ func intakeChainChange(previous, next intake.State) (intake.Change, error) {
 		choices[index] = intake.Choice{
 			QuestionRef: decision.QuestionRef,
 			OptionRef:   decision.Choice,
+			AnswerText:  decision.AnswerText,
 		}
 	}
 	return intake.Change{
