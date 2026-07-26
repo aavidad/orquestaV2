@@ -114,9 +114,9 @@ func TestDirectorPlanInitialAndReplanFencesAreAllOrNothing(t *testing.T) {
 	}
 }
 
-func TestCanonicalRegistryHas31CommandsAndPropagatesCouncilContracts(t *testing.T) {
+func TestCanonicalRegistryHas33CommandsAndPropagatesCouncilContracts(t *testing.T) {
 	dispatcher, api, _ := testDispatcher(t)
-	if got := len(dispatcher.Definitions()); got != 31 {
+	if got := len(dispatcher.Definitions()); got != 33 {
 		t.Fatalf("definitions=%d", got)
 	}
 	byID := compiledDefinitionsByID()
@@ -446,9 +446,17 @@ func canonicalPayloads() map[string]any {
 		"orquesta.goals.create": map[string]any{"statement": "build", "confirm": true},
 		"orquesta.goals.amend":  map[string]any{"source_goal_ref": "goal:g", "expected_source_revision": 1, "expected_source_spec_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "statement": "amend", "reason": "fix", "confirm": true},
 		"orquesta.goals.get":    map[string]any{"goal_ref": "goal:g"}, "orquesta.goals.list": map[string]any{"limit": 1},
-		"orquesta.intakes.create":          map[string]any{"intake_ref": "intake:test", "max_question_rounds": 2},
-		"orquesta.intakes.get":             map[string]any{"intake_ref": "intake:test"},
-		"orquesta.intakes.apply":           canonicalIntakeApplyPayload(),
+		"orquesta.intakes.create": map[string]any{"intake_ref": "intake:test", "max_question_rounds": 2},
+		"orquesta.intakes.get":    map[string]any{"intake_ref": "intake:test"},
+		"orquesta.intakes.apply":  canonicalIntakeApplyPayload(),
+		"orquesta.intakes.recommendations.accept": map[string]any{
+			"intake_ref": "intake:test", "expected_revision": 2,
+			"origin": "chat", "question_round": 1,
+		},
+		"orquesta.intakes.context.get": map[string]any{
+			"intake_ref": "intake:test", "expected_revision": 2,
+			"origin": "form", "kind": "help", "question_refs": []any{},
+		},
 		"orquesta.intakes.dossier.prepare": canonicalIntakeDossierPreparePayload(),
 		"orquesta.intakes.dossier.get":     map[string]any{"dossier_ref": "intake-dossier:test"},
 		"orquesta.intakes.dossier.confirm": map[string]any{"dossier_ref": "intake-dossier:test", "confirm": true},

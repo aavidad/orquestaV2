@@ -10,6 +10,7 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
+	"orquesta/internal/intake"
 	"orquesta/internal/ports"
 )
 
@@ -42,6 +43,8 @@ type applicationAPI interface {
 	CreateIntake(context.Context, application.Access, application.CreateIntakeRequest) (application.IntakeResult, error)
 	GetIntake(context.Context, application.Access, application.GetIntakeRequest) (application.IntakeRecord, error)
 	ApplyIntake(context.Context, application.Access, application.ApplyIntakeRequest) (application.IntakeResult, error)
+	AcceptIntakeRecommendations(context.Context, application.Access, application.AcceptIntakeRecommendationsRequest) (application.IntakeResult, error)
+	GetIntakeContext(context.Context, application.Access, application.GetIntakeContextRequest) (intake.Context, error)
 	PrepareIntakeDossier(context.Context, application.Access, application.PrepareIntakeDossierRequest) (application.IntakeDossierResult, error)
 	GetIntakeDossier(context.Context, application.Access, application.GetIntakeDossierRequest) (application.IntakeDossierRecord, error)
 	ConfirmIntakeDossier(context.Context, application.Access, application.ConfirmIntakeDossierRequest) (application.ConfirmIntakeDossierResult, error)
@@ -59,6 +62,7 @@ var expectedHandlerPermissions = map[string]string{
 	"GetMailbox": "goals.get", "ListMailbox": "goals.get", "AcknowledgeMailbox": "goals.get", "BlockMailbox": "goals.get",
 	"OpenCouncilRound": "goals.direct", "SkipCouncil": "council.skip",
 	"CreateIntake": "goals.create", "GetIntake": "goals.get", "ApplyIntake": "goals.create",
+	"AcceptIntakeRecommendations": "goals.create", "GetIntakeContext": "goals.get",
 	"PrepareIntakeDossier": "goals.create", "GetIntakeDossier": "goals.get", "ConfirmIntakeDossier": "goals.create",
 }
 
@@ -85,9 +89,11 @@ func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
 			return handleCreateIntake(ctx, dispatcher.application, bound, payload, dispatcher.intakePolicy)
 		},
 		"GetIntake": wrap(handleGetIntake), "ApplyIntake": wrap(handleApplyIntake),
-		"PrepareIntakeDossier": wrap(handlePrepareIntakeDossier),
-		"GetIntakeDossier":     wrap(handleGetIntakeDossier),
-		"ConfirmIntakeDossier": wrap(handleConfirmIntakeDossier),
+		"AcceptIntakeRecommendations": wrap(handleAcceptIntakeRecommendations),
+		"GetIntakeContext":            wrap(handleGetIntakeContext),
+		"PrepareIntakeDossier":        wrap(handlePrepareIntakeDossier),
+		"GetIntakeDossier":            wrap(handleGetIntakeDossier),
+		"ConfirmIntakeDossier":        wrap(handleConfirmIntakeDossier),
 	}
 }
 

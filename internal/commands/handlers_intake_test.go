@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -35,6 +36,63 @@ func (api *fakeApplication) GetIntake(
 ) (application.IntakeRecord, error) {
 	api.called("GetIntake")
 	state, err := intake.NewState(request.StateRef, intake.Policy{MaxQuestionRounds: 2})
+	if err == nil {
+		state, err = intake.Apply(state, intake.Change{
+			StateRef: request.StateRef, ExpectedRevision: 1,
+			Origin: intake.OriginChat,
+			Issues: []intake.Issue{
+				{
+					Ref: "intake-issue:root", Kind: intake.IssueGap,
+					Field: "root", DetailKey: "intake.issue.root.missing",
+				},
+				{
+					Ref: "intake-issue:audience", Kind: intake.IssueGap,
+					Field: "audience", DetailKey: "intake.issue.audience.missing",
+				},
+			},
+			Questions: []intake.Question{
+				{
+					Ref:         "intake-question:root",
+					DerivedFrom: []intake.IssueRef{"intake-issue:root"},
+					PromptKey:   "intake.question.root.prompt",
+					WhyKey:      "intake.question.root.why",
+					Options: []intake.Option{
+						{
+							Ref:          "intake-option:root-yes",
+							LabelKey:     "intake.option.root.yes.label",
+							RationaleKey: "intake.option.root.yes.rationale",
+							Recommended:  true,
+						},
+						{
+							Ref:          "intake-option:root-no",
+							LabelKey:     "intake.option.root.no.label",
+							RationaleKey: "intake.option.root.no.rationale",
+						},
+					},
+				},
+				{
+					Ref:         "intake-question:audience",
+					DerivedFrom: []intake.IssueRef{"intake-issue:audience"},
+					DependsOn:   []intake.QuestionRef{"intake-question:root"},
+					PromptKey:   "intake.question.audience.prompt",
+					WhyKey:      "intake.question.audience.why",
+					Options: []intake.Option{
+						{
+							Ref:          "intake-option:audience-team",
+							LabelKey:     "intake.option.audience.team.label",
+							RationaleKey: "intake.option.audience.team.rationale",
+							Recommended:  true,
+						},
+						{
+							Ref:          "intake-option:audience-personal",
+							LabelKey:     "intake.option.audience.personal.label",
+							RationaleKey: "intake.option.audience.personal.rationale",
+						},
+					},
+				},
+			},
+		})
+	}
 	return application.IntakeRecord{
 		ActorRef: request.ActorRef, ProjectRef: request.ProjectRef, State: state,
 	}, err
@@ -141,7 +199,7 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 			ActorRef    string            `json:"actor_ref"`
 			ProjectRef  string            `json:"project_ref"`
 			Issues      []json.RawMessage `json:"issues"`
-			Questions   []json.RawMessage `json:"questions"`
+			Questions   []intake.Question `json:"questions"`
 			Decisions   []json.RawMessage `json:"decisions"`
 			History     []json.RawMessage `json:"history"`
 		} `json:"intake"`
@@ -156,6 +214,22 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 		projected.Intake.Issues == nil || projected.Intake.Questions == nil ||
 		projected.Intake.Decisions == nil || projected.Intake.History == nil {
 		t.Fatalf("public intake=%s", get.Data)
+	}
+	if len(projected.Intake.Questions) != 2 ||
+		!reflect.DeepEqual(
+			projected.Intake.Questions[1].DependsOn,
+			[]intake.QuestionRef{"intake-question:root"},
+		) ||
+		len(api.applies[0].Change.Questions) != 2 ||
+		!reflect.DeepEqual(
+			api.applies[0].Change.Questions[1].DependsOn,
+			[]intake.QuestionRef{"intake-question:root"},
+		) {
+		t.Fatalf(
+			"dependency roundtrip get=%s apply=%+v",
+			get.Data,
+			api.applies[0].Change.Questions,
+		)
 	}
 
 	spoof := invoke(t, dispatcher, "orquesta.intakes.create", "request:intake-spoof", map[string]any{
@@ -275,26 +349,60 @@ func TestIntakeMutationsRejectOversizedRequestRefBeforeApplicationWriter(t *test
 func canonicalIntakeApplyPayload() map[string]any {
 	return map[string]any{
 		"intake_ref": "intake:test", "expected_revision": 1, "origin": "chat",
-		"issues": []any{map[string]any{
-			"ref": "intake-issue:audience", "kind": "gap",
-			"field": "audience", "detail_key": "intake.issue.audience.missing",
-		}},
-		"questions": []any{map[string]any{
-			"ref":          "intake-question:audience",
-			"derived_from": []any{"intake-issue:audience"},
-			"prompt_key":   "intake.question.audience.prompt",
-			"why_key":      "intake.question.audience.why",
-			"options": []any{
-				map[string]any{
-					"ref": "intake-option:audience-team", "label_key": "intake.option.audience.team.label",
-					"rationale_key": "intake.option.audience.team.rationale", "recommended": true,
-				},
-				map[string]any{
-					"ref": "intake-option:audience-personal", "label_key": "intake.option.audience.personal.label",
-					"rationale_key": "intake.option.audience.personal.rationale", "recommended": false,
+		"issues": []any{
+			map[string]any{
+				"ref": "intake-issue:root", "kind": "gap",
+				"field": "root", "detail_key": "intake.issue.root.missing",
+			},
+			map[string]any{
+				"ref": "intake-issue:audience", "kind": "gap",
+				"field": "audience", "detail_key": "intake.issue.audience.missing",
+			},
+		},
+		"questions": []any{
+			map[string]any{
+				"ref":          "intake-question:root",
+				"derived_from": []any{"intake-issue:root"},
+				"depends_on":   []any{},
+				"prompt_key":   "intake.question.root.prompt",
+				"why_key":      "intake.question.root.why",
+				"options": []any{
+					map[string]any{
+						"ref":           "intake-option:root-yes",
+						"label_key":     "intake.option.root.yes.label",
+						"rationale_key": "intake.option.root.yes.rationale",
+						"recommended":   true,
+					},
+					map[string]any{
+						"ref":           "intake-option:root-no",
+						"label_key":     "intake.option.root.no.label",
+						"rationale_key": "intake.option.root.no.rationale",
+						"recommended":   false,
+					},
 				},
 			},
-		}},
+			map[string]any{
+				"ref":          "intake-question:audience",
+				"derived_from": []any{"intake-issue:audience"},
+				"depends_on":   []any{"intake-question:root"},
+				"prompt_key":   "intake.question.audience.prompt",
+				"why_key":      "intake.question.audience.why",
+				"options": []any{
+					map[string]any{
+						"ref":           "intake-option:audience-team",
+						"label_key":     "intake.option.audience.team.label",
+						"rationale_key": "intake.option.audience.team.rationale",
+						"recommended":   true,
+					},
+					map[string]any{
+						"ref":           "intake-option:audience-personal",
+						"label_key":     "intake.option.audience.personal.label",
+						"rationale_key": "intake.option.audience.personal.rationale",
+						"recommended":   false,
+					},
+				},
+			},
+		},
 		"choices": []any{},
 	}
 }
