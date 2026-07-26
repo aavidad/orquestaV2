@@ -61,6 +61,12 @@ type Inventory struct {
 }
 
 func BuiltIn() Inventory {
+	return BuiltInV1()
+}
+
+// BuiltInV1 is the inventory frozen for evaluator V1. New semantics require a
+// new constructor and evaluator identity; replay never follows BuiltIn.
+func BuiltInV1() Inventory {
 	return Inventory{
 		schemaVersion: SchemaVersion,
 		dimensions:    builtInDimensions(),

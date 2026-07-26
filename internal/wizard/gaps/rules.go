@@ -107,7 +107,7 @@ func (value *evaluation) detectR3() error {
 		selectedRefs[ref.String()] = struct{}{}
 	}
 	seenSlot := make(map[SlotKey]struct{})
-	for _, pack := range catalog.BuiltIn().Packs() {
+	for _, pack := range catalog.BuiltInV1().Packs() {
 		if _, selected := selectedRefs[pack.Ref().String()]; !selected {
 			continue
 		}

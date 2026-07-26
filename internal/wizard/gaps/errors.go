@@ -9,12 +9,13 @@ import (
 type ErrorCode string
 
 const (
-	ErrorInvalidArgument  ErrorCode = "wizard_gaps.invalid_argument"
-	ErrorUnknownDimension ErrorCode = "wizard_gaps.unknown_dimension"
-	ErrorUnknownQuestion  ErrorCode = "wizard_gaps.unknown_question"
-	ErrorUnknownOption    ErrorCode = "wizard_gaps.unknown_option"
-	ErrorInvalidFreeText  ErrorCode = "wizard_gaps.invalid_free_text"
-	ErrorUnknownPack      ErrorCode = "wizard_gaps.unknown_pack"
+	ErrorInvalidArgument      ErrorCode = "wizard_gaps.invalid_argument"
+	ErrorUnknownDimension     ErrorCode = "wizard_gaps.unknown_dimension"
+	ErrorUnknownQuestion      ErrorCode = "wizard_gaps.unknown_question"
+	ErrorUnknownOption        ErrorCode = "wizard_gaps.unknown_option"
+	ErrorInvalidFreeText      ErrorCode = "wizard_gaps.invalid_free_text"
+	ErrorUnknownPack          ErrorCode = "wizard_gaps.unknown_pack"
+	ErrorUnsupportedEvaluator ErrorCode = "wizard_gaps.unsupported_evaluator"
 )
 
 // DomainError deliberately carries no human-facing prose.

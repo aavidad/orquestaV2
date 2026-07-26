@@ -38,9 +38,16 @@ func DomainPackRefs() []PackRef {
 	return refs
 }
 
-// BuiltIn returns the canonical pure V23 catalog. Invalid built-in data is a
-// programming defect and therefore panics during construction.
+// BuiltIn is the current catalog alias. Versioned evaluators must call the
+// frozen constructor they were accredited with instead.
 func BuiltIn() Catalog {
+	return BuiltInV1()
+}
+
+// BuiltInV1 returns the catalog frozen for Wizard gaps evaluator V1. New
+// catalog semantics require a new constructor; mutating this one breaks its
+// semantic-digest golden test and therefore cannot silently rewrite replay.
+func BuiltInV1() Catalog {
 	packs := []Pack{foundationPack()}
 	for _, key := range domainKeys {
 		packs = append(packs, domainPack(key))

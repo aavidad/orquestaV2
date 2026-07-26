@@ -36,7 +36,13 @@ type evaluation struct {
 // Evaluate is pure and deterministic. Input order, repeated equal selections
 // and repeated pack refs do not change output.
 func Evaluate(input Input) (Result, error) {
-	inventory := BuiltIn()
+	return EvaluateV1(input)
+}
+
+// EvaluateV1 is retained as the historical V1 implementation. Current aliases
+// may advance only by adding a new evaluator; V1 replay keeps calling this one.
+func EvaluateV1(input Input) (Result, error) {
+	inventory := BuiltInV1()
 	dimensions := inventory.Dimensions()
 	byDimension := dimensionsByRef(dimensions)
 	if err := validateFacts(input.Facts); err != nil {

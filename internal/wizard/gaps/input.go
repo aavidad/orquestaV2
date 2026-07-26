@@ -191,7 +191,7 @@ func supplementalQuestionCatalog(
 	for _, ref := range packRefs {
 		selectedRefs[ref.String()] = struct{}{}
 	}
-	for _, pack := range catalog.BuiltIn().Packs() {
+	for _, pack := range catalog.BuiltInV1().Packs() {
 		if _, selected := selectedRefs[pack.Ref().String()]; !selected {
 			continue
 		}
@@ -207,7 +207,7 @@ func supplementalQuestionCatalog(
 }
 
 func validatePackRefs(values []catalog.PackRef) ([]catalog.PackRef, error) {
-	builtIn := catalog.BuiltIn()
+	builtIn := catalog.BuiltInV1()
 	if _, err := builtIn.Compose(values...); err != nil {
 		return nil, domainError(ErrorUnknownPack, "pack_refs")
 	}
