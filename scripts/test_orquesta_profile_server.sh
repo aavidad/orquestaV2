@@ -242,7 +242,7 @@ write_config() {
   port="$2"
   max_concurrent="${3:-1}"
   auth_max_document_bytes="$4"
-  go_toolchain_root="${5-$FAKE_TOOLCHAIN}"
+  go_toolchain_root="${5-}"
   runtime_root="$BASE/$profile"
   config="$TEST_ROOT/$profile.toml"
   cat >"$config" <<EOF
@@ -364,7 +364,7 @@ grep -Fq '[ "$(uname -s 2>/dev/null)" = "Linux" ] || fail "platform_unsupported"
 prepare_account CodexA account-a
 prepare_account CodexB account-b
 write_config CodexA "$(available_port)" 1 1048576
-write_config CodexB "$(available_port)" 1 1048576 ""
+write_config CodexB "$(available_port)" 1 1048576
 
 # Dos cuentas arrancan desde el mismo cwd sin compartir HOME, auth ni estado.
 start_profile CodexA >"$TEST_ROOT/start-a-1.out" &
@@ -382,8 +382,10 @@ start_profile CodexB >"$TEST_ROOT/start-b.out"
 assert_observed_environment CodexA
 assert_observed_environment CodexB
 [ "$(stat -Lc '%a' -- "$BASE/CodexA/cache/codex-go")" = 700 ]
-grep -Fq "go_toolchain_root = \"$FAKE_TOOLCHAIN\"" \
-  "$BASE/CodexA/config/orquesta.toml"
+[ "$(stat -Lc '%a' -- "$BASE/CodexB/cache/codex-go")" = 700 ]
+[ "$(realpath -e -- "$BASE/CodexA/cache/codex-go")" != \
+  "$(realpath -e -- "$BASE/CodexB/cache/codex-go")" ]
+grep -Fq 'go_toolchain_root = ""' "$BASE/CodexA/config/orquesta.toml"
 grep -Fq 'go_toolchain_root = ""' "$BASE/CodexB/config/orquesta.toml"
 readiness_ref_a="$(<"$BASE/CodexA/daemon-home/readiness-ref.txt")"
 [[ "$readiness_ref_a" =~ ^request:profile-server-readiness:[0-9a-f]{64}$ ]]
@@ -410,6 +412,11 @@ exec 7>&-
 write_config CodexA "$(available_port)" 70 1048576
 expect_failure orquesta_config_invalid start_profile CodexA
 [ "$(<"$BASE/CodexA/run/server.pid")" = "$pid_a" ]
+if [ "$(id -u)" -ne 0 ]; then
+  write_config CodexA "$(available_port)" 1 1048576 "$FAKE_TOOLCHAIN"
+  expect_failure orquesta_config_invalid start_profile CodexA
+  [ "$(<"$BASE/CodexA/run/server.pid")" = "$pid_a" ]
+fi
 write_config CodexA "$(available_port)" 1 1048576 "$UNSAFE_TOOLCHAIN"
 expect_failure orquesta_config_invalid start_profile CodexA
 [ "$(<"$BASE/CodexA/run/server.pid")" = "$pid_a" ]

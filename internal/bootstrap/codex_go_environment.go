@@ -14,10 +14,26 @@ const (
 	codexGoToolchainInvalid = "bootstrap.codex_go_toolchain_invalid"
 )
 
+type codexGoToolchainTrust func(os.FileInfo) bool
+
 func prepareCodexGoEnvironment(
 	inherited map[string]string,
 	configuredCacheRoot string,
 	configuredToolchainRoot string,
+) (map[string]string, error) {
+	return prepareCodexGoEnvironmentWithTrust(
+		inherited,
+		configuredCacheRoot,
+		configuredToolchainRoot,
+		codexGoToolchainOwnerTrusted,
+	)
+}
+
+func prepareCodexGoEnvironmentWithTrust(
+	inherited map[string]string,
+	configuredCacheRoot string,
+	configuredToolchainRoot string,
+	ownerTrusted codexGoToolchainTrust,
 ) (map[string]string, error) {
 	cacheRoot, err := canonicalCodexGoCacheRoot(configuredCacheRoot)
 	if err != nil {
@@ -25,7 +41,7 @@ func prepareCodexGoEnvironment(
 	}
 	toolchainRoot := ""
 	if configuredToolchainRoot != "" {
-		toolchainRoot, err = validateCodexGoToolchain(configuredToolchainRoot)
+		toolchainRoot, err = validateCodexGoToolchainWithTrust(configuredToolchainRoot, ownerTrusted)
 		if err != nil {
 			return nil, errors.New(codexGoToolchainInvalid)
 		}
@@ -116,6 +132,13 @@ func ensurePrivateCodexGoCacheDirectory(path string) error {
 }
 
 func validateCodexGoToolchain(configuredRoot string) (string, error) {
+	return validateCodexGoToolchainWithTrust(configuredRoot, codexGoToolchainOwnerTrusted)
+}
+
+func validateCodexGoToolchainWithTrust(
+	configuredRoot string,
+	ownerTrusted codexGoToolchainTrust,
+) (string, error) {
 	if configuredRoot == "" ||
 		strings.TrimSpace(configuredRoot) != configuredRoot ||
 		strings.ContainsRune(configuredRoot, '\x00') ||
@@ -123,13 +146,19 @@ func validateCodexGoToolchain(configuredRoot string) (string, error) {
 		filepath.Clean(configuredRoot) != configuredRoot {
 		return "", errors.New(codexGoToolchainInvalid)
 	}
+	if ownerTrusted == nil {
+		return "", errors.New(codexGoToolchainInvalid)
+	}
 	resolved, err := filepath.EvalSymlinks(configuredRoot)
 	if err != nil || resolved != configuredRoot {
 		return "", errors.New(codexGoToolchainInvalid)
 	}
+	if err := validateCodexGoToolchainAncestors(configuredRoot, ownerTrusted); err != nil {
+		return "", errors.New(codexGoToolchainInvalid)
+	}
 	rootInfo, err := os.Lstat(configuredRoot)
 	if err != nil || rootInfo.Mode()&os.ModeSymlink != 0 || !rootInfo.IsDir() ||
-		unsafeCodexGoPermissions(rootInfo.Mode()) {
+		unsafeCodexGoPermissions(rootInfo.Mode()) || !ownerTrusted(rootInfo) {
 		return "", errors.New(codexGoToolchainInvalid)
 	}
 	binPath := filepath.Join(configuredRoot, "bin")
@@ -139,7 +168,7 @@ func validateCodexGoToolchain(configuredRoot string) (string, error) {
 	}
 	binInfo, err := os.Lstat(binPath)
 	if err != nil || binInfo.Mode()&os.ModeSymlink != 0 || !binInfo.IsDir() ||
-		unsafeCodexGoPermissions(binInfo.Mode()) {
+		unsafeCodexGoPermissions(binInfo.Mode()) || !ownerTrusted(binInfo) {
 		return "", errors.New(codexGoToolchainInvalid)
 	}
 	executablePath := filepath.Join(binPath, goExecutableName())
@@ -150,16 +179,32 @@ func validateCodexGoToolchain(configuredRoot string) (string, error) {
 	executableInfo, err := os.Lstat(executablePath)
 	if err != nil || executableInfo.Mode()&os.ModeSymlink != 0 || !executableInfo.Mode().IsRegular() ||
 		!codexGoExecutable(executableInfo.Mode()) ||
-		unsafeCodexGoPermissions(executableInfo.Mode()) {
+		unsafeCodexGoPermissions(executableInfo.Mode()) || !ownerTrusted(executableInfo) {
 		return "", errors.New(codexGoToolchainInvalid)
 	}
-	if err := validateCodexGoToolchainTree(configuredRoot); err != nil {
+	if err := validateCodexGoToolchainTree(configuredRoot, ownerTrusted); err != nil {
 		return "", errors.New(codexGoToolchainInvalid)
 	}
 	return configuredRoot, nil
 }
 
-func validateCodexGoToolchainTree(root string) error {
+func validateCodexGoToolchainAncestors(root string, ownerTrusted codexGoToolchainTrust) error {
+	for current := root; ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil ||
+			info.Mode()&os.ModeSymlink != 0 ||
+			!info.IsDir() ||
+			unsafeCodexGoPermissions(info.Mode()) ||
+			!ownerTrusted(info) {
+			return errors.New(codexGoToolchainInvalid)
+		}
+		if parent := filepath.Dir(current); parent == current {
+			return nil
+		}
+	}
+}
+
+func validateCodexGoToolchainTree(root string, ownerTrusted codexGoToolchainTrust) error {
 	return filepath.WalkDir(root, func(_ string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -175,6 +220,9 @@ func validateCodexGoToolchainTree(root string) error {
 			return errors.New(codexGoToolchainInvalid)
 		}
 		if unsafeCodexGoPermissions(info.Mode()) {
+			return errors.New(codexGoToolchainInvalid)
+		}
+		if !ownerTrusted(info) {
 			return errors.New(codexGoToolchainInvalid)
 		}
 		return nil

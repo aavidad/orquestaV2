@@ -9,11 +9,11 @@ import (
 )
 
 func TestPrepareCodexGoEnvironmentPinsConfiguredToolchainAndPrivateCaches(t *testing.T) {
-	root := t.TempDir()
+	root := secureCodexGoFixtureBase(t)
 	marker := filepath.Join(root, "go-was-executed")
 	toolchainRoot := writeFakeCodexGoToolchain(t, filepath.Join(root, "toolchain"), marker)
 	cacheRoot := filepath.Join(root, "cache")
-	environment, err := prepareCodexGoEnvironment(map[string]string{
+	environment, err := prepareCodexGoEnvironmentWithTrust(map[string]string{
 		"PATH":        "/usr/bin:/bin",
 		"CUSTOM":      "preserved",
 		"GOENV":       "poisoned",
@@ -24,7 +24,7 @@ func TestPrepareCodexGoEnvironmentPinsConfiguredToolchainAndPrivateCaches(t *tes
 		"GOPATH":      "/poisoned/gopath",
 		"GOTMPDIR":    "/poisoned/go-tmp",
 		"TMPDIR":      "/poisoned/tmp",
-	}, cacheRoot, toolchainRoot)
+	}, cacheRoot, toolchainRoot, trustCodexGoFixtureOwner)
 	if err != nil {
 		t.Fatalf("prepareCodexGoEnvironment() error = %v", err)
 	}
@@ -125,7 +125,7 @@ func TestPrepareCodexGoEnvironmentRejectsUnsafeCacheBeforeCodex(t *testing.T) {
 }
 
 func TestPrepareCodexGoEnvironmentRejectsInvalidConfiguredToolchainBeforeCacheEffect(t *testing.T) {
-	root := t.TempDir()
+	root := secureCodexGoFixtureBase(t)
 	missingGoRoot := filepath.Join(root, "missing-go")
 	if err := os.MkdirAll(filepath.Join(missingGoRoot, "bin"), 0o700); err != nil {
 		t.Fatal(err)
@@ -187,7 +187,12 @@ func TestPrepareCodexGoEnvironmentRejectsInvalidConfiguredToolchainBeforeCacheEf
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cacheRoot := filepath.Join(root, "cache-"+test.name)
-			_, err := prepareCodexGoEnvironment(map[string]string{"PATH": "/usr/bin"}, cacheRoot, test.root)
+			_, err := prepareCodexGoEnvironmentWithTrust(
+				map[string]string{"PATH": "/usr/bin"},
+				cacheRoot,
+				test.root,
+				trustCodexGoFixtureOwner,
+			)
 			if err == nil || err.Error() != codexGoToolchainInvalid {
 				t.Fatalf("invalid toolchain error = %v", err)
 			}
@@ -195,6 +200,59 @@ func TestPrepareCodexGoEnvironmentRejectsInvalidConfiguredToolchainBeforeCacheEf
 				t.Fatalf("invalid toolchain created cache before rejection: %v", statErr)
 			}
 		})
+	}
+}
+
+func TestPrepareCodexGoEnvironmentRejectsNonRootOwnedToolchain(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix UID/GID ownership")
+	}
+	root := secureCodexGoFixtureBase(t)
+	toolchainRoot := writeFakeCodexGoToolchain(
+		t,
+		filepath.Join(root, "user-owned-toolchain"),
+		filepath.Join(root, "must-not-execute"),
+	)
+	info, statErr := os.Lstat(toolchainRoot)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if codexGoToolchainOwnerTrusted(info) {
+		t.Skip("test process created a root-owned fixture")
+	}
+	cacheRoot := filepath.Join(root, "cache")
+	_, err := prepareCodexGoEnvironment(
+		map[string]string{"PATH": "/usr/bin"},
+		cacheRoot,
+		toolchainRoot,
+	)
+	if err == nil || err.Error() != codexGoToolchainInvalid {
+		t.Fatalf("user-owned toolchain error = %v", err)
+	}
+	if _, statErr := os.Stat(cacheRoot); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("untrusted owner created cache before rejection: %v", statErr)
+	}
+}
+
+func TestPrepareCodexGoEnvironmentEnforcesInjectedOwnershipPolicy(t *testing.T) {
+	root := secureCodexGoFixtureBase(t)
+	toolchainRoot := writeFakeCodexGoToolchain(
+		t,
+		filepath.Join(root, "synthetically-untrusted-toolchain"),
+		filepath.Join(root, "must-not-execute"),
+	)
+	cacheRoot := filepath.Join(root, "cache")
+	_, err := prepareCodexGoEnvironmentWithTrust(
+		map[string]string{"PATH": "/usr/bin"},
+		cacheRoot,
+		toolchainRoot,
+		func(os.FileInfo) bool { return false },
+	)
+	if err == nil || err.Error() != codexGoToolchainInvalid {
+		t.Fatalf("synthetically untrusted toolchain error = %v", err)
+	}
+	if _, statErr := os.Stat(cacheRoot); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("synthetically untrusted owner created cache before rejection: %v", statErr)
 	}
 }
 
@@ -217,4 +275,30 @@ func writeExecutableMarker(t *testing.T, path, marker string) {
 	if err := os.WriteFile(path, content, 0o700); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func trustCodexGoFixtureOwner(os.FileInfo) bool {
+	return true
+}
+
+func secureCodexGoFixtureBase(t *testing.T) string {
+	t.Helper()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.MkdirTemp(home, ".orquesta-codex-go-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		_ = os.RemoveAll(root)
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(root); err != nil {
+			t.Errorf("RemoveAll(%s) error = %v", root, err)
+		}
+	})
+	return root
 }

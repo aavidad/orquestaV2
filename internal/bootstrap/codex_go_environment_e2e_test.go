@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestCodexProductionProcessReceivesPinnedGoEnvironment(t *testing.T) {
-	root := t.TempDir()
+	root := secureCodexGoFixtureBase(t)
 	environmentPath := filepath.Join(root, "codex-environment")
 	argumentsPath := filepath.Join(root, "codex-arguments")
 	helperPath := filepath.Join(root, "codex-helper.sh")
@@ -45,8 +46,9 @@ func TestCodexProductionProcessReceivesPinnedGoEnvironment(t *testing.T) {
 	t.Setenv("GOPROXY", "https://proxy.example.test")
 
 	runtime, err := Build(context.Background(), Options{
-		ConfigPath: configPath,
-		Version:    "bug460-codex-go-environment",
+		ConfigPath:                    configPath,
+		Version:                       "bug460-codex-go-environment",
+		codexGoToolchainTrustForTests: trustCodexGoFixtureOwner,
 	})
 	if err != nil {
 		t.Fatalf("Build(production Codex) error = %v", err)
@@ -94,6 +96,49 @@ func TestCodexProductionProcessReceivesPinnedGoEnvironment(t *testing.T) {
 		}
 	}
 	requireCodexGoShellPolicy(t, argumentsPath)
+}
+
+func TestCodexGoToolchainOwnerPreflightFailsBeforeCodexInvocation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no Unix UID/GID ownership")
+	}
+	root := secureCodexGoFixtureBase(t)
+	invocationPath := filepath.Join(root, "codex-invoked")
+	helperPath := filepath.Join(root, "codex-helper.sh")
+	if err := os.WriteFile(helperPath, []byte(
+		"#!/bin/sh\nprintf invoked > "+strconv.Quote(invocationPath)+"\n",
+	), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	toolchainRoot := writeFakeCodexGoToolchain(
+		t,
+		filepath.Join(root, "user-owned-toolchain"),
+		filepath.Join(root, "go-was-executed"),
+	)
+	info, statErr := os.Lstat(toolchainRoot)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if codexGoToolchainOwnerTrusted(info) {
+		t.Skip("test process created a root-owned fixture")
+	}
+	configPath := writeTestConfig(t, root)
+	replaceTestConfigValue(t, configPath, "[runtime.codex]\ntimeout = \"1s\"",
+		"[runtime.codex]\n"+
+			"command = "+strconv.Quote(helperPath)+"\n"+
+			"go_toolchain_root = "+strconv.Quote(toolchainRoot)+"\n"+
+			"timeout = \"5s\"",
+	)
+	orquestaRuntime, err := Build(context.Background(), Options{ConfigPath: configPath})
+	if orquestaRuntime != nil || err == nil || err.Error() != codexGoToolchainInvalid {
+		t.Fatalf("user-owned toolchain Build() = runtime:%v error:%v", orquestaRuntime, err)
+	}
+	if _, invocationErr := os.Stat(invocationPath); !errors.Is(invocationErr, os.ErrNotExist) {
+		t.Fatalf("untrusted owner reached Codex process: %v", invocationErr)
+	}
+	if _, cacheErr := os.Stat(filepath.Join(root, "cache", "codex-go")); !errors.Is(cacheErr, os.ErrNotExist) {
+		t.Fatalf("untrusted owner created Go cache before rejection: %v", cacheErr)
+	}
 }
 
 func TestCodexGoToolchainPreflightFailsBeforeCodexInvocation(t *testing.T) {
