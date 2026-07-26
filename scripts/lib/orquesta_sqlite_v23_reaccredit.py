@@ -1055,7 +1055,6 @@ def main(arguments: Sequence[str]) -> int:
     output_root: Path | None = None
     runner: Runner | None = None
     cleanup_args: dict[str, Any] | None = None
-    running = False
     try:
         if not REVISION_RE.fullmatch(args.expected_revision):
             fail("expected_revision_invalid")
@@ -1477,7 +1476,6 @@ def main(arguments: Sequence[str]) -> int:
                 f"cycle-{cycle}-start",
                 adapter_arguments(projected_adapter, "start", **common),
             )
-            running = True
             start_invocation = parse_invocation(start.stdout, "start")
             observed_control_group = direct_control_group(
                 runner,
@@ -1506,7 +1504,6 @@ def main(arguments: Sequence[str]) -> int:
                 f"cycle-{cycle}-stop",
                 adapter_arguments(projected_adapter, "stop-profile", **common),
             )
-            running = False
             runner.run(
                 f"cycle-{cycle}-collect",
                 adapter_arguments(projected_adapter, "collect", **common),
@@ -1749,23 +1746,22 @@ def main(arguments: Sequence[str]) -> int:
                         for key, value in cleanup_args.items()
                         if key != "adapter"
                     }
-                    if running:
-                        runner.run(
-                            "failure-cleanup-stop",
-                            adapter_arguments(
-                                adapter_path,
-                                "stop-profile",
-                                **common_cleanup,
-                            ),
-                            allowed=frozenset({0, 1, 3}),
-                        )
-                    runner.run(
-                        "failure-cleanup-collect",
-                        adapter_arguments(
-                            adapter_path, "collect", **common_cleanup
-                        ),
-                        allowed=frozenset({0, 1, 3}),
-                    )
+                    for cleanup_operation, cleanup_label in (
+                        ("stop-profile", "failure-cleanup-stop"),
+                        ("collect", "failure-cleanup-collect"),
+                    ):
+                        try:
+                            runner.run(
+                                cleanup_label,
+                                adapter_arguments(
+                                    adapter_path,
+                                    cleanup_operation,
+                                    **common_cleanup,
+                                ),
+                                allowed=frozenset({0, 1, 3}),
+                            )
+                        except HarnessError:
+                            continue
                 except (HarnessError, KeyError):
                     pass
             failure_path = output_root / "failure.json"

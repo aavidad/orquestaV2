@@ -143,6 +143,8 @@ if operation == "start":
             "INSERT INTO authorization_receipts VALUES(?)", (ref,)
         )
     state.write_text("loaded\n", encoding="utf-8")
+    if (systemctl.parent / "fail-start-after-unit").exists():
+        raise SystemExit(97)
     print(
         "orquesta_profile_systemd_user: status=running action=start "
         f"unit={values['--unit']} profile={values['--profile']} "
@@ -495,6 +497,19 @@ grep -q 'reason_code=binary_revision_mismatch' "$FIXTURE/stderr" ||
   fail_test "modified_buildinfo_reason"
 [ ! -e "$COMMANDS/operations" ] ||
   fail_test "modified_buildinfo_adapter_called"
+
+write_fixture start-cleanup
+: >"$COMMANDS/fail-start-after-unit"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "start_failure_accepted"
+fi
+grep -q 'reason_code=command_failed' "$FIXTURE/stderr" ||
+  fail_test "start_failure_reason"
+[ "$(<"$COMMANDS/operations")" = $'start\nstop-profile\ncollect' ] ||
+  fail_test "start_failure_cleanup_sequence"
+[ "$("$COMMANDS/systemctl" --user show ignored.service \
+  --property=LoadState --value)" = "not-found" ] ||
+  fail_test "start_failure_unit_residue"
 
 write_fixture config-live
 python3 - "$PRIVATE/config-template.toml" "$LIVE/tool" <<'PY'
