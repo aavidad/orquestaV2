@@ -289,18 +289,26 @@ El bloque ejecutable anterior para `3451d3108c0c14b9539bec1ca134afd07a9beb19`
 queda retirado por obsoleto. No debe reutilizarse ni inferirse de él una
 activación, receipt, nonce, resultado PASS o ejecución física.
 
-El único handoff vigente conocido por esta documentación es el wrapper
+El candidato `815c1f295391a077a6023a10637a7d52afab1eb6` se ejecutó y falló
+limpiamente antes de arrancar una microVM. La evidencia física mostró que
+Linux 7.0 exponía `/proc/net/route` vacío en el netns limpio; el launcher lo
+rechazaba por exigir la cabecera histórica. `21d256bf` corrige esa
+representación sin aceptar rutas y `156fd972` evita que la ausencia legítima
+de `runs` después de parar enmascare la causa primaria. Los incidentes quedan
+registrados como `BUG-ORQ-20260727-570` y `BUG-ORQ-20260727-571`.
+
+El único handoff vigente es el wrapper
 `/home/alberto/Trabajo/orquesta/script/ejecutar_firecracker_root_v2.sh`, sobre
-la revisión `815c1f295391a077a6023a10637a7d52afab1eb6` y árbol
-`37450649443f7f44061afa3d7d6e8b3bc73fcf84`. Sus identidades estáticas son:
+la revisión `ec6dfc98c764d6613a95401d4c7395b75063a547` y árbol
+`829e39af0fef4e3c65241d83c3316a5f0eb2f1f7`. Sus identidades estáticas son:
 
 ```text
-driver_sha256=3af57693a3926d4ccd8ed471434575e310f0183cd3b3c02d88a7c27b1b3509d3
-wrapper_sha256=760b80a159cdd6183c71101b86a1aee8f239de6346cd30c7d828f2f9ddfff83f
+driver_sha256=38d4c3870c4246c13440ce1ea5e9578a1e2e50b8cff1df1bf28401c6fd161cc4
+wrapper_sha256=c75e0660cd6d7dfc223ac75077218575276b7ec5bca69b807b4569fb4809d9f7
 driver_source=/tmp/orquesta-firecracker-root-v2.rfuWOn/run-root-e2e.sh
-driver_target=/srv/orquesta-self/operator/firecracker-root-e2e-815c1f295391a077a6023a10637a7d52afab1eb6
+driver_target=/srv/orquesta-self/operator/firecracker-root-e2e-ec6dfc98c764d6613a95401d4c7395b75063a547
 asset_digest=7df880f7cbfbf82d076254b474c46c6e85065a921a819308482343613a83d1f0
-candidate_unit=orquesta-firecracker-attestor-36fbd58046da0b9ad0fd5e68188412b98324bd0ad1a478e51d2d648f829d7d1d.service
+candidate_unit=orquesta-firecracker-attestor-0a0b436cf1e452f072fb94509168b8b9897e3cea43ded5865150fc0aaa8f595a.service
 ```
 
 El wrapper, no el instalador, solicita `sudo -v` como preflight de operador.
