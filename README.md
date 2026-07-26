@@ -1,72 +1,56 @@
-# Orquesta
+# Orquesta V2
 
-Orquesta es el nucleo de orquestacion de agentes del workspace. La direccion
-vigente es que el nucleo sea reutilizable por aplicaciones externas: programacion
-con Codex y OPES son composiciones consumidoras, no la definicion del nucleo.
+Reconstrucción de Orquesta sobre un único lifecycle `Goal`, un único escritor
+de aplicación y un único scheduler. El producto nuevo no importa, arranca ni
+adapta el runtime anterior.
 
-## Lectura inicial
+## Autoridad vigente
 
-- `AGENTS.md`: reglas para futuros agentes que trabajen en este repo.
-- `docs/estado_actual_2026-05-17.md`: foto vigente del proyecto.
-- `docs/guia_nucleo_orquestacion_2026-05-17.md`: mapa de piezas contra el
-  nuevo nucleo.
-- `docs/principio_orquesta_piensa_director.md`: principio de reparto entre
-  Orquesta y apps de dominio.
-- `docs/uso_actual_app_orquesta.md`: uso operativo server-first de la
-  composicion actual, rutas `/api/v0/*`, web/CLI como clientes finos y
-  cuarentena de aliases legacy.
-- `docs/matriz_pruebas_reales_y_smoke_2026-05-17.md`: matriz de pruebas reales,
-  opt-in y offline.
-- `docs/orquesta_goal_first_codex_2026-06-25.md`: corte para usar Codex Goal
-  como Director operativo interno y adelgazar el loop residente.
+Lee en este orden:
 
-## Autoridad documental
+1. `AGENTS.md`;
+2. `product/roadmap.json`;
+3. `product/capabilities.json` y `product/evidence/**`;
+4. `docs/reconstruccion/ruta_total_100.md`.
 
-La foto vigente vive en `AGENTS.md` y `docs/estado_actual_2026-05-17.md`. La
-matriz de smokes decide que casos estan cerrados con evidencia; el backlog de
-autoprogramacion enumera trabajo ejecutable y no debe relanzar
-`CODEX-WAVE-REAL` ni `CODEX-RECURSION-REAL` salvo regresion demostrada. Los
-documentos historicos deben citar una fuente vigente antes de usarse para
-planificar.
+V1-V22 son verticales acreditadas de esta reconstrucción. V23 permanece abierto
+hasta que su contrato y su receipt queden sellados; no se declara terminado por
+documentación ni por un smoke parcial.
 
-El uso operativo vigente es server-first: `cmd/orquesta-server` expone rutas
-publicas versionadas y readiness en `/api/v0/server/readiness`; web, CLI y MCP
-son adaptadores finos sobre esas superficies. Las rutas `/api/*` sin version y
-los manuales V1 quedan como compatibilidad historica salvo que una fuente
-vigente los nombre explicitamente.
-Si una guia antigua contradice `docs/uso_actual_app_orquesta.md`, no debe abrir
-tareas de codigo ni pruebas contra rutas legacy sin pasar antes por una fuente
-vigente.
+## Superficie de producto
 
-## Validacion rapida
+- dominio y aplicación: `internal/goal`, `internal/application`;
+- puertos y adaptadores: `internal/ports`, `internal/adapters`;
+- interfaces y composición: `internal/interfaces`, `internal/bootstrap`;
+- único binario productivo: `cmd/orquesta`;
+- contratos públicos: `sdk`;
+- catálogo, roadmap y evidencias: `product`;
+- aceptación transversal: `acceptance`.
+
+OPES, programación con Codex y otras aplicaciones son consumidores o
+adaptadores. No definen el núcleo.
+
+## Legado
+
+El código anterior no está en la vista activa de este equipo. Se conserva
+íntegro y consultable en:
+
+```text
+/home/alberto/Trabajo/orquestaV2-legacy-consulta
+```
+
+La copia, el bundle, las referencias de rescate y la reversión están descritos
+en `docs/reconstruccion/separacion_legacy_consulta_2026-07-26.md`. El legado
+sirve para extraer lecciones, fixtures y semántica; nunca como autoridad ni
+como atajo de implementación.
+
+## Verificación
 
 ```bash
 git diff --check
-go test -count=1 ./...
+go test -mod=vendor -count=1 ./...
 ```
 
-## Frontera vigente
-
-El core puro vive en `modulos/orquesta-core-workflow` y el loop de aplicacion en
-`modulos/orquesta-orchestration-core`. Los adaptadores concretos de runtime,
-persistencia, deploy, web, MCP, OPES y Codex deben quedar fuera de esas capas.
-`modulos/orquesta-deploy` es el owner de `DeploymentPlan v0`: prepara contratos
-de despliegue declarativos y dry-run por puerto, sin ejecutar infraestructura ni
-tocar secretos.
-
-La espina `DirectorCycleStepV0 -> director-runner -> director-scheduler ->
-core-workflow -> director-cycle-outbox` define el tick neutral del Director V2:
-prepara input compacto, planifica comandos publicos, aplica workflow por puerto
-y deja outbox pendiente para un supervisor externo. No es daemon ni composicion
-residente; esos cierres viven en el servidor/adaptadores y requieren evidencia
-propia.
-
-El camino nuevo para runtimes con `goal` persistente es goal-first: Orquesta
-compila `GoalWorkSpecV0` con reglas, contexto, write-set, tests y artefactos;
-Codex Goal actua como Director operativo dentro del trabajo; Orquesta observa y
-valida el cierre. El loop historico `app-director-service`/`PlanState` queda
-como compatibilidad hasta que cada ruta tenga smoke equivalente.
-
-`modulos/orquesta-domain-work-sql` es solo un adaptador SQL externo de referencia
-para jobs de dominio. No es persistencia global de Orquesta, no abre conexiones,
-no registra drivers y no esta cableado al servidor productivo.
+Las pruebas reales y los smokes que requieren runtime, credenciales o
+infraestructura son opt-in y deben ejecutarse según el contrato de la vertical
+correspondiente.

@@ -38,9 +38,13 @@ Las tres superficies apuntan al corte de producto
 - `opes-salidas/**`;
 - `temas_opes_a1_2026-05-20/**`;
 - `tcae.jpeg`.
+- `ARQUITECTURA.md`;
+- `CODEX_LEEME.md`;
+- `REVISION_ARQUITECTURA_HALLAZGOS_2026-06-28.md`.
 
 `cmd/orquesta/**` permanece visible porque es el único binario productivo de la
-reconstrucción.
+reconstrucción. El antiguo `README.md` se sustituyó por la entrada vigente de
+Orquesta V2; su versión anterior también se conserva en la copia de consulta.
 
 No se han apartado en bloque `docs/**`, `scripts/**`, `testdata/**` ni datos
 OPES: contienen material histórico y soporte vigente mezclados. Su separación
@@ -62,6 +66,9 @@ El worktree activo usa estos patrones locales:
 !/opes-salidas/
 !/temas_opes_a1_2026-05-20/
 !/tcae.jpeg
+!/ARQUITECTURA.md
+!/CODEX_LEEME.md
+!/REVISION_ARQUITECTURA_HALLAZGOS_2026-06-28.md
 ```
 
 Esto no crea una eliminación en Git y mantiene limpio `git status`. `rg`,
