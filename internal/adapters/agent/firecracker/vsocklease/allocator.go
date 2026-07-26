@@ -22,7 +22,10 @@ const (
 
 	businessSavepointCreate   = "SAVEPOINT agent_microvm_vsock_business"
 	businessSavepointRollback = "ROLLBACK TO SAVEPOINT agent_microvm_vsock_business"
-	businessSavepointRelease  = "RELEASE SAVEPOINT agent_microvm_vsock_business"
+
+	// ROLLBACK TO is idempotent while its savepoint remains active. One retry
+	// resolves a single lost response without turning cleanup into an open loop.
+	businessRollbackToMaximumAttempts = 2
 )
 
 // Config is supplied by composition. DB must be the deployment's canonical
@@ -139,15 +142,16 @@ func (guard *transactionGuard) rollbackBusinessAndCommitFrontier(returned error)
 	}
 	guard.phase = transactionPhaseFinished
 	cleanupContext := context.Background()
-	if _, err := guard.allocator.execTransaction(
-		cleanupContext, guard.connection, businessSavepointRollback,
-	); err != nil {
-		discardConnection(guard.connection)
-		return allocatorError("store_unavailable")
+	rollbackAccredited := false
+	for range businessRollbackToMaximumAttempts {
+		if _, err := guard.allocator.execTransaction(
+			cleanupContext, guard.connection, businessSavepointRollback,
+		); err == nil {
+			rollbackAccredited = true
+			break
+		}
 	}
-	if _, err := guard.allocator.execTransaction(
-		cleanupContext, guard.connection, businessSavepointRelease,
-	); err != nil {
+	if !rollbackAccredited {
 		discardConnection(guard.connection)
 		return allocatorError("store_unavailable")
 	}
@@ -207,7 +211,6 @@ func Open(ctx context.Context, config Config) (*Allocator, error) {
 		return nil, err
 	}
 	allocator := &Allocator{config: config}
-	allocator.beginTransaction = allocator.beginImmediate
 	allocator.execTransaction = func(
 		ctx context.Context,
 		connection *sql.Conn,
@@ -215,6 +218,7 @@ func Open(ctx context.Context, config Config) (*Allocator, error) {
 	) (sql.Result, error) {
 		return connection.ExecContext(ctx, statement)
 	}
+	allocator.beginTransaction = allocator.beginImmediate
 	return allocator, nil
 }
 
@@ -645,8 +649,10 @@ func (allocator *Allocator) beginImmediate(ctx context.Context) (*sql.Conn, erro
 		_ = connection.Close()
 		return nil, err
 	}
-	if _, err := connection.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
-		_ = connection.Close()
+	if _, err := allocator.execTransaction(ctx, connection, "BEGIN IMMEDIATE"); err != nil {
+		// A driver error cannot prove that SQLite did not apply BEGIN. Returning
+		// this physical connection to the pool could leak a manual transaction.
+		discardConnection(connection)
 		if ctx.Err() != nil {
 			return nil, allocatorError("canceled")
 		}
