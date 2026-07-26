@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-26.31",
-  "registry_hash": "sha256:9ef296db333c2271857fc5e3022c66559d777617749eee99695dc0439152045e",
+  "registry_revision": "2026-07-26.32",
+  "registry_hash": "sha256:7a676618918142d2c286d0feb1686fabd73a6e4817e9849d94f4283f01e0d6ed",
   "aliases": [],
   "cross_validators": [
     {
@@ -57,6 +57,7 @@
         "artifact.filesystem.root",
         "credentials.local.path",
         "runtime.codex.work_root",
+        "runtime.codex.cache_root",
         "runtime.codex.account_home_root",
         "workspace.local.root",
         "config.effective_path",
@@ -406,6 +407,30 @@
       "restart_required": true,
       "validator_ids": [
         "non_empty_path"
+      ]
+    },
+    {
+      "key": "runtime.codex.cache_root",
+      "semantic_ref": "orquesta.config.runtime.codex.cache_root",
+      "label_key": "config.field.runtime.codex.cache_root",
+      "type": "path",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "non_empty_path"
+      ]
+    },
+    {
+      "key": "runtime.codex.go_toolchain_root",
+      "semantic_ref": "orquesta.config.runtime.codex.go_toolchain_root",
+      "label_key": "config.field.runtime.codex.go_toolchain_root",
+      "type": "optional_path",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "optional_path"
       ]
     },
     {
