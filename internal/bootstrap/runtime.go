@@ -46,13 +46,14 @@ type AgentAdapter interface {
 type AgentFactory func(config.Snapshot, application.Clock) (AgentAdapter, error)
 
 type Options struct {
-	ConfigPath               string
-	Version                  string
-	Listener                 net.Listener
-	AgentFactory             AgentFactory
-	IdentityHTTPClient       *http.Client
-	CommandExecutionResolver commandcore.ExecutionAuthorityResolver
-	ReportError              func(error)
+	ConfigPath                    string
+	Version                       string
+	Listener                      net.Listener
+	AgentFactory                  AgentFactory
+	IdentityHTTPClient            *http.Client
+	CommandExecutionResolver      commandcore.ExecutionAuthorityResolver
+	ReportError                   func(error)
+	codexGoToolchainTrustForTests codexGoToolchainTrust
 }
 
 type identityRuntimeComposition struct {
@@ -117,7 +118,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	)
 	openAgent := func() error {
 		agent, capabilities, controller, err = openBuildAgent(
-			ctx, setup.snapshot, setup.clock, options.AgentFactory, promptRenderer, credentialStore,
+			ctx,
+			setup.snapshot,
+			setup.clock,
+			options.AgentFactory,
+			promptRenderer,
+			credentialStore,
+			options.codexGoToolchainTrustForTests,
 		)
 		if err == nil {
 			cleanup.add(func() { shutdownBuildAgent(agent, setup.snapshot.ServerShutdownTimeout()) })
@@ -306,10 +313,20 @@ func openBuildAgent(
 	ctx context.Context, snapshot config.Snapshot, clock local.Clock, factory AgentFactory,
 	promptRenderer codex.PromptRenderer,
 	credentialStore credentials.Store,
+	toolchainTrust codexGoToolchainTrust,
 ) (AgentAdapter, ports.AgentCapabilities, application.AgentController, error) {
 	if factory == nil {
+		if toolchainTrust == nil {
+			toolchainTrust = codexGoToolchainOwnerTrusted
+		}
 		factory = func(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
-			return productionAgentAdapter(snapshot, clock, promptRenderer, credentialStore)
+			return productionAgentAdapterWithGoToolchainTrust(
+				snapshot,
+				clock,
+				promptRenderer,
+				credentialStore,
+				toolchainTrust,
+			)
 		}
 	}
 	agent, err := factory(snapshot, clock)
@@ -968,6 +985,22 @@ func productionAgentFactory(
 func productionAgentAdapter(
 	snapshot config.Snapshot, clock application.Clock, promptRenderer codex.PromptRenderer, credentialStore credentials.Store,
 ) (*codex.Adapter, error) {
+	return productionAgentAdapterWithGoToolchainTrust(
+		snapshot,
+		clock,
+		promptRenderer,
+		credentialStore,
+		codexGoToolchainOwnerTrusted,
+	)
+}
+
+func productionAgentAdapterWithGoToolchainTrust(
+	snapshot config.Snapshot,
+	clock application.Clock,
+	promptRenderer codex.PromptRenderer,
+	credentialStore credentials.Store,
+	ownerTrusted codexGoToolchainTrust,
+) (*codex.Adapter, error) {
 	if snapshot.RuntimeProvider() != "codex" {
 		return nil, errors.New("bootstrap.runtime_provider_unsupported")
 	}
@@ -975,10 +1008,11 @@ func productionAgentAdapter(
 	if err != nil {
 		return nil, err
 	}
-	environment, err = prepareCodexGoEnvironment(
+	environment, err = prepareCodexGoEnvironmentWithTrust(
 		environment,
 		snapshot.RuntimeCodexCacheRoot(),
 		snapshot.RuntimeCodexGoToolchainRoot(),
+		ownerTrusted,
 	)
 	if err != nil {
 		return nil, err

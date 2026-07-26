@@ -581,12 +581,28 @@ if go_toolchain_root:
         or "\r" in go_toolchain_root
     ):
         raise ValueError("go_toolchain")
+    current = go_toolchain_root
+    while True:
+        metadata = os.lstat(current)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_gid != 0
+            or stat.S_IMODE(metadata.st_mode) & 0o022
+        ):
+            raise ValueError("go_toolchain")
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
     pending = [go_toolchain_root]
     while pending:
         current = pending.pop()
         metadata = os.lstat(current)
         if (
             stat.S_ISLNK(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_gid != 0
             or stat.S_IMODE(metadata.st_mode) & 0o022
         ):
             raise ValueError("go_toolchain")
@@ -599,6 +615,8 @@ if go_toolchain_root:
     metadata = os.lstat(go_executable)
     if (
         not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != 0
+        or metadata.st_gid != 0
         or not metadata.st_mode & 0o111
         or metadata.st_mode & 0o022
     ):
