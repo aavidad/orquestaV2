@@ -4,6 +4,10 @@ Lee este fichero antes de trabajar. Después lee solo el `AGENTS.md` local y los
 contratos necesarios para tu write-set. Este árbol reconstruye Orquesta; no
 continúa el runtime anterior.
 
+Antes de inspeccionar código, lee
+`docs/reconstruccion/LEEME_AGENTE_ORQUESTAV2.md`. Es el corte breve que evita
+confundir producto nuevo, trazabilidad histórica y copia legacy.
+
 ## Misión y estado honesto
 
 Orquesta es un núcleo reutilizable que recibe una intención, mantiene un Goal

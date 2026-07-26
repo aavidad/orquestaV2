@@ -9,9 +9,10 @@ adapta el runtime anterior.
 Lee en este orden:
 
 1. `AGENTS.md`;
-2. `product/roadmap.json`;
-3. `product/capabilities.json` y `product/evidence/**`;
-4. `docs/reconstruccion/ruta_total_100.md`.
+2. `docs/reconstruccion/LEEME_AGENTE_ORQUESTAV2.md`;
+3. `product/roadmap.json`;
+4. `product/capabilities.json` y `product/evidence/**`;
+5. `docs/reconstruccion/ruta_total_100.md`.
 
 V1-V22 son verticales acreditadas de esta reconstrucción. V23 permanece abierto
 hasta que su contrato y su receipt queden sellados; no se declara terminado por

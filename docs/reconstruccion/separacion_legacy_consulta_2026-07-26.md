@@ -44,6 +44,9 @@ Las tres superficies apuntan al corte de producto
 - 26 scripts de operación, smoke y tests ligados al antiguo
   `cmd/orquesta-server`, al loop Goal-first clásico o a la autoprogramación
   anterior. El manifiesto exacto aparece en la sección siguiente.
+- seis tests raíz del runtime anterior: fronteras de `modulos`, Director V2
+  clásico, estado vivo, backends Goal-first, tripwire multiusuario legacy y
+  dependencias de la imagen antigua.
 
 `cmd/orquesta/**` permanece visible porque es el único binario productivo de la
 reconstrucción. El antiguo `README.md` se sustituyó por la entrada vigente de
@@ -98,6 +101,12 @@ El worktree activo usa estos patrones locales:
 !/scripts/test_orquesta_server_deploy.sh
 !/scripts/test_orquesta_server_drain.sh
 !/scripts/test_orquesta_smoke_nightly.sh
+!/architecture_boundaries_test.go
+!/director_v2_freeze_test.go
+!/estado_vivo_boundaries_test.go
+!/goal_first_process_backends_e2e_test.go
+!/multiusuario_legacy_tripwire_v0_test.go
+!/runtime_dependencies_declaradas_v0_test.go
 ```
 
 Esto no crea una eliminación en Git y mantiene limpio `git status`. `rg`,
