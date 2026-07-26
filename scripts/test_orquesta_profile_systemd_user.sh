@@ -73,6 +73,9 @@ EOF
 set -euo pipefail
 root="${ORQUESTA_SYSTEMD_FAKE_ROOT:?}"
 printf '%s\0' "$@" >"$root/log/systemd-run.argv"
+[ "${1:-}" = "--user" ] &&
+  [ "${2:-}" = "--expand-environment=no" ] ||
+  exit 97
 case "${ORQUESTA_SYSTEMD_FAKE_RUN_MODE:-success}" in
   success)
     cp -- "$root/state/properties.ready" "$root/state/properties"
@@ -298,16 +301,18 @@ values = open(sys.argv[1], "rb").read().split(b"\0")
 if values[-1] == b"":
     values.pop()
 decoded = [value.decode() for value in values]
-required = [
-    "--user", "--collect", "--service-type=exec",
+expected_prefix = [
+    "--user", "--expand-environment=no", "--collect", "--service-type=exec",
     "--unit=orquesta-v23-Codex12.service",
     "--property=Delegate=yes",
     "--property=DelegateSubgroup=orquesta-control",
-    "/bin/bash", "-c", sys.argv[2],
 ]
-for value in required[:-1]:
-    if value not in decoded:
-        raise SystemExit(f"missing argv {value!r}")
+if decoded[:len(expected_prefix)] != expected_prefix:
+    raise SystemExit(
+        f"unexpected argv prefix {decoded[:len(expected_prefix)]!r}"
+    )
+if decoded.count("--expand-environment=no") != 1:
+    raise SystemExit("environment expansion guard was not passed exactly once")
 if sys.argv[2] not in decoded:
     raise SystemExit("config was not passed as one positional argument")
 body = decoded[decoded.index("-c") + 1]
