@@ -78,6 +78,7 @@ EOF
   cat >"$REPOSITORY/scripts/orquesta_profile_systemd_user.sh" <<'PY'
 #!/usr/bin/env python3
 import hashlib
+import os
 import pathlib
 import sqlite3
 import sys
@@ -111,6 +112,20 @@ else:
 if operation == "start":
     with open(values["--config"], "rb") as handle:
         config = tomllib.load(handle)
+    manager_cgroup = (
+        f"/user.slice/user-{os.geteuid()}.slice/"
+        f"user@{os.geteuid()}.service"
+    )
+    unit_cgroup = manager_cgroup + "/app.slice/" + values["--unit"]
+    delegated_root = (
+        pathlib.Path(values["--cgroup-mount"])
+        / unit_cgroup.removeprefix("/")
+    )
+    assert config["runtime"]["codex"]["cgroup_root"] == str(delegated_root)
+    assert (
+        config["test_attestor"]["resources"]["cgroup_root"]
+        == str(delegated_root)
+    )
     database = config["state"]["sqlite"]["path"]
     repository = pathlib.Path(values["--repository-root"])
     with sqlite3.connect(database) as connection:
@@ -166,6 +181,16 @@ if operation == "start":
         connection.execute(
             "INSERT INTO authorization_receipts VALUES(?)", (ref,)
         )
+    process_cgroup = unit_cgroup + "/orquesta-control"
+    if (systemctl.parent / "place-process-in-parent-cgroup").exists():
+        process_cgroup = unit_cgroup
+    for pid in (100, 101):
+        proc = pathlib.Path(values["--proc-root"]) / str(pid)
+        proc.mkdir(mode=0o700, exist_ok=True)
+        (proc / "cgroup").write_text(
+            "0::" + process_cgroup + "\n",
+            encoding="utf-8",
+        )
     state.write_text("loaded\n", encoding="utf-8")
     if (systemctl.parent / "fail-start-after-unit").exists():
         raise SystemExit(97)
@@ -218,8 +243,13 @@ for argument in "$@"; do
   esac
 done
 if [ "$property" = "ControlGroup" ]; then
-  printf '/user.slice/user-%s.slice/user@%s.service/app.slice/%s\n' \
-    "$(id -u)" "$(id -u)" "$unit"
+  if [ -n "$unit" ]; then
+    printf '/user.slice/user-%s.slice/user@%s.service/app.slice/%s\n' \
+      "$(id -u)" "$(id -u)" "$unit"
+  else
+    printf '/user.slice/user-%s.slice/user@%s.service\n' \
+      "$(id -u)" "$(id -u)"
+  fi
 elif [ -f "$state_file" ]; then
   tr -d '\n' <"$state_file"
   printf '\n'
@@ -409,6 +439,7 @@ import os
 import pathlib
 import stat
 import sys
+import tomllib
 
 receipt_path = pathlib.Path(sys.argv[1])
 root = pathlib.Path(sys.argv[2])
@@ -483,6 +514,17 @@ for item in receipt["evidence"]:
         assert len(content) == stream["bytes"]
         assert hashlib.sha256(content).hexdigest() == stream["sha256"]
 assert pathlib.Path(receipt["harness"]["output_dir"]) == root
+with (root / "config.toml").open("rb") as handle:
+    config = tomllib.load(handle)
+assert config["runtime"]["codex"]["cgroup_root"] == (
+    receipt["harness"]["delegated_cgroup_root"]
+)
+assert config["test_attestor"]["resources"]["cgroup_root"] == (
+    receipt["harness"]["delegated_cgroup_root"]
+)
+assert receipt["harness"]["unit_control_group"] == (
+    receipt["harness"]["delegated_cgroup_root"] + "/orquesta-control"
+)
 assert not root.is_relative_to(live)
 assert not list(root.rglob("auth.json"))
 assert stat.S_IMODE(receipt_path.stat().st_mode) == 0o600
@@ -600,6 +642,17 @@ grep -q 'reason_code=sqlite_schema_manifest_changed' "$FIXTURE/stderr" ||
 [ "$("$COMMANDS/systemctl" --user show ignored.service \
   --property=LoadState --value)" = "not-found" ] ||
   fail_test "migration_receipts_without_ddl_unit_residue"
+
+write_fixture process-in-parent-cgroup
+: >"$COMMANDS/place-process-in-parent-cgroup"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "process_in_parent_cgroup_accepted"
+fi
+grep -q 'reason_code=runtime_process_cgroup_mismatch' "$FIXTURE/stderr" ||
+  fail_test "process_in_parent_cgroup_reason"
+[ "$("$COMMANDS/systemctl" --user show ignored.service \
+  --property=LoadState --value)" = "not-found" ] ||
+  fail_test "process_in_parent_cgroup_unit_residue"
 
 write_fixture config-live
 python3 - "$PRIVATE/config-template.toml" "$LIVE/tool" <<'PY'

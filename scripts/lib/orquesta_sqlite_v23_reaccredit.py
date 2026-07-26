@@ -818,6 +818,28 @@ def parse_invocation(output: str, expected_action: str) -> str:
     return match.group(1)
 
 
+def parse_runtime_pids(output: str) -> tuple[int, int]:
+    values: dict[str, int] = {}
+    for name in ("main_pid", "daemon_pid"):
+        match = re.search(rf"(?:^| ){name}=([1-9][0-9]*)(?:\s|$)", output)
+        if match is None:
+            fail("adapter_runtime_pid_missing", name)
+        values[name] = int(match.group(1))
+    return values["main_pid"], values["daemon_pid"]
+
+
+def read_process_cgroup(proc_root: Path, pid: int) -> str:
+    path = proc_root / str(pid) / "cgroup"
+    try:
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        fail("runtime_process_cgroup_unreadable", f"pid={pid}:{error}")
+    lines = content.splitlines()
+    if len(lines) != 1 or not lines[0].startswith("0::/"):
+        fail("runtime_process_cgroup_invalid", f"pid={pid}")
+    return lines[0].removeprefix("0::")
+
+
 def parse_go_buildinfo(output: str) -> tuple[str, bool]:
     fields: dict[str, str] = {}
     for line in output.splitlines():
@@ -878,6 +900,32 @@ def direct_control_group(
         or value.endswith("/..")
     ):
         fail("unit_control_group_invalid", repr(value))
+    return value
+
+
+def direct_user_manager_control_group(
+    runner: Runner, systemctl: Path
+) -> str:
+    result = runner.run(
+        "user-manager-control-group",
+        [
+            str(systemctl),
+            "--user",
+            "show",
+            "--property=ControlGroup",
+            "--value",
+        ],
+    )
+    value = result.stdout.strip()
+    if (
+        not value.startswith("/")
+        or value == "/"
+        or "\n" in value
+        or "/../" in value
+        or value.endswith("/..")
+        or value.endswith("/")
+    ):
+        fail("user_manager_control_group_invalid", repr(value))
     return value
 
 
@@ -1403,6 +1451,10 @@ def main(arguments: Sequence[str]) -> int:
             migration_files,
             expected_migrations,
         )
+        runner = Runner(output_root, source_guard, args.command_timeout)
+        user_manager_control_group = direct_user_manager_control_group(
+            runner, systemctl
+        )
 
         profile = "SqliteReaccredit" + secrets.token_hex(8)
         if not PROFILE_RE.fullmatch(profile):
@@ -1411,15 +1463,13 @@ def main(arguments: Sequence[str]) -> int:
         listen = choose_loopback()
         runtime_root = runtime_base / profile
         source_home = account_root / profile
-        unit_control_group = (
+        delegated_cgroup_root = (
             cgroup_mount
-            / "user.slice"
-            / f"user-{os.geteuid()}.slice"
-            / f"user@{os.geteuid()}.service"
+            / user_manager_control_group.removeprefix("/")
             / "app.slice"
             / unit
-            / "orquesta-control"
         )
+        unit_control_group = delegated_cgroup_root / "orquesta-control"
         source_home.mkdir(mode=0o700)
         os.chmod(source_home, 0o700)
         projected_auth = source_home / "auth.json"
@@ -1459,7 +1509,7 @@ def main(arguments: Sequence[str]) -> int:
             account_root,
             profile,
             listen,
-            unit_control_group,
+            delegated_cgroup_root,
             projected_repo,
             bubblewrap,
             live_root,
@@ -1515,7 +1565,7 @@ def main(arguments: Sequence[str]) -> int:
             ]
         )
         guard.verify()
-        runner = Runner(output_root, guard, args.command_timeout)
+        runner.guard = guard
         buildinfo = runner.run(
             "binary-buildinfo",
             [str(go_command), "version", "-m", str(projected_binary)],
@@ -1633,6 +1683,7 @@ def main(arguments: Sequence[str]) -> int:
                 adapter_arguments(projected_adapter, "start", **common),
             )
             start_invocation = parse_invocation(start.stdout, "start")
+            main_pid, daemon_pid = parse_runtime_pids(start.stdout)
             observed_control_group = direct_control_group(
                 runner,
                 systemctl,
@@ -1642,13 +1693,27 @@ def main(arguments: Sequence[str]) -> int:
             observed_cgroup_root = (
                 cgroup_mount
                 / observed_control_group.removeprefix("/")
-                / "orquesta-control"
             )
-            if observed_cgroup_root != unit_control_group:
+            if observed_cgroup_root != delegated_cgroup_root:
                 fail(
                     "unit_control_group_config_mismatch",
-                    f"expected={unit_control_group}:observed={observed_cgroup_root}",
+                    (
+                        f"expected={delegated_cgroup_root}:"
+                        f"observed={observed_cgroup_root}"
+                    ),
                 )
+            expected_process_cgroup = (
+                observed_control_group + "/orquesta-control"
+            )
+            for role, pid in (
+                ("main", main_pid),
+                ("daemon", daemon_pid),
+            ):
+                if read_process_cgroup(proc_root, pid) != expected_process_cgroup:
+                    fail(
+                        "runtime_process_cgroup_mismatch",
+                        f"cycle={cycle}:role={role}:pid={pid}",
+                    )
             status = runner.run(
                 f"cycle-{cycle}-status",
                 adapter_arguments(projected_adapter, "check", **common),
@@ -1866,6 +1931,7 @@ def main(arguments: Sequence[str]) -> int:
                 "profile": profile,
                 "unit": unit,
                 "listen": listen,
+                "delegated_cgroup_root": str(delegated_cgroup_root),
                 "unit_control_group": str(unit_control_group),
                 "projected_repository_revision": repository_revision,
                 "directory_mode": "0700",
