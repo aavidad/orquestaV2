@@ -348,6 +348,13 @@ var v02SharedDomainPackages = map[string]struct{}{
 	"orquesta/internal/governance": {},
 }
 
+// v02ApplicationDomainPackages are inward domains consumed only by the
+// application writer. They are kept separate from v02SharedDomainPackages so
+// Goal cannot silently acquire another lifecycle dependency.
+var v02ApplicationDomainPackages = map[string]struct{}{
+	"orquesta/internal/intake": {},
+}
+
 func v02VersionedGoalType(name string) bool {
 	return v02ParallelGoalPattern.MatchString(name)
 }
@@ -445,6 +452,9 @@ func v02AssertExecutionAndProviderSeparation(t *testing.T, sources v02SourceSet,
 				continue
 			}
 			if _, allowed := v02SharedDomainPackages[importPath]; allowed {
+				continue
+			}
+			if _, allowed := v02ApplicationDomainPackages[importPath]; allowed {
 				continue
 			}
 			position := sources.FileSet.Position(spec.Pos())

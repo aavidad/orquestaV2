@@ -121,6 +121,16 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
+	t.Run("intake_is_pure_inward_domain", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/intake") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureIntakeImportReason(imported.path); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/intake "+reason)
+				}
+			}
+		}
+	})
+
 	t.Run("application_has_no_delivery_or_concrete_runtime_dependencies", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/application") {
 			for _, imported := range file.imports {
@@ -186,6 +196,7 @@ func TestRebuildArchitecture(t *testing.T) {
 				"orquesta/internal/goal",
 				"orquesta/internal/governance",
 				"orquesta/internal/identity",
+				"orquesta/internal/intake",
 				"orquesta/internal/ports",
 				"orquesta/internal/review",
 			}
@@ -271,16 +282,26 @@ func TestRebuildArchitecture(t *testing.T) {
 		rebuildArchitectureAssertConfigGuardMutants(t)
 	})
 
-	t.Run("council_domain_allowlist_keeps_concrete_boundaries_forbidden", func(t *testing.T) {
+	t.Run("inward_domain_allowlist_keeps_concrete_boundaries_forbidden", func(t *testing.T) {
 		if reason := rebuildArchitectureGoalImportReason("orquesta/internal/council"); reason != "" {
 			t.Errorf("Goal must accept pure council domain: %s", reason)
 		}
 		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/council"); reason != "" {
 			t.Errorf("application must accept pure council domain: %s", reason)
 		}
+		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/intake"); reason != "" {
+			t.Errorf("application must accept pure intake domain: %s", reason)
+		}
+		if reason := rebuildArchitectureIntakeImportReason("orquesta/internal/intake"); reason != "" {
+			t.Errorf("intake must accept only its own inward package: %s", reason)
+		}
 		for name, reason := range map[string]string{
 			"goal_adapter":        rebuildArchitectureGoalImportReason("orquesta/internal/adapters/state/sqlite"),
+			"goal_intake":         rebuildArchitectureGoalImportReason("orquesta/internal/intake"),
 			"goal_http":           rebuildArchitectureGoalImportReason("net/http"),
+			"intake_application":  rebuildArchitectureIntakeImportReason("orquesta/internal/application"),
+			"intake_adapter":      rebuildArchitectureIntakeImportReason("orquesta/internal/adapters/state/sqlite"),
+			"intake_provider":     rebuildArchitectureIntakeImportReason("github.com/openai/client"),
 			"application_adapter": rebuildArchitectureApplicationImportReason("orquesta/internal/adapters/state/sqlite"),
 			"application_http":    rebuildArchitectureApplicationImportReason("net/http"),
 		} {
@@ -676,8 +697,9 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 		importPath != "orquesta/internal/council" &&
 		importPath != "orquesta/internal/governance" &&
 		importPath != "orquesta/internal/identity" &&
+		importPath != "orquesta/internal/intake" &&
 		importPath != "orquesta/internal/ports" {
-		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity and internal/ports"
+		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity, internal/intake and internal/ports"
 	}
 	switch {
 	case importPath == "net/http" || strings.HasPrefix(importPath, "net/http/"):
@@ -691,6 +713,13 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 	default:
 		return ""
 	}
+}
+
+func rebuildArchitectureIntakeImportReason(importPath string) string {
+	if importPath == "orquesta/internal/intake" || rebuildArchitectureIsStandardLibraryImport(importPath) {
+		return ""
+	}
+	return "may depend only on the standard library and orquesta/internal/intake"
 }
 
 func rebuildArchitectureForbiddenInternalLayer(importPath string, layers ...string) string {

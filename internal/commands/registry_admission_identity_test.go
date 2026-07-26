@@ -4,11 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"testing"
-	"time"
 
-	"orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
 )
 
@@ -34,20 +31,13 @@ func (api *registryUpgradeApplication) Submit(
 
 func TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade(t *testing.T) {
 	ctx := context.Background()
-	repository, err := sqlite.Open(ctx, sqlite.Options{
-		Path: filepath.Join(t.TempDir(), "private", "orquesta.sqlite"), BusyTimeout: time.Second, MaxOpenConnections: 1,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = repository.Close() })
-
 	api := &registryUpgradeApplication{
 		fakeApplication:    newFakeApplication(),
 		seenSubmitRequests: make(map[string]struct{}),
 	}
+	audit := newMemoryAudit()
 	dispatcher, err := newDispatcher(
-		api, repository, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {
@@ -72,7 +62,7 @@ func TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditi
 		historical.RegistryDigest == RegistrySourceSHA256 {
 		t.Fatalf("historical digest=%q current global=%q", historical.RegistryDigest, RegistrySourceSHA256)
 	}
-	if _, err := repository.Begin(ctx, historical); err != nil {
+	if _, err := audit.Begin(ctx, historical); err != nil {
 		t.Fatal(err)
 	}
 
@@ -92,7 +82,7 @@ func TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditi
 	if semanticChange.RegistryDigest == historical.RegistryDigest {
 		t.Fatalf("semantic mutation retained historical digest %q", semanticChange.RegistryDigest)
 	}
-	if _, err := repository.Begin(ctx, semanticChange); !errors.Is(err, ErrAuditConflict) {
+	if _, err := audit.Begin(ctx, semanticChange); !errors.Is(err, ErrAuditConflict) {
 		t.Fatalf("semantic mutation replay err=%v", err)
 	}
 }
