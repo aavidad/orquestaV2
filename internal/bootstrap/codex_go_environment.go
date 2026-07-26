@@ -153,7 +153,32 @@ func validateCodexGoToolchain(configuredRoot string) (string, error) {
 		unsafeCodexGoPermissions(executableInfo.Mode()) {
 		return "", errors.New(codexGoToolchainInvalid)
 	}
+	if err := validateCodexGoToolchainTree(configuredRoot); err != nil {
+		return "", errors.New(codexGoToolchainInvalid)
+	}
 	return configuredRoot, nil
+}
+
+func validateCodexGoToolchainTree(root string) error {
+	return filepath.WalkDir(root, func(_ string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return errors.New(codexGoToolchainInvalid)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() && !info.Mode().IsRegular() {
+			return errors.New(codexGoToolchainInvalid)
+		}
+		if unsafeCodexGoPermissions(info.Mode()) {
+			return errors.New(codexGoToolchainInvalid)
+		}
+		return nil
+	})
 }
 
 func unsafeCodexGoPermissions(mode os.FileMode) bool {
