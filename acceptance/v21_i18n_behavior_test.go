@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"golang.org/x/text/language"
+	"orquesta/internal/commands"
 )
 
 func TestV21BCP47MatrixAndSpanishFallbackContract(t *testing.T) {
@@ -97,8 +98,10 @@ func TestV21MachineProtocolFieldsRemainLocaleInvariant(t *testing.T) {
 			ErrorCodes []string `json:"error_codes"`
 		} `json:"commands"`
 	}
-	if err := json.Unmarshal(content, &registry); err != nil || len(registry.Commands) != 25 {
-		t.Fatalf("V21 consumes invalid V20 registry: commands=%d err=%v", len(registry.Commands), err)
+	if err := json.Unmarshal(content, &registry); err != nil ||
+		len(registry.Commands) != len(commands.CanonicalDefinitions()) {
+		t.Fatalf("V21 consumes invalid canonical registry: commands=%d err=%v",
+			len(registry.Commands), err)
 	}
 	for _, command := range registry.Commands {
 		if !strings.HasPrefix(command.ID, "orquesta.") || command.Version != "1" || len(command.ErrorCodes) == 0 {

@@ -112,9 +112,9 @@ func TestDirectorPlanInitialAndReplanFencesAreAllOrNothing(t *testing.T) {
 	}
 }
 
-func TestCanonicalRegistryHas25CommandsAndPropagatesCouncilContracts(t *testing.T) {
+func TestCanonicalRegistryHas28CommandsAndPropagatesCouncilContracts(t *testing.T) {
 	dispatcher, api, _ := testDispatcher(t)
-	if got := len(dispatcher.Definitions()); got != 25 {
+	if got := len(dispatcher.Definitions()); got != 28 {
 		t.Fatalf("definitions=%d", got)
 	}
 	byID := compiledDefinitionsByID()
@@ -442,6 +442,9 @@ func canonicalPayloads() map[string]any {
 		"orquesta.goals.create": map[string]any{"statement": "build", "confirm": true},
 		"orquesta.goals.amend":  map[string]any{"source_goal_ref": "goal:g", "expected_source_revision": 1, "expected_source_spec_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "statement": "amend", "reason": "fix", "confirm": true},
 		"orquesta.goals.get":    map[string]any{"goal_ref": "goal:g"}, "orquesta.goals.list": map[string]any{"limit": 1},
+		"orquesta.intakes.create": map[string]any{"intake_ref": "intake:test", "max_question_rounds": 2},
+		"orquesta.intakes.get":    map[string]any{"intake_ref": "intake:test"},
+		"orquesta.intakes.apply":  canonicalIntakeApplyPayload(),
 		"orquesta.artifacts.read": map[string]any{"goal_ref": "goal:g", "artifact_ref": "artifact:a"}, "orquesta.system.status": map[string]any{},
 		"orquesta.projects.memberships.grant":  map[string]any{"target_principal_ref": "principal:target", "target_actor_ref": "actor:target", "target_kind": "human", "target_method": "local_token", "role": "contributor", "expected_revision": 0},
 		"orquesta.projects.memberships.revoke": map[string]any{"target_principal_ref": "principal:target", "expected_revision": 1},

@@ -312,7 +312,7 @@ func TestRuntimeUsesGeneratedRegistryAndNeverLoadsMutableRegistryPath(t *testing
 		t.Fatal(err)
 	}
 	if !bytes.Contains(dispatcherSource, []byte("cloneDefinitions(compiledDefinitions)")) ||
-		!bytes.Contains(dispatcherSource, []byte("RegistryDigest: RegistrySourceSHA256")) {
-		t.Fatal("dispatcher is not bound to generated definitions and their source digest")
+		!bytes.Contains(dispatcherSource, []byte("RegistryDigest: registryAdmissionDigest(definition)")) {
+		t.Fatal("dispatcher is not bound to generated definitions and stable admission identity")
 	}
 }

@@ -283,7 +283,7 @@ func admissionRecord(definition Definition, invocation Invocation, bound handler
 	)
 	return CommandAuditRecord{
 		Ref: ref, CommandID: definition.ID, CommandVersion: definition.Version,
-		RegistryDigest: RegistrySourceSHA256, SchemaDigest: schemaDigest,
+		RegistryDigest: registryAdmissionDigest(definition), SchemaDigest: schemaDigest,
 		RequestRef: invocation.RequestRef, InputDigest: inputDigest,
 		PrincipalRef: invocation.Principal.Ref.String(), ProjectRef: bound.projectRef.String(),
 		AuthenticatedExecutionRef: bound.executionRef.String(), ReplayMode: definition.ReplayMode, Status: "admitted",
