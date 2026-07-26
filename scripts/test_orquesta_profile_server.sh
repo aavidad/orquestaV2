@@ -5,6 +5,7 @@ umask 077
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCRIPT="$ROOT/scripts/orquesta_profile_server.sh"
 FIRECRACKER_PROBE="$ROOT/scripts/lib/firecracker_launcher_probe.py"
+MAINTENANCE_MARKER_READER="$ROOT/scripts/lib/profile_maintenance_marker.py"
 TEST_PARENT="$(python3 - <<'PY'
 import os
 import pwd
@@ -35,6 +36,7 @@ cleanup() {
     kill -0 "$LAUNCHER_FIXTURE_PID" 2>/dev/null; then
     kill -TERM "$LAUNCHER_FIXTURE_PID" 2>/dev/null || true
   fi
+  rm -f -- "$BASE/.profile-locks/"*.maintenance 2>/dev/null || true
   for profile in CodexA CodexB; do
     "$SCRIPT" stop --profile "$profile" --runtime-base "$BASE" \
       >/dev/null 2>&1 || true
@@ -339,6 +341,42 @@ start_profile_with_driver() {
     --exec-path "$(dirname "$(realpath "$(command -v go)")"):/usr/local/bin:/usr/bin"
 }
 
+start_profile_with_maintenance() {
+  profile="$1"
+  maintenance_ref="$2"
+  "$SCRIPT" start \
+    --profile "$profile" \
+    --runtime-base "$BASE" \
+    --source-codex-home "$ACCOUNTS/$profile" \
+    --binary "$FAKE_BINARY" \
+    --config "$TEST_ROOT/$profile.toml" \
+    --exec-path "$(dirname "$(realpath "$(command -v go)")"):/usr/local/bin:/usr/bin" \
+    --maintenance-ref "$maintenance_ref"
+}
+
+write_maintenance_marker() {
+  profile="$1"
+  maintenance_ref="$2"
+  marker="$BASE/.profile-locks/$profile.maintenance"
+  temporary="$BASE/.profile-locks/.$profile.maintenance.tmp"
+  exec 6<>"$BASE/.profile-locks/$profile.control.lock"
+  flock 6
+  printf 'maintenance_ref=%s\n' "$maintenance_ref" >"$temporary"
+  chmod 600 -- "$temporary"
+  mv -f -- "$temporary" "$marker"
+  flock -u 6
+  exec 6>&-
+}
+
+remove_maintenance_marker() {
+  profile="$1"
+  exec 6<>"$BASE/.profile-locks/$profile.control.lock"
+  flock 6
+  rm -f -- "$BASE/.profile-locks/$profile.maintenance"
+  flock -u 6
+  exec 6>&-
+}
+
 start_profile_with_nofile() {
   profile="$1"
   nofile="$2"
@@ -479,9 +517,21 @@ PY
 
 bash -n "$SCRIPT"
 PYTHONPYCACHEPREFIX="$TEST_ROOT/pycache" \
-  python3 -m py_compile "$FIRECRACKER_PROBE"
+  python3 -m py_compile "$FIRECRACKER_PROBE" "$MAINTENANCE_MARKER_READER"
 grep -Fq '[ "$(uname -s 2>/dev/null)" = "Linux" ] || fail "platform_unsupported"' \
   "$SCRIPT"
+
+# Status de un perfil inexistente observa sin crear locks ni runtime.
+set +e
+missing_status_output="$(
+  "$SCRIPT" status --profile CodexMissing --runtime-base "$BASE"
+)"
+missing_status_code="$?"
+set -e
+[ "$missing_status_code" -eq 3 ]
+grep -q "status=stopped profile=CodexMissing" <<<"$missing_status_output"
+[ ! -e "$BASE/.profile-locks" ]
+[ ! -e "$BASE/CodexMissing" ]
 
 # La sonda UDS no envía ninguna petición: solo conecta, acredita peer y cierra.
 mkdir -m 700 "$LAUNCHER_ROOT"
@@ -492,6 +542,7 @@ mkdir -m 700 "$PROFILE_TEST_DRIVER_ROOT" "$PROFILE_TEST_DRIVER_ROOT/lib"
 cp -- "$SCRIPT" "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh"
 cp -- \
   "$FIRECRACKER_PROBE" \
+  "$MAINTENANCE_MARKER_READER" \
   "$ROOT/scripts/lib/pidfd_signal.py" \
   "$PROFILE_TEST_DRIVER_ROOT/lib/"
 # Producción conserva peer root:root. La copia aislada solo permite que el
@@ -503,6 +554,7 @@ sed -i \
 chmod 755 \
   "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh" \
   "$PROFILE_TEST_DRIVER_ROOT/lib/firecracker_launcher_probe.py" \
+  "$PROFILE_TEST_DRIVER_ROOT/lib/profile_maintenance_marker.py" \
   "$PROFILE_TEST_DRIVER_ROOT/lib/pidfd_signal.py"
 connectable_socket="$LAUNCHER_ROOT/connectable.sock"
 connectable_observation="$LAUNCHER_ROOT/connectable.observed"
@@ -636,6 +688,105 @@ exec 7<>"$BASE/.profile-locks/CodexA.lease.lock"
 flock -n 7
 flock -u 7
 exec 7>&-
+
+# Un marker canónico excluye toda mutación salvo la ligada a su ref. Status
+# sigue siendo observación read-only y el marker nunca lo retira este script.
+MAINTENANCE_REF="$(
+  printf '%s' "profile-maintenance-CodexA" | sha256sum | awk '{print $1}'
+)"
+readonly MAINTENANCE_REF
+OTHER_MAINTENANCE_REF="$(
+  printf '%s' "profile-maintenance-other" | sha256sum | awk '{print $1}'
+)"
+readonly OTHER_MAINTENANCE_REF
+expect_failure maintenance_ref_invalid \
+  "$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref not-a-sha256
+expect_failure maintenance_marker_missing \
+  "$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref "$MAINTENANCE_REF"
+write_maintenance_marker CodexA "$MAINTENANCE_REF"
+maintenance_marker="$BASE/.profile-locks/CodexA.maintenance"
+[ "$(stat -Lc '%a:%u:%h' -- "$maintenance_marker")" = \
+  "600:$(id -u):1" ]
+set +e
+maintenance_status_output="$(
+  "$SCRIPT" status --profile CodexA --runtime-base "$BASE"
+)"
+maintenance_status_code="$?"
+set -e
+[ "$maintenance_status_code" -eq 3 ]
+grep -q "status=stopped profile=CodexA" <<<"$maintenance_status_output"
+expect_failure profile_maintenance_active start_profile CodexA
+expect_failure maintenance_ref_mismatch \
+  start_profile_with_maintenance CodexA "$OTHER_MAINTENANCE_REF"
+start_profile_with_maintenance CodexA "$MAINTENANCE_REF" >/dev/null
+maintenance_pid="$(<"$BASE/CodexA/run/server.pid")"
+"$SCRIPT" status --profile CodexA --runtime-base "$BASE" |
+  grep -q "status=running profile=CodexA pid=$maintenance_pid"
+expect_failure profile_maintenance_active \
+  "$SCRIPT" stop --profile CodexA --runtime-base "$BASE"
+expect_failure maintenance_ref_mismatch \
+  "$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref "$OTHER_MAINTENANCE_REF"
+kill -0 "$maintenance_pid"
+
+# Modo, hardlink, symlink, owner y framing alterados fallan cerrados. Cada
+# negativo conserva tanto el daemon como el marker para una reparación segura.
+chmod 640 -- "$maintenance_marker"
+expect_failure maintenance_marker_invalid \
+  "$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref "$MAINTENANCE_REF"
+chmod 600 -- "$maintenance_marker"
+ln -- "$maintenance_marker" "$maintenance_marker.hardlink"
+expect_failure maintenance_marker_invalid \
+  "$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref "$MAINTENANCE_REF"
+rm -- "$maintenance_marker.hardlink"
+mv -- "$maintenance_marker" "$maintenance_marker.target"
+ln -s -- "$maintenance_marker.target" "$maintenance_marker"
+expect_failure maintenance_marker_invalid \
+  "$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref "$MAINTENANCE_REF"
+rm -- "$maintenance_marker"
+mv -- "$maintenance_marker.target" "$maintenance_marker"
+if [ "$(id -u)" -eq 0 ]; then
+  chown 1 -- "$maintenance_marker"
+  expect_failure maintenance_marker_invalid \
+    "$SCRIPT" stop \
+    --profile CodexA \
+    --runtime-base "$BASE" \
+    --maintenance-ref "$MAINTENANCE_REF"
+  chown 0 -- "$maintenance_marker"
+fi
+printf 'maintenance_ref=%s\nextra\n' "$MAINTENANCE_REF" \
+  >"$maintenance_marker"
+expect_failure maintenance_marker_invalid \
+  "$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref "$MAINTENANCE_REF"
+write_maintenance_marker CodexA "$MAINTENANCE_REF"
+kill -0 "$maintenance_pid"
+"$SCRIPT" stop \
+  --profile CodexA \
+  --runtime-base "$BASE" \
+  --maintenance-ref "$MAINTENANCE_REF" >/dev/null
+[ -f "$maintenance_marker" ]
+remove_maintenance_marker CodexA
+[ ! -e "$maintenance_marker" ]
 
 # El perfil persiste y una reautenticación legítima no se copia ni se rechaza.
 printf '{"account":"account-a-refreshed"}\n' >"$ACCOUNTS/CodexA/auth.json"
