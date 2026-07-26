@@ -133,12 +133,17 @@ func TestBindRuntimeScopeRetriesCanceledGuardRecoveryBeforeAdoption(t *testing.T
 
 func TestBindRuntimeScopeQuarantinesAuthorityFailureBeforeAdoption(t *testing.T) {
 	config := supervisorTestConfig(t)
-	const suffix = "runtime-scope-session-recovery-quarantine"
-	request := supervisorTestRequest(suffix, "helper:session helper:block", 1024)
+	const suffix = "runtime-scope-session-recovery-quarantine-setsid"
+	request := supervisorTestRequest(suffix, "helper:session helper:setsid-block", 1024)
 	runSupervisorTestSubprocess(
 		t, supervisorOwnerTestArgument, config.WorkRoot, suffix, request.Objective,
 	)
 	record := awaitSupervisorProcessRecord(t, config.WorkRoot, request.ExecutionRef)
+	descendantPID := awaitSetsidPID(t, config, request.ExecutionRef)
+	_, descendantPGID, descendantBirth, err := readLinuxProcess(descendantPID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		if controller, err := openCodexCgroupRoot(config.CgroupRoot); err == nil {
 			_ = controller.kill(record)
@@ -177,6 +182,15 @@ func TestBindRuntimeScopeQuarantinesAuthorityFailureBeforeAdoption(t *testing.T)
 	if identity, inspectErr := platformInspectProcess(record); inspectErr != nil ||
 		identity != processIdentityGone {
 		t.Fatalf("quarantined process identity=%v error=%v", identity, inspectErr)
+	}
+	if identity, inspectErr := platformInspectProcess(processRecord{
+		PID: descendantPID, PGID: descendantPGID,
+		BootID: record.BootID, BirthMarker: descendantBirth,
+	}); inspectErr != nil || identity != processIdentityGone {
+		t.Fatalf("quarantined setsid descendant identity=%v error=%v", identity, inspectErr)
+	}
+	if _, leafErr := reopened.cgroups.leafForRecord(record); !errors.Is(leafErr, os.ErrNotExist) {
+		t.Fatalf("quarantine left cgroup leaf: %v", leafErr)
 	}
 	if output, readErr := os.ReadFile(outputPath); readErr != nil || len(output) != 0 {
 		t.Fatalf("quarantined output=%q error=%v", output, readErr)
@@ -1219,6 +1233,9 @@ func runSupervisorTestProcess(arguments []string) (int, bool) {
 		objective = "helper:block"
 	} else if strings.Contains(suffix, "session-recovery") {
 		objective = "helper:session helper:block"
+		if strings.Contains(suffix, "quarantine-setsid") {
+			objective = "helper:session helper:setsid-block"
+		}
 		config.SessionResolver = sessionResolverFunc(func(
 			_ context.Context, request ports.AgentLaunchRequest,
 		) (Session, error) {
@@ -1329,7 +1346,8 @@ func runSupervisorTestSubprocess(t *testing.T, mode, workRoot, suffix, objective
 	if objective != "helper:delayed-success" {
 		// Delayed failure uses the same owner fixture with a suffix convention.
 		if objective != "helper:delayed-failure" && objective != "helper:block" &&
-			objective != "helper:session helper:block" {
+			objective != "helper:session helper:block" &&
+			objective != "helper:session helper:setsid-block" {
 			t.Fatalf("unsupported supervisor subprocess objective %q", objective)
 		}
 	}
