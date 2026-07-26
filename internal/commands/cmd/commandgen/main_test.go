@@ -98,11 +98,17 @@ func TestGeneratorRejectsContractMutationsAndTrailingJSON(t *testing.T) {
 		}},
 		{"query_not_read_only", func(value *document) {
 			no := false
-			value.Commands[2].MCP.Annotations.ReadOnly = &no
+			definitionByID(
+				value,
+				"orquesta.goals.get",
+			).MCP.Annotations.ReadOnly = &no
 		}},
 		{"query_destructive", func(value *document) {
 			yes := true
-			value.Commands[2].MCP.Annotations.Destructive = &yes
+			definitionByID(
+				value,
+				"orquesta.goals.get",
+			).MCP.Annotations.Destructive = &yes
 		}},
 		{"non_idempotent", func(value *document) {
 			no := false
@@ -137,6 +143,15 @@ func TestGeneratorRejectsContractMutationsAndTrailingJSON(t *testing.T) {
 	if err := run(root, "internal/commands/registry.json", modeWrite); err == nil {
 		t.Fatal("trailing JSON accepted")
 	}
+}
+
+func definitionByID(registry *document, id string) *definition {
+	for index := range registry.Commands {
+		if registry.Commands[index].ID == id {
+			return &registry.Commands[index]
+		}
+	}
+	panic("commandgen test fixture lacks definition " + id)
 }
 
 func TestCommandRegistryRejectsDuplicateIDsAndBindingsUnknownPermissionsHandlersAndCatalogKeys(t *testing.T) {

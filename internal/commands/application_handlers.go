@@ -46,6 +46,7 @@ type applicationAPI interface {
 	AcceptIntakeRecommendations(context.Context, application.Access, application.AcceptIntakeRecommendationsRequest) (application.IntakeResult, error)
 	GetIntakeContext(context.Context, application.Access, application.GetIntakeContextRequest) (intake.Context, error)
 	PrepareIntakeDossier(context.Context, application.Access, application.PrepareIntakeDossierRequest) (application.IntakeDossierResult, error)
+	PrepareWizardDossier(context.Context, application.Access, application.PrepareWizardDossierRequest) (application.WizardDossierResult, error)
 	GetIntakeDossier(context.Context, application.Access, application.GetIntakeDossierRequest) (application.IntakeDossierRecord, error)
 	ConfirmIntakeDossier(context.Context, application.Access, application.ConfirmIntakeDossierRequest) (application.ConfirmIntakeDossierResult, error)
 }
@@ -63,7 +64,8 @@ var expectedHandlerPermissions = map[string]string{
 	"OpenCouncilRound": "goals.direct", "SkipCouncil": "council.skip",
 	"CreateIntake": "goals.create", "GetIntake": "goals.get", "ApplyIntake": "goals.create",
 	"AcceptIntakeRecommendations": "goals.create", "GetIntakeContext": "goals.get",
-	"PrepareIntakeDossier": "goals.create", "GetIntakeDossier": "goals.get", "ConfirmIntakeDossier": "goals.create",
+	"PrepareIntakeDossier": "goals.create", "PrepareWizardDossier": "goals.create",
+	"GetIntakeDossier": "goals.get", "ConfirmIntakeDossier": "goals.create",
 }
 
 func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
@@ -92,6 +94,7 @@ func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
 		"AcceptIntakeRecommendations": wrap(handleAcceptIntakeRecommendations),
 		"GetIntakeContext":            wrap(handleGetIntakeContext),
 		"PrepareIntakeDossier":        wrap(handlePrepareIntakeDossier),
+		"PrepareWizardDossier":        wrap(handlePrepareWizardDossier),
 		"GetIntakeDossier":            wrap(handleGetIntakeDossier),
 		"ConfirmIntakeDossier":        wrap(handleConfirmIntakeDossier),
 	}

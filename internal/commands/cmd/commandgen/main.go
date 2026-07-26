@@ -201,7 +201,8 @@ var handlerPermissions = map[string]string{
 	"OpenCouncilRound": "goals.direct", "SkipCouncil": "council.skip",
 	"CreateIntake": "goals.create", "GetIntake": "goals.get", "ApplyIntake": "goals.create",
 	"AcceptIntakeRecommendations": "goals.create", "GetIntakeContext": "goals.get",
-	"PrepareIntakeDossier": "goals.create", "GetIntakeDossier": "goals.get", "ConfirmIntakeDossier": "goals.create",
+	"PrepareIntakeDossier": "goals.create", "PrepareWizardDossier": "goals.create",
+	"GetIntakeDossier": "goals.get", "ConfirmIntakeDossier": "goals.create",
 }
 
 func equalStrings(left, right []string) bool {

@@ -114,9 +114,9 @@ func TestDirectorPlanInitialAndReplanFencesAreAllOrNothing(t *testing.T) {
 	}
 }
 
-func TestCanonicalRegistryHas33CommandsAndPropagatesCouncilContracts(t *testing.T) {
+func TestCanonicalRegistryHas34CommandsAndPropagatesCouncilContracts(t *testing.T) {
 	dispatcher, api, _ := testDispatcher(t)
-	if got := len(dispatcher.Definitions()); got != 33 {
+	if got := len(dispatcher.Definitions()); got != 34 {
 		t.Fatalf("definitions=%d", got)
 	}
 	byID := compiledDefinitionsByID()
@@ -457,10 +457,11 @@ func canonicalPayloads() map[string]any {
 			"intake_ref": "intake:test", "expected_revision": 2,
 			"origin": "form", "kind": "help", "question_refs": []any{},
 		},
-		"orquesta.intakes.dossier.prepare": canonicalIntakeDossierPreparePayload(),
-		"orquesta.intakes.dossier.get":     map[string]any{"dossier_ref": "intake-dossier:test"},
-		"orquesta.intakes.dossier.confirm": map[string]any{"dossier_ref": "intake-dossier:test", "confirm": true},
-		"orquesta.artifacts.read":          map[string]any{"goal_ref": "goal:g", "artifact_ref": "artifact:a"}, "orquesta.system.status": map[string]any{},
+		"orquesta.intakes.dossier.prepare":        canonicalIntakeDossierPreparePayload(),
+		"orquesta.intakes.wizard.dossier.prepare": canonicalWizardDossierPreparePayload(),
+		"orquesta.intakes.dossier.get":            map[string]any{"dossier_ref": "intake-dossier:test"},
+		"orquesta.intakes.dossier.confirm":        map[string]any{"dossier_ref": "intake-dossier:test", "confirm": true},
+		"orquesta.artifacts.read":                 map[string]any{"goal_ref": "goal:g", "artifact_ref": "artifact:a"}, "orquesta.system.status": map[string]any{},
 		"orquesta.projects.memberships.grant":  map[string]any{"target_principal_ref": "principal:target", "target_actor_ref": "actor:target", "target_kind": "human", "target_method": "local_token", "role": "contributor", "expected_revision": 0},
 		"orquesta.projects.memberships.revoke": map[string]any{"target_principal_ref": "principal:target", "expected_revision": 1},
 		"orquesta.director.claim":              map[string]any{"goal_ref": "goal:g"}, "orquesta.director.renew": map[string]any{"goal_ref": "goal:g", "token": "token:t", "fence": 1},

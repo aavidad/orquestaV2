@@ -132,6 +132,44 @@ func (orchestrator *Orchestrator) PrepareIntakeDossier(
 	return orchestrator.intakeDossier.PrepareIntakeDossier(ctx, request)
 }
 
+// PrepareWizardDossier exposes the same authorization boundary as generic
+// dossier preparation. Template resolution and projection remain owned by the
+// IntakeDossierService; Orchestrator only binds authenticated authority.
+func (orchestrator *Orchestrator) PrepareWizardDossier(
+	ctx context.Context,
+	access Access,
+	request PrepareWizardDossierRequest,
+) (WizardDossierResult, error) {
+	if orchestrator == nil || orchestrator.intakeDossier == nil {
+		return WizardDossierResult{}, errors.New("application.unavailable")
+	}
+	authorizationRequestRef, err := IntakeDossierAuthorizationRequestRef(
+		request.RequestRef,
+	)
+	if err != nil {
+		return WizardDossierResult{}, err
+	}
+	principal, projectRef, err := access.values()
+	if err != nil {
+		return WizardDossierResult{}, err
+	}
+	authorization, err := orchestrator.authorizeIdempotentWithRequestRef(
+		ctx,
+		access,
+		identity.PermissionGoalsCreate,
+		projectRef.String(),
+		orchestrator.clock.Now(),
+		authorizationRequestRef,
+	)
+	if err != nil {
+		return WizardDossierResult{}, err
+	}
+	request.ActorRef = principal.ActorRef
+	request.ProjectRef = projectRef
+	request.AuthorizationReceipt = authorization
+	return orchestrator.intakeDossier.PrepareWizardDossier(ctx, request)
+}
+
 func (orchestrator *Orchestrator) GetIntakeDossier(
 	ctx context.Context,
 	access Access,

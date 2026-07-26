@@ -135,6 +135,50 @@ func TestOrchestratorIntakeDossierDenialStopsBeforeStores(t *testing.T) {
 	}
 }
 
+func TestOrchestratorWizardDossierBindsAuthenticatedScopeAndAuthorization(
+	t *testing.T,
+) {
+	system := newIntakeDossierOrchestratorTestSystem(t)
+	request := wizardDossierTestRequest(
+		t,
+		system.dossier,
+		"request:wizard-dossier-orchestrator",
+		"template:build_app",
+	)
+	spoofedActor, _ := goal.NewActorRef("actor:spoofed")
+	spoofedProject, _ := goal.NewProjectRef("project:spoofed")
+	request.ActorRef = spoofedActor
+	request.ProjectRef = spoofedProject
+	request.AuthorizationReceipt = identity.AuthorizationReceipt{}
+
+	result, err := system.orchestrator.PrepareWizardDossier(
+		context.Background(),
+		system.access,
+		request,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Record.ActorRef != system.dossier.record.ActorRef ||
+		result.Record.ProjectRef != system.dossier.record.ProjectRef ||
+		result.StagePlanProjection.TemplateRef != request.TemplateRef {
+		t.Fatalf("wizard dossier=%+v", result)
+	}
+	authorizations := intakeAuthorizations(system.accessRepository)
+	if len(authorizations) != 1 {
+		t.Fatalf("authorizations=%d", len(authorizations))
+	}
+	authorization := authorizations[0]
+	if authorization.Principal().ActorRef != system.dossier.record.ActorRef ||
+		authorization.ProjectRef() != system.dossier.record.ProjectRef ||
+		authorization.Permission() != identity.PermissionGoalsCreate ||
+		authorization.RequestRef() !=
+			"authorization-request:intake-dossier-generate:"+
+				request.RequestRef {
+		t.Fatalf("authorization=%+v", authorization)
+	}
+}
+
 func TestOrchestratorWithoutIntakeDossierStoreReturnsUnavailable(t *testing.T) {
 	clock := &mutableClock{now: time.Date(2026, 7, 26, 9, 0, 0, 0, time.UTC)}
 	orchestrator, _ := newTestOrchestrator(
@@ -150,6 +194,10 @@ func TestOrchestratorWithoutIntakeDossierStoreReturnsUnavailable(t *testing.T) {
 	}
 	_, err := orchestrator.PrepareIntakeDossier(
 		context.Background(), access, PrepareIntakeDossierRequest{},
+	)
+	assertUnavailable(err)
+	_, err = orchestrator.PrepareWizardDossier(
+		context.Background(), access, PrepareWizardDossierRequest{},
 	)
 	assertUnavailable(err)
 	_, err = orchestrator.GetIntakeDossier(
