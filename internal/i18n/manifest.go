@@ -70,7 +70,7 @@ func validateManifest(manifest Manifest) error {
 		"http": {"active", "machine_envelope_catalog_presenter"}, "mcp": {"active", "catalog_only"},
 		"public_docs": {"active", "localized_document_bundle"}, "notifications": {"future", "catalog_required_before_activation"},
 		"prompts": {"active", "catalog_only"}, "web": {"future", "catalog_required_before_activation"},
-		"wizard": {"future", "catalog_required_before_activation"},
+		"wizard": {"active", "catalog_only"},
 	}
 	surfaces := make(map[string]Surface, len(manifest.Surfaces))
 	for _, surface := range manifest.Surfaces {

@@ -23,7 +23,7 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	if got := catalog.Locales(); !reflect.DeepEqual(got, []string{"es", "en"}) {
 		t.Fatalf("Locales() = %v", got)
 	}
-	if got := len(catalog.Keys()); got != 56 {
+	if got := len(catalog.Keys()); got != 870 {
 		t.Fatalf("Keys() count = %d", got)
 	}
 	for _, key := range []string{
@@ -339,7 +339,7 @@ func testManifest(keys []string) []byte {
 			{ID: "notifications", State: "future", LiteralPolicy: "catalog_required_before_activation"},
 			{ID: "prompts", State: "active", KeySources: []string{"surface:cli"}, LiteralPolicy: "catalog_only"},
 			{ID: "web", State: "future", LiteralPolicy: "catalog_required_before_activation"},
-			{ID: "wizard", State: "future", LiteralPolicy: "catalog_required_before_activation"},
+			{ID: "wizard", State: "active", KeySources: []string{"surface:prompts"}, LiteralPolicy: "catalog_only"},
 		},
 		PublicDocuments: []PublicDocument{{
 			ID: "orquesta.quickstart",
@@ -387,6 +387,43 @@ func unknownManifest() []byte {
 func wrongSurfacePolicy() []byte {
 	valid := string(testManifest([]string{"sample.text"}))
 	return []byte(strings.Replace(valid, `"literal_policy":"catalog_only"`, `"literal_policy":"unknown"`, 1))
+}
+
+func TestWizardManifestRejectsArbitraryStateAndSources(t *testing.T) {
+	valid := testManifest([]string{"sample.text"})
+	var manifest Manifest
+	if err := json.Unmarshal(valid, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*Surface)
+	}{
+		{"future state", func(surface *Surface) {
+			surface.State = "future"
+			surface.LiteralPolicy = "catalog_required_before_activation"
+		}},
+		{"empty sources", func(surface *Surface) { surface.KeySources = nil }},
+		{"duplicate catalog claim", func(surface *Surface) {
+			surface.KeySources = []string{"catalog:sample.text"}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := cloneManifest(manifest)
+			for index := range candidate.Surfaces {
+				if candidate.Surfaces[index].ID == "wizard" {
+					test.mutate(&candidate.Surfaces[index])
+				}
+			}
+			content, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := loadCatalog(withManifest(rawCatalogFS(`{"sample.text":"uno"}`, `{"sample.text":"one"}`), content)); !errors.Is(err, ErrManifestInvalid) {
+				t.Fatalf("loadCatalog() error = %v, want %v", err, ErrManifestInvalid)
+			}
+		})
+	}
 }
 
 func contains(values []string, target string) bool {
