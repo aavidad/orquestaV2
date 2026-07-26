@@ -394,6 +394,16 @@ aparentemente endurecido pero rompe el arranque real.
 
 ## Rollback
 
+### Rollback Bubblewrap de emergencia
+
+Firecracker continúa como proveedor principal; Bubblewrap es solo rollback. El
+rollback seguro usa el mismo binario nuevo y la configuración
+`/home/alberto/Trabajo/.orquesta-runtime-v2-v23/Codex12/config/orquesta.rollback-bubblewrap-65536.toml`
+con SHA-256 `c9028735362b6a95c5bc7589851ab56358b3d9656fee59ab51e2f1f41ef7df2f`.
+El preflight real de Bubblewrap (SHA `cc4e8c8…`) superó 44.992 argumentos.
+No volver al binario `5b5` tras migraciones 017--019 ni restaurar o tocar
+SQLite/WAL. Esta alternativa no acredita Firecracker activo ni un E2E físico.
+
 Los candidatos anteriores nunca se borran. Antes de una promoción manual,
 guardar target y estados previos:
 
