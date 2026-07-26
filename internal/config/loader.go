@@ -153,7 +153,9 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 		case "agent_firecracker_vsock_cid_lease_bounds":
 			minimum, minimumOK := values[KeyAgentFirecrackerVsockCIDMinimumLeaseDuration].value.(time.Duration)
 			maximum, maximumOK := values[KeyAgentFirecrackerVsockCIDMaximumLeaseDuration].value.(time.Duration)
-			if !minimumOK || !maximumOK || minimum <= 0 || maximum < minimum {
+			canonicalMaximum, maximumErr := time.ParseDuration(validator.MaximumDuration)
+			if !minimumOK || !maximumOK || maximumErr != nil ||
+				minimum <= 0 || maximum < minimum || maximum > canonicalMaximum {
 				return fail(validator.ID)
 			}
 		case "identity_provider_requirements":

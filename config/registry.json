@@ -39,6 +39,7 @@
     },
     {
       "id": "agent_firecracker_vsock_cid_lease_bounds",
+      "maximum_duration": "24h",
       "keys": [
         "agent.firecracker.vsock_cid.minimum_lease_duration",
         "agent.firecracker.vsock_cid.maximum_lease_duration"

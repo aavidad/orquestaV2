@@ -506,7 +506,8 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 				return fmt.Errorf("cross validator key order mismatch")
 			}
 		}
-		requiresMaximumDuration := definition.ID == "runtime_codex_supervisor_start_timeout_bounded"
+		requiresMaximumDuration := definition.ID == "runtime_codex_supervisor_start_timeout_bounded" ||
+			definition.ID == "agent_firecracker_vsock_cid_lease_bounds"
 		if requiresMaximumDuration != (definition.MaximumDuration != "") {
 			return fmt.Errorf("cross validator duration bound mismatch")
 		}
