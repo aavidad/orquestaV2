@@ -75,14 +75,14 @@ código o usar una tarea histórica como evidencia de producto.
 
 `historical_bug_extraction_policy.json` congela el universo literal `BUG-ORQ`
 de 160 fuentes con rol bug: 152 primarias y ocho fuentes task con rol adicional.
-`historical_bug_rows.jsonl` conserva 242
-filas Markdown ricas (238 del inventario vivo y cuatro de la incidencia de
+`historical_bug_rows.jsonl` conserva 243
+filas Markdown ricas (239 del inventario vivo y cuatro de la incidencia de
 invariantes causales), con estado original, área, hipótesis, acción,
 capabilities y lesson candidato sin acreditar. El detector normaliza sufijos
-compactos como `...-211/212/213/214` y materializa 1.298 ocurrencias exactas —ref,
+compactos como `...-211/212/213/214` y materializa 1.299 ocurrencias exactas —ref,
 línea, columna y hash— en `historical_bug_occurrences.jsonl`.
 
-Los 340 IDs normalizados quedan en `historical_bug_ids.jsonl`: 200 heredan la
+Los 341 IDs normalizados quedan en `historical_bug_ids.jsonl`: 201 heredan la
 unión exacta de sus filas ricas y 140 `narrative_only` usan una revisión
 semántica explícita de `historical_bug_id_reviews.jsonl`, ligada a sus
 ocurrencias por `historical_bug_id_review_bindings.jsonl`. Las cuatro filas
