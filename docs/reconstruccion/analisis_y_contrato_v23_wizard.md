@@ -16,14 +16,15 @@ que V23 esté completa.
 > candidato de dossier en `internal/application/intake_dossier.go`: recibe el
 > `IntakeRecord` durable y el `PlanSpec` concreto, recalcula el digest del
 > estado, deriva el del plan y proyecta las decisiones completas. Su
-> persistencia, validación ejecutable por el orquestador, confirmación, freeze
-> y creación atómica del Goal siguen pendientes. V23 continúa
+> persistencia, validación ejecutable por el orquestador y comandos públicos
+> del dossier ya están integrados. Confirmación, freeze y creación atómica del
+> Goal siguen pendientes. V23 continúa
 > `partial_green_unsealed`.
 >
 > Corte posterior: `docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md`
-> ya acredita persistencia, replay, restart y recovery del dossier. Siguen
-> pendientes su generación editorial, comandos públicos, confirmación, freeze
-> y creación atómica del Goal.
+> ya acredita persistencia, replay, restart, recovery y comandos públicos del
+> dossier. Siguen pendientes su generación editorial, confirmación, freeze y
+> creación atómica del Goal.
 
 Contexto causal:
 

@@ -54,6 +54,24 @@
       "replay_mode": "application_receipt",
       "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
       "required_output_fields": ["intake_ref", "project_ref", "revision", "receipt_ref"]
+    },
+    {
+      "id": "orquesta.intakes.dossier.prepare",
+      "handler": "PrepareIntakeDossier",
+      "permission": "goals.create",
+      "kind": "command",
+      "replay_mode": "application_receipt",
+      "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint", "authorization_receipt_ref"],
+      "required_output_fields": ["schema", "dossier_ref", "actor_ref", "project_ref", "intake_ref", "intake_revision", "intake_digest", "source_intake_receipt_ref", "statement", "objective", "sections", "diagrams", "decisions", "risk_refs", "plan", "plan_digest", "digest", "generation_receipt"]
+    },
+    {
+      "id": "orquesta.intakes.dossier.get",
+      "handler": "GetIntakeDossier",
+      "permission": "goals.get",
+      "kind": "query",
+      "replay_mode": "read_reexecute",
+      "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "required_output_fields": ["schema", "dossier_ref", "actor_ref", "project_ref", "intake_ref", "intake_revision", "intake_digest", "source_intake_receipt_ref", "statement", "objective", "sections", "diagrams", "decisions", "risk_refs", "plan", "plan_digest", "digest", "generation_receipt"]
     }
   ],
   "typed_round_policy": {
@@ -97,11 +115,12 @@
     "reject_no_tests_to_run": true
   },
   "integration_gate": {
-    "command": "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
+    "command": "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart)$'",
     "test_names": [
       "TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
       "TestIntakeDossierHashProjectsEveryCurrentDecisionField",
       "TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan",
+      "TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata",
       "TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread",
       "TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint",
       "TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity",
@@ -113,10 +132,13 @@
       "TestIntakeSQLiteRestartAndHistoricalReplay",
       "TestIntakeSQLiteConcurrentCASAdmitsOneReceipt",
       "TestV23RecoveryRejectsDivergentIntakeBranch",
+      "TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields",
       "TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState",
+      "TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan",
       "TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade",
       "TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite",
-      "TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart"
+      "TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart",
+      "TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart"
     ],
     "reject_no_tests_to_run": true
   },
@@ -261,7 +283,8 @@
     "application_dossier_builder",
     "command_registry_binding",
     "durable_cas_persistence_and_restart",
-    "durable_dossier_persistence"
+    "durable_dossier_persistence",
+    "public_dossier_commands"
   ],
   "deferred_scopes": [
     "canonical_round_default_under_L-CONFIG",
@@ -270,7 +293,6 @@
     "explicit_confirmation",
     "freeze_after_confirmation",
     "full_wizard_i18n_catalog",
-    "public_dossier_commands",
     "roadmap_promotion",
     "seal_and_receipt",
     "templates_and_domain_packs",
