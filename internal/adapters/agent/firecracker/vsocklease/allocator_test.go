@@ -529,12 +529,180 @@ WHERE lease_ref = ?`, lease.LeaseRef); err == nil {
 	})
 }
 
+func TestAllocatorRejectsClockOutsideUnixNanoRange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vsock-clock-outside-range.db")
+	database := openTestDatabase(t, path, true)
+	t.Cleanup(func() { _ = database.Close() })
+
+	var outsideRange time.Time
+	for year := 2263; year <= 9999; year++ {
+		candidate := time.Date(year, time.January, 1, 0, 0, 0, 0, time.UTC)
+		unixNano := candidate.UnixNano()
+		if unixNano > 0 && !time.Unix(0, unixNano).UTC().Equal(candidate) {
+			outsideRange = candidate
+			break
+		}
+	}
+	if outsideRange.IsZero() {
+		t.Fatal("test fixture did not find a positive wrapped UnixNano value")
+	}
+	clock := &testClock{now: outsideRange}
+	allocator := openTestAllocator(t, database, clock, 96, 96)
+
+	if _, err := allocator.Reserve(
+		context.Background(), testReservationRequest(t, 1),
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.clock_invalid" {
+		t.Fatalf("out-of-range clock = %v", err)
+	}
+	for _, table := range []string{
+		"agent_microvm_vsock_cid_clock",
+		"agent_microvm_vsock_cid_reservations",
+		"agent_microvm_vsock_cid_operations",
+	} {
+		var rows int
+		if err := database.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		if rows != 0 {
+			t.Fatalf("out-of-range clock persisted %d rows in %s", rows, table)
+		}
+	}
+}
+
+func TestAllocatorCommitsExpiryAndClockWhenFencingIsExhausted(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vsock-fencing-exhausted.db")
+	database := openTestDatabase(t, path, true)
+	t.Cleanup(func() { _ = database.Close() })
+	start := time.Date(2026, 7, 26, 15, 30, 0, 0, time.UTC)
+	clock := &testClock{now: start}
+	allocator := openTestAllocator(t, database, clock, 136, 136)
+	request := testReservationRequest(t, 1)
+	request.LeaseDuration = time.Minute
+	lease, err := allocator.Reserve(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+UPDATE agent_microvm_vsock_cid_generations
+SET fencing_token = ?
+WHERE pool_ref = ? AND guest_cid = ?`,
+		int64(math.MaxInt64), lease.PoolRef, lease.GuestCID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	clock.Advance(2 * time.Minute)
+	if _, err := allocator.Reserve(
+		context.Background(), testReservationRequest(t, 2),
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.fencing_exhausted" {
+		t.Fatalf("exhausted fencing token = %v", err)
+	}
+
+	var state string
+	if err := database.QueryRow(`
+SELECT state
+FROM agent_microvm_vsock_cid_reservations
+WHERE lease_ref = ?`, lease.LeaseRef).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != reservationStateExpired {
+		t.Fatalf("expiry rolled back after fencing exhaustion: state=%q", state)
+	}
+	var highWater int64
+	if err := database.QueryRow(`
+SELECT high_water_unix_nano
+FROM agent_microvm_vsock_cid_clock
+WHERE pool_ref = ?`, lease.PoolRef).Scan(&highWater); err != nil {
+		t.Fatal(err)
+	}
+	if want := start.Add(2 * time.Minute).UnixNano(); highWater != want {
+		t.Fatalf("high-water = %d, want %d", highWater, want)
+	}
+
+	clock.Set(start.Add(30 * time.Second))
+	if _, err := allocator.Recover(context.Background(), ports.AgentMicroVMVsockCIDRecoveryRequest{
+		PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+		LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+		FencingToken: lease.FencingToken,
+	}); ErrorCode(err) != "agent_firecracker_vsock_cid.clock_regressed" {
+		t.Fatalf("regressed clock after fencing exhaustion = %v", err)
+	}
+}
+
 func TestAllocatorDiscardsConnectionsWhenTransactionCleanupFails(t *testing.T) {
 	t.Run("commit failure rolls back", func(t *testing.T) {
 		testCommitFailureLeavesNoAmbiguousEffects(t, false)
 	})
 	t.Run("commit and rollback failure discard physical connection", func(t *testing.T) {
 		testCommitFailureLeavesNoAmbiguousEffects(t, true)
+	})
+	t.Run("lost commit response replays durable receipt", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "vsock-lost-commit-response.db")
+		database := openTestDatabase(t, path, true)
+		database.SetMaxOpenConns(1)
+		t.Cleanup(func() { _ = database.Close() })
+		clock := &testClock{now: time.Date(2026, 7, 26, 16, 15, 0, 0, time.UTC)}
+		allocator := openTestAllocator(t, database, clock, 137, 137)
+		originalExec := allocator.execTransaction
+		var commitInjected bool
+		var rollbackAttempts int
+		allocator.execTransaction = func(
+			ctx context.Context,
+			connection *sql.Conn,
+			statement string,
+		) (sql.Result, error) {
+			if statement == "ROLLBACK" {
+				rollbackAttempts++
+			}
+			if statement == "COMMIT" && !commitInjected {
+				commitInjected = true
+				result, err := originalExec(ctx, connection, statement)
+				if err != nil {
+					return result, err
+				}
+				return result, errors.New("injected lost commit response")
+			}
+			return originalExec(ctx, connection, statement)
+		}
+		request := testReservationRequest(t, 1)
+		if _, err := allocator.Reserve(
+			context.Background(), request,
+		); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+			t.Fatalf("lost commit response = %v", err)
+		}
+		if rollbackAttempts != 1 {
+			t.Fatalf("rollback attempts after completed commit = %d, want 1 compensating attempt", rollbackAttempts)
+		}
+		allocator.execTransaction = originalExec
+
+		replayed, err := allocator.Reserve(context.Background(), request)
+		if err != nil {
+			t.Fatalf("idempotent replay after lost commit response = %v", err)
+		}
+		var reservations, operations int
+		if err := database.QueryRow(`
+SELECT COUNT(*) FROM agent_microvm_vsock_cid_reservations`).Scan(&reservations); err != nil {
+			t.Fatal(err)
+		}
+		if err := database.QueryRow(`
+SELECT COUNT(*) FROM agent_microvm_vsock_cid_operations`).Scan(&operations); err != nil {
+			t.Fatal(err)
+		}
+		if reservations != 1 || operations != 1 {
+			t.Fatalf("replay duplicated effects: reservations=%d operations=%d", reservations, operations)
+		}
+		var persistedLeaseRef string
+		if err := database.QueryRow(`
+SELECT lease_ref
+FROM agent_microvm_vsock_cid_operations
+WHERE pool_ref = ? AND idempotency_key = ?`,
+			request.PoolRef, request.IdempotencyKey,
+		).Scan(&persistedLeaseRef); err != nil {
+			t.Fatal(err)
+		}
+		if replayed.LeaseRef != persistedLeaseRef {
+			t.Fatalf("replayed lease %q != durable lease %q", replayed.LeaseRef, persistedLeaseRef)
+		}
 	})
 	t.Run("deferred rollback failure discards physical connection", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "vsock-rollback-failure.db")
