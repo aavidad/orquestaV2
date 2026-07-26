@@ -17,7 +17,10 @@ import (
 )
 
 var errAttestationDenied = errors.New("attestation denied")
+var errBeginFailed = errors.New("begin failed")
 var errOpeningFailed = errors.New("opening failed")
+var errCommitFailed = errors.New("commit failed")
+var errRollbackFailed = errors.New("rollback failed")
 
 type credentialStoreFake struct {
 	credentials.Store
@@ -69,14 +72,113 @@ func (verifier *attestationVerifierFake) VerifyLaunchAttestation(
 	return nil
 }
 
-type openingFake struct {
-	callCount atomic.Int32
-	err       error
+type launchTransactionSnapshot struct {
+	OpenCount               int
+	CommitCount             int
+	RollbackCount           int
+	Partial                 bool
+	Reachable               bool
+	RollbackContextCanceled bool
 }
 
-func (opening *openingFake) Open(_ context.Context) error {
-	opening.callCount.Add(1)
-	return opening.err
+type launchTransactionFake struct {
+	mu                      sync.Mutex
+	openCount               int
+	commitCount             int
+	rollbackCount           int
+	partial                 bool
+	reachable               bool
+	openErr                 error
+	commitErr               error
+	rollbackErr             error
+	blockRollback           bool
+	cancelAfterOpen         context.CancelFunc
+	rollbackContextCanceled bool
+}
+
+func (transaction *launchTransactionFake) Open(_ context.Context) error {
+	transaction.mu.Lock()
+	transaction.openCount++
+	transaction.partial = true
+	openErr := transaction.openErr
+	cancel := transaction.cancelAfterOpen
+	transaction.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	return openErr
+}
+
+func (transaction *launchTransactionFake) Commit(_ context.Context) error {
+	transaction.mu.Lock()
+	defer transaction.mu.Unlock()
+	transaction.commitCount++
+	if transaction.commitErr != nil {
+		return transaction.commitErr
+	}
+	transaction.partial = false
+	transaction.reachable = true
+	return nil
+}
+
+func (transaction *launchTransactionFake) Rollback(ctx context.Context) error {
+	transaction.mu.Lock()
+	transaction.rollbackCount++
+	transaction.rollbackContextCanceled = ctx.Err() != nil
+	block := transaction.blockRollback
+	transaction.mu.Unlock()
+	if block {
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	transaction.mu.Lock()
+	defer transaction.mu.Unlock()
+	if transaction.rollbackErr != nil {
+		return transaction.rollbackErr
+	}
+	transaction.partial = false
+	transaction.reachable = false
+	return nil
+}
+
+func (transaction *launchTransactionFake) Snapshot() launchTransactionSnapshot {
+	transaction.mu.Lock()
+	defer transaction.mu.Unlock()
+	return launchTransactionSnapshot{
+		OpenCount: transaction.openCount, CommitCount: transaction.commitCount,
+		RollbackCount: transaction.rollbackCount, Partial: transaction.partial,
+		Reachable:               transaction.reachable,
+		RollbackContextCanceled: transaction.rollbackContextCanceled,
+	}
+}
+
+type launchTransactionFactoryFake struct {
+	mu          sync.Mutex
+	beginCount  int
+	beginErr    error
+	transaction *launchTransactionFake
+}
+
+func newLaunchTransactionFactoryFake() *launchTransactionFactoryFake {
+	return &launchTransactionFactoryFake{transaction: &launchTransactionFake{}}
+}
+
+func (factory *launchTransactionFactoryFake) Begin(
+	_ context.Context,
+) (ports.AgentMicroVMLaunchTransaction, error) {
+	factory.mu.Lock()
+	defer factory.mu.Unlock()
+	factory.beginCount++
+	if factory.beginErr != nil {
+		return nil, factory.beginErr
+	}
+	return factory.transaction, nil
+}
+
+func (factory *launchTransactionFactoryFake) BeginCount() int {
+	factory.mu.Lock()
+	defer factory.mu.Unlock()
+	return factory.beginCount
 }
 
 type testClock struct {
@@ -165,7 +267,8 @@ func newVerifierFixture(t *testing.T) verifierFixture {
 	}}
 	verifier, err := New(Config{
 		CredentialStore: credentialStore, Attestations: attestations, Challenges: challenges,
-		Now: clock.Now, VerifierRef: "verifier:agent-firecracker-network",
+		Now: clock.Now, CleanupTimeout: 100 * time.Millisecond,
+		VerifierRef:        "verifier:agent-firecracker-network",
 		CredentialActorRef: "actor:agent-firecracker-network",
 	})
 	if err != nil {
@@ -212,19 +315,28 @@ func (fixture verifierFixture) proofRequest(t *testing.T) ports.AgentMicroVMLaun
 	}
 }
 
+func TestNewRequiresExplicitPositiveCleanupTimeout(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	config := fixture.verifier.config
+	config.CleanupTimeout = 0
+	if _, err := New(config); ErrorCode(err) != "agent_firecracker_network_auth.config_invalid" {
+		t.Fatalf("zero cleanup timeout error = %v", err)
+	}
+}
+
 func TestVerifierAuthorizesOnceAndRejectsIdenticalReplay(t *testing.T) {
 	fixture := newVerifierFixture(t)
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
-	opening := &openingFake{}
-	receipt, err := fixture.verifier.Authorize(context.Background(), request, opening.Open)
+	transactions := newLaunchTransactionFactoryFake()
+	receipt, err := fixture.verifier.Authorize(context.Background(), request, transactions)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := ports.ValidateAgentMicroVMLaunchAuthorizationReceipt(request, receipt); err != nil {
 		t.Fatalf("receipt invalid: %v", err)
 	}
-	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+	if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 		"agent_firecracker_network_auth.challenge_denied" {
 		t.Fatalf("identical replay error = %v", err)
 	}
@@ -234,8 +346,13 @@ func TestVerifierAuthorizesOnceAndRejectsIdenticalReplay(t *testing.T) {
 	if got := fixture.attestations.callCount.Load(); got != 1 {
 		t.Fatalf("attestation calls = %d, want 1", got)
 	}
-	if got := opening.callCount.Load(); got != 1 {
-		t.Fatalf("opening calls = %d, want 1", got)
+	if got := transactions.BeginCount(); got != 1 {
+		t.Fatalf("transaction begins = %d, want 1", got)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{
+		OpenCount: 1, CommitCount: 1, Reachable: true,
+	}) {
+		t.Fatalf("transaction state = %#v", got)
 	}
 }
 
@@ -243,24 +360,24 @@ func TestVerifierBadProofConsumesChallengeAndCannotRetry(t *testing.T) {
 	fixture := newVerifierFixture(t)
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
-	opening := &openingFake{}
+	transactions := newLaunchTransactionFactoryFake()
 	badProof, _ := ports.NewAgentMicroVMLaunchProof(bytes.Repeat([]byte{0xff}, sha256.Size))
 	bad := request
 	bad.Proof = badProof
 	defer bad.Proof.Destroy()
-	if _, err := fixture.verifier.Authorize(context.Background(), bad, opening.Open); ErrorCode(err) !=
+	if _, err := fixture.verifier.Authorize(context.Background(), bad, transactions); ErrorCode(err) !=
 		"agent_firecracker_network_auth.proof_invalid" {
 		t.Fatalf("bad proof error = %v", err)
 	}
-	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+	if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 		"agent_firecracker_network_auth.challenge_denied" {
 		t.Fatalf("retry after bad proof error = %v", err)
 	}
 	if got := fixture.credentials.useCount.Load(); got != 1 {
 		t.Fatalf("credential uses = %d, want 1", got)
 	}
-	if got := opening.callCount.Load(); got != 0 {
-		t.Fatalf("opening calls = %d, want 0", got)
+	if got := transactions.BeginCount(); got != 0 {
+		t.Fatalf("transaction begins = %d, want 0", got)
 	}
 }
 
@@ -269,8 +386,8 @@ func TestVerifierRejectsAttestationBeforeCredentialUse(t *testing.T) {
 	fixture.attestations.deny = true
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
-	opening := &openingFake{}
-	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+	transactions := newLaunchTransactionFactoryFake()
+	if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 		"agent_firecracker_network_auth.attestation_denied" {
 		t.Fatalf("attestation error = %v", err)
 	}
@@ -278,15 +395,15 @@ func TestVerifierRejectsAttestationBeforeCredentialUse(t *testing.T) {
 		t.Fatalf("credential used before attestation: %d", got)
 	}
 	fixture.attestations.deny = false
-	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+	if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 		"agent_firecracker_network_auth.challenge_denied" {
 		t.Fatalf("retry after attestation denial error = %v", err)
 	}
 	if got := fixture.attestations.callCount.Load(); got != 1 {
 		t.Fatalf("attestation calls = %d, want 1", got)
 	}
-	if got := opening.callCount.Load(); got != 0 {
-		t.Fatalf("opening calls = %d, want 0", got)
+	if got := transactions.BeginCount(); got != 0 {
+		t.Fatalf("transaction begins = %d, want 0", got)
 	}
 }
 
@@ -296,13 +413,13 @@ func TestVerifierMissingAndExpiredChallengesDoNotCrossLedgers(t *testing.T) {
 		request := fixture.proofRequest(t)
 		defer request.Proof.Destroy()
 		request.ChallengeRef = "challenge:agent-microvm:missing"
-		opening := &openingFake{}
-		if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+		transactions := newLaunchTransactionFactoryFake()
+		if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 			"agent_firecracker_network_auth.challenge_denied" {
 			t.Fatalf("missing challenge error = %v", err)
 		}
 		if fixture.credentials.useCount.Load() != 0 || fixture.attestations.callCount.Load() != 0 ||
-			opening.callCount.Load() != 0 {
+			transactions.BeginCount() != 0 {
 			t.Fatalf("missing challenge crossed a ledger or opening")
 		}
 	})
@@ -311,13 +428,13 @@ func TestVerifierMissingAndExpiredChallengesDoNotCrossLedgers(t *testing.T) {
 		request := fixture.proofRequest(t)
 		defer request.Proof.Destroy()
 		fixture.clock.Set(fixture.now.Add(time.Minute))
-		opening := &openingFake{}
-		if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+		transactions := newLaunchTransactionFactoryFake()
+		if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 			"agent_firecracker_network_auth.challenge_denied" {
 			t.Fatalf("expired challenge error = %v", err)
 		}
 		if fixture.credentials.useCount.Load() != 0 || fixture.attestations.callCount.Load() != 0 ||
-			opening.callCount.Load() != 0 {
+			transactions.BeginCount() != 0 {
 			t.Fatalf("expired challenge crossed a ledger or opening")
 		}
 	})
@@ -327,14 +444,14 @@ func TestVerifierConcurrentReplayHasSingleWinner(t *testing.T) {
 	fixture := newVerifierFixture(t)
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
-	opening := &openingFake{}
+	transactions := newLaunchTransactionFactoryFake()
 	var wait sync.WaitGroup
 	var successes atomic.Int32
 	wait.Add(2)
 	for range 2 {
 		go func() {
 			defer wait.Done()
-			if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); err == nil {
+			if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); err == nil {
 				successes.Add(1)
 			}
 		}()
@@ -349,30 +466,176 @@ func TestVerifierConcurrentReplayHasSingleWinner(t *testing.T) {
 	if got := fixture.attestations.callCount.Load(); got != 1 {
 		t.Fatalf("concurrent attestation calls = %d, want 1", got)
 	}
-	if got := opening.callCount.Load(); got != 1 {
-		t.Fatalf("concurrent opening calls = %d, want 1", got)
+	if got := transactions.BeginCount(); got != 1 {
+		t.Fatalf("concurrent transaction begins = %d, want 1", got)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{
+		OpenCount: 1, CommitCount: 1, Reachable: true,
+	}) {
+		t.Fatalf("concurrent transaction state = %#v", got)
 	}
 }
 
-func TestVerifierOpeningFailureConsumesAuthorization(t *testing.T) {
+func TestVerifierOpenPartialFailureRollsBackAndConsumesAuthorization(t *testing.T) {
 	fixture := newVerifierFixture(t)
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
-	opening := &openingFake{err: errOpeningFailed}
-	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+	transactions := newLaunchTransactionFactoryFake()
+	transactions.transaction.openErr = errOpeningFailed
+	if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 		"agent_firecracker_network_auth.opening_failed" {
 		t.Fatalf("opening error = %v", err)
 	}
-	opening.err = nil
-	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+	transactions.transaction.openErr = nil
+	if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
 		"agent_firecracker_network_auth.challenge_denied" {
 		t.Fatalf("retry after opening failure error = %v", err)
 	}
 	if got := fixture.credentials.useCount.Load(); got != 1 {
 		t.Fatalf("credential uses = %d, want 1", got)
 	}
-	if got := opening.callCount.Load(); got != 1 {
-		t.Fatalf("opening calls = %d, want 1", got)
+	if got := transactions.BeginCount(); got != 1 {
+		t.Fatalf("transaction begins = %d, want 1", got)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{
+		OpenCount: 1, RollbackCount: 1,
+	}) {
+		t.Fatalf("transaction state after partial open = %#v", got)
+	}
+}
+
+func TestVerifierBeginFailureHasNoTransactionEffectsAndConsumesAuthorization(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	request := fixture.proofRequest(t)
+	defer request.Proof.Destroy()
+	transactions := newLaunchTransactionFactoryFake()
+	transactions.beginErr = errBeginFailed
+
+	receipt, err := fixture.verifier.Authorize(context.Background(), request, transactions)
+	if ErrorCode(err) != "agent_firecracker_network_auth.transaction_begin_failed" {
+		t.Fatalf("begin error = %v", err)
+	}
+	if receipt != (ports.AgentMicroVMLaunchAuthorizationReceipt{}) {
+		t.Fatalf("begin failure returned receipt: %#v", receipt)
+	}
+	if got := transactions.BeginCount(); got != 1 {
+		t.Fatalf("transaction begins = %d, want 1", got)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{}) {
+		t.Fatalf("begin failure produced transaction effects: %#v", got)
+	}
+	if _, err := fixture.verifier.Authorize(context.Background(), request, transactions); ErrorCode(err) !=
+		"agent_firecracker_network_auth.challenge_denied" {
+		t.Fatalf("retry after begin failure error = %v", err)
+	}
+}
+
+func TestVerifierCancellationAfterOpenRollsBackBeforeCommit(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	request := fixture.proofRequest(t)
+	defer request.Proof.Destroy()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transactions := newLaunchTransactionFactoryFake()
+	transactions.transaction.cancelAfterOpen = cancel
+
+	receipt, err := fixture.verifier.Authorize(ctx, request, transactions)
+	if ErrorCode(err) != "agent_firecracker_network_auth.unavailable" {
+		t.Fatalf("cancellation error = %v", err)
+	}
+	if receipt != (ports.AgentMicroVMLaunchAuthorizationReceipt{}) {
+		t.Fatalf("cancellation returned receipt: %#v", receipt)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{
+		OpenCount: 1, RollbackCount: 1,
+	}) {
+		t.Fatalf("transaction state after cancellation = %#v", got)
+	}
+}
+
+func TestVerifierCommitPartialFailureRollsBack(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	request := fixture.proofRequest(t)
+	defer request.Proof.Destroy()
+	transactions := newLaunchTransactionFactoryFake()
+	transactions.transaction.commitErr = errCommitFailed
+
+	receipt, err := fixture.verifier.Authorize(context.Background(), request, transactions)
+	if ErrorCode(err) != "agent_firecracker_network_auth.commit_failed" {
+		t.Fatalf("commit error = %v", err)
+	}
+	if receipt != (ports.AgentMicroVMLaunchAuthorizationReceipt{}) {
+		t.Fatalf("failed commit returned receipt: %#v", receipt)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{
+		OpenCount: 1, CommitCount: 1, RollbackCount: 1,
+	}) {
+		t.Fatalf("transaction state after commit failure = %#v", got)
+	}
+}
+
+func TestVerifierRollbackFailureIsVisibleAndNeverReturnsReceipt(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	request := fixture.proofRequest(t)
+	defer request.Proof.Destroy()
+	transactions := newLaunchTransactionFactoryFake()
+	transactions.transaction.openErr = errOpeningFailed
+	transactions.transaction.rollbackErr = errRollbackFailed
+
+	receipt, err := fixture.verifier.Authorize(context.Background(), request, transactions)
+	if ErrorCode(err) != "agent_firecracker_network_auth.cleanup_failed" {
+		t.Fatalf("rollback error = %v", err)
+	}
+	if receipt != (ports.AgentMicroVMLaunchAuthorizationReceipt{}) {
+		t.Fatalf("rollback failure returned receipt: %#v", receipt)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{
+		OpenCount: 1, RollbackCount: 1, Partial: true,
+	}) {
+		t.Fatalf("transaction state after rollback failure = %#v", got)
+	}
+}
+
+func TestVerifierBoundsBlockedRollbackAndNeverReturnsReceipt(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	fixture.verifier.config.CleanupTimeout = 10 * time.Millisecond
+	request := fixture.proofRequest(t)
+	defer request.Proof.Destroy()
+	transactions := newLaunchTransactionFactoryFake()
+	transactions.transaction.openErr = errOpeningFailed
+	transactions.transaction.blockRollback = true
+
+	type authorizationResult struct {
+		receipt ports.AgentMicroVMLaunchAuthorizationReceipt
+		err     error
+	}
+	result := make(chan authorizationResult, 1)
+	startedAt := time.Now()
+	go func() {
+		receipt, err := fixture.verifier.Authorize(context.Background(), request, transactions)
+		result <- authorizationResult{receipt: receipt, err: err}
+	}()
+	var authorization authorizationResult
+	select {
+	case authorization = <-result:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("blocked rollback exceeded its cleanup bound")
+	}
+	receipt, err := authorization.receipt, authorization.err
+	if ErrorCode(err) != "agent_firecracker_network_auth.cleanup_failed" {
+		t.Fatalf("blocked rollback error = %v", err)
+	}
+	if elapsed := time.Since(startedAt); elapsed < fixture.verifier.config.CleanupTimeout ||
+		elapsed > 500*time.Millisecond {
+		t.Fatalf("blocked rollback elapsed = %v", elapsed)
+	}
+	if receipt != (ports.AgentMicroVMLaunchAuthorizationReceipt{}) {
+		t.Fatalf("blocked rollback returned receipt: %#v", receipt)
+	}
+	if got := transactions.transaction.Snapshot(); got != (launchTransactionSnapshot{
+		OpenCount: 1, RollbackCount: 1, Partial: true,
+	}) {
+		t.Fatalf("transaction state after blocked rollback = %#v", got)
 	}
 }
 
