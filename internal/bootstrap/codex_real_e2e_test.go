@@ -23,6 +23,25 @@ var realCodexConfig = flag.String(
 	"opt-in TOML config for the real Codex MCP end-to-end test",
 )
 
+type realCodexGoalSnapshot struct {
+	Goal struct {
+		State string `json:"state"`
+	} `json:"goal"`
+	WorkItems []struct {
+		Ref           string `json:"work_item_ref"`
+		State         string `json:"state"`
+		ExecutionRef  string `json:"execution_ref"`
+		InterruptCode string `json:"interrupt_code"`
+	} `json:"work_items"`
+	Executions []struct {
+		Ref         string `json:"execution_ref"`
+		AttemptNo   int    `json:"attempt_no"`
+		MaxAttempts int    `json:"max_attempts"`
+		State       string `json:"state"`
+		FailureCode string `json:"failure_code"`
+	} `json:"executions"`
+}
+
 func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	if *realCodexConfig == "" {
 		t.Skip("real Codex E2E is opt-in")
@@ -83,10 +102,11 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 
 	closed := false
 	poll := 0
+	var lastSnapshot realCodexGoalSnapshot
 	for !closed {
 		select {
 		case <-ctx.Done():
-			t.Fatalf("wait real Codex closure: %v", ctx.Err())
+			t.Fatalf("wait real Codex closure: %v snapshot=%+v", ctx.Err(), lastSnapshot)
 		case <-time.After(250 * time.Millisecond):
 		}
 		poll++
@@ -97,19 +117,15 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 		})
 		var output mcpiface.CommandToolOutput
 		decodeMCPOutput(t, result, &output)
-		var data struct {
-			Goal struct {
-				State string `json:"state"`
-			} `json:"goal"`
-		}
-		decodeCommandData(t, output.Result, &data)
+		decodeCommandData(t, output.Result, &lastSnapshot)
 		if result.IsError || output.Result.Failure != nil {
 			t.Fatalf("get real Codex Goal: %+v result=%+v", output, result)
 		}
-		if data.Goal.State == string(goal.GoalStateFailed) {
-			t.Fatalf("real Codex Goal failed: %+v", data.Goal)
+		switch lastSnapshot.Goal.State {
+		case string(goal.GoalStateFailed), string(goal.GoalStateCanceled):
+			t.Fatalf("real Codex Goal terminated without success: %+v", lastSnapshot)
 		}
-		closed = data.Goal.State == string(goal.GoalStateSucceeded)
+		closed = lastSnapshot.Goal.State == string(goal.GoalStateSucceeded)
 	}
 	goalRef, err := goal.NewGoalRef(createdData.Goal.GoalRef)
 	if err != nil {
