@@ -4,7 +4,7 @@
 
 Registry revision: `2026-07-26.31`
 
-Registry hash: `sha256:1c39bbe0244319fa44925a752535a985d00666ac4546e68aa168959cae833e93`
+Registry hash: `sha256:9ef296db333c2271857fc5e3022c66559d777617749eee99695dc0439152045e`
 
 Precedence: `default < file < env`
 
@@ -99,7 +99,7 @@ Source limit: `1048576` bytes
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`; maximum duration `30s`
 - `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
-- `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`
+- `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`; maximum duration `24h`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
 - `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.account_home_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`

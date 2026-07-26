@@ -2,7 +2,7 @@
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
   "registry_revision": "2026-07-26.31",
-  "registry_hash": "sha256:1c39bbe0244319fa44925a752535a985d00666ac4546e68aa168959cae833e93",
+  "registry_hash": "sha256:9ef296db333c2271857fc5e3022c66559d777617749eee99695dc0439152045e",
   "aliases": [],
   "cross_validators": [
     {
@@ -35,7 +35,8 @@
       "keys": [
         "agent.firecracker.vsock_cid.minimum_lease_duration",
         "agent.firecracker.vsock_cid.maximum_lease_duration"
-      ]
+      ],
+      "maximum_duration": "24h"
     },
     {
       "id": "server_listen_loopback",
