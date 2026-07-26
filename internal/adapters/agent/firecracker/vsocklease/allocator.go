@@ -405,6 +405,10 @@ func (allocator *Allocator) beginImmediate(ctx context.Context) (*sql.Conn, erro
 	if err != nil {
 		return nil, allocatorError("store_unavailable")
 	}
+	if err := verifyDurableConnection(ctx, connection); err != nil {
+		_ = connection.Close()
+		return nil, err
+	}
 	if _, err := connection.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		_ = connection.Close()
 		if ctx.Err() != nil {
@@ -710,6 +714,10 @@ func verifyDurability(ctx context.Context, database *sql.DB) error {
 		return allocatorError("store_unavailable")
 	}
 	defer connection.Close()
+	return verifyDurableConnection(ctx, connection)
+}
+
+func verifyDurableConnection(ctx context.Context, connection *sql.Conn) error {
 	var journalMode string
 	var synchronous, foreignKeys, busyTimeout int
 	if err := connection.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil ||
