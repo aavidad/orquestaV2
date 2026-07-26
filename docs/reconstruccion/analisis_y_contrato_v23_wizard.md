@@ -12,7 +12,13 @@ que V23 esté completa.
 > SQLite y bindings públicos— ya tiene implementación candidata en
 > `docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md`. Las frases
 > posteriores que la enumeran como pendiente describen el baseline del
-> 2026-07-25, no el estado vigente. V23 continúa `partial_green_unsealed`.
+> 2026-07-25, no el estado vigente. La capa de aplicación ya tiene un builder
+> candidato de dossier en `internal/application/intake_dossier.go`: recibe el
+> `IntakeRecord` durable y el `PlanSpec` concreto, recalcula el digest del
+> estado, deriva el del plan y proyecta las decisiones completas. Su
+> persistencia, validación ejecutable por el orquestador, confirmación, freeze
+> y creación atómica del Goal siguen pendientes. V23 continúa
+> `partial_green_unsealed`.
 
 Contexto causal:
 
@@ -296,11 +302,11 @@ RequiredTest focal:
 go test -mod=vendor -race -count=1 -v ./acceptance -run '^(TestAcceptanceV23WizardIntakeContract|TestV23WizardIntakeNegativeAndAtomicContract|TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset)$'
 ```
 
-Esta aceptación verde demuestra semántica offline del paquete. No demuestra
-CAS durable, persistencia real, idempotencia application, auth, binding
-público, catálogo completo, dossier, confirmación, freeze, creación causal de
-plan, E2E web, promoción del roadmap, receipt, sello ni disponibilidad tras
-restart.
+Esta aceptación verde demuestra semántica offline del paquete. La evidencia
+de integración separada añade intake durable y el builder candidato del
+dossier, pero todavía no demuestra persistencia durable del dossier,
+confirmación, freeze, creación causal de plan, E2E web, promoción del roadmap,
+receipt ni sello.
 
 Verificación ejecutada:
 

@@ -353,8 +353,11 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid required test: %+v", fixture.RequiredTest)
 	}
 	wantIntegrationGate := v23WizardRequiredTest{
-		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
+		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
 		TestNames: []string{
+			"TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
+			"TestIntakeDossierHashProjectsEveryCurrentDecisionField",
+			"TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan",
 			"TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation",
 			"TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite",
 			"TestIntakeSQLiteRestartAndHistoricalReplay",
@@ -379,6 +382,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	assertV23RemainingCapabilities(t, fixture.RemainingWIZ)
 	if !reflect.DeepEqual(fixture.CompletedScopes, []string{
 		"application_idempotency",
+		"application_dossier_builder",
 		"command_registry_binding",
 		"durable_cas_persistence_and_restart",
 	}) {
@@ -386,7 +390,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	}
 	wantDeferred := []string{
 		"canonical_round_default_under_L-CONFIG", "causal_plan_creation",
-		"dossier_generation", "explicit_confirmation", "freeze_after_confirmation",
+		"dossier_generation", "durable_dossier_persistence",
+		"explicit_confirmation", "freeze_after_confirmation",
 		"full_wizard_i18n_catalog", "roadmap_promotion", "seal_and_receipt",
 		"templates_and_domain_packs", "web_surface",
 	}
@@ -415,6 +420,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	}
 	wantIntegrationFiles := []string{
 		"docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
+		"internal/application/intake_dossier.go",
+		"internal/application/intake_dossier_test.go",
 		"internal/application/intake_chain.go",
 		"internal/application/intake_orchestrator.go",
 		"internal/application/intake_service.go",

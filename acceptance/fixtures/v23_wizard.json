@@ -97,8 +97,11 @@
     "reject_no_tests_to_run": true
   },
   "integration_gate": {
-    "command": "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
+    "command": "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
     "test_names": [
+      "TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
+      "TestIntakeDossierHashProjectsEveryCurrentDecisionField",
+      "TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan",
       "TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation",
       "TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite",
       "TestIntakeSQLiteRestartAndHistoricalReplay",
@@ -122,6 +125,8 @@
   ],
   "integration_files": [
     "docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
+    "internal/application/intake_dossier.go",
+    "internal/application/intake_dossier_test.go",
     "internal/application/intake_chain.go",
     "internal/application/intake_orchestrator.go",
     "internal/application/intake_service.go",
@@ -238,6 +243,7 @@
   ],
   "completed_integration_scopes": [
     "application_idempotency",
+    "application_dossier_builder",
     "command_registry_binding",
     "durable_cas_persistence_and_restart"
   ],
@@ -245,6 +251,7 @@
     "canonical_round_default_under_L-CONFIG",
     "causal_plan_creation",
     "dossier_generation",
+    "durable_dossier_persistence",
     "explicit_confirmation",
     "freeze_after_confirmation",
     "full_wizard_i18n_catalog",
