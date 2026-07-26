@@ -295,6 +295,12 @@ func TestRebuildArchitecture(t *testing.T) {
 		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/wizard/stages"); reason != "" {
 			t.Errorf("application must accept pure Wizard stages domain: %s", reason)
 		}
+		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/wizard/catalog"); reason != "" {
+			t.Errorf("application must accept pure Wizard catalog domain: %s", reason)
+		}
+		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/wizard/gaps"); reason != "" {
+			t.Errorf("application must accept pure Wizard gaps domain: %s", reason)
+		}
 		if reason := rebuildArchitectureIntakeImportReason("orquesta/internal/intake"); reason != "" {
 			t.Errorf("intake must accept only its own inward package: %s", reason)
 		}
@@ -307,6 +313,12 @@ func TestRebuildArchitecture(t *testing.T) {
 			"intake_provider":     rebuildArchitectureIntakeImportReason("github.com/openai/client"),
 			"application_adapter": rebuildArchitectureApplicationImportReason("orquesta/internal/adapters/state/sqlite"),
 			"application_http":    rebuildArchitectureApplicationImportReason("net/http"),
+			"application_wizard_catalog_mutant": rebuildArchitectureApplicationImportReason(
+				"orquesta/internal/wizard/catalog/mutant",
+			),
+			"application_wizard_gaps_mutant": rebuildArchitectureApplicationImportReason(
+				"orquesta/internal/wizard/gaps/mutant",
+			),
 		} {
 			if reason == "" {
 				t.Errorf("%s concrete dependency escaped architecture guard", name)
@@ -701,9 +713,11 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 		importPath != "orquesta/internal/governance" &&
 		importPath != "orquesta/internal/identity" &&
 		importPath != "orquesta/internal/intake" &&
+		importPath != "orquesta/internal/wizard/catalog" &&
+		importPath != "orquesta/internal/wizard/gaps" &&
 		importPath != "orquesta/internal/wizard/stages" &&
 		importPath != "orquesta/internal/ports" {
-		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity, internal/intake, internal/wizard/stages and internal/ports"
+		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity, internal/intake, internal/wizard/catalog, internal/wizard/gaps, internal/wizard/stages and internal/ports"
 	}
 	switch {
 	case importPath == "net/http" || strings.HasPrefix(importPath, "net/http/"):
