@@ -131,9 +131,12 @@ transacción no libera `BEGIN IMMEDIATE` entre reloj y negocio. Antes de tocar e
 reloj entra en fase `temporal-only`; si falla el reloj, la expiración o la
 creación del savepoint, confirma el `BEGIN` porque aún no existe negocio. Tras
 crear el savepoint, cualquier rechazo o error técnico hace rollback solo hasta
-esa frontera, libera el savepoint y confirma high-water/expiraciones. Solo el
-éxito confirma conjuntamente frontera y negocio. Una respuesta ambigua de
-savepoint o cleanup descarta la conexión física. Los
+esa frontera y confirma directamente el outer: `COMMIT` libera todos los
+savepoints, por lo que un `RELEASE` intermedio no forma parte del protocolo.
+`ROLLBACK TO` mantiene el savepoint activo y es reintentable; una única
+respuesta perdida se resuelve con un reintento acotado antes del COMMIT. Si
+ningún intento acredita el rollback, la conexión física se descarta fail-closed.
+Solo el éxito confirma conjuntamente frontera y negocio. Los
 límites mínimo y máximo de duración pertenecen al registro canónico
 (`agent.firecracker.vsock_cid.*_lease_duration`) y Reserve/Renew rechazan fuera
 de esos límites en la frontera. El registro acota el máximo operativo a `24h`;
@@ -160,7 +163,10 @@ transacción. Los negativos persistentes cubren drift del índice único tras
 restart, cambio durable a journal DELETE y manipulación connection-local de
 synchronous, foreign keys y busy timeout.
 
-Una conexión solo vuelve al pool tras `COMMIT` o `ROLLBACK` acreditado. Si
+Una conexión solo vuelve al pool tras `COMMIT` o `ROLLBACK` acreditado. Un error
+de `BEGIN IMMEDIATE` tampoco prueba que SQLite no lo aplicara: la conexión se
+descarta físicamente siempre, incluso si el fallo pudo ocurrir antes del efecto.
+Si
 falla el rollback manual o el rollback compensatorio posterior a un COMMIT
 fallido, el adaptador marca la conexión física como `driver.ErrBadConn` para
 que `database/sql` la descarte. Una guarda de ownership finaliza la transacción
@@ -270,6 +276,10 @@ arranque. Debe incluir, como mínimo:
 - failpoints antes y después de la frontera de negocio: fallo de expiración,
   respuesta perdida al crear savepoint y fallo downstream tras expirar en T2
   conservan high-water, revierten cualquier negocio parcial y bloquean T1;
+- failpoints post-apply de `BEGIN IMMEDIATE` y `ROLLBACK TO`: el primero
+  descarta la conexión sin dejar lock ni transacción en el pool; el segundo se
+  reintenta una vez, revierte generación/reserva parciales, confirma
+  high-water/expiry y sigue bloqueando T1;
 - pruebas del gateway: autenticación, ACL por Goal y parentesco, aislamiento
   entre Goals, causalidad, fencing cuando aplique, idempotencia, auditoría y
   entrega de mailbox/CAS por refs opacas;
