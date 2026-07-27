@@ -48,4 +48,3 @@ la capacidad efectiva ni constituye el perfil endurecido final.
 2. Reintroducir bounding y NNP de uno en uno, repitiendo el E2E físico.
 3. Mantener el candidato actual como bootstrap funcional hasta tener evidencia
    equivalente del perfil endurecido.
-
