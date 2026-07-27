@@ -673,8 +673,10 @@ Restart=on-failure
 RestartSec=2s
 TimeoutStopSec=45s
 KillMode=control-group
-NoNewPrivileges=yes
-CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_KILL CAP_MKNOD CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_SYS_RESOURCE
+# Bootstrap físico: este host llevó Jailer a setuid sin CAP_SETUID efectiva.
+# No recortar capabilities ni fijar NNP hasta acreditar la transición real;
+# ambas medidas se reintroducirán una a una después del primer E2E.
+NoNewPrivileges=no
 AmbientCapabilities=
 PrivateTmp=yes
 PrivateDevices=no

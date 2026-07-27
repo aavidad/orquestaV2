@@ -328,15 +328,14 @@ for unsafe_netns_metadata in \
   fi
 done
 
-assert_contains "$UNIT" "NoNewPrivileges=yes"
+assert_contains "$UNIT" "NoNewPrivileges=no"
 assert_line "$UNIT" "User=0"
 assert_line "$UNIT" "Group=0"
 assert_not_contains "$UNIT" "Group=$TEST_ALLOWED_GID"
 assert_contains "$UNIT" "Requires=orquesta-firecracker-primitives-"
 assert_contains "$UNIT" "ExecStartPre=/usr/local/libexec/orquesta-firecracker-primitives-"
 assert_contains "$UNIT" " --check"
-assert_contains "$UNIT" "CapabilityBoundingSet="
-assert_contains "$UNIT" "CAP_SYS_ADMIN"
+assert_not_contains "$UNIT" "CapabilityBoundingSet="
 assert_contains "$UNIT" "PrivateDevices=no"
 assert_line "$UNIT" "DeviceAllow=/dev/kvm rwm"
 assert_line "$UNIT" "DeviceAllow=/dev/net/tun rwm"

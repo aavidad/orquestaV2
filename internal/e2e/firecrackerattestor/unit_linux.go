@@ -83,7 +83,8 @@ func (LinuxUnit) Preflight(ctx context.Context, config Config) (CandidateIdentit
 	if err != nil ||
 		!bytes.Contains(unitContent, []byte("User=0\n")) ||
 		!bytes.Contains(unitContent, []byte("Group=0\n")) ||
-		!bytes.Contains(unitContent, []byte("NoNewPrivileges=yes\n")) ||
+		!bytes.Contains(unitContent, []byte("NoNewPrivileges=no\n")) ||
+		bytes.Contains(unitContent, []byte("CapabilityBoundingSet=")) ||
 		!bytes.Contains(unitContent, []byte("IPAddressDeny=any\n")) ||
 		!bytes.Contains(unitContent, []byte(
 			"Requires="+filepath.Base(candidate.PrimitivesUnitPath)+"\n",
