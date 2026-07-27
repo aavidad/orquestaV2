@@ -88,14 +88,25 @@ type recordingCommandFactory struct {
 	args              [][]string
 	configs           [][]byte
 	layouts           []recordedJailLayout
+	outerExecutables  []recordedOuterExecutables
 	commands          []*exec.Cmd
 }
 
-func (factory *recordingCommandFactory) build(_ string, arguments ...string) *exec.Cmd {
+func (factory *recordingCommandFactory) build(
+	commandPath string,
+	arguments ...string,
+) *exec.Cmd {
 	factory.mu.Lock()
 	defer factory.mu.Unlock()
 	copied := append([]string(nil), arguments...)
 	factory.args = append(factory.args, copied)
+	factory.outerExecutables = append(
+		factory.outerExecutables,
+		recordOuterExecutables(
+			commandPath,
+			argumentValue(arguments, "--exec-file"),
+		),
+	)
 	root := helperJailRoot(arguments)
 	if raw, err := os.ReadFile(filepath.Join(root, firecrackerConfig)); err == nil {
 		factory.configs = append(factory.configs, raw)
@@ -171,6 +182,7 @@ func TestPhysicalRunnerBuildsIsolatedJailerCommandAndCopiesOutput(t *testing.T) 
 		t.Fatalf("output=%q err=%v", content, err)
 	}
 	assertJailerIsolationArguments(t, factory.args[0], runner.config, request)
+	assertOuterExecutableLayout(t, factory.outerExecutables[0], runner)
 	assertPrecreatedJailerLayout(t, factory.layouts[0], runner)
 	assertFirecrackerConfiguration(t, factory.configs[0], request)
 	id, _ := runID(request.Nonce)
@@ -188,6 +200,31 @@ func TestPhysicalRunnerBuildsIsolatedJailerCommandAndCopiesOutput(t *testing.T) 
 	assertRunsEmpty(t, runner.runs.path)
 	if err := runner.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOuterFirecrackerMetadataRejectsRootOnlyExecution(t *testing.T) {
+	const (
+		rootUID = uint32(0)
+		jailUID = uint32(65432)
+		jailGID = uint32(65432)
+	)
+	rootOnly := unix.Stat_t{
+		Mode: unix.S_IFREG | 0o500, Uid: rootUID, Gid: rootUID, Nlink: 1,
+	}
+	if outerFirecrackerExecutableByJail(rootOnly, rootUID, jailUID, jailGID) {
+		t.Fatal("root:root 0500 accepted for a distinct jail identity")
+	}
+	groupExecutable := unix.Stat_t{
+		Mode: unix.S_IFREG | 0o550, Uid: rootUID, Gid: jailGID, Nlink: 1,
+	}
+	if !outerFirecrackerExecutableByJail(
+		groupExecutable,
+		rootUID,
+		jailUID,
+		jailGID,
+	) {
+		t.Fatal("root:JailGID 0550 rejected")
 	}
 }
 
@@ -748,6 +785,63 @@ func assertPrecreatedJailerLayout(
 			t.Fatalf("%s stat=%+v", name, stat)
 		}
 	}
+}
+
+type recordedOuterExecutables struct {
+	jailer      unix.Stat_t
+	firecracker unix.Stat_t
+	err         error
+}
+
+func recordOuterExecutables(
+	jailerPath string,
+	firecrackerPath string,
+) recordedOuterExecutables {
+	var observation recordedOuterExecutables
+	if err := unix.Lstat(jailerPath, &observation.jailer); err != nil {
+		observation.err = err
+		return observation
+	}
+	if err := unix.Lstat(firecrackerPath, &observation.firecracker); err != nil {
+		observation.err = err
+	}
+	return observation
+}
+
+func assertOuterExecutableLayout(
+	t *testing.T,
+	observation recordedOuterExecutables,
+	runner *physicalRunner,
+) {
+	t.Helper()
+	if observation.err != nil {
+		t.Fatal(observation.err)
+	}
+	jailer := observation.jailer
+	if jailer.Mode != unix.S_IFREG|0o500 ||
+		jailer.Uid != runner.runs.owner ||
+		jailer.Gid != runner.runs.owner ||
+		jailer.Nlink != 1 {
+		t.Fatalf("outer jailer stat=%+v", jailer)
+	}
+	firecracker := observation.firecracker
+	if firecracker.Mode != unix.S_IFREG|0o550 ||
+		firecracker.Uid != runner.runs.owner ||
+		firecracker.Gid != runner.config.JailGID ||
+		firecracker.Nlink != 1 {
+		t.Fatalf("outer firecracker stat=%+v", firecracker)
+	}
+}
+
+func outerFirecrackerExecutableByJail(
+	stat unix.Stat_t,
+	rootUID, jailUID, jailGID uint32,
+) bool {
+	return rootUID != jailUID &&
+		stat.Mode == unix.S_IFREG|0o550 &&
+		stat.Uid == rootUID &&
+		stat.Gid == jailGID &&
+		stat.Nlink == 1
 }
 
 type recordedJailLayout struct {
