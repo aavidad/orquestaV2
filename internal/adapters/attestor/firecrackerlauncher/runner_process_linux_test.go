@@ -203,31 +203,6 @@ func TestPhysicalRunnerBuildsIsolatedJailerCommandAndCopiesOutput(t *testing.T) 
 	}
 }
 
-func TestOuterFirecrackerMetadataRejectsRootOnlyExecution(t *testing.T) {
-	const (
-		rootUID = uint32(0)
-		jailUID = uint32(65432)
-		jailGID = uint32(65432)
-	)
-	rootOnly := unix.Stat_t{
-		Mode: unix.S_IFREG | 0o500, Uid: rootUID, Gid: rootUID, Nlink: 1,
-	}
-	if outerFirecrackerExecutableByJail(rootOnly, rootUID, jailUID, jailGID) {
-		t.Fatal("root:root 0500 accepted for a distinct jail identity")
-	}
-	groupExecutable := unix.Stat_t{
-		Mode: unix.S_IFREG | 0o550, Uid: rootUID, Gid: jailGID, Nlink: 1,
-	}
-	if !outerFirecrackerExecutableByJail(
-		groupExecutable,
-		rootUID,
-		jailUID,
-		jailGID,
-	) {
-		t.Fatal("root:JailGID 0550 rejected")
-	}
-}
-
 func TestPhysicalRunnerRejectsGuestMemoryBelowPinnedManifest(t *testing.T) {
 	runner, factory, cgroup, namespace, request, input, output := physicalRunnerFixture(t, "success")
 	runner.assets.minimumGuestMemoryMiB = request.GuestMemoryMiB + 1
@@ -825,23 +800,12 @@ func assertOuterExecutableLayout(
 		t.Fatalf("outer jailer stat=%+v", jailer)
 	}
 	firecracker := observation.firecracker
-	if firecracker.Mode != unix.S_IFREG|0o550 ||
+	if firecracker.Mode != unix.S_IFREG|0o500 ||
 		firecracker.Uid != runner.runs.owner ||
-		firecracker.Gid != runner.config.JailGID ||
+		firecracker.Gid != runner.runs.owner ||
 		firecracker.Nlink != 1 {
 		t.Fatalf("outer firecracker stat=%+v", firecracker)
 	}
-}
-
-func outerFirecrackerExecutableByJail(
-	stat unix.Stat_t,
-	rootUID, jailUID, jailGID uint32,
-) bool {
-	return rootUID != jailUID &&
-		stat.Mode == unix.S_IFREG|0o550 &&
-		stat.Uid == rootUID &&
-		stat.Gid == jailGID &&
-		stat.Nlink == 1
 }
 
 type recordedJailLayout struct {

@@ -255,17 +255,17 @@ func (workspace *runWorkspace) populate(
 	); err != nil {
 		return err
 	}
-	// Jailer bind-mounts this source and executes it only after dropping to
-	// JailUID:JailGID. The exact jail group needs execute permission, while
-	// neither the jail identity nor unrelated users may modify or execute it.
+	// Jailer copies this source while it is still root and fixes the
+	// destination ownership before dropping privileges. Keep the outer copy
+	// root-only so the jail identity cannot replace the executable source.
 	if err := copyAssetAt(
 		ctx,
 		workspace.directory,
 		"firecracker",
 		assets.firecracker,
-		0o550,
+		0o500,
 		workspace.runs.owner,
-		config.JailGID,
+		workspace.runs.owner,
 	); err != nil {
 		return err
 	}
