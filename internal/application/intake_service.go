@@ -124,37 +124,9 @@ func (service *IntakeService) ApplyIntake(
 	ctx context.Context,
 	request ApplyIntakeRequest,
 ) (IntakeResult, error) {
-	if err := validateIntakeRequestScope(request.RequestRef, request.ActorRef, request.ProjectRef); err != nil {
-		return IntakeResult{}, err
-	}
-	authorizationRequestRef, err := IntakeAuthorizationRequestRef(
-		IntakeOperationApply, request.RequestRef,
-	)
+	fingerprint, replay, err := intakeApplyRequestIdentity(request)
 	if err != nil {
 		return IntakeResult{}, err
-	}
-	if err := validateIntakeAuthorization(
-		request.AuthorizationReceipt, request.ActorRef, request.ProjectRef,
-		authorizationRequestRef,
-	); err != nil {
-		return IntakeResult{}, err
-	}
-	encoded, err := json.Marshal(request.Change)
-	if err != nil {
-		return IntakeResult{}, errors.New("application.intake_change_invalid")
-	}
-	fingerprint := fingerprintFields(
-		"orquesta.intake.apply.v1",
-		request.ActorRef.String(),
-		request.ProjectRef.String(),
-		string(encoded),
-		request.AuthorizationReceipt.Ref(),
-	)
-	replay := IntakeReplayRequest{
-		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
-		Operation: IntakeOperationApply, ActorRef: request.ActorRef,
-		ProjectRef: request.ProjectRef, StateRef: request.Change.StateRef,
-		AuthorizationReceiptRef: request.AuthorizationReceipt.Ref(),
 	}
 	if record, found, replayErr := service.replay(
 		ctx, replay, nil, request.Change.ExpectedRevision,
@@ -170,14 +142,107 @@ func (service *IntakeService) ApplyIntake(
 	if err != nil {
 		return IntakeResult{}, err
 	}
-	if err := validateStoredIntakeRecord(
-		request.ActorRef, request.ProjectRef, request.Change.StateRef, current,
+	state, err := prepareIntakeApplyStateWithIdentity(
+		request,
+		current,
+		fingerprint,
+	)
+	if err != nil {
+		return IntakeResult{}, err
+	}
+	persisted, changed, err := service.store.ApplyIntake(ctx, state)
+	if err != nil {
+		return service.recoverIntakeConflict(
+			ctx, replay, &state.State, request.Change.ExpectedRevision, err,
+		)
+	}
+	if err := validateIntakeMutationRecord(
+		replay, state.State, request.Change.ExpectedRevision, persisted,
 	); err != nil {
 		return IntakeResult{}, err
 	}
+	return IntakeResult{Record: persisted, Changed: changed}, nil
+}
+
+func intakeApplyRequestIdentity(
+	request ApplyIntakeRequest,
+) (string, IntakeReplayRequest, error) {
+	if err := validateIntakeRequestScope(request.RequestRef, request.ActorRef, request.ProjectRef); err != nil {
+		return "", IntakeReplayRequest{}, err
+	}
+	authorizationRequestRef, err := IntakeAuthorizationRequestRef(
+		IntakeOperationApply, request.RequestRef,
+	)
+	if err != nil {
+		return "", IntakeReplayRequest{}, err
+	}
+	if err := validateIntakeAuthorization(
+		request.AuthorizationReceipt, request.ActorRef, request.ProjectRef,
+		authorizationRequestRef,
+	); err != nil {
+		return "", IntakeReplayRequest{}, err
+	}
+	fingerprint, err := intakeApplyRequestFingerprint(
+		request.ActorRef,
+		request.ProjectRef,
+		request.Change,
+		request.AuthorizationReceipt.Ref(),
+	)
+	if err != nil {
+		return "", IntakeReplayRequest{}, err
+	}
+	replay := IntakeReplayRequest{
+		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
+		Operation: IntakeOperationApply, ActorRef: request.ActorRef,
+		ProjectRef: request.ProjectRef, StateRef: request.Change.StateRef,
+		AuthorizationReceiptRef: request.AuthorizationReceipt.Ref(),
+	}
+	return fingerprint, replay, nil
+}
+
+func intakeApplyRequestFingerprint(
+	actorRef goal.ActorRef,
+	projectRef goal.ProjectRef,
+	change intake.Change,
+	authorizationReceiptRef string,
+) (string, error) {
+	encoded, err := json.Marshal(change)
+	if err != nil {
+		return "", errors.New("application.intake_change_invalid")
+	}
+	return fingerprintFields(
+		"orquesta.intake.apply.v1",
+		actorRef.String(),
+		projectRef.String(),
+		string(encoded),
+		authorizationReceiptRef,
+	), nil
+}
+
+func prepareIntakeApplyState(
+	request ApplyIntakeRequest,
+	current IntakeRecord,
+) (IntakeApplyState, error) {
+	fingerprint, _, err := intakeApplyRequestIdentity(request)
+	if err != nil {
+		return IntakeApplyState{}, err
+	}
+	return prepareIntakeApplyStateWithIdentity(request, current, fingerprint)
+}
+
+func prepareIntakeApplyStateWithIdentity(
+	request ApplyIntakeRequest,
+	current IntakeRecord,
+	fingerprint string,
+) (IntakeApplyState, error) {
+	if err := validateStoredIntakeRecord(
+		request.ActorRef, request.ProjectRef, request.Change.StateRef, current,
+	); err != nil {
+		return IntakeApplyState{}, err
+	}
 	next, err := intake.Apply(current.State, request.Change)
 	if err != nil {
-		return IntakeResult{}, err
+		return IntakeApplyState{}, err
 	}
 	receipt, err := buildIntakeReceipt(
 		IntakeOperationApply, request.RequestRef, fingerprint,
@@ -185,26 +250,15 @@ func (service *IntakeService) ApplyIntake(
 		request.AuthorizationReceipt.Ref(),
 	)
 	if err != nil {
-		return IntakeResult{}, err
+		return IntakeApplyState{}, err
 	}
-	persisted, changed, err := service.store.ApplyIntake(ctx, IntakeApplyState{
+	return IntakeApplyState{
 		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
 		ActorRef: request.ActorRef, ProjectRef: request.ProjectRef,
 		AuthorizationReceipt: request.AuthorizationReceipt,
 		ExpectedRevision:     request.Change.ExpectedRevision,
 		State:                next, Receipt: receipt,
-	})
-	if err != nil {
-		return service.recoverIntakeConflict(
-			ctx, replay, &next, request.Change.ExpectedRevision, err,
-		)
-	}
-	if err := validateIntakeMutationRecord(
-		replay, next, request.Change.ExpectedRevision, persisted,
-	); err != nil {
-		return IntakeResult{}, err
-	}
-	return IntakeResult{Record: persisted, Changed: changed}, nil
+	}, nil
 }
 
 func (service *IntakeService) replay(

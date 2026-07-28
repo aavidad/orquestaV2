@@ -16,9 +16,7 @@ func TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart(
 	ctx := context.Background()
 	system := newSQLiteIntakeTestSystem(t)
 	created := system.create(t, "request:wizard-gaps-sqlite-create")
-	service, err := application.NewWizardGapsService(
-		system.service, system.repository,
-	)
+	service, err := application.NewWizardGapsService(system.repository)
 	sqliteTestNoError(t, err)
 	request := func(requestRef string, revision intake.Revision) application.ApplyWizardGapsRequest {
 		return application.ApplyWizardGapsRequest{
@@ -49,7 +47,7 @@ func TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart(
 		noOp.Record.Receipt != seed.Record.Receipt {
 		t.Fatalf("no-op=%+v seed=%+v", noOp, seed)
 	}
-	var outcomeCount, mutationCount int
+	var outcomeCount, mutationCount, inputCount int
 	sqliteTestNoError(t, system.repository.db.QueryRow(
 		`SELECT COUNT(*) FROM wizard_gaps_outcomes WHERE request_ref=?`,
 		noOpRequestRef,
@@ -58,8 +56,17 @@ func TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart(
 		`SELECT COUNT(*) FROM intake_receipts WHERE request_ref=?`,
 		noOpRequestRef,
 	).Scan(&mutationCount))
-	if outcomeCount != 1 || mutationCount != 0 {
-		t.Fatalf("outcomes=%d mutation_receipts=%d", outcomeCount, mutationCount)
+	sqliteTestNoError(t, system.repository.db.QueryRow(
+		`SELECT COUNT(*) FROM wizard_gaps_input_receipts WHERE request_ref=?`,
+		noOpRequestRef,
+	).Scan(&inputCount))
+	if outcomeCount != 1 || mutationCount != 0 || inputCount != 1 {
+		t.Fatalf(
+			"outcomes=%d mutation_receipts=%d inputs=%d",
+			outcomeCount,
+			mutationCount,
+			inputCount,
+		)
 	}
 
 	laterRequestRef := "request:wizard-gaps-sqlite-later"
@@ -89,9 +96,7 @@ func TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart(
 	system.repository = openSQLiteIntakeTestRepository(t, system.path)
 	system.service, err = application.NewIntakeService(system.repository)
 	sqliteTestNoError(t, err)
-	service, err = application.NewWizardGapsService(
-		system.service, system.repository,
-	)
+	service, err = application.NewWizardGapsService(system.repository)
 	sqliteTestNoError(t, err)
 
 	replayed, err := service.ApplyWizardGaps(ctx, noOpRequest)
@@ -100,6 +105,7 @@ func TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart(
 		replayed.EvaluationReplayExact ||
 		replayed.RequestOutcome != noOp.RequestOutcome ||
 		replayed.Record.Receipt != noOp.Record.Receipt ||
+		replayed.InputDurability != noOp.InputDurability ||
 		!reflect.DeepEqual(replayed.Evaluation, noOp.Evaluation) {
 		t.Fatalf("replayed=%+v no-op=%+v", replayed, noOp)
 	}
@@ -282,7 +288,7 @@ func TestWizardGapsSQLiteConcurrentNoOpAndMutationReserveOneEffect(t *testing.T)
 	if accepted != 1 || conflicts != 1 {
 		t.Fatalf("accepted=%d conflicts=%d", accepted, conflicts)
 	}
-	var outcomeCount, mutationCount int
+	var outcomeCount, mutationCount, inputCount int
 	sqliteTestNoError(t, system.repository.db.QueryRow(
 		`SELECT COUNT(*) FROM wizard_gaps_outcomes WHERE request_ref=?`,
 		requestRef,
@@ -291,9 +297,22 @@ func TestWizardGapsSQLiteConcurrentNoOpAndMutationReserveOneEffect(t *testing.T)
 		`SELECT COUNT(*) FROM intake_receipts WHERE request_ref=?`,
 		requestRef,
 	).Scan(&mutationCount))
+	sqliteTestNoError(t, system.repository.db.QueryRow(
+		`SELECT COUNT(*) FROM wizard_gaps_input_receipts WHERE request_ref=?`,
+		requestRef,
+	).Scan(&inputCount))
 	if outcomeCount+mutationCount != 1 {
 		t.Fatalf(
 			"outcomes=%d mutation_receipts=%d",
+			outcomeCount,
+			mutationCount,
+		)
+	}
+	if inputCount != outcomeCount {
+		t.Fatalf(
+			"inputs=%d want=%d outcomes=%d mutations=%d",
+			inputCount,
+			outcomeCount,
 			outcomeCount,
 			mutationCount,
 		)
@@ -328,9 +347,7 @@ func newSQLiteWizardGapsNoOpTestSystem(
 	t.Helper()
 	system := newSQLiteIntakeTestSystem(t)
 	created := system.create(t, "request:wizard-gaps-sqlite-race-create")
-	service, err := application.NewWizardGapsService(
-		system.service, system.repository,
-	)
+	service, err := application.NewWizardGapsService(system.repository)
 	sqliteTestNoError(t, err)
 	seed, err := service.ApplyWizardGaps(
 		context.Background(),
@@ -378,7 +395,7 @@ func assertSQLiteWizardGapsRequestEffects(
 	wantMutations int,
 ) {
 	t.Helper()
-	var outcomes, mutations int
+	var outcomes, mutations, inputs int
 	sqliteTestNoError(t, system.repository.db.QueryRow(
 		`SELECT COUNT(*) FROM wizard_gaps_outcomes WHERE request_ref=?`,
 		requestRef,
@@ -387,13 +404,18 @@ func assertSQLiteWizardGapsRequestEffects(
 		`SELECT COUNT(*) FROM intake_receipts WHERE request_ref=?`,
 		requestRef,
 	).Scan(&mutations))
-	if outcomes != wantOutcomes || mutations != wantMutations {
+	sqliteTestNoError(t, system.repository.db.QueryRow(
+		`SELECT COUNT(*) FROM wizard_gaps_input_receipts WHERE request_ref=?`,
+		requestRef,
+	).Scan(&inputs))
+	if outcomes != wantOutcomes || mutations != wantMutations || inputs != 1 {
 		t.Fatalf(
-			"outcomes=%d/%d mutations=%d/%d",
+			"outcomes=%d/%d mutations=%d/%d inputs=%d/1",
 			outcomes,
 			wantOutcomes,
 			mutations,
 			wantMutations,
+			inputs,
 		)
 	}
 }

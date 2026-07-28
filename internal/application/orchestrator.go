@@ -15,7 +15,7 @@ const (
 type Dependencies struct {
 	State                   StateRepository
 	IntakeStore             IntakeStore
-	WizardGapsOutcomes      WizardGapsOutcomeStore
+	WizardGapsStore         WizardGapsStore
 	IntakeDossierStore      IntakeDossierStore
 	Access                  AccessRepository
 	Launcher                AgentLauncher
@@ -77,8 +77,7 @@ type Orchestrator struct {
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
 	switch {
-	case (dependencies.IntakeStore == nil) !=
-		(dependencies.WizardGapsOutcomes == nil):
+	case dependencies.IntakeStore != nil && dependencies.WizardGapsStore != nil:
 		return nil, errors.New("application.wizard_gaps_store_composition_invalid")
 	case dependencies.State == nil:
 		return nil, errors.New("application.state_required")
@@ -130,14 +129,21 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 	}
 	var intakeService *IntakeService
 	var wizardGapsService *WizardGapsService
-	if dependencies.IntakeStore != nil {
+	effectiveIntakeStore := dependencies.IntakeStore
+	if dependencies.WizardGapsStore != nil {
+		effectiveIntakeStore = dependencies.WizardGapsStore
+	}
+	if effectiveIntakeStore != nil {
 		var err error
-		intakeService, err = NewIntakeService(dependencies.IntakeStore)
+		intakeService, err = NewIntakeService(effectiveIntakeStore)
 		if err != nil {
 			return nil, err
 		}
+	}
+	if dependencies.WizardGapsStore != nil {
+		var err error
 		wizardGapsService, err = NewWizardGapsService(
-			intakeService, dependencies.WizardGapsOutcomes,
+			dependencies.WizardGapsStore,
 		)
 		if err != nil {
 			return nil, err
@@ -147,7 +153,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 	if dependencies.IntakeDossierStore != nil {
 		var err error
 		intakeDossierService, err = NewIntakeDossierService(
-			dependencies.IntakeStore,
+			effectiveIntakeStore,
 			dependencies.IntakeDossierStore,
 		)
 		if err != nil {

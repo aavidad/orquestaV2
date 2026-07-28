@@ -43,9 +43,14 @@ type wizardGapsRequestOutcomeView struct {
 }
 
 type wizardGapsDurabilityView struct {
-	Selections string `json:"selections"`
-	Facts      string `json:"facts"`
-	PackRefs   string `json:"pack_refs"`
+	ReceiptRef             string `json:"receipt_ref"`
+	SourceIntakeReceiptRef string `json:"source_intake_receipt_ref"`
+	Selections             string `json:"selections"`
+	SelectionsDigest       string `json:"selections_digest"`
+	Facts                  string `json:"facts"`
+	FactsDigest            string `json:"facts_digest"`
+	PackRefs               string `json:"pack_refs"`
+	PackRefsDigest         string `json:"pack_refs_digest"`
 }
 
 type wizardGapsEvaluationView struct {
@@ -176,9 +181,14 @@ func projectWizardGapsResult(
 			ReceiptRef: source.RequestOutcome.ReceiptRef,
 		},
 		InputDurability: wizardGapsDurabilityView{
-			Selections: source.InputDurability.Selections,
-			Facts:      source.InputDurability.Facts,
-			PackRefs:   source.InputDurability.PackRefs,
+			ReceiptRef:             source.InputDurability.ReceiptRef,
+			SourceIntakeReceiptRef: source.InputDurability.SourceIntakeReceiptRef,
+			Selections:             source.InputDurability.Selections,
+			SelectionsDigest:       source.InputDurability.SelectionsDigest,
+			Facts:                  source.InputDurability.Facts,
+			FactsDigest:            source.InputDurability.FactsDigest,
+			PackRefs:               source.InputDurability.PackRefs,
+			PackRefsDigest:         source.InputDurability.PackRefsDigest,
 		},
 		EvaluatorIdentity: source.EvaluatorIdentity,
 	}, nil

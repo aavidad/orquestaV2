@@ -14,21 +14,31 @@ import (
 	"orquesta/internal/wizard/gaps"
 )
 
-// WizardGapsInputDurability makes the current persistence frontier explicit.
-// Durable selections are reconstructed from Intake decisions. Facts and pack
-// refs remain typed request context until Intake gains corresponding typed
-// decisions; this service never creates a parallel store for them.
+// WizardGapsInputDurability exposes the immutable input receipt without
+// claiming that the evaluation result snapshot is already durable.
 type WizardGapsInputDurability struct {
-	Selections string
-	Facts      string
-	PackRefs   string
+	ReceiptRef             string
+	SourceIntakeReceiptRef string
+	Selections             string
+	SelectionsDigest       string
+	Facts                  string
+	FactsDigest            string
+	PackRefs               string
+	PackRefsDigest         string
 }
 
-func wizardGapsDurability() WizardGapsInputDurability {
+func wizardGapsDurability(
+	receipt WizardGapsInputReceipt,
+) WizardGapsInputDurability {
 	return WizardGapsInputDurability{
-		Selections: "intake_decisions",
-		Facts:      "request_scoped",
-		PackRefs:   "request_scoped",
+		ReceiptRef:             receipt.Ref,
+		SourceIntakeReceiptRef: receipt.SourceIntakeReceiptRef,
+		Selections:             "wizard_gaps_input_receipt",
+		SelectionsDigest:       receipt.SelectionsDigest,
+		Facts:                  "wizard_gaps_input_receipt",
+		FactsDigest:            receipt.FactsDigest,
+		PackRefs:               "wizard_gaps_input_receipt",
+		PackRefsDigest:         receipt.PackRefsDigest,
 	}
 }
 
@@ -63,9 +73,8 @@ type WizardGapsRequestOutcome struct {
 type ApplyWizardGapsResult struct {
 	Record     IntakeRecord
 	Evaluation gaps.Result
-	// EvaluationReplayExact is false while Facts and PackRefs remain
-	// request-scoped. The Intake receipt replays Record exactly; callers must
-	// not present the re-evaluated advisory Result as Intake-receipt evidence.
+	// EvaluationReplayExact remains false until the exact evaluation result
+	// snapshot is persisted by the next causal cut.
 	EvaluationReplayExact bool
 	Changed               bool
 	// RequestRefReserved is true when either an Intake mutation receipt or an
@@ -80,7 +89,12 @@ type ApplyWizardGapsResult struct {
 // request as durable without exposing the exact receipt that owns it.
 func ValidateApplyWizardGapsResult(result ApplyWizardGapsResult) error {
 	if !result.RequestRefReserved || result.EvaluationReplayExact ||
-		result.RequestOutcome.ReceiptRef == "" {
+		result.RequestOutcome.ReceiptRef == "" ||
+		result.InputDurability.ReceiptRef == "" ||
+		result.InputDurability.SourceIntakeReceiptRef == "" ||
+		!validWizardGapsCanonicalHash(result.InputDurability.SelectionsDigest) ||
+		!validWizardGapsCanonicalHash(result.InputDurability.FactsDigest) ||
+		!validWizardGapsCanonicalHash(result.InputDurability.PackRefsDigest) {
 		return errors.New("application.wizard_gaps_request_outcome_invalid")
 	}
 	switch result.RequestOutcome.Kind {
@@ -128,45 +142,45 @@ func (resolver builtInWizardGapsEvaluatorResolver) Resolve(
 }
 
 // WizardGapsService evaluates the pure gaps engine and compiles only missing
-// findings into the existing Intake CAS mutation. IntakeService remains the
-// sole writer and its receipt remains the sole mutation receipt.
+// findings into the existing Intake CAS mutation. The application Intake
+// contract remains the mutation authority and its receipt remains the sole
+// mutation receipt; the combined store commits that mutation and its Wizard
+// input receipt atomically.
 type WizardGapsService struct {
 	intakes    *IntakeService
-	outcomes   WizardGapsOutcomeStore
+	outcomes   WizardGapsStore
 	evaluators wizardGapsEvaluatorResolver
 }
 
 func NewWizardGapsService(
-	intakes *IntakeService,
-	outcomes WizardGapsOutcomeStore,
+	store WizardGapsStore,
 ) (*WizardGapsService, error) {
 	registry := gaps.BuiltInEvaluatorRegistry()
 	if registry.Empty() {
 		return nil, errors.New("application.wizard_gaps_evaluators_required")
 	}
 	return newWizardGapsServiceWithEvaluatorResolver(
-		intakes,
-		outcomes,
+		store,
 		builtInWizardGapsEvaluatorResolver{registry: registry},
 	)
 }
 
 func newWizardGapsServiceWithEvaluatorResolver(
-	intakes *IntakeService,
-	outcomes WizardGapsOutcomeStore,
+	store WizardGapsStore,
 	evaluators wizardGapsEvaluatorResolver,
 ) (*WizardGapsService, error) {
-	if intakes == nil {
-		return nil, errors.New("application.intake_service_required")
-	}
 	if evaluators == nil {
 		return nil, errors.New("application.wizard_gaps_evaluators_required")
 	}
-	if outcomes == nil {
-		return nil, errors.New("application.wizard_gaps_outcome_store_required")
+	if store == nil {
+		return nil, errors.New("application.wizard_gaps_store_required")
+	}
+	intakes, err := NewIntakeService(store)
+	if err != nil {
+		return nil, err
 	}
 	return &WizardGapsService{
-		intakes: intakes, outcomes: outcomes, evaluators: evaluators,
+		intakes: intakes, outcomes: store, evaluators: evaluators,
 	}, nil
 }
 
@@ -210,19 +224,21 @@ func (service *WizardGapsService) ApplyWizardGaps(
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	replayRequest, err := wizardGapsNoOpReplayRequest(
-		request, evaluator.Identity(),
-	)
+	replayRequest, facts, packRefs, factsDigest, packRefsDigest, err :=
+		canonicalWizardGapsRequest(
+			request,
+			evaluator,
+		)
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	if replayed, found, replayErr := service.outcomes.ReplayWizardGapsNoOp(
+	if replayed, found, replayErr := service.outcomes.ReplayWizardGapsInput(
 		ctx, replayRequest,
 	); replayErr != nil {
 		return ApplyWizardGapsResult{}, replayErr
 	} else if found {
-		return service.replayWizardGapsNoOp(
-			replayRequest, request, evaluator, replayed,
+		return service.replayWizardGapsInput(
+			replayRequest, request.AuthorizationReceipt, evaluator, replayed,
 		)
 	}
 
@@ -233,21 +249,23 @@ func (service *WizardGapsService) ApplyWizardGaps(
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	base, err := intakeStateAtRevision(current.State, request.ExpectedRevision)
-	if err != nil {
-		return ApplyWizardGapsResult{}, err
+	if current.State.Revision() != request.ExpectedRevision {
+		return ApplyWizardGapsResult{}, &intake.DomainError{
+			Code:  intake.ErrorRevisionConflict,
+			Field: "request.expected_revision",
+		}
 	}
 	evaluated, err := evaluateWizardGapsDetailed(
-		base,
-		request.Facts,
-		request.PackRefs,
+		current.State,
+		facts,
+		packRefs,
 		evaluator,
 	)
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
 	change, err := wizardGapsChangeWithReconciliation(
-		base,
+		current.State,
 		request.Origin,
 		evaluator.Identity(),
 		evaluated.result,
@@ -256,22 +274,31 @@ func (service *WizardGapsService) ApplyWizardGaps(
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	result := ApplyWizardGapsResult{
-		Record: current, Evaluation: evaluated.result,
-		InputDurability:   wizardGapsDurability(),
-		EvaluatorIdentity: evaluator.Identity(),
-	}
 	if len(change.Issues) == 0 && len(change.Questions) == 0 &&
 		len(change.QuestionRevisions) == 0 &&
 		len(change.QuestionRetirements) == 0 {
-		if current.State.Revision() != request.ExpectedRevision {
-			return ApplyWizardGapsResult{}, &intake.DomainError{
-				Code:  intake.ErrorRevisionConflict,
-				Field: "request.expected_revision",
-			}
-		}
 		outcome, err := buildWizardGapsNoOpOutcome(
-			replayRequest, current, evaluated.result,
+			wizardGapsNoOpReplayRequest(replayRequest),
+			current,
+			evaluated.result,
+		)
+		if err != nil {
+			return ApplyWizardGapsResult{}, err
+		}
+		input, err := buildWizardGapsInputReceipt(
+			replayRequest,
+			request.Origin,
+			current,
+			WizardGapsRequestOutcome{
+				Kind:       WizardGapsRequestOutcomeNoOp,
+				ReceiptRef: outcome.Ref,
+			},
+			facts,
+			factsDigest,
+			packRefs,
+			packRefsDigest,
+			evaluated.selections,
+			evaluated.selectionsDigest,
 		)
 		if err != nil {
 			return ApplyWizardGapsResult{}, err
@@ -280,86 +307,120 @@ func (service *WizardGapsService) ApplyWizardGaps(
 			ctx,
 			WizardGapsNoOpReservation{
 				Outcome:              outcome,
+				Input:                input,
 				AuthorizationReceipt: request.AuthorizationReceipt,
 			},
 		)
 		if err != nil {
-			if !IsStateError(err, StateConflict) {
-				return ApplyWizardGapsResult{}, err
-			}
-			reservationErr := err
-			var found bool
-			reserved, found, err = service.outcomes.ReplayWizardGapsNoOp(
-				ctx, replayRequest,
+			return service.recoverWizardGapsConflict(
+				ctx, replayRequest, request.AuthorizationReceipt,
+				evaluator, err,
 			)
-			if err != nil {
-				return ApplyWizardGapsResult{}, err
-			}
-			if !found {
-				return ApplyWizardGapsResult{}, reservationErr
-			}
 		}
-		if err := validateWizardGapsNoOpOutcome(
-			replayRequest, reserved, evaluated.result,
-		); err != nil {
-			return ApplyWizardGapsResult{}, err
-		}
-		result.Record = reserved.Record
-		result.RequestRefReserved = true
-		result.RequestOutcome = WizardGapsRequestOutcome{
-			Kind:       WizardGapsRequestOutcomeNoOp,
-			ReceiptRef: reserved.Ref,
-		}
-		if err := ValidateApplyWizardGapsResult(result); err != nil {
-			return ApplyWizardGapsResult{}, err
-		}
-		return result, nil
+		return service.replayWizardGapsInput(
+			replayRequest, request.AuthorizationReceipt, evaluator, reserved,
+		)
 	}
 
-	applied, err := service.intakes.ApplyIntake(ctx, ApplyIntakeRequest{
-		RequestRef: request.RequestRef, ActorRef: request.ActorRef,
-		ProjectRef: request.ProjectRef, Change: change,
-		AuthorizationReceipt: request.AuthorizationReceipt,
-	})
+	intakeState, err := prepareIntakeApplyState(
+		ApplyIntakeRequest{
+			RequestRef: request.RequestRef, ActorRef: request.ActorRef,
+			ProjectRef: request.ProjectRef, Change: change,
+			AuthorizationReceipt: request.AuthorizationReceipt,
+		},
+		current,
+	)
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	result.Record = applied.Record
-	result.Changed = applied.Changed
-	result.RequestRefReserved = true
-	result.RequestOutcome = WizardGapsRequestOutcome{
-		Kind:       WizardGapsRequestOutcomeIntakeMutation,
-		ReceiptRef: applied.Record.Receipt.Ref,
-	}
-	if err := ValidateApplyWizardGapsResult(result); err != nil {
+	input, err := buildWizardGapsInputReceipt(
+		replayRequest,
+		request.Origin,
+		current,
+		WizardGapsRequestOutcome{
+			Kind:       WizardGapsRequestOutcomeIntakeMutation,
+			ReceiptRef: intakeState.Receipt.Ref,
+		},
+		facts,
+		factsDigest,
+		packRefs,
+		packRefsDigest,
+		evaluated.selections,
+		evaluated.selectionsDigest,
+	)
+	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
+	applied, changed, err := service.outcomes.ApplyWizardGapsMutation(
+		ctx,
+		WizardGapsMutationReservation{Input: input, Intake: intakeState},
+	)
+	if err != nil {
+		return service.recoverWizardGapsConflict(
+			ctx, replayRequest, request.AuthorizationReceipt, evaluator, err,
+		)
+	}
+	result, err := service.replayWizardGapsInput(
+		replayRequest, request.AuthorizationReceipt, evaluator, applied,
+	)
+	if err != nil {
+		return ApplyWizardGapsResult{}, err
+	}
+	result.Changed = changed
 	return result, nil
 }
 
-func (service *WizardGapsService) replayWizardGapsNoOp(
-	replayRequest WizardGapsNoOpReplayRequest,
-	request ApplyWizardGapsRequest,
+func (service *WizardGapsService) recoverWizardGapsConflict(
+	ctx context.Context,
+	replayRequest WizardGapsInputReplayRequest,
+	authorization identity.AuthorizationReceipt,
 	evaluator wizardGapsEvaluator,
-	outcome WizardGapsNoOpOutcome,
+	persistErr error,
 ) (ApplyWizardGapsResult, error) {
+	if !IsStateError(persistErr, StateConflict) {
+		return ApplyWizardGapsResult{}, persistErr
+	}
+	replayed, found, err := service.outcomes.ReplayWizardGapsInput(
+		ctx, replayRequest,
+	)
+	if err != nil {
+		return ApplyWizardGapsResult{}, err
+	}
+	if !found {
+		return ApplyWizardGapsResult{}, persistErr
+	}
+	return service.replayWizardGapsInput(
+		replayRequest, authorization, evaluator, replayed,
+	)
+}
+
+func (service *WizardGapsService) replayWizardGapsInput(
+	replayRequest WizardGapsInputReplayRequest,
+	authorization identity.AuthorizationReceipt,
+	evaluator wizardGapsEvaluator,
+	record WizardGapsInputRecord,
+) (ApplyWizardGapsResult, error) {
+	if err := validateWizardGapsInputRecord(replayRequest, record); err != nil {
+		return ApplyWizardGapsResult{}, err
+	}
+	if authorization.Ref() != record.Receipt.AuthorizationReceiptRef {
+		return ApplyWizardGapsResult{}, &StateError{Code: StateConflict}
+	}
 	evaluated, err := evaluateWizardGapsDetailed(
-		outcome.Record.State,
-		request.Facts,
-		request.PackRefs,
+		record.SourceRecord.State,
+		record.Receipt.Facts,
+		record.Receipt.PackRefs,
 		evaluator,
 	)
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	if err := validateWizardGapsNoOpOutcome(
-		replayRequest, outcome, evaluated.result,
-	); err != nil {
-		return ApplyWizardGapsResult{}, err
+	if evaluated.selectionsDigest != record.Receipt.SelectionsDigest {
+		return ApplyWizardGapsResult{}, &StateError{Code: StateConflict}
 	}
 	change, err := wizardGapsChangeWithReconciliation(
-		outcome.Record.State,
-		request.Origin,
+		record.SourceRecord.State,
+		record.Receipt.Origin,
 		evaluator.Identity(),
 		evaluated.result,
 		evaluated.reconcilable,
@@ -367,18 +428,54 @@ func (service *WizardGapsService) replayWizardGapsNoOp(
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	if len(change.Issues) != 0 || len(change.Questions) != 0 ||
-		len(change.QuestionRevisions) != 0 ||
-		len(change.QuestionRetirements) != 0 {
+	switch record.Receipt.OutcomeKind {
+	case WizardGapsRequestOutcomeNoOp:
+		if len(change.Issues) != 0 || len(change.Questions) != 0 ||
+			len(change.QuestionRevisions) != 0 ||
+			len(change.QuestionRetirements) != 0 {
+			return ApplyWizardGapsResult{}, &StateError{Code: StateConflict}
+		}
+		expectedOutcome, err := buildWizardGapsNoOpOutcome(
+			wizardGapsNoOpReplayRequest(replayRequest),
+			record.SourceRecord,
+			evaluated.result,
+		)
+		if err != nil ||
+			expectedOutcome.Ref != record.Receipt.OutcomeReceiptRef {
+			return ApplyWizardGapsResult{}, &StateError{
+				Code: StateConflict, Cause: err,
+			}
+		}
+	case WizardGapsRequestOutcomeIntakeMutation:
+		expected, err := prepareIntakeApplyState(
+			ApplyIntakeRequest{
+				RequestRef:           replayRequest.RequestRef,
+				ActorRef:             replayRequest.ActorRef,
+				ProjectRef:           replayRequest.ProjectRef,
+				Change:               change,
+				AuthorizationReceipt: authorization,
+			},
+			record.SourceRecord,
+		)
+		if err != nil ||
+			expected.Receipt != record.OutcomeRecord.Receipt ||
+			!reflectIntakeStateEqual(expected.State, record.OutcomeRecord.State) {
+			return ApplyWizardGapsResult{}, &StateError{
+				Code:  StateConflict,
+				Cause: err,
+			}
+		}
+	default:
 		return ApplyWizardGapsResult{}, &StateError{Code: StateConflict}
 	}
 	result := ApplyWizardGapsResult{
-		Record: outcome.Record, Evaluation: evaluated.result,
-		RequestRefReserved: true, InputDurability: wizardGapsDurability(),
-		EvaluatorIdentity: evaluator.Identity(),
+		Record: record.OutcomeRecord, Evaluation: evaluated.result,
+		RequestRefReserved: true,
+		InputDurability:    wizardGapsDurability(record.Receipt),
+		EvaluatorIdentity:  evaluator.Identity(),
 		RequestOutcome: WizardGapsRequestOutcome{
-			Kind:       WizardGapsRequestOutcomeNoOp,
-			ReceiptRef: outcome.Ref,
+			Kind:       record.Receipt.OutcomeKind,
+			ReceiptRef: record.Receipt.OutcomeReceiptRef,
 		},
 	}
 	if err := ValidateApplyWizardGapsResult(result); err != nil {
@@ -388,8 +485,10 @@ func (service *WizardGapsService) replayWizardGapsNoOp(
 }
 
 type detailedWizardGapsEvaluation struct {
-	result       gaps.Result
-	reconcilable map[intake.QuestionRef]struct{}
+	result           gaps.Result
+	reconcilable     map[intake.QuestionRef]struct{}
+	selections       []WizardGapsSelectionInput
+	selectionsDigest string
 }
 
 func evaluateWizardGaps(
@@ -476,8 +575,14 @@ func evaluateWizardGapsDetailed(
 	if err != nil {
 		return detailedWizardGapsEvaluation{}, err
 	}
+	canonicalSelections, selectionsDigest, err :=
+		canonicalWizardGapsSelections(selections, questionSelections)
+	if err != nil {
+		return detailedWizardGapsEvaluation{}, err
+	}
 	return detailedWizardGapsEvaluation{
 		result: result, reconcilable: reconcilable,
+		selections: canonicalSelections, selectionsDigest: selectionsDigest,
 	}, nil
 }
 

@@ -508,7 +508,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"failed_change_does_not_mutate_the_current_snapshot",
 		"help_and_clarification_do_not_consume_round_or_revision",
 		"question_references_at_least_one_recorded_gap_or_contradiction",
-		"public_wizard_gap_application_exposes_request_scoped_replay_boundary",
+		"public_wizard_gap_application_exposes_durable_canonical_input_receipt",
 		"public_wizard_gap_application_exposes_typed_request_outcome_receipt",
 		"exact_dossier_confirmation_freezes_it_and_creates_one_causal_goal",
 		"required_test_runs_named_contract_and_two_negatives",
@@ -597,6 +597,19 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"TestWizardGapsSQLiteConcurrentDivergentNoOpAdmitsOnePayload",
 		"TestWizardGapsSQLiteConcurrentNoOpAndMutationReserveOneEffect",
 		"TestV23WizardGapsRecoveryRejectsCorruptedNoOpOutcomes",
+		"TestWizardGapsInputReceiptPersistsCanonicalContextAndSelections",
+		"TestWizardGapsInputValidationRejectsCoherentContextTampering",
+		"TestWizardGapsInputEvaluationRejectsCoherentSelectionTampering",
+		"TestWizardGapsInputEvaluationRejectsCoherentMutationReceiptTampering",
+		"TestWizardGapsInputEvaluationRejectsCoherentNoOpOutcomeTampering",
+		"TestWizardGapsSQLiteMutationInputReplaysExactlyAfterRestart",
+		"TestWizardGapsSQLiteConcurrentExactMutationCommitsOneInput",
+		"TestWizardGapsSQLiteInputFailureRollsBackWholeRequest",
+		"TestV23WizardGapsInputRecoveryRejectsColumnCorruptions",
+		"TestV23WizardGapsInputRecoveryRejectsCoherentMutationSelectionTamper",
+		"TestV23WizardGapsInputRejectsCoherentMutationFingerprintTamper",
+		"TestV23WizardGapsInputRecoveryRejectsCoherentNoOpOutcomeTamper",
+		"TestV23WizardGapsInputUpgradeFromSchema20DoesNotInventLegacyInput",
 	}
 	wantIntegrationGate.TestNames = append(wantIntegrationGate.TestNames, newWizardGapTests...)
 	wantIntegrationGate.Command = strings.TrimSuffix(wantIntegrationGate.Command, ")$'") +
@@ -633,6 +646,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"wizard_gap_application_compiler_fail_closed",
 		"wizard_catalog_foundation_and_15_domain_packs",
 		"wizard_gap_explicit_outcome_receipt",
+		"wizard_gap_input_receipt_durability",
 		"wizard_gap_noop_request_reservation_and_historical_replay",
 		"wizard_gap_reconciliation",
 	}) {
@@ -640,13 +654,13 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	}
 	wantDeferred := []string{
 		"dossier_generation", "roadmap_promotion", "seal_and_receipt",
-		"web_surface", "wizard_gap_input_durability_and_exact_evaluation_replay",
+		"web_surface", "wizard_gap_exact_evaluation_snapshot_and_replay",
 		"wizard_help_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
 	}
-	if fixture.NextDependency != "wizard_gap_input_durability_before_exact_evaluation_replay" {
+	if fixture.NextDependency != "wizard_gap_exact_evaluation_snapshot_before_replay" {
 		t.Fatalf("invalid next dependency: %q", fixture.NextDependency)
 	}
 	wantCandidateFiles := []string{
@@ -675,6 +689,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	wantIntegrationFiles := []string{
 		"docs/reconstruccion/corte_v23_comandos_dossier_2026-07-26.md",
 		"docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md",
+		"docs/reconstruccion/corte_v23_inputs_wizard_durables_2026-07-28.md",
 		"docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
 		"internal/application/intake_dossier.go",
 		"internal/application/intake_dossier_confirmation.go",
@@ -697,6 +712,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/application/wizard_gaps_identity_test.go",
 		"internal/application/wizard_gaps_orchestrator_test.go",
 		"internal/application/wizard_gaps_outcomes.go",
+		"internal/application/wizard_gaps_inputs.go",
+		"internal/application/wizard_gaps_inputs_test.go",
 		"internal/application/wizard_gaps_preflight.go",
 		"internal/application/wizard_gaps_test.go",
 		"internal/adapters/state/sqlite/intake_dossier.go",
@@ -707,18 +724,22 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/adapters/state/sqlite/intake_derivation_test.go",
 		"internal/adapters/state/sqlite/intake.go",
 		"internal/adapters/state/sqlite/migrations/020_wizard_gaps_outcomes.sql",
+		"internal/adapters/state/sqlite/migrations/021_wizard_gaps_inputs.sql",
 		"internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
 		"internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql",
 		"internal/adapters/state/sqlite/migrations/017_intake.sql",
 		"internal/adapters/state/sqlite/recovery_validation.go",
 		"internal/adapters/state/sqlite/recovery_validation_versions.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23_wizard_gaps.go",
+		"internal/adapters/state/sqlite/recovery_validation_v23_wizard_gaps_inputs.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23_wizard_gaps_test.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23_dossier.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23.go",
 		"internal/adapters/state/sqlite/repository_test.go",
 		"internal/adapters/state/sqlite/wizard_gaps_outcomes.go",
 		"internal/adapters/state/sqlite/wizard_gaps_outcomes_test.go",
+		"internal/adapters/state/sqlite/wizard_gaps_inputs.go",
+		"internal/adapters/state/sqlite/wizard_gaps_inputs_test.go",
 		"internal/bootstrap/command_registry_upgrade_e2e_test.go",
 		"internal/bootstrap/command_surfaces.go",
 		"internal/bootstrap/intake_e2e_test.go",
@@ -748,6 +769,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/wizard/catalog/semantic.go",
 		"internal/wizard/catalog/semantic_test.go",
 		"internal/wizard/catalog/validation.go",
+		"internal/wizard/gaps/canonical_context.go",
 		"internal/wizard/gaps/catalog.go",
 		"internal/wizard/gaps/engine.go",
 		"internal/wizard/gaps/evaluator.go",

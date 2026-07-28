@@ -49,9 +49,15 @@ func (api *fakeApplication) ApplyWizardGaps(
 			ReceiptRef: intakeReceiptRef,
 		},
 		InputDurability: application.WizardGapsInputDurability{
-			Selections: "intake_decisions",
-			Facts:      "request_scoped",
-			PackRefs:   "request_scoped",
+			ReceiptRef: "wizard-gaps-input:" +
+				"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+			SourceIntakeReceiptRef: intakeReceiptRef,
+			Selections:             "wizard_gaps_input_receipt",
+			SelectionsDigest:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Facts:                  "wizard_gaps_input_receipt",
+			FactsDigest:            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			PackRefs:               "wizard_gaps_input_receipt",
+			PackRefsDigest:         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 		},
 		EvaluatorIdentity: request.EvaluatorIdentity,
 	}, nil
@@ -130,8 +136,11 @@ func TestWizardGapsCommandBindsAuthorityAndProjectsCompleteEvaluation(t *testing
 		len(output.Evaluation.Questions[0].Options) == 0 ||
 		len(output.Evaluation.PackRefs) != 1 ||
 		output.Evaluation.PackRefs[0] != packRef ||
-		output.InputDurability.Facts != "request_scoped" ||
-		output.InputDurability.PackRefs != "request_scoped" ||
+		output.InputDurability.ReceiptRef == "" ||
+		output.InputDurability.SourceIntakeReceiptRef == "" ||
+		output.InputDurability.Selections != "wizard_gaps_input_receipt" ||
+		output.InputDurability.Facts != "wizard_gaps_input_receipt" ||
+		output.InputDurability.PackRefs != "wizard_gaps_input_receipt" ||
 		output.EvaluationReplayExact ||
 		!output.RequestRefReserved ||
 		output.RequestOutcome.Kind !=

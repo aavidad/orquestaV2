@@ -26,10 +26,11 @@ func TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter(t *testing.T) {
 		result.RequestOutcome.Kind != WizardGapsRequestOutcomeIntakeMutation ||
 		result.RequestOutcome.ReceiptRef != result.Record.Receipt.Ref ||
 		result.EvaluatorIdentity != request.EvaluatorIdentity ||
-		result.InputDurability != wizardGapsDurability() ||
-		result.InputDurability.Selections != "intake_decisions" ||
-		result.InputDurability.Facts != "request_scoped" ||
-		result.InputDurability.PackRefs != "request_scoped" {
+		result.InputDurability.ReceiptRef == "" ||
+		result.InputDurability.SourceIntakeReceiptRef == "" ||
+		result.InputDurability.Selections != "wizard_gaps_input_receipt" ||
+		result.InputDurability.Facts != "wizard_gaps_input_receipt" ||
+		result.InputDurability.PackRefs != "wizard_gaps_input_receipt" {
 		t.Fatalf("result=%+v durability=%+v", result, result.InputDurability)
 	}
 	if len(result.Evaluation.Issues()) == 0 ||
@@ -57,6 +58,14 @@ func TestWizardGapsRequestOutcomeValidationFailsClosed(t *testing.T) {
 		RequestOutcome: WizardGapsRequestOutcome{
 			Kind:       WizardGapsRequestOutcomeIntakeMutation,
 			ReceiptRef: intakeReceiptRef,
+		},
+		InputDurability: WizardGapsInputDurability{
+			ReceiptRef: "wizard-gaps-input:" +
+				"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+			SourceIntakeReceiptRef: intakeReceiptRef,
+			SelectionsDigest:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			FactsDigest:            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			PackRefsDigest:         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
 		},
 	}
 	noOp := mutation
@@ -559,7 +568,7 @@ func questionByIntakeRef(
 	return intake.Question{}
 }
 
-func TestWizardGapsProjectsExplicitPackAsRequestScopedContext(t *testing.T) {
+func TestWizardGapsProjectsExplicitPackIntoDurableInputReceipt(t *testing.T) {
 	system, service := newWizardGapsTestSystem(t)
 	packRef := catalog.DomainPackRefs()[0]
 	request := wizardGapsRequest(t, system, "request:wizard-gaps-pack", 1)
@@ -569,7 +578,9 @@ func TestWizardGapsProjectsExplicitPackAsRequestScopedContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Changed || result.InputDurability.PackRefs != "request_scoped" {
+	if !result.Changed ||
+		result.InputDurability.PackRefs != "wizard_gaps_input_receipt" ||
+		result.InputDurability.PackRefsDigest == "" {
 		t.Fatalf("result=%+v", result)
 	}
 	packQuestions := 0
@@ -639,18 +650,18 @@ type conflictingWizardGapsOutcomeStore struct {
 	*memoryIntakeStore
 }
 
-func (store conflictingWizardGapsOutcomeStore) ReplayWizardGapsNoOp(
+func (store conflictingWizardGapsOutcomeStore) ReplayWizardGapsInput(
 	context.Context,
-	WizardGapsNoOpReplayRequest,
-) (WizardGapsNoOpOutcome, bool, error) {
-	return WizardGapsNoOpOutcome{}, false, nil
+	WizardGapsInputReplayRequest,
+) (WizardGapsInputRecord, bool, error) {
+	return WizardGapsInputRecord{}, false, nil
 }
 
 func (store conflictingWizardGapsOutcomeStore) ReserveWizardGapsNoOp(
 	context.Context,
 	WizardGapsNoOpReservation,
-) (WizardGapsNoOpOutcome, bool, error) {
-	return WizardGapsNoOpOutcome{}, false, &StateError{Code: StateConflict}
+) (WizardGapsInputRecord, bool, error) {
+	return WizardGapsInputRecord{}, false, &StateError{Code: StateConflict}
 }
 
 func TestWizardGapsNoOpReservationConflictWithoutReplayFailsClosed(t *testing.T) {
@@ -663,7 +674,6 @@ func TestWizardGapsNoOpReservationConflictWithoutReplayFailsClosed(t *testing.T)
 		t.Fatal(err)
 	}
 	service, err = NewWizardGapsService(
-		system.service,
 		conflictingWizardGapsOutcomeStore{memoryIntakeStore: system.store},
 	)
 	if err != nil {
@@ -708,7 +718,7 @@ func newWizardGapsTestSystem(
 	t.Helper()
 	system := newIntakeTestSystem(t)
 	mustCreateIntake(t, system)
-	service, err := NewWizardGapsService(system.service, system.store)
+	service, err := NewWizardGapsService(system.store)
 	if err != nil {
 		t.Fatal(err)
 	}

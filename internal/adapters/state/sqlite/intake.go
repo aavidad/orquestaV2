@@ -153,17 +153,35 @@ func (repository *Repository) ApplyIntake(
 		}
 		return record, false, nil
 	}
+	record, err = applyIntakeMutationInTransaction(
+		ctx, transaction, state, snapshotJSON,
+	)
+	if err != nil {
+		return application.IntakeRecord{}, false, err
+	}
+	if err := commit(transaction); err != nil {
+		return application.IntakeRecord{}, false, err
+	}
+	return record, true, nil
+}
+
+func applyIntakeMutationInTransaction(
+	ctx context.Context,
+	transaction *sql.Tx,
+	state application.IntakeApplyState,
+	snapshotJSON []byte,
+) (application.IntakeRecord, error) {
 	if err := requirePersistedIntakeAuthorization(
 		ctx, transaction, state.AuthorizationReceipt, state.ActorRef, state.ProjectRef,
 	); err != nil {
-		return application.IntakeRecord{}, false, err
+		return application.IntakeRecord{}, err
 	}
 	if frozen, err := intakeDossierConfirmed(
 		ctx, transaction, state.ActorRef, state.ProjectRef, state.State.Ref(),
 	); err != nil {
-		return application.IntakeRecord{}, false, err
+		return application.IntakeRecord{}, err
 	} else if frozen {
-		return application.IntakeRecord{}, false, conflict(
+		return application.IntakeRecord{}, conflict(
 			errors.New("sqlite.intake_dossier_confirmed"),
 		)
 	}
@@ -171,10 +189,10 @@ func (repository *Repository) ApplyIntake(
 		ctx, transaction, state.ActorRef, state.ProjectRef, state.State.Ref(),
 	)
 	if err != nil {
-		return application.IntakeRecord{}, false, err
+		return application.IntakeRecord{}, err
 	}
 	if len(chain) == 0 || chain[len(chain)-1].State.Revision() != state.ExpectedRevision {
-		return application.IntakeRecord{}, false, conflict(
+		return application.IntakeRecord{}, conflict(
 			errors.New("sqlite.intake_revision_conflict"),
 		)
 	}
@@ -183,12 +201,12 @@ func (repository *Repository) ApplyIntake(
 		State: state.State, Receipt: state.Receipt,
 	})
 	if err := application.ValidateIntakeChain(chain); err != nil {
-		return application.IntakeRecord{}, false, invalid(errors.Join(
+		return application.IntakeRecord{}, invalid(errors.Join(
 			errors.New("sqlite.intake_apply_chain_invalid"), err,
 		))
 	}
 	if err := insertIntakeReceipt(ctx, transaction, state.Receipt, snapshotJSON); err != nil {
-		return application.IntakeRecord{}, false, err
+		return application.IntakeRecord{}, err
 	}
 	result, err := transaction.ExecContext(ctx, `
 UPDATE intake_states
@@ -201,23 +219,20 @@ WHERE actor_ref = ? AND project_ref = ? AND state_ref = ? AND revision = ?`,
 		int64(state.ExpectedRevision),
 	)
 	if err != nil {
-		return application.IntakeRecord{}, false, mapDatabaseError(err)
+		return application.IntakeRecord{}, mapDatabaseError(err)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil {
-		return application.IntakeRecord{}, false, mapDatabaseError(err)
+		return application.IntakeRecord{}, mapDatabaseError(err)
 	}
 	if affected != 1 {
-		return application.IntakeRecord{}, false, conflict(errors.New("sqlite.intake_revision_conflict"))
+		return application.IntakeRecord{}, conflict(errors.New("sqlite.intake_revision_conflict"))
 	}
-	record, err = readIntakeRecordByReceipt(ctx, transaction, state.Receipt.Ref)
+	record, err := readIntakeRecordByReceipt(ctx, transaction, state.Receipt.Ref)
 	if err != nil {
-		return application.IntakeRecord{}, false, err
+		return application.IntakeRecord{}, err
 	}
-	if err := commit(transaction); err != nil {
-		return application.IntakeRecord{}, false, err
-	}
-	return record, true, nil
+	return record, nil
 }
 
 func insertIntakeReceipt(

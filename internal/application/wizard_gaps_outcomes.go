@@ -45,63 +45,39 @@ type WizardGapsNoOpReplayRequest struct {
 
 type WizardGapsNoOpReservation struct {
 	Outcome              WizardGapsNoOpOutcome
+	Input                WizardGapsInputReceipt
 	AuthorizationReceipt identity.AuthorizationReceipt
 }
 
-// WizardGapsOutcomeStore owns only immutable no-op request reservations.
-// IntakeStore remains the sole authority for Intake mutations and revisions.
-type WizardGapsOutcomeStore interface {
-	ReplayWizardGapsNoOp(
+// WizardGapsStore is one combined state authority. Embedding IntakeStore makes
+// it impossible to read source Intake from one repository while atomically
+// committing the Wizard outcome to another.
+type WizardGapsStore interface {
+	IntakeStore
+	ReplayWizardGapsInput(
 		context.Context,
-		WizardGapsNoOpReplayRequest,
-	) (WizardGapsNoOpOutcome, bool, error)
+		WizardGapsInputReplayRequest,
+	) (WizardGapsInputRecord, bool, error)
 	ReserveWizardGapsNoOp(
 		context.Context,
 		WizardGapsNoOpReservation,
-	) (WizardGapsNoOpOutcome, bool, error)
+	) (WizardGapsInputRecord, bool, error)
+	ApplyWizardGapsMutation(
+		context.Context,
+		WizardGapsMutationReservation,
+	) (WizardGapsInputRecord, bool, error)
 }
 
 func wizardGapsNoOpReplayRequest(
-	request ApplyWizardGapsRequest,
-	evaluatorIdentity intake.DerivationIdentity,
-) (WizardGapsNoOpReplayRequest, error) {
-	factsJSON, err := json.Marshal(request.Facts)
-	if err != nil {
-		return WizardGapsNoOpReplayRequest{}, errors.New(
-			"application.wizard_gaps_facts_invalid",
-		)
-	}
-	packRefs := make([]string, len(request.PackRefs))
-	for index, ref := range request.PackRefs {
-		packRefs[index] = ref.String()
-	}
-	packRefsJSON, err := json.Marshal(packRefs)
-	if err != nil {
-		return WizardGapsNoOpReplayRequest{}, errors.New(
-			"application.wizard_gaps_pack_refs_invalid",
-		)
-	}
-	fingerprint := fingerprintFields(
-		"orquesta.wizard.gaps.noop.request.v1",
-		request.ActorRef.String(),
-		request.ProjectRef.String(),
-		string(request.StateRef),
-		strconv.FormatUint(uint64(request.ExpectedRevision), 10),
-		string(request.Origin),
-		string(factsJSON),
-		string(packRefsJSON),
-		evaluatorIdentity.Schema,
-		evaluatorIdentity.Version,
-		evaluatorIdentity.SemanticDigest,
-		request.AuthorizationReceipt.Ref(),
-	)
+	request WizardGapsInputReplayRequest,
+) WizardGapsNoOpReplayRequest {
 	return WizardGapsNoOpReplayRequest{
-		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
+		RequestRef: request.RequestRef, RequestFingerprint: request.RequestFingerprint,
 		ActorRef: request.ActorRef, ProjectRef: request.ProjectRef,
 		StateRef: request.StateRef, ExpectedRevision: request.ExpectedRevision,
-		EvaluatorIdentity:       evaluatorIdentity,
-		AuthorizationReceiptRef: request.AuthorizationReceipt.Ref(),
-	}, nil
+		EvaluatorIdentity:       request.EvaluatorIdentity,
+		AuthorizationReceiptRef: request.AuthorizationReceiptRef,
+	}
 }
 
 func buildWizardGapsNoOpOutcome(

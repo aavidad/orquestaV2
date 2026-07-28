@@ -318,11 +318,16 @@
           "input_durability": {
             "type": "object",
             "properties": {
+              "receipt_ref": {"type": "string"},
+              "source_intake_receipt_ref": {"type": "string"},
               "selections": {"type": "string"},
+              "selections_digest": {"type": "string"},
               "facts": {"type": "string"},
-              "pack_refs": {"type": "string"}
+              "facts_digest": {"type": "string"},
+              "pack_refs": {"type": "string"},
+              "pack_refs_digest": {"type": "string"}
             },
-            "required": ["selections", "facts", "pack_refs"],
+            "required": ["receipt_ref", "source_intake_receipt_ref", "selections", "selections_digest", "facts", "facts_digest", "pack_refs", "pack_refs_digest"],
             "additionalProperties": false
           },
           "evaluator_identity": {

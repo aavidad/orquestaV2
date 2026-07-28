@@ -15,7 +15,6 @@ func TestOrchestratorWizardGapsBindsAuthenticatedScopeAndSharedWriter(t *testing
 	system := newIntakeOrchestratorTestSystem(t)
 	var err error
 	system.orchestrator.wizardGaps, err = NewWizardGapsService(
-		system.orchestrator.intake,
 		system.store,
 	)
 	if err != nil {
@@ -70,7 +69,6 @@ func TestOrchestratorDeniedWizardGapsDoesNotReachSharedWriter(t *testing.T) {
 	system := newIntakeOrchestratorTestSystem(t)
 	var err error
 	system.orchestrator.wizardGaps, err = NewWizardGapsService(
-		system.orchestrator.intake,
 		system.store,
 	)
 	if err != nil {
@@ -123,8 +121,9 @@ func TestOrchestratorWithoutIntakeStoreRejectsWizardGaps(t *testing.T) {
 func TestOrchestratorRejectsPartialWizardGapsStoreComposition(t *testing.T) {
 	store := newMemoryIntakeStore()
 	for name, dependencies := range map[string]Dependencies{
-		"intake_without_outcomes": {IntakeStore: store},
-		"outcomes_without_intake": {WizardGapsOutcomes: store},
+		"split_brain": {
+			IntakeStore: store, WizardGapsStore: newMemoryIntakeStore(),
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := New(dependencies)

@@ -83,8 +83,7 @@ func (system *sqliteIntakeDossierConfirmationSystem) newOrchestrator(
 ) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
-		State: state, IntakeStore: system.repository,
-		WizardGapsOutcomes: system.repository,
+		State: state, WizardGapsStore: system.repository,
 		IntakeDossierStore: system.repository,
 		Access:             system.repository, Launcher: system.external,
 		Observer:   system.external,

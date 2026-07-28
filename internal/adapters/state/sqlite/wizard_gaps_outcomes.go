@@ -9,7 +9,7 @@ import (
 	"orquesta/internal/intake"
 )
 
-var _ application.WizardGapsOutcomeStore = (*Repository)(nil)
+var _ application.WizardGapsStore = (*Repository)(nil)
 
 func (repository *Repository) ReplayWizardGapsNoOp(
 	ctx context.Context,
@@ -36,29 +36,41 @@ func (repository *Repository) ReplayWizardGapsNoOp(
 func (repository *Repository) ReserveWizardGapsNoOp(
 	ctx context.Context,
 	reservation application.WizardGapsNoOpReservation,
-) (application.WizardGapsNoOpOutcome, bool, error) {
+) (application.WizardGapsInputRecord, bool, error) {
 	outcome := reservation.Outcome
 	if err := validateWizardGapsNoOpReservation(reservation); err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, invalid(err)
+		return application.WizardGapsInputRecord{}, false, invalid(err)
+	}
+	packRefsJSON, selectionsJSON, err := encodeWizardGapsInput(reservation.Input)
+	if err != nil {
+		return application.WizardGapsInputRecord{}, false, invalid(err)
 	}
 	transaction, err := beginTransaction(ctx, repository)
 	if err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, err
+		return application.WizardGapsInputRecord{}, false, err
 	}
 	defer func() { _ = transaction.Rollback() }()
 
-	replayRequest := wizardGapsNoOpReplayRequest(outcome)
-	replayed, found, err := readWizardGapsNoOp(
-		ctx, transaction, replayRequest,
-	)
+	inputReplay := wizardGapsInputReplayRequest(reservation.Input)
+	replayed, found, err := readWizardGapsInput(ctx, transaction, inputReplay)
 	if err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, err
+		return application.WizardGapsInputRecord{}, false, err
 	}
 	if found {
 		if err := commit(transaction); err != nil {
-			return application.WizardGapsNoOpOutcome{}, false, err
+			return application.WizardGapsInputRecord{}, false, err
 		}
 		return replayed, false, nil
+	}
+	replayRequest := wizardGapsNoOpReplayRequest(outcome)
+	if _, found, err := readWizardGapsNoOp(
+		ctx, transaction, replayRequest,
+	); err != nil {
+		return application.WizardGapsInputRecord{}, false, err
+	} else if found {
+		return application.WizardGapsInputRecord{}, false, conflict(
+			errors.New("sqlite.wizard_gaps_input_late_attachment_forbidden"),
+		)
 	}
 	if err := requirePersistedIntakeAuthorization(
 		ctx,
@@ -67,7 +79,7 @@ func (repository *Repository) ReserveWizardGapsNoOp(
 		outcome.ActorRef,
 		outcome.ProjectRef,
 	); err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, err
+		return application.WizardGapsInputRecord{}, false, err
 	}
 	current, err := readCurrentIntakeRecord(
 		ctx,
@@ -77,12 +89,12 @@ func (repository *Repository) ReserveWizardGapsNoOp(
 		outcome.StateRef,
 	)
 	if err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, err
+		return application.WizardGapsInputRecord{}, false, err
 	}
 	if current.State.Revision() != outcome.ExpectedRevision ||
 		current.Receipt.Ref != outcome.SourceIntakeReceiptRef ||
 		current.Receipt != outcome.Record.Receipt {
-		return application.WizardGapsNoOpOutcome{}, false, conflict(
+		return application.WizardGapsInputRecord{}, false, conflict(
 			errors.New("sqlite.wizard_gaps_outcome_revision_conflict"),
 		)
 	}
@@ -101,21 +113,45 @@ INSERT INTO wizard_gaps_outcomes(
 		outcome.AuthorizationReceiptRef,
 	)
 	if err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, mapDatabaseError(err)
+		return application.WizardGapsInputRecord{}, false, mapDatabaseError(err)
 	}
-	persisted, found, err := readWizardGapsNoOp(
+	persistedOutcome, found, err := readWizardGapsNoOp(
 		ctx, transaction, replayRequest,
 	)
 	if err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, err
+		return application.WizardGapsInputRecord{}, false, err
 	}
 	if !found {
-		return application.WizardGapsNoOpOutcome{}, false, invalid(
+		return application.WizardGapsInputRecord{}, false, invalid(
 			errors.New("sqlite.wizard_gaps_outcome_missing_after_insert"),
 		)
 	}
+	record := application.WizardGapsInputRecord{
+		Receipt:       reservation.Input,
+		SourceRecord:  persistedOutcome.Record,
+		OutcomeRecord: persistedOutcome.Record,
+	}
+	if err := application.ValidateWizardGapsInputRecord(record); err != nil {
+		return application.WizardGapsInputRecord{}, false, invalid(err)
+	}
+	if err := insertWizardGapsInput(
+		ctx, transaction, reservation.Input, packRefsJSON, selectionsJSON,
+	); err != nil {
+		return application.WizardGapsInputRecord{}, false, err
+	}
+	persisted, found, err := readWizardGapsInput(
+		ctx, transaction, inputReplay,
+	)
+	if err != nil {
+		return application.WizardGapsInputRecord{}, false, err
+	}
+	if !found {
+		return application.WizardGapsInputRecord{}, false, invalid(
+			errors.New("sqlite.wizard_gaps_input_missing_after_insert"),
+		)
+	}
 	if err := commit(transaction); err != nil {
-		return application.WizardGapsNoOpOutcome{}, false, err
+		return application.WizardGapsInputRecord{}, false, err
 	}
 	return persisted, true, nil
 }
@@ -192,6 +228,28 @@ func validateWizardGapsNoOpReservation(
 	}
 	if uint64(outcome.ExpectedRevision) > maxSQLiteInteger {
 		return errors.New("sqlite.wizard_gaps_outcome_revision_invalid")
+	}
+	input := reservation.Input
+	if input.OutcomeKind != application.WizardGapsRequestOutcomeNoOp ||
+		input.OutcomeReceiptRef != outcome.Ref ||
+		input.RequestRef != outcome.RequestRef ||
+		input.RequestFingerprint != outcome.RequestFingerprint ||
+		input.ActorRef != outcome.ActorRef ||
+		input.ProjectRef != outcome.ProjectRef ||
+		input.StateRef != outcome.StateRef ||
+		input.ExpectedRevision != outcome.ExpectedRevision ||
+		input.SourceIntakeReceiptRef != outcome.SourceIntakeReceiptRef ||
+		input.EvaluatorIdentity != outcome.EvaluatorIdentity ||
+		input.AuthorizationReceiptRef != outcome.AuthorizationReceiptRef {
+		return errors.New("sqlite.wizard_gaps_input_outcome_binding_invalid")
+	}
+	if err := application.ValidateWizardGapsInputRecord(
+		application.WizardGapsInputRecord{
+			Receipt: input, SourceRecord: outcome.Record,
+			OutcomeRecord: outcome.Record,
+		},
+	); err != nil {
+		return err
 	}
 	return validateIntakeAuthorization(
 		reservation.AuthorizationReceipt,

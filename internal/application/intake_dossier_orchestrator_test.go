@@ -11,18 +11,25 @@ import (
 	"orquesta/internal/identity"
 )
 
-func (store *dossierIntakeStore) ReplayWizardGapsNoOp(
+func (store *dossierIntakeStore) ReplayWizardGapsInput(
 	context.Context,
-	WizardGapsNoOpReplayRequest,
-) (WizardGapsNoOpOutcome, bool, error) {
-	return WizardGapsNoOpOutcome{}, false, errors.New("test.unused")
+	WizardGapsInputReplayRequest,
+) (WizardGapsInputRecord, bool, error) {
+	return WizardGapsInputRecord{}, false, errors.New("test.unused")
 }
 
 func (store *dossierIntakeStore) ReserveWizardGapsNoOp(
 	context.Context,
 	WizardGapsNoOpReservation,
-) (WizardGapsNoOpOutcome, bool, error) {
-	return WizardGapsNoOpOutcome{}, false, errors.New("test.unused")
+) (WizardGapsInputRecord, bool, error) {
+	return WizardGapsInputRecord{}, false, errors.New("test.unused")
+}
+
+func (store *dossierIntakeStore) ApplyWizardGapsMutation(
+	context.Context,
+	WizardGapsMutationReservation,
+) (WizardGapsInputRecord, bool, error) {
+	return WizardGapsInputRecord{}, false, errors.New("test.unused")
 }
 
 func TestOrchestratorIntakeDossierUsesAuthenticatedScopeAndExactPermissions(t *testing.T) {
@@ -263,8 +270,7 @@ func newIntakeDossierOrchestratorTestSystem(
 		t.Fatal(err)
 	}
 	orchestrator, err := New(Dependencies{
-		State: repository, IntakeStore: dossier.intakes,
-		WizardGapsOutcomes: dossier.intakes,
+		State: repository, WizardGapsStore: dossier.intakes,
 		IntakeDossierStore: dossiers, Access: accessRepository,
 		Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts:        newMemoryArtifactStore(),

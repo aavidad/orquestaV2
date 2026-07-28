@@ -15,6 +15,7 @@ type memoryIntakeStore struct {
 	current            map[string]IntakeRecord
 	requests           map[string]IntakeRecord
 	wizardGapsNoOps    map[string]WizardGapsNoOpOutcome
+	wizardGapsInputs   map[string]WizardGapsInputRecord
 	replayCalls        int
 	createCalls        int
 	getCalls           int
@@ -25,9 +26,10 @@ type memoryIntakeStore struct {
 
 func newMemoryIntakeStore() *memoryIntakeStore {
 	return &memoryIntakeStore{
-		current:         make(map[string]IntakeRecord),
-		requests:        make(map[string]IntakeRecord),
-		wizardGapsNoOps: make(map[string]WizardGapsNoOpOutcome),
+		current:          make(map[string]IntakeRecord),
+		requests:         make(map[string]IntakeRecord),
+		wizardGapsNoOps:  make(map[string]WizardGapsNoOpOutcome),
+		wizardGapsInputs: make(map[string]WizardGapsInputRecord),
 	}
 }
 
@@ -156,20 +158,40 @@ func (store *memoryIntakeStore) ReplayWizardGapsNoOp(
 	return outcome, true, nil
 }
 
+func (store *memoryIntakeStore) ReplayWizardGapsInput(
+	_ context.Context,
+	request WizardGapsInputReplayRequest,
+) (WizardGapsInputRecord, bool, error) {
+	store.wizardReplayCalls++
+	record, found := store.wizardGapsInputs[intakeRequestKey(
+		request.ActorRef, request.ProjectRef, request.RequestRef,
+	)]
+	if !found {
+		return WizardGapsInputRecord{}, false, nil
+	}
+	if err := validateWizardGapsInputRecord(request, record); err != nil {
+		return WizardGapsInputRecord{}, false, err
+	}
+	return record, true, nil
+}
+
 func (store *memoryIntakeStore) ReserveWizardGapsNoOp(
 	ctx context.Context,
 	reservation WizardGapsNoOpReservation,
-) (WizardGapsNoOpOutcome, bool, error) {
+) (WizardGapsInputRecord, bool, error) {
 	store.wizardReserveCalls++
 	outcome := reservation.Outcome
-	request := WizardGapsNoOpReplayRequest{
-		RequestRef: outcome.RequestRef, RequestFingerprint: outcome.RequestFingerprint,
-		ActorRef: outcome.ActorRef, ProjectRef: outcome.ProjectRef,
-		StateRef: outcome.StateRef, ExpectedRevision: outcome.ExpectedRevision,
-		EvaluatorIdentity:       outcome.EvaluatorIdentity,
-		AuthorizationReceiptRef: outcome.AuthorizationReceiptRef,
+	request := WizardGapsInputReplayRequest{
+		RequestRef:              reservation.Input.RequestRef,
+		RequestFingerprint:      reservation.Input.RequestFingerprint,
+		ActorRef:                reservation.Input.ActorRef,
+		ProjectRef:              reservation.Input.ProjectRef,
+		StateRef:                reservation.Input.StateRef,
+		ExpectedRevision:        reservation.Input.ExpectedRevision,
+		EvaluatorIdentity:       reservation.Input.EvaluatorIdentity,
+		AuthorizationReceiptRef: reservation.Input.AuthorizationReceiptRef,
 	}
-	if replayed, found, err := store.ReplayWizardGapsNoOp(
+	if replayed, found, err := store.ReplayWizardGapsInput(
 		ctx, request,
 	); err != nil || found {
 		return replayed, false, err
@@ -177,22 +199,99 @@ func (store *memoryIntakeStore) ReserveWizardGapsNoOp(
 	if _, reserved := store.requests[intakeRequestKey(
 		outcome.ActorRef, outcome.ProjectRef, outcome.RequestRef,
 	)]; reserved {
-		return WizardGapsNoOpOutcome{}, false, &StateError{Code: StateConflict}
+		return WizardGapsInputRecord{}, false, &StateError{Code: StateConflict}
 	}
 	key := intakeStateKey(outcome.ActorRef, outcome.ProjectRef, outcome.StateRef)
 	current, found := store.current[key]
 	if !found {
-		return WizardGapsNoOpOutcome{}, false, &StateError{Code: StateNotFound}
+		return WizardGapsInputRecord{}, false, &StateError{Code: StateNotFound}
 	}
 	if current.State.Revision() != outcome.ExpectedRevision ||
 		current.Receipt.Ref != outcome.SourceIntakeReceiptRef ||
 		current.Receipt != outcome.Record.Receipt {
-		return WizardGapsNoOpOutcome{}, false, &StateError{Code: StateConflict}
+		return WizardGapsInputRecord{}, false, &StateError{Code: StateConflict}
 	}
-	store.wizardGapsNoOps[intakeRequestKey(
+	requestKey := intakeRequestKey(
 		outcome.ActorRef, outcome.ProjectRef, outcome.RequestRef,
-	)] = outcome
-	return outcome, true, nil
+	)
+	record := WizardGapsInputRecord{
+		Receipt: reservation.Input, SourceRecord: current, OutcomeRecord: current,
+	}
+	if err := ValidateWizardGapsInputRecord(record); err != nil {
+		return WizardGapsInputRecord{}, false, err
+	}
+	store.wizardGapsNoOps[requestKey] = outcome
+	store.wizardGapsInputs[requestKey] = record
+	return record, true, nil
+}
+
+func (store *memoryIntakeStore) ApplyWizardGapsMutation(
+	ctx context.Context,
+	reservation WizardGapsMutationReservation,
+) (WizardGapsInputRecord, bool, error) {
+	request := WizardGapsInputReplayRequest{
+		RequestRef:              reservation.Input.RequestRef,
+		RequestFingerprint:      reservation.Input.RequestFingerprint,
+		ActorRef:                reservation.Input.ActorRef,
+		ProjectRef:              reservation.Input.ProjectRef,
+		StateRef:                reservation.Input.StateRef,
+		ExpectedRevision:        reservation.Input.ExpectedRevision,
+		EvaluatorIdentity:       reservation.Input.EvaluatorIdentity,
+		AuthorizationReceiptRef: reservation.Input.AuthorizationReceiptRef,
+	}
+	if replayed, found, err := store.ReplayWizardGapsInput(
+		ctx, request,
+	); err != nil || found {
+		return replayed, false, err
+	}
+	requestKey := intakeRequestKey(
+		reservation.Input.ActorRef,
+		reservation.Input.ProjectRef,
+		reservation.Input.RequestRef,
+	)
+	if _, found := store.requests[requestKey]; found {
+		return WizardGapsInputRecord{}, false, &StateError{
+			Code: StateConflict, Cause: errors.New("test.wizard_input_request_exists"),
+		}
+	}
+	stateKey := intakeStateKey(
+		reservation.Input.ActorRef,
+		reservation.Input.ProjectRef,
+		reservation.Input.StateRef,
+	)
+	source, found := store.current[stateKey]
+	if !found {
+		return WizardGapsInputRecord{}, false, &StateError{Code: StateNotFound}
+	}
+	state := reservation.Intake
+	if source.State.Revision() != state.ExpectedRevision ||
+		state.State.Revision() != state.ExpectedRevision+1 ||
+		source.Receipt.Ref != reservation.Input.SourceIntakeReceiptRef {
+		return WizardGapsInputRecord{}, false, &StateError{
+			Code: StateConflict, Cause: errors.New("test.wizard_input_source_mismatch"),
+		}
+	}
+	outcome := IntakeRecord{
+		ActorRef: state.ActorRef, ProjectRef: state.ProjectRef,
+		State: state.State, Receipt: state.Receipt,
+	}
+	record := WizardGapsInputRecord{
+		Receipt: reservation.Input, SourceRecord: source, OutcomeRecord: outcome,
+	}
+	if err := ValidateWizardGapsInputRecord(record); err != nil {
+		return WizardGapsInputRecord{}, false, &StateError{
+			Code: StateConflict,
+			Cause: errors.Join(
+				errors.New("test.wizard_input_record_invalid"),
+				err,
+			),
+		}
+	}
+	store.current[stateKey] = outcome
+	store.requests[requestKey] = outcome
+	store.wizardGapsInputs[requestKey] = record
+	store.applyCalls++
+	return record, true, nil
 }
 
 func TestIntakeServiceCreatesAndAppliesChatAndFormToOneState(t *testing.T) {

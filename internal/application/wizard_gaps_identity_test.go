@@ -168,7 +168,6 @@ func TestWizardGapsHistoricalEvaluatorReplaySurvivesRegistryEvolution(
 	}
 	v2 := testWizardGapsEvaluator{identity: v2Identity, delegate: v1}
 	evolved, err := newWizardGapsServiceWithEvaluatorResolver(
-		system.service,
 		system.store,
 		testWizardGapsEvaluatorResolver{evaluators: []wizardGapsEvaluator{v1, v2}},
 	)

@@ -310,9 +310,14 @@ func assertV23WizardGapsPublicResult(
 			ReceiptRef string `json:"receipt_ref"`
 		} `json:"request_outcome"`
 		InputDurability struct {
-			Selections string `json:"selections"`
-			Facts      string `json:"facts"`
-			PackRefs   string `json:"pack_refs"`
+			ReceiptRef             string `json:"receipt_ref"`
+			SourceIntakeReceiptRef string `json:"source_intake_receipt_ref"`
+			Selections             string `json:"selections"`
+			SelectionsDigest       string `json:"selections_digest"`
+			Facts                  string `json:"facts"`
+			FactsDigest            string `json:"facts_digest"`
+			PackRefs               string `json:"pack_refs"`
+			PackRefsDigest         string `json:"pack_refs_digest"`
 		} `json:"input_durability"`
 		EvaluatorIdentity struct {
 			Schema         string `json:"schema"`
@@ -335,9 +340,14 @@ func assertV23WizardGapsPublicResult(
 		!output.RequestRefReserved ||
 		output.RequestOutcome.Kind != "intake_mutation" ||
 		output.RequestOutcome.ReceiptRef != output.Intake.ReceiptRef ||
-		output.InputDurability.Selections != "intake_decisions" ||
-		output.InputDurability.Facts != "request_scoped" ||
-		output.InputDurability.PackRefs != "request_scoped" ||
+		output.InputDurability.ReceiptRef == "" ||
+		output.InputDurability.SourceIntakeReceiptRef == "" ||
+		output.InputDurability.Selections != "wizard_gaps_input_receipt" ||
+		output.InputDurability.SelectionsDigest == "" ||
+		output.InputDurability.Facts != "wizard_gaps_input_receipt" ||
+		output.InputDurability.FactsDigest == "" ||
+		output.InputDurability.PackRefs != "wizard_gaps_input_receipt" ||
+		output.InputDurability.PackRefsDigest == "" ||
 		output.EvaluatorIdentity.Schema != wantIdentity.Schema ||
 		output.EvaluatorIdentity.Version != wantIdentity.Version ||
 		output.EvaluatorIdentity.SemanticDigest != wantIdentity.SemanticDigest {
@@ -372,5 +382,9 @@ func wizardGapsPublicEvaluation(
 	}
 	delete(output, "intake")
 	delete(output, "request_outcome")
+	if durability, ok := output["input_durability"].(map[string]any); ok {
+		delete(durability, "receipt_ref")
+		delete(durability, "source_intake_receipt_ref")
+	}
 	return output
 }
