@@ -422,6 +422,17 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 			},
 		},
 		{
+			ID: "orquesta.intakes.wizard.gaps.apply", Handler: "ApplyWizardGaps",
+			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
+			ForbiddenPayloadFields: wantForbidden,
+			OutputKey:              "intake",
+			RequiredEnvelopeFields: []string{
+				"intake", "evaluation", "evaluation_replay_exact", "request_ref_reserved",
+				"request_outcome", "input_durability", "evaluator_identity",
+			},
+			RequiredOutputFields: []string{"intake_ref", "project_ref", "revision", "receipt_ref"},
+		},
+		{
 			ID:         "orquesta.intakes.wizard.dossier.prepare",
 			Handler:    "PrepareWizardDossier",
 			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
@@ -497,6 +508,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"failed_change_does_not_mutate_the_current_snapshot",
 		"help_and_clarification_do_not_consume_round_or_revision",
 		"question_references_at_least_one_recorded_gap_or_contradiction",
+		"public_wizard_gap_application_exposes_request_scoped_replay_boundary",
+		"public_wizard_gap_application_exposes_typed_request_outcome_receipt",
 		"exact_dossier_confirmation_freezes_it_and_creates_one_causal_goal",
 		"required_test_runs_named_contract_and_two_negatives",
 		"selected_and_recommended_options_coexist_when_they_differ",
@@ -565,6 +578,29 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		},
 		RejectNoTestsToRun: true,
 	}
+	newWizardGapTests := []string{
+		"TestOrchestratorWizardGapsBindsAuthenticatedScopeAndSharedWriter",
+		"TestOrchestratorDeniedWizardGapsDoesNotReachSharedWriter",
+		"TestOrchestratorWithoutIntakeStoreRejectsWizardGaps",
+		"TestWizardGapsCommandBindsAuthorityAndProjectsCompleteEvaluation",
+		"TestWizardGapsCommandRejectsUnknownPackAndSpoofedAuthorityBeforeUseCase",
+		"TestWizardGapsCommandHasCanonicalHTTPMCPAndCLIBindings",
+		"TestV23WizardGapsCLIAndMCPUseSharedSQLiteIntakeWriter",
+		"TestWizardGapsNoOpCreatesNoIntakeMutationAndReservesOutcome",
+		"TestWizardGapsNoOpReservationConflictWithoutReplayFailsClosed",
+		"TestWizardGapsNoOpReservesRequestRefAndReplaysHistoricalResult",
+		"TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart",
+		"TestV23WizardGapsNoOpReplayIsExactAfterLaterMutationAndRestart",
+		"TestOrchestratorRejectsPartialWizardGapsStoreComposition",
+		"TestWizardGapsCommandRejectsMissingApplicationRequestOutcome",
+		"TestWizardGapsSQLiteConcurrentExactNoOpReservesOneOutcome",
+		"TestWizardGapsSQLiteConcurrentDivergentNoOpAdmitsOnePayload",
+		"TestWizardGapsSQLiteConcurrentNoOpAndMutationReserveOneEffect",
+		"TestV23WizardGapsRecoveryRejectsCorruptedNoOpOutcomes",
+	}
+	wantIntegrationGate.TestNames = append(wantIntegrationGate.TestNames, newWizardGapTests...)
+	wantIntegrationGate.Command = strings.TrimSuffix(wantIntegrationGate.Command, ")$'") +
+		"|" + strings.Join(newWizardGapTests, "|") + ")$'"
 	if !reflect.DeepEqual(fixture.IntegrationGate, wantIntegrationGate) {
 		t.Fatalf("invalid integration gate: %+v", fixture.IntegrationGate)
 	}
@@ -592,21 +628,25 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"public_pure_context_command",
 		"public_recommendation_batch_command",
 		"public_wizard_dossier_prepare",
+		"public_wizard_gap_application",
 		"versioned_wizard_gaps_evaluator_identity",
 		"wizard_gap_application_compiler_fail_closed",
 		"wizard_catalog_foundation_and_15_domain_packs",
+		"wizard_gap_explicit_outcome_receipt",
+		"wizard_gap_noop_request_reservation_and_historical_replay",
+		"wizard_gap_reconciliation",
 	}) {
 		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
 	}
 	wantDeferred := []string{
 		"dossier_generation", "roadmap_promotion", "seal_and_receipt",
-		"web_surface", "wizard_gap_public_binding_and_reconciliation",
+		"web_surface", "wizard_gap_input_durability_and_exact_evaluation_replay",
 		"wizard_help_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
 	}
-	if fixture.NextDependency != "wizard_gap_reconciliation_before_public_binding" {
+	if fixture.NextDependency != "wizard_gap_input_durability_before_exact_evaluation_replay" {
 		t.Fatalf("invalid next dependency: %q", fixture.NextDependency)
 	}
 	wantCandidateFiles := []string{
@@ -646,12 +686,17 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/application/intake_dossier_snapshot.go",
 		"internal/application/intake_dossier_snapshot_test.go",
 		"internal/application/intake_dossier_test.go",
+		"internal/application/intake_dossier_orchestrator_test.go",
 		"internal/application/intake_chain.go",
 		"internal/application/intake_derivation_test.go",
 		"internal/application/intake_orchestrator.go",
 		"internal/application/intake_service.go",
+		"internal/application/intake_service_test.go",
+		"internal/application/orchestrator.go",
 		"internal/application/wizard_gaps.go",
 		"internal/application/wizard_gaps_identity_test.go",
+		"internal/application/wizard_gaps_orchestrator_test.go",
+		"internal/application/wizard_gaps_outcomes.go",
 		"internal/application/wizard_gaps_preflight.go",
 		"internal/application/wizard_gaps_test.go",
 		"internal/adapters/state/sqlite/intake_dossier.go",
@@ -661,21 +706,40 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/adapters/state/sqlite/intake_dependencies_test.go",
 		"internal/adapters/state/sqlite/intake_derivation_test.go",
 		"internal/adapters/state/sqlite/intake.go",
+		"internal/adapters/state/sqlite/migrations/020_wizard_gaps_outcomes.sql",
 		"internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
 		"internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql",
 		"internal/adapters/state/sqlite/migrations/017_intake.sql",
+		"internal/adapters/state/sqlite/recovery_validation.go",
+		"internal/adapters/state/sqlite/recovery_validation_versions.go",
+		"internal/adapters/state/sqlite/recovery_validation_v23_wizard_gaps.go",
+		"internal/adapters/state/sqlite/recovery_validation_v23_wizard_gaps_test.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23_dossier.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23.go",
+		"internal/adapters/state/sqlite/repository_test.go",
+		"internal/adapters/state/sqlite/wizard_gaps_outcomes.go",
+		"internal/adapters/state/sqlite/wizard_gaps_outcomes_test.go",
 		"internal/bootstrap/command_registry_upgrade_e2e_test.go",
 		"internal/bootstrap/command_surfaces.go",
 		"internal/bootstrap/intake_e2e_test.go",
+		"internal/bootstrap/runtime.go",
+		"internal/bootstrap/wizard_gaps_public_e2e_test.go",
 		"internal/commands/handlers_intake.go",
+		"internal/commands/handlers_wizard_gaps.go",
+		"internal/commands/handlers_wizard_gaps_test.go",
+		"internal/commands/application_handlers.go",
+		"internal/commands/cmd/commandgen/main.go",
+		"internal/commands/definitions_generated.go",
+		"internal/commands/dispatcher_contract_test.go",
+		"internal/commands/mutation_replay_test.go",
 		"internal/commands/registry.json",
 		"internal/commands/registry_admission_identity.go",
 		"internal/config/integer_test.go",
 		"internal/config/keys_generated.go",
 		"internal/i18n/catalogs/en.json",
 		"internal/i18n/catalogs/es.json",
+		"internal/i18n/catalog_test.go",
+		"internal/i18n/manifest.json",
 		"internal/wizard/catalog/builtin.go",
 		"internal/wizard/catalog/catalog.go",
 		"internal/wizard/catalog/catalog_test.go",
@@ -710,7 +774,9 @@ func assertV23PublicCommandBindings(t *testing.T, bindings []v23WizardBinding) {
 	for _, definition := range commands.CanonicalDefinitions() {
 		definitions[definition.ID] = definition
 	}
+	declared := make(map[string]struct{}, len(bindings))
 	for _, binding := range bindings {
+		declared[binding.ID] = struct{}{}
 		definition, found := definitions[binding.ID]
 		if !found || definition.Handler != binding.Handler ||
 			definition.Permission != binding.Permission ||
@@ -747,6 +813,14 @@ func assertV23PublicCommandBindings(t *testing.T, bindings []v23WizardBinding) {
 		if !exists || !reflect.DeepEqual(boundOutput.Required, binding.RequiredOutputFields) {
 			t.Fatalf("%s output fields=%v want=%v", binding.ID,
 				boundOutput.Required, binding.RequiredOutputFields)
+		}
+	}
+	for id := range definitions {
+		if !strings.HasPrefix(id, "orquesta.intakes.") {
+			continue
+		}
+		if _, found := declared[id]; !found {
+			t.Fatalf("public intake command %q is missing from the V23 acceptance fixture", id)
 		}
 	}
 }
