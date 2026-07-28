@@ -1,24 +1,54 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "contract_id": "AC-V23-WIZARD",
   "implementation_status": "partial_green_unsealed",
   "task_context": {
-    "project_ref": "project:v23",
-    "goal_ref": "goal:a7b8704cc9b368213fd7c201dfc8e6c9",
-    "work_item_ref": "work-item:7e8333c215d71ea3199bb4b48fea7a15",
-    "execution_ref": "execution:1e8b0c8164d7dda5e626f43e108996f8",
+    "project_ref": "project:default",
+    "goal_ref": "goal:48a624ca7849e44622705b9d3e4ab0a4",
+    "work_item_ref": "work-item:397631cf19b01d9b9c90c2a49633ac84",
+    "execution_ref": "execution:0421bce3564edff3e62364aae6bbc590",
     "plan_generation": 1,
     "app_spec_generation": 1
   },
-  "owned_capability_ids": [
-    "WIZ-03",
-    "WIZ-04",
-    "WIZ-05",
-    "WIZ-07",
-    "WIZ-15",
-    "WIZ-18",
-    "WIZ-23"
-  ],
+  "capability_classification": {
+    "candidate": [
+      "WIZ-03",
+      "WIZ-04",
+      "WIZ-05",
+      "WIZ-07",
+      "WIZ-15",
+      "WIZ-18",
+      "WIZ-23"
+    ],
+    "partial": [
+      "WIZ-01",
+      "WIZ-02",
+      "WIZ-06",
+      "WIZ-08",
+      "WIZ-09",
+      "WIZ-10",
+      "WIZ-11",
+      "WIZ-16",
+      "WIZ-17",
+      "WIZ-19",
+      "WIZ-20",
+      "WIZ-21",
+      "WIZ-22",
+      "WIZ-24",
+      "WIZ-25",
+      "STG-01",
+      "STG-03",
+      "STG-07"
+    ],
+    "pending": [
+      "WIZ-13",
+      "UI-05"
+    ],
+    "rejected": [
+      "WIZ-12",
+      "WIZ-14"
+    ]
+  },
   "phase_criteria": [
     "criterion:v23-one-versioned-intake",
     "criterion:v23-gap-derived-questions",
@@ -199,7 +229,7 @@
     "reject_no_tests_to_run": true
   },
   "integration_gate": {
-    "command": "go test -mod=vendor -count=1 ./internal/intake ./internal/wizard/catalog ./internal/wizard/gaps ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt|TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier|TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier|TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress|TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings|TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord|TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze|TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence|TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure|TestV23DossierConfirmationRecoveryRejectsTamperedBinding|TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart|TestDerivationIdentityIsValidatedAndRecordedInSingleMutationHistory|TestBuiltInV1SemanticDigestGolden|TestEvaluatorV1SourceDigestGolden|TestEvaluatorV1SemanticDigestGolden|TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter|TestWizardGapsRejectsAlteredCanonicalAnsweredQuestionPayload|TestIntakeSQLiteDerivationIdentitySurvivesRestartAndReplay|TestOrchestratorWizardGapsBindsAuthenticatedScopeAndSharedWriter|TestOrchestratorDeniedWizardGapsDoesNotReachSharedWriter|TestOrchestratorWithoutIntakeStoreRejectsWizardGaps|TestWizardGapsCommandBindsAuthorityAndProjectsCompleteEvaluation|TestWizardGapsCommandRejectsUnknownPackAndSpoofedAuthorityBeforeUseCase|TestWizardGapsCommandHasCanonicalHTTPMCPAndCLIBindings|TestV23WizardGapsCLIAndMCPUseSharedSQLiteIntakeWriter|TestWizardGapsNoOpCreatesNoIntakeMutationAndReservesOutcome|TestWizardGapsNoOpReservationConflictWithoutReplayFailsClosed|TestWizardGapsNoOpReservesRequestRefAndReplaysHistoricalResult|TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart|TestV23WizardGapsNoOpReplayIsExactAfterLaterMutationAndRestart|TestOrchestratorRejectsPartialWizardGapsStoreComposition|TestWizardGapsCommandRejectsMissingApplicationRequestOutcome|TestWizardGapsSQLiteConcurrentExactNoOpReservesOneOutcome|TestWizardGapsSQLiteConcurrentDivergentNoOpAdmitsOnePayload|TestWizardGapsSQLiteConcurrentNoOpAndMutationReserveOneEffect|TestV23WizardGapsRecoveryRejectsCorruptedNoOpOutcomes|TestWizardGapsInputReceiptPersistsCanonicalContextAndSelections|TestWizardGapsInputValidationRejectsCoherentContextTampering|TestWizardGapsInputEvaluationRejectsCoherentSelectionTampering|TestWizardGapsInputEvaluationRejectsCoherentMutationReceiptTampering|TestWizardGapsInputEvaluationRejectsCoherentNoOpOutcomeTampering|TestWizardGapsSQLiteMutationInputReplaysExactlyAfterRestart|TestWizardGapsSQLiteConcurrentExactMutationCommitsOneInput|TestWizardGapsSQLiteInputFailureRollsBackWholeRequest|TestV23WizardGapsInputRecoveryRejectsColumnCorruptions|TestV23WizardGapsInputRecoveryRejectsCoherentMutationSelectionTamper|TestV23WizardGapsInputRejectsCoherentMutationFingerprintTamper|TestV23WizardGapsInputRecoveryRejectsCoherentNoOpOutcomeTamper|TestV23WizardGapsInputUpgradeFromSchema20DoesNotInventLegacyInput)$'",
+    "command": "go test -mod=vendor -count=1 ./internal/intake ./internal/wizard/catalog ./internal/wizard/gaps ./internal/wizard/stages ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt|TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier|TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier|TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress|TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings|TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord|TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze|TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence|TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure|TestV23DossierConfirmationRecoveryRejectsTamperedBinding|TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart|TestDerivationIdentityIsValidatedAndRecordedInSingleMutationHistory|TestBuiltInV1SemanticDigestGolden|TestEvaluatorV1SourceDigestGolden|TestEvaluatorV1SemanticDigestGolden|TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter|TestWizardGapsRejectsAlteredCanonicalAnsweredQuestionPayload|TestIntakeSQLiteDerivationIdentitySurvivesRestartAndReplay|TestOrchestratorWizardGapsBindsAuthenticatedScopeAndSharedWriter|TestOrchestratorDeniedWizardGapsDoesNotReachSharedWriter|TestOrchestratorWithoutIntakeStoreRejectsWizardGaps|TestWizardGapsCommandBindsAuthorityAndProjectsCompleteEvaluation|TestWizardGapsCommandRejectsUnknownPackAndSpoofedAuthorityBeforeUseCase|TestWizardGapsCommandHasCanonicalHTTPMCPAndCLIBindings|TestV23WizardGapsCLIAndMCPUseSharedSQLiteIntakeWriter|TestWizardGapsNoOpCreatesNoIntakeMutationAndReservesOutcome|TestWizardGapsNoOpReservationConflictWithoutReplayFailsClosed|TestWizardGapsNoOpReservesRequestRefAndReplaysHistoricalResult|TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart|TestV23WizardGapsNoOpReplayIsExactAfterLaterMutationAndRestart|TestOrchestratorRejectsPartialWizardGapsStoreComposition|TestWizardGapsCommandRejectsMissingApplicationRequestOutcome|TestWizardGapsSQLiteConcurrentExactNoOpReservesOneOutcome|TestWizardGapsSQLiteConcurrentDivergentNoOpAdmitsOnePayload|TestWizardGapsSQLiteConcurrentNoOpAndMutationReserveOneEffect|TestV23WizardGapsRecoveryRejectsCorruptedNoOpOutcomes|TestWizardGapsInputReceiptPersistsCanonicalContextAndSelections|TestWizardGapsInputValidationRejectsCoherentContextTampering|TestWizardGapsInputEvaluationRejectsCoherentSelectionTampering|TestWizardGapsInputEvaluationRejectsCoherentMutationReceiptTampering|TestWizardGapsInputEvaluationRejectsCoherentNoOpOutcomeTampering|TestWizardGapsSQLiteMutationInputReplaysExactlyAfterRestart|TestWizardGapsSQLiteConcurrentExactMutationCommitsOneInput|TestWizardGapsSQLiteInputFailureRollsBackWholeRequest|TestV23WizardGapsInputRecoveryRejectsColumnCorruptions|TestV23WizardGapsInputRecoveryRejectsCoherentMutationSelectionTamper|TestV23WizardGapsInputRejectsCoherentMutationFingerprintTamper|TestV23WizardGapsInputRecoveryRejectsCoherentNoOpOutcomeTamper|TestV23WizardGapsInputUpgradeFromSchema20DoesNotInventLegacyInput|TestBuiltInCatalogContainsExactlySixCompleteTemplates|TestBuiltInTemplatesExposeExplicitGovernedEffects|TestCatalogAndNestedAccessorsReturnDefensiveCopies|TestCatalogSupportsConcurrentReadAndCopyMutation|TestTemplateConstructionHasDeterministicOrder|TestTemplateRejectsMissingDependencyAndCycles|TestTemplateRejectsUnorderedWriteSetConflict|TestUnitRejectsEmptyTestsAndUnresolvedCriterion|TestUnitRejectsUnsafeWritePathAndUnguardedExternalMutation|TestCatalogRejectsMissingAndConflictingTemplateDefinitions|TestPackageImportsStayPureAndDoNotReachForbiddenLayers|TestBuiltInV1CatalogDigestIsFrozen|TestTemplateDigestCoversPreviewOnlySemantics|TestBuiltInVersionAndDigestFailClosed|TestCompileWizardStagePlanCoversEveryBuiltInTemplate|TestCompileWizardStagePlanIsDeterministicAcrossRefInputOrder|TestCompileWizardStagePlanRejectsInvalidInput|TestCompileWizardStagePlanMaterializesStageDAGAsDependencyKeys|TestCompileWizardStagePlanProjectsUnrepresentableSemanticsExactly|TestCompileWizardStagePlanMapsSecurityAndEffortAxesIndependently|TestIntakeDossierProjectionGeneratesCanonicalMinimumContentAndDiagrams|TestIntakeDossierProjectionIsStableAcrossEquivalentReordering|TestIntakeDossierProjectionPreservesExactOrderSensitivePlan|TestIntakeDossierProjectionCopiesInputsOutputsAndSupportsConcurrentReads|TestIntakeDossierProjectionRejectsStructurallyIncompleteOrDivergentInput|TestIntakeDossierProjectionEscapesMarkdownAndMermaidControlSyntax|TestIntakeDossierProjectionDiagramGrowthIsLinearAndIndicesAreUnbounded|TestIntakeDossierProjectionBindsDecisionViewsToDurableIntakeRecord|TestIntakeDossierProjectionPreservesDurableDecisionOrderWhileViewsReorder|TestIntakeDossierProjectionRecordsUnjustifiedDeviationWithoutBlocking|TestPrepareWizardDossierCompilesBuiltInPlanAndPersistsOneDossier|TestPrepareWizardDossierReplaysExactHistoricalProjectionAfterIntakeAdvance|TestPrepareWizardDossierRejectsDivergenceAndStaleFirstCreation|TestPrepareWizardDossierRejectsUnknownTemplateCallerPlanAndBadAuthority|TestPrepareWizardDossierKeepsV1PreviewWhenAdditiveV2ChangesOnlyRoadmap|TestWizardDossierCommandResolvesIdentityBindsAuthorityAndExposesSafePreview|TestWizardDossierCommandRejectsCallerPlanAndDigestSpoofBeforeAdmission|TestWizardDossierCommandRejectsUnknownCatalogAndTemplateWithoutUseCase|TestV23WizardDossierPublicReplaySurvivesSQLiteRestart)$'",
     "test_names": [
       "TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
       "TestIntakeDossierHashProjectsEveryCurrentDecisionField",
@@ -271,7 +301,46 @@
       "TestV23WizardGapsInputRecoveryRejectsCoherentMutationSelectionTamper",
       "TestV23WizardGapsInputRejectsCoherentMutationFingerprintTamper",
       "TestV23WizardGapsInputRecoveryRejectsCoherentNoOpOutcomeTamper",
-      "TestV23WizardGapsInputUpgradeFromSchema20DoesNotInventLegacyInput"
+      "TestV23WizardGapsInputUpgradeFromSchema20DoesNotInventLegacyInput",
+      "TestBuiltInCatalogContainsExactlySixCompleteTemplates",
+      "TestBuiltInTemplatesExposeExplicitGovernedEffects",
+      "TestCatalogAndNestedAccessorsReturnDefensiveCopies",
+      "TestCatalogSupportsConcurrentReadAndCopyMutation",
+      "TestTemplateConstructionHasDeterministicOrder",
+      "TestTemplateRejectsMissingDependencyAndCycles",
+      "TestTemplateRejectsUnorderedWriteSetConflict",
+      "TestUnitRejectsEmptyTestsAndUnresolvedCriterion",
+      "TestUnitRejectsUnsafeWritePathAndUnguardedExternalMutation",
+      "TestCatalogRejectsMissingAndConflictingTemplateDefinitions",
+      "TestPackageImportsStayPureAndDoNotReachForbiddenLayers",
+      "TestBuiltInV1CatalogDigestIsFrozen",
+      "TestTemplateDigestCoversPreviewOnlySemantics",
+      "TestBuiltInVersionAndDigestFailClosed",
+      "TestCompileWizardStagePlanCoversEveryBuiltInTemplate",
+      "TestCompileWizardStagePlanIsDeterministicAcrossRefInputOrder",
+      "TestCompileWizardStagePlanRejectsInvalidInput",
+      "TestCompileWizardStagePlanMaterializesStageDAGAsDependencyKeys",
+      "TestCompileWizardStagePlanProjectsUnrepresentableSemanticsExactly",
+      "TestCompileWizardStagePlanMapsSecurityAndEffortAxesIndependently",
+      "TestIntakeDossierProjectionGeneratesCanonicalMinimumContentAndDiagrams",
+      "TestIntakeDossierProjectionIsStableAcrossEquivalentReordering",
+      "TestIntakeDossierProjectionPreservesExactOrderSensitivePlan",
+      "TestIntakeDossierProjectionCopiesInputsOutputsAndSupportsConcurrentReads",
+      "TestIntakeDossierProjectionRejectsStructurallyIncompleteOrDivergentInput",
+      "TestIntakeDossierProjectionEscapesMarkdownAndMermaidControlSyntax",
+      "TestIntakeDossierProjectionDiagramGrowthIsLinearAndIndicesAreUnbounded",
+      "TestIntakeDossierProjectionBindsDecisionViewsToDurableIntakeRecord",
+      "TestIntakeDossierProjectionPreservesDurableDecisionOrderWhileViewsReorder",
+      "TestIntakeDossierProjectionRecordsUnjustifiedDeviationWithoutBlocking",
+      "TestPrepareWizardDossierCompilesBuiltInPlanAndPersistsOneDossier",
+      "TestPrepareWizardDossierReplaysExactHistoricalProjectionAfterIntakeAdvance",
+      "TestPrepareWizardDossierRejectsDivergenceAndStaleFirstCreation",
+      "TestPrepareWizardDossierRejectsUnknownTemplateCallerPlanAndBadAuthority",
+      "TestPrepareWizardDossierKeepsV1PreviewWhenAdditiveV2ChangesOnlyRoadmap",
+      "TestWizardDossierCommandResolvesIdentityBindsAuthorityAndExposesSafePreview",
+      "TestWizardDossierCommandRejectsCallerPlanAndDigestSpoofBeforeAdmission",
+      "TestWizardDossierCommandRejectsUnknownCatalogAndTemplateWithoutUseCase",
+      "TestV23WizardDossierPublicReplaySurvivesSQLiteRestart"
     ],
     "reject_no_tests_to_run": true
   },
@@ -300,6 +369,9 @@
     "internal/application/intake_dossier_confirmation_adversarial_test.go",
     "internal/application/intake_dossier_confirmation_test.go",
     "internal/application/intake_dossier_plan_binding.go",
+    "internal/application/intake_dossier_projection.go",
+    "internal/application/intake_dossier_projection_render.go",
+    "internal/application/intake_dossier_projection_test.go",
     "internal/application/intake_dossier_service.go",
     "internal/application/intake_dossier_service_test.go",
     "internal/application/intake_dossier_snapshot.go",
@@ -312,6 +384,8 @@
     "internal/application/intake_service.go",
     "internal/application/intake_service_test.go",
     "internal/application/orchestrator.go",
+    "internal/application/wizard_dossier_preparation.go",
+    "internal/application/wizard_dossier_preparation_test.go",
     "internal/application/wizard_gaps.go",
     "internal/application/wizard_gaps_identity_test.go",
     "internal/application/wizard_gaps_orchestrator_test.go",
@@ -320,6 +394,8 @@
     "internal/application/wizard_gaps_inputs_test.go",
     "internal/application/wizard_gaps_preflight.go",
     "internal/application/wizard_gaps_test.go",
+    "internal/application/wizard_stage_plan.go",
+    "internal/application/wizard_stage_plan_test.go",
     "internal/adapters/state/sqlite/intake_dossier.go",
     "internal/adapters/state/sqlite/intake_dossier_confirmation.go",
     "internal/adapters/state/sqlite/intake_dossier_confirmation_test.go",
@@ -348,8 +424,12 @@
     "internal/bootstrap/command_surfaces.go",
     "internal/bootstrap/intake_e2e_test.go",
     "internal/bootstrap/runtime.go",
+    "internal/bootstrap/wizard_dossier_e2e_test.go",
     "internal/bootstrap/wizard_gaps_public_e2e_test.go",
     "internal/commands/handlers_intake.go",
+    "internal/commands/handlers_wizard_dossier.go",
+    "internal/commands/handlers_wizard_dossier_input.go",
+    "internal/commands/handlers_wizard_dossier_test.go",
     "internal/commands/handlers_wizard_gaps.go",
     "internal/commands/handlers_wizard_gaps_test.go",
     "internal/commands/application_handlers.go",
@@ -382,7 +462,15 @@
     "internal/wizard/gaps/model.go",
     "internal/wizard/gaps/rules.go",
     "internal/wizard/gaps/semantic.go",
-    "internal/wizard/gaps/semantic_corpus.go"
+    "internal/wizard/gaps/semantic_corpus.go",
+    "internal/wizard/stages/builtin.go",
+    "internal/wizard/stages/catalog.go",
+    "internal/wizard/stages/catalog_test.go",
+    "internal/wizard/stages/digest.go",
+    "internal/wizard/stages/digest_test.go",
+    "internal/wizard/stages/errors.go",
+    "internal/wizard/stages/model.go",
+    "internal/wizard/stages/validation.go"
   ],
   "forbidden_import_boundaries": [
     "adapters",
@@ -393,80 +481,6 @@
     "legacy",
     "orquesta/modulos",
     "provider"
-  ],
-  "remaining_wiz": [
-    {
-      "id": "WIZ-01",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-02",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-06",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-08",
-      "status": "partial"
-    },
-    {
-      "id": "WIZ-09",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-10",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-11",
-      "status": "partial"
-    },
-    {
-      "id": "WIZ-12",
-      "status": "roadmap_rejected"
-    },
-    {
-      "id": "WIZ-13",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-14",
-      "status": "roadmap_rejected"
-    },
-    {
-      "id": "WIZ-16",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-17",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-19",
-      "status": "pending"
-    },
-    {
-      "id": "WIZ-20",
-      "status": "partial"
-    },
-    {
-      "id": "WIZ-21",
-      "status": "partial"
-    },
-    {
-      "id": "WIZ-22",
-      "status": "partial"
-    },
-    {
-      "id": "WIZ-24",
-      "status": "partial"
-    },
-    {
-      "id": "WIZ-25",
-      "status": "partial"
-    }
   ],
   "completed_integration_scopes": [
     "application_idempotency",
