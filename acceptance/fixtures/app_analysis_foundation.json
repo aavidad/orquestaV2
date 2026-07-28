@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "contract_id": "FOUNDATION-APP-ANALYSIS",
+  "status": "foundation_only_unwired",
+  "capabilities_accredited": [],
+  "related_roadmap_capabilities": [
+    {"id": "WIZ-10", "status": "declared", "evidence_refs": []},
+    {"id": "EXT-00", "status": "declared", "evidence_refs": []}
+  ],
+  "related_acceptance_contract": {"id": "AC-V28-DOMAIN-PLUGINS", "status": "planned"},
+  "foundation_files": [
+    "internal/application/app_analysis.go",
+    "internal/application/app_analysis_service.go",
+    "internal/application/app_analysis_contract_test.go",
+    "internal/application/app_analysis_service_test.go"
+  ],
+  "ports": [
+    "AppAnalysisIntakeSnapshotVerifier",
+    "AppAnalysisArtifactResolver",
+    "AppAnalysisReviewVerifier",
+    "AppAnalysisAttachmentStore"
+  ],
+  "causal_sources": [
+    "authenticated authorization receipt",
+    "project-scoped intake snapshot",
+    "review receipt bound to canonical manifest",
+    "artifact provenance receipt"
+  ],
+  "forbidden_import_boundaries": [
+    "orquesta/modulos/",
+    "orquesta/internal/adapters/",
+    "orquesta/cmd/"
+  ],
+  "deferred": [
+    "bootstrap wiring",
+    "concrete adapters",
+    "public canonical commands",
+    "durable persistence integration",
+    "end-to-end acceptance evidence"
+  ],
+  "relevant_test_files": [
+    "internal/application/app_analysis_contract_test.go",
+    "internal/application/app_analysis_service_test.go"
+  ],
+  "required_test": {
+    "command": "go test -mod=vendor -count=1 -v ./internal/application -run '^TestAppAnalysis'",
+    "name_prefix": "TestAppAnalysis",
+    "reject_no_tests_to_run": true
+  }
+}
