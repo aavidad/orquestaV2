@@ -39,6 +39,7 @@ cgroup_root = ""
 env_allowlist = ["PATH", "HOME", "CODEX_HOME"]
 account_home_root = ""
 account_profile = ""
+account_profiles = []
 account_auth_max_document_bytes = 1048576
 mcp_bearer_token_env_var = "ORQUESTA_MCP_BEARER_TOKEN"
 credential_ref = ""

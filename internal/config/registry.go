@@ -445,8 +445,8 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeCodexSupervisorStartTimeout, KeyRuntimeCodexTimeout, KeyServerShutdownTimeout,
 		},
 		"runtime_codex_account_profiles_complete": {
-			KeyRuntimeCodexAccountHomeRoot, KeyRuntimeCodexAccountProfile, KeyRuntimeCodexMaxConcurrentExecutions,
-			KeyRuntimeCodexCredentialRef,
+			KeyRuntimeCodexAccountHomeRoot, KeyRuntimeCodexAccountProfile, KeyRuntimeCodexAccountProfiles,
+			KeyRuntimeCodexMaxConcurrentExecutions, KeyRuntimeCodexCredentialRef,
 		},
 		"agent_firecracker_vsock_cid_lease_bounds": {
 			KeyAgentFirecrackerVsockCIDMinimumLeaseDuration,

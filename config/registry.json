@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-26.33",
+  "revision": "2026-07-28.1",
   "precedence": [
     "default",
     "file",
@@ -33,6 +33,7 @@
       "keys": [
         "runtime.codex.account_home_root",
         "runtime.codex.account_profile",
+        "runtime.codex.account_profiles",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
       ]
@@ -551,6 +552,20 @@
       "env_alias": "ORQUESTA_RUNTIME_CODEX_ACCOUNT_PROFILE",
       "validator_ids": [
         "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.codex.account_profiles",
+      "go_name": "RuntimeCodexAccountProfiles",
+      "semantic_ref": "orquesta.config.runtime.codex.account_profiles",
+      "type": "string_list",
+      "default": [],
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_ACCOUNT_PROFILES",
+      "validator_ids": [
+        "unique_non_empty_string_list"
       ]
     },
     {

@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-26.33",
-  "registry_hash": "sha256:c44eedea0312d4cf9c40b2bac85c4d448cc956e2afad1ed87cc5342eb8576161",
+  "registry_revision": "2026-07-28.1",
+  "registry_hash": "sha256:a1db38af4f99380c5cae11c4bd879c5bfdc4fcdd113605a5ac59da2c368838a8",
   "aliases": [],
   "cross_validators": [
     {
@@ -26,6 +26,7 @@
       "keys": [
         "runtime.codex.account_home_root",
         "runtime.codex.account_profile",
+        "runtime.codex.account_profiles",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
       ]
@@ -480,6 +481,18 @@
       "restart_required": true,
       "validator_ids": [
         "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.codex.account_profiles",
+      "semantic_ref": "orquesta.config.runtime.codex.account_profiles",
+      "label_key": "config.field.runtime.codex.account_profiles",
+      "type": "string_list",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "unique_non_empty_string_list"
       ]
     },
     {

@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-26.33`
+Registry revision: `2026-07-28.1`
 
-Registry hash: `sha256:c44eedea0312d4cf9c40b2bac85c4d448cc956e2afad1ed87cc5342eb8576161`
+Registry hash: `sha256:a1db38af4f99380c5cae11c4bd879c5bfdc4fcdd113605a5ac59da2c368838a8`
 
 Precedence: `default < file < env`
 
@@ -46,6 +46,7 @@ Source limit: `1048576` bytes
       ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list, environment_name_list` |
 | `runtime.codex.account_home_root` | `optional_path` | `""` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_HOME_ROOT` | `true` | `optional_path` |
 | `runtime.codex.account_profile` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_PROFILE` | `true` | `trimmed_optional_string` |
+| `runtime.codex.account_profiles` | `string_list` | `[]` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_PROFILES` | `true` | `unique_non_empty_string_list` |
 | `runtime.codex.account_auth_max_document_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_AUTH_MAX_DOCUMENT_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.mcp_bearer_token_env_var` | `string` | `"ORQUESTA_MCP_BEARER_TOKEN"` | `ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR` | `true` | `environment_name` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
@@ -101,7 +102,7 @@ Source limit: `1048576` bytes
 
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`; maximum duration `30s`
-- `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
+- `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.account_profiles`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
 - `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`; maximum duration `24h`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`

@@ -39,7 +39,8 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 	}
 	if snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond ||
-		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "ORQUESTA_MCP_BEARER_TOKEN" {
+		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "ORQUESTA_MCP_BEARER_TOKEN" ||
+		len(snapshot.RuntimeCodexAccountProfiles()) != 0 {
 		t.Fatal("runtime defaults missing")
 	}
 	if snapshot.GovernanceBudgetCurrency() != "USD" || snapshot.GovernanceGlobalTokenBudget() != 14000000 ||
@@ -266,8 +267,8 @@ func TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lines := bytes.Count(generatedGo, []byte{'\n'}); lines > 450 {
-		t.Fatalf("generated config Go exceeds 450 lines: %d", lines)
+	if lines := bytes.Count(generatedGo, []byte{'\n'}); lines > 460 {
+		t.Fatalf("generated config Go exceeds 460 lines: %d", lines)
 	}
 
 	temporary := t.TempDir()

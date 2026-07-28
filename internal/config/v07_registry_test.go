@@ -196,12 +196,16 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		{name: "supervisor start exceeds absolute bound", toml: "[server]\nshutdown_timeout = \"2m\"\n[runtime.codex]\ntimeout = \"2m\"\nsupervisor_start_timeout = \"31s\""},
 		{name: "account root without profiles", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\""},
 		{name: "account profile without root", toml: "[runtime.codex]\naccount_profile = \"account-a\""},
+		{name: "account profiles without root", toml: "[runtime.codex]\naccount_profiles = [\"account-a\", \"account-b\"]"},
 		{name: "account profile concurrent refresh unsafe", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\""},
 		{name: "account profile format", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \".account\"\nmax_concurrent_executions = 1"},
+		{name: "account profiles format", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profiles = [\"account-a\", \".account\"]"},
+		{name: "singular and plural account profiles", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\"\naccount_profiles = [\"account-b\"]\nmax_concurrent_executions = 1"},
 		{name: "account root overlaps work", toml: "[runtime.codex]\naccount_home_root = \"./var/work/accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1"},
 		{name: "Go cache overlaps work", toml: "[runtime.codex]\ncache_root = \"./var/work/go-cache\""},
 		{name: "Go cache contains workspace", toml: "[runtime.codex]\ncache_root = \"./var\""},
 		{name: "account profile conflicts with credential authority", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1\ncredential_ref = \"credential:codex\""},
+		{name: "account profiles conflict with credential authority", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profiles = [\"account-a\", \"account-b\"]\ncredential_ref = \"credential:codex\""},
 		{name: "Firecracker vsock lease bounds", toml: "[agent.firecracker.vsock_cid]\nminimum_lease_duration = \"2h\"\nmaximum_lease_duration = \"1h\""},
 		{name: "Firecracker vsock lease ceiling", toml: "[agent.firecracker.vsock_cid]\nmaximum_lease_duration = \"25h\""},
 		{name: "non loopback", toml: "[server]\nlisten = \"0.0.0.0:8080\""},
@@ -258,6 +262,58 @@ func TestResolveOwnsAccountProfileConfiguration(t *testing.T) {
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 1 {
 		t.Fatalf("account profile snapshot drifted")
 	}
+}
+
+func TestResolveOwnsConcurrentAccountProfilesConfiguration(t *testing.T) {
+	snapshot, err := Resolve(ResolveOptions{TOML: []byte(
+		"[runtime.codex]\n" +
+			"account_home_root = \"/srv/codex-accounts\"\n" +
+			"account_profiles = [\"Codex_1\", \"Codex_2\"]\n" +
+			"max_concurrent_executions = 70\n",
+	)})
+	if err != nil {
+		t.Fatalf("Resolve(account profiles) error = %v", err)
+	}
+	want := []string{"Codex_1", "Codex_2"}
+	if snapshot.RuntimeCodexAccountHomeRoot() != "/srv/codex-accounts" ||
+		!reflect.DeepEqual(snapshot.RuntimeCodexAccountProfiles(), want) ||
+		snapshot.RuntimeCodexAccountProfile() != "" ||
+		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 {
+		t.Fatalf("account profiles snapshot drifted")
+	}
+
+	profiles := snapshot.RuntimeCodexAccountProfiles()
+	profiles[0] = "mutated"
+	if !reflect.DeepEqual(snapshot.RuntimeCodexAccountProfiles(), want) {
+		t.Fatal("account profiles getter leaks mutable registry state")
+	}
+
+	effective, err := snapshot.EffectiveJSON()
+	if err != nil {
+		t.Fatalf("EffectiveJSON(account profiles) error = %v", err)
+	}
+	var document effectiveDocument
+	if err := json.Unmarshal(effective, &document); err != nil {
+		t.Fatalf("decode effective config: %v", err)
+	}
+	for _, entry := range document.Entries {
+		if entry.Key == KeyRuntimeCodexAccountProfiles {
+			if entry.Source != SourceFile || !reflect.DeepEqual(entry.Value, []any{"Codex_1", "Codex_2"}) {
+				t.Fatalf("effective account profiles = %#v source=%q", entry.Value, entry.Source)
+			}
+			return
+		}
+	}
+	t.Fatal("effective account profiles entry missing")
+}
+
+func TestResolveRejectsDuplicateAccountProfiles(t *testing.T) {
+	_, err := Resolve(ResolveOptions{TOML: []byte(
+		"[runtime.codex]\n" +
+			"account_home_root = \"/srv/codex-accounts\"\n" +
+			"account_profiles = [\"Codex_1\", \"Codex_1\"]\n",
+	)})
+	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexAccountProfiles)
 }
 
 func TestResolveOwnsOptionalCodexGoCapabilityConfiguration(t *testing.T) {

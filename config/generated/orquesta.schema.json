@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-26.33",
+  "$id": "urn:orquesta:config:2026-07-28.1",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -543,6 +543,23 @@
               "x-sensitive": false,
               "x-validator-ids": [
                 "trimmed_optional_string"
+              ]
+            },
+            "account_profiles": {
+              "default": [],
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true,
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_ACCOUNT_PROFILES",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.account_profiles",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "unique_non_empty_string_list"
               ]
             },
             "cache_root": {
@@ -1259,8 +1276,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-26.33",
-  "x-registry-hash": "sha256:c44eedea0312d4cf9c40b2bac85c4d448cc956e2afad1ed87cc5342eb8576161",
+  "x-registry-revision": "2026-07-28.1",
+  "x-registry-hash": "sha256:a1db38af4f99380c5cae11c4bd879c5bfdc4fcdd113605a5ac59da2c368838a8",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1285,6 +1302,7 @@
       "keys": [
         "runtime.codex.account_home_root",
         "runtime.codex.account_profile",
+        "runtime.codex.account_profiles",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
       ]

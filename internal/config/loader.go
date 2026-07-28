@@ -143,11 +143,17 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 		case "runtime_codex_account_profiles_complete":
 			root, rootOK := values[KeyRuntimeCodexAccountHomeRoot].value.(string)
 			profile, profileOK := values[KeyRuntimeCodexAccountProfile].value.(string)
+			profiles, profilesOK := values[KeyRuntimeCodexAccountProfiles].value.([]string)
 			maxConcurrent, concurrentOK := values[KeyRuntimeCodexMaxConcurrentExecutions].value.(int64)
 			credentialRef, credentialOK := values[KeyRuntimeCodexCredentialRef].value.(CredentialRef)
-			if !rootOK || !profileOK || !concurrentOK || !credentialOK ||
-				(root == "") != (profile == "") ||
-				profile != "" && (maxConcurrent != 1 || credentialRef != "" || !validCodexAccountProfile(profile)) {
+			hasProfile := profile != ""
+			hasProfiles := len(profiles) > 0
+			if !rootOK || !profileOK || !profilesOK || !concurrentOK || !credentialOK ||
+				(root != "") != (hasProfile || hasProfiles) ||
+				hasProfile && hasProfiles ||
+				hasProfile && (maxConcurrent != 1 || !validCodexAccountProfile(profile)) ||
+				hasProfiles && !validCodexAccountProfiles(profiles) ||
+				(hasProfile || hasProfiles) && credentialRef != "" {
 				return fail(validator.ID)
 			}
 		case "agent_firecracker_vsock_cid_lease_bounds":
@@ -302,6 +308,20 @@ func validCodexAccountProfile(value string) bool {
 		default:
 			return false
 		}
+	}
+	return true
+}
+
+func validCodexAccountProfiles(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if !validCodexAccountProfile(value) {
+			return false
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return false
+		}
+		seen[value] = struct{}{}
 	}
 	return true
 }
