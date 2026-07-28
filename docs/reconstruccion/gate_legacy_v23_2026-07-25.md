@@ -2,6 +2,11 @@
 
 Estado: **superado para abrir siguiente tramo; no acredita V23**.
 
+Inventario posterior vigente:
+`docs/reconstruccion/rescate_legacy_v23_wizard_2026-07-28.md`. Este gate
+conserva la decisión de entrada; el inventario posterior detalla por capability
+las rutas, pruebas, descartes y riesgos aplicables al cierre de V23.
+
 ## Actualización dirigida del 2026-07-26
 
 La comparación del Wizard de `/home/alberto/Trabajo/orquesta` y
