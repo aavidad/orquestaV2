@@ -126,9 +126,8 @@ type Config struct {
 	// daemon. The selected persistent profile is projected directly as both
 	// HOME and CODEX_HOME so Codex can persist credential refreshes. A
 	// lifetime lease and MaxConcurrentExecutions=1 prevent concurrent use.
-	// Multiple accounts run as separate daemons with disjoint WorkRoots.
-	// This adapter boundary does not replace the neutral multi-home capacity
-	// and pool contract that selects those daemon profiles.
+	// Pool composes several homogeneous account-bound adapters behind one
+	// server and derives a disjoint WorkRoot for every opaque profile binding.
 	AccountHomeRoot                   string
 	AccountProfile                    string
 	AccountAuthMaxDocumentBytes       int64
