@@ -269,6 +269,69 @@ func TestSnapshotTreeModePolicyRejectsGitlinkAndSpecialTypes(t *testing.T) {
 	}
 }
 
+func TestSnapshotTreeAcceptsCanonicalGitDirectoryOrder(t *testing.T) {
+	adapter, prepare := testAdapterAndPrepare(t)
+	prepare.WriteSet = []string{"foo-bar/file.txt", "foo/child.txt"}
+	prepare.WriteSetDigest = ports.WorkspaceWriteSetDigest(prepare.WriteSet)
+	prepared, err := adapter.Prepare(context.Background(), prepare)
+	gitTestNoError(t, err)
+	workspace := adapter.workspacePath(prepare.WorkspaceRef)
+	for name, content := range map[string]string{
+		"foo-bar/file.txt": "hyphen sorts before directory terminator\n",
+		"foo/child.txt":    "directory sorts after hyphen\n",
+	} {
+		gitTestNoError(t, os.MkdirAll(filepath.Dir(filepath.Join(workspace, name)), 0o700))
+		gitTestNoError(t, os.WriteFile(filepath.Join(workspace, name), []byte(content), 0o600))
+	}
+	change, err := adapter.Commit(context.Background(), testCommit(t, prepare, prepared))
+	gitTestNoError(t, err)
+	if err := drainSnapshot(adapter, gitSnapshotRequest(prepare, prepared, change)); err != nil {
+		t.Fatalf("canonical Git tree order rejected: %v", err)
+	}
+}
+
+func TestParseSnapshotTreeEntriesEnforcesCanonicalOrderAndUniquePaths(t *testing.T) {
+	const (
+		rootOID = "0000000000000000000000000000000000000000"
+		treeOID = "1111111111111111111111111111111111111111"
+		blobOID = "2222222222222222222222222222222222222222"
+	)
+	record := func(mode, kind, oid, name string) string {
+		return mode + " " + kind + " " + oid + "\t" + name + "\x00"
+	}
+	canonical := record("040000", "tree", treeOID, "foo-bar") +
+		record("100644", "blob", blobOID, "foo-bar/file.txt") +
+		record("040000", "tree", treeOID, "foo") +
+		record("100644", "blob", blobOID, "foo/child.txt")
+
+	for name, raw := range map[string]string{
+		"out_of_order": record("040000", "tree", treeOID, "foo") +
+			record("100644", "blob", blobOID, "foo/child.txt") +
+			record("040000", "tree", treeOID, "foo-bar"),
+		"duplicate_path_across_modes": record("100644", "blob", blobOID, "foo") +
+			record("040000", "tree", treeOID, "foo"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			budget := &snapshotBudget{bytes: 1, entries: 8}
+			if _, _, err := parseSnapshotTreeEntries([]byte(raw), rootOID, budget); ErrorCodeOf(err) != CodeSnapshotInvalid {
+				t.Fatalf("adversarial tree err=%v", err)
+			}
+		})
+	}
+
+	budget := &snapshotBudget{bytes: 1, entries: 8}
+	entries, trees, err := parseSnapshotTreeEntries([]byte(canonical), rootOID, budget)
+	if err != nil {
+		t.Fatalf("canonical tree: %v", err)
+	}
+	if len(entries) != 2 || len(trees) != 3 {
+		t.Fatalf("entries=%d trees=%d", len(entries), len(trees))
+	}
+	if snapshotTreeOrderKey("foo", true) != "foo/" || snapshotTreeOrderKey("foo", false) != "foo" {
+		t.Fatal("tree order key does not use Git directory terminator")
+	}
+}
+
 func TestSnapshotTreeRejectsUnsafePathsDuplicatesAndCollisions(t *testing.T) {
 	for _, value := range []string{"", "/absolute", "../escape", "a/../b", ".git/config", "a/.GIT/config", "a\x00b"} {
 		if validSnapshotPath(value) {

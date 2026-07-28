@@ -98,9 +98,15 @@ func snapshotTreeEntries(ctx context.Context, repository *snapshotRepository, tr
 	if err := budget.consume(int64(len(raw)), 0); err != nil {
 		return nil, nil, err
 	}
+	return parseSnapshotTreeEntries(raw, tree, budget)
+}
+
+func parseSnapshotTreeEntries(raw []byte, tree string, budget *snapshotBudget,
+) ([]snapshotEntry, []snapshotObject, error) {
 	var entries []snapshotEntry
 	trees := []snapshotObject{{"tree", tree}}
-	last := ""
+	lastOrderKey := ""
+	seenPaths := make(map[string]struct{})
 	for _, record := range bytes.Split(raw, []byte{0}) {
 		if len(record) == 0 {
 			continue
@@ -112,13 +118,17 @@ func snapshotTreeEntries(ctx context.Context, repository *snapshotRepository, tr
 			entry.mode, entry.oid = fields[0], fields[2]
 		}
 		isTree, modeErr := snapshotEntryMode(entry.mode)
-		if !found || len(fields) != 3 || modeErr != nil || !validSnapshotPath(entry.path) || entry.path <= last {
+		orderKey := snapshotTreeOrderKey(entry.path, isTree)
+		_, duplicate := seenPaths[entry.path]
+		if !found || len(fields) != 3 || modeErr != nil || !validSnapshotPath(entry.path) ||
+			duplicate || orderKey <= lastOrderKey {
 			if modeErr != nil {
 				return nil, nil, modeErr
 			}
 			return nil, nil, &Error{Code: CodeSnapshotInvalid}
 		}
-		last = entry.path
+		lastOrderKey = orderKey
+		seenPaths[entry.path] = struct{}{}
 		if err := budget.consume(0, 1); err != nil {
 			return nil, nil, err
 		}
@@ -129,6 +139,13 @@ func snapshotTreeEntries(ctx context.Context, repository *snapshotRepository, tr
 		}
 	}
 	return entries, trees, nil
+}
+
+func snapshotTreeOrderKey(entryPath string, isTree bool) string {
+	if isTree {
+		return entryPath + "/"
+	}
+	return entryPath
 }
 
 func verifySnapshotDiff(ctx context.Context, repository *snapshotRepository, request ports.SnapshotVerificationRequest,
