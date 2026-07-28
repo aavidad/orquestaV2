@@ -1292,16 +1292,16 @@ safe_write_value "$CONFIG_SHA_FILE" "$REQUESTED_CONFIG_SHA"
 
 ready=0
 microvm_readiness_failure=0
-for _ in $(seq 1 100); do
-  if ! pid_alive "$started_pid"; then
-    break
-  fi
+if pid_alive "$started_pid"; then
   if python3 - "$listen" "$token_path" "$project_ref" \
     "$READINESS_REQUEST_REF" <<'PY' >/dev/null 2>&1
+import errno
 import json
 import os
 import stat
 import sys
+import time
+import urllib.error
 import urllib.request
 
 host_port, token_path, project_ref, request_ref = sys.argv[1:]
@@ -1336,8 +1336,22 @@ request = urllib.request.Request(
         "Content-Type": "application/json",
     },
 )
-with urllib.request.urlopen(request, timeout=0.2) as response:
-    result = json.load(response)
+connect_deadline = time.monotonic() + 5.0
+while True:
+    try:
+        with urllib.request.urlopen(request, timeout=15.0) as response:
+            result = json.load(response)
+        break
+    except urllib.error.URLError as error:
+        reason = error.reason
+        if (
+            isinstance(reason, OSError)
+            and reason.errno == errno.ECONNREFUSED
+            and time.monotonic() < connect_deadline
+        ):
+            time.sleep(0.1)
+            continue
+        raise
 data = result.get("data")
 if (
     result.get("command_id") != "orquesta.system.status"
@@ -1358,16 +1372,15 @@ PY
     if [ "$attestor_provider" = "microvm" ]; then
       if run_microvm_launcher_probe "$launcher_socket"; then
         microvm_readiness_failure=0
+        ready=1
       else
         microvm_readiness_failure="$?"
-        break
       fi
+    else
+      ready=1
     fi
-    ready=1
-    break
   fi
-  sleep 0.1
-done
+fi
 
 if [ "$ready" -ne 1 ]; then
   safe_write_value "$START_FAILED_FILE" "readiness_failed"

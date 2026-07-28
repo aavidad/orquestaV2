@@ -63,6 +63,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -109,6 +110,25 @@ func main() {
 			input.ProjectRef != values["project.default"] {
 			http.Error(writer, "bad request", http.StatusBadRequest)
 			return
+		}
+		count, err := os.OpenFile(
+			filepath.Join(os.Getenv("HOME"), "readiness-count.txt"),
+			os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+			0o600,
+		)
+		if err != nil {
+			panic(err)
+		}
+		if _, err := count.WriteString("request\n"); err != nil {
+			panic(err)
+		}
+		if err := count.Close(); err != nil {
+			panic(err)
+		}
+		if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), "slow-readiness")); err == nil {
+			time.Sleep(750 * time.Millisecond)
+		} else if !os.IsNotExist(err) {
+			panic(err)
 		}
 		if err := os.WriteFile(filepath.Join(os.Getenv("HOME"), "readiness-ref.txt"), []byte(input.RequestRef), 0o600); err != nil {
 			panic(err)
@@ -834,6 +854,16 @@ mv "$ACCOUNTS/CodexA/auth.real" "$ACCOUNTS/CodexA/auth.json"
 write_config CodexA "$(available_port)" 70 1048576
 expect_failure orquesta_config_invalid start_profile CodexA
 
+"$SCRIPT" stop --profile CodexB --runtime-base "$BASE" >/dev/null
+
+# Una autorización durable lenta no provoca una tormenta de health-checks:
+# después de que el puerto acepte, el bootstrap espera una única respuesta.
+rm -f -- "$BASE/CodexB/daemon-home/readiness-count.txt"
+touch "$BASE/CodexB/daemon-home/slow-readiness"
+chmod 600 "$BASE/CodexB/daemon-home/slow-readiness"
+write_config CodexB "$(available_port)" 1 1048576
+start_profile CodexB >/dev/null
+[ "$(wc -l <"$BASE/CodexB/daemon-home/readiness-count.txt")" -eq 1 ]
 "$SCRIPT" stop --profile CodexB --runtime-base "$BASE" >/dev/null
 
 # El preflight usa solo blobs regulares del HEAD autorizado y replica las
