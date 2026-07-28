@@ -169,6 +169,7 @@ func TestWizardGapsHistoricalEvaluatorReplaySurvivesRegistryEvolution(
 	v2 := testWizardGapsEvaluator{identity: v2Identity, delegate: v1}
 	evolved, err := newWizardGapsServiceWithEvaluatorResolver(
 		system.service,
+		system.store,
 		testWizardGapsEvaluatorResolver{evaluators: []wizardGapsEvaluator{v1, v2}},
 	)
 	if err != nil {
@@ -488,7 +489,7 @@ func TestWizardGapsReconciliationWindowRejectsUnrelatedFactsProjection(
 	}
 }
 
-func TestWizardGapsNoOpDoesNotReserveRequestRef(t *testing.T) {
+func TestWizardGapsNoOpReservesRequestRefAndReplaysHistoricalResult(t *testing.T) {
 	system, service := newWizardGapsTestSystem(t)
 	first, err := service.ApplyWizardGaps(
 		context.Background(),
@@ -500,14 +501,16 @@ func TestWizardGapsNoOpDoesNotReserveRequestRef(t *testing.T) {
 	request := wizardGapsRequest(
 		t,
 		system,
-		"request:wizard-gaps-unreserved-noop",
+		"request:wizard-gaps-reserved-noop",
 		first.Record.State.Revision(),
 	)
 	noOp, err := service.ApplyWizardGaps(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if noOp.Changed || noOp.RequestRefReserved {
+	if noOp.Changed || !noOp.RequestRefReserved ||
+		noOp.RequestOutcome.Kind != WizardGapsRequestOutcomeNoOp ||
+		!validWizardGapsNoOpOutcomeRef(noOp.RequestOutcome.ReceiptRef) {
 		t.Fatalf("no-op result=%+v", noOp)
 	}
 
@@ -523,7 +526,7 @@ func TestWizardGapsNoOpDoesNotReserveRequestRef(t *testing.T) {
 	answered, err := system.service.ApplyIntake(
 		context.Background(),
 		ApplyIntakeRequest{
-			RequestRef: "request:wizard-gaps-unreserved-answer",
+			RequestRef: "request:wizard-gaps-reserved-answer",
 			ActorRef:   system.actor, ProjectRef: system.project,
 			Change: intake.Change{
 				StateRef:         "intake:shared",
@@ -537,21 +540,30 @@ func TestWizardGapsNoOpDoesNotReserveRequestRef(t *testing.T) {
 			AuthorizationReceipt: system.authorizationFor(
 				t,
 				IntakeOperationApply,
-				"request:wizard-gaps-unreserved-answer",
+				"request:wizard-gaps-reserved-answer",
 			),
 		},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.ExpectedRevision = answered.Record.State.Revision()
-	applied, err := service.ApplyWizardGaps(context.Background(), request)
+	replayed, err := service.ApplyWizardGaps(context.Background(), request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !applied.Changed || !applied.RequestRefReserved ||
-		applied.Record.Receipt.RequestRef != request.RequestRef {
-		t.Fatalf("later reuse result=%+v", applied)
+	if replayed.Changed || !replayed.RequestRefReserved ||
+		replayed.RequestOutcome != noOp.RequestOutcome ||
+		replayed.Record.Receipt != noOp.Record.Receipt ||
+		replayed.Record.State.Revision() != noOp.Record.State.Revision() {
+		t.Fatalf("replayed result=%+v", replayed)
+	}
+
+	divergent := request
+	divergent.ExpectedRevision = answered.Record.State.Revision()
+	if _, err = service.ApplyWizardGaps(
+		context.Background(), divergent,
+	); !IsStateError(err, StateConflict) {
+		t.Fatalf("divergent reuse err=%v", err)
 	}
 }
 

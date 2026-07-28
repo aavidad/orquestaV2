@@ -23,7 +23,7 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	if got := catalog.Locales(); !reflect.DeepEqual(got, []string{"es", "en"}) {
 		t.Fatalf("Locales() = %v", got)
 	}
-	if got := len(catalog.Keys()); got != 870 {
+	if got := len(catalog.Keys()); got != 871 {
 		t.Fatalf("Keys() count = %d", got)
 	}
 	for _, key := range []string{
@@ -32,6 +32,7 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 		"command.intakes.dossier.prepare.description",
 		"command.intakes.context.get.description",
 		"command.intakes.recommendations.accept.description",
+		"command.intakes.wizard.gaps.apply.description",
 	} {
 		if !contains(catalog.Keys(), key) {
 			t.Errorf("missing dossier command key: %s", key)

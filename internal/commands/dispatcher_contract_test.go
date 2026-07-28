@@ -114,9 +114,9 @@ func TestDirectorPlanInitialAndReplanFencesAreAllOrNothing(t *testing.T) {
 	}
 }
 
-func TestCanonicalRegistryHas34CommandsAndPropagatesCouncilContracts(t *testing.T) {
+func TestCanonicalRegistryHas35CommandsAndPropagatesCouncilContracts(t *testing.T) {
 	dispatcher, api, _ := testDispatcher(t)
-	if got := len(dispatcher.Definitions()); got != 34 {
+	if got := len(dispatcher.Definitions()); got != 35 {
 		t.Fatalf("definitions=%d", got)
 	}
 	byID := compiledDefinitionsByID()
@@ -446,9 +446,10 @@ func canonicalPayloads() map[string]any {
 		"orquesta.goals.create": map[string]any{"statement": "build", "confirm": true},
 		"orquesta.goals.amend":  map[string]any{"source_goal_ref": "goal:g", "expected_source_revision": 1, "expected_source_spec_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "statement": "amend", "reason": "fix", "confirm": true},
 		"orquesta.goals.get":    map[string]any{"goal_ref": "goal:g"}, "orquesta.goals.list": map[string]any{"limit": 1},
-		"orquesta.intakes.create": map[string]any{"intake_ref": "intake:test", "max_question_rounds": 2},
-		"orquesta.intakes.get":    map[string]any{"intake_ref": "intake:test"},
-		"orquesta.intakes.apply":  canonicalIntakeApplyPayload(),
+		"orquesta.intakes.create":            map[string]any{"intake_ref": "intake:test", "max_question_rounds": 2},
+		"orquesta.intakes.get":               map[string]any{"intake_ref": "intake:test"},
+		"orquesta.intakes.apply":             canonicalIntakeApplyPayload(),
+		"orquesta.intakes.wizard.gaps.apply": canonicalWizardGapsPayload(),
 		"orquesta.intakes.recommendations.accept": map[string]any{
 			"intake_ref": "intake:test", "expected_revision": 2,
 			"origin": "chat", "question_round": 1,

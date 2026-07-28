@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "2026-07-26.6",
+  "revision": "2026-07-28.1",
   "commands": [
     {
       "id":"orquesta.intakes.wizard.dossier.prepare","version":"1","kind":"command","handler":"PrepareWizardDossier","permission":"goals.create","audience":"principal","execution_bound":false,"replay_mode":"application_receipt",
@@ -174,6 +174,176 @@
       "id": "orquesta.council.skip", "version": "1", "kind": "command", "handler": "SkipCouncil", "permission": "council.skip", "audience": "principal", "execution_bound": false, "replay_mode": "application_receipt",
       "input_schema": {"type":"object","properties":{"goal_ref":{"type":"string"},"change_ref":{"type":"string"},"expected_goal_revision":{"type":"integer","minimum":1},"expected_item_revision":{"type":"integer","minimum":1},"reason":{"type":"string","minLength":1}},"required":["goal_ref","change_ref","expected_goal_revision","expected_item_revision","reason"],"additionalProperties":false}, "output_schema": {"type":"object","properties":{"skip":{"type":"object","properties":{"skip_ref":{"type":"string"},"goal_ref":{"type":"string"},"work_item_ref":{"type":"string"},"change_ref":{"type":"string"},"subject_digest":{"type":"string"},"principal_ref":{"type":"string"},"reason":{"type":"string"},"recorded_at":{"type":"string"}},"required":["skip_ref","goal_ref","work_item_ref","change_ref","subject_digest","principal_ref","reason","recorded_at"],"additionalProperties":false}},"required":["skip"],"additionalProperties":false},
       "description_key": "command.council.skip.description", "error_codes": ["invalid_request","unauthenticated","forbidden","not_found","conflict","unavailable","internal"], "http": {"method":"POST","path":"/api/v1/commands/orquesta.council.skip"}, "mcp": {"tool":"orquesta.council.skip","annotations":{"read_only":false,"destructive":true,"idempotent":true,"open_world":false}}, "cli": {"path":["council","skip"]}
+    },
+    {
+      "id": "orquesta.intakes.wizard.gaps.apply",
+      "version": "1",
+      "kind": "command",
+      "handler": "ApplyWizardGaps",
+      "permission": "goals.create",
+      "audience": "principal",
+      "execution_bound": false,
+      "replay_mode": "application_receipt",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "intake_ref": {"type": "string"},
+          "expected_revision": {"type": "integer", "minimum": 1},
+          "origin": {"type": "string", "enum": ["chat", "form"]},
+          "facts": {
+            "type": "object",
+            "properties": {
+              "surface": {"type": "string", "enum": ["", "human_ui", "native_mobile", "native_desktop", "server_service", "kernel_module"]},
+              "sharing_intent": {"type": "string", "enum": ["", "ambiguous", "personal", "shared"]},
+              "corporate_identity": {"type": "string", "enum": ["", "missing", "declared"]},
+              "target_users": {"type": "string", "enum": ["", "missing", "declared"]},
+              "integration_auth": {"type": "string", "enum": ["", "missing", "declared"]},
+              "integration_criticality": {"type": "string", "enum": ["", "missing", "declared"]}
+            },
+            "required": ["surface", "sharing_intent", "corporate_identity", "target_users", "integration_auth", "integration_criticality"],
+            "additionalProperties": false
+          },
+          "pack_refs": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["intake_ref", "expected_revision", "origin", "facts", "pack_refs"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "intake": {
+            "type": "object",
+            "properties": {
+              "intake_ref": {"type": "string"},
+              "project_ref": {"type": "string"},
+              "revision": {"type": "integer", "minimum": 1},
+              "receipt_ref": {"type": "string"}
+            },
+            "required": ["intake_ref", "project_ref", "revision", "receipt_ref"],
+            "additionalProperties": false
+          },
+          "evaluation": {
+            "type": "object",
+            "properties": {
+              "schema_version": {"type": "string"},
+              "issues": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["gap", "contradiction"]},
+                    "rule_ref": {"type": "string"},
+                    "dimension": {"type": "string"},
+                    "field": {"type": "string"},
+                    "detail_key": {"type": "string"},
+                    "depends_on": {"type": "array", "items": {"type": "string"}}
+                  },
+                  "required": ["ref", "kind", "rule_ref", "dimension", "field", "detail_key", "depends_on"],
+                  "additionalProperties": false
+                }
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {"type": "string"},
+                    "dimension": {"type": "string"},
+                    "pack_ref": {"type": "string"},
+                    "slot": {"type": "string"},
+                    "decision_kind": {"type": "string", "enum": ["product", "technical", "technical_default"]},
+                    "derived_from": {"type": "array", "items": {"type": "string"}},
+                    "depends_on": {"type": "array", "items": {"type": "string"}},
+                    "prompt_key": {"type": "string"},
+                    "why_key": {"type": "string"},
+                    "help_key": {"type": "string"},
+                    "example_key": {"type": "string"},
+                    "options": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "ref": {"type": "string"},
+                          "kind": {"type": "string", "enum": ["preset", "free_text"]},
+                          "label_key": {"type": "string"},
+                          "help_key": {"type": "string"},
+                          "example_key": {"type": "string"},
+                          "rationale_key": {"type": "string"},
+                          "recommended": {"type": "boolean"}
+                        },
+                        "required": ["ref", "kind", "label_key", "help_key", "example_key", "rationale_key", "recommended"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": ["ref", "dimension", "pack_ref", "slot", "decision_kind", "derived_from", "depends_on", "prompt_key", "why_key", "help_key", "example_key", "options"],
+                  "additionalProperties": false
+                }
+              },
+              "default_proposals": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "dimension": {"type": "string"},
+                    "decision_kind": {"type": "string", "enum": ["product", "technical", "technical_default"]},
+                    "option": {"type": "string"},
+                    "label_key": {"type": "string"},
+                    "help_key": {"type": "string"},
+                    "example_key": {"type": "string"},
+                    "rationale_key": {"type": "string"},
+                    "implicitly_applied": {"type": "boolean"}
+                  },
+                  "required": ["dimension", "decision_kind", "option", "label_key", "help_key", "example_key", "rationale_key", "implicitly_applied"],
+                  "additionalProperties": false
+                }
+              },
+              "pack_refs": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["schema_version", "issues", "questions", "default_proposals", "pack_refs"],
+            "additionalProperties": false
+          },
+          "evaluation_replay_exact": {"type": "boolean"},
+          "request_ref_reserved": {"type": "boolean"},
+          "request_outcome": {
+            "type": "object",
+            "properties": {
+              "kind": {"type": "string", "enum": ["intake_mutation", "wizard_gaps_noop"]},
+              "receipt_ref": {"type": "string"}
+            },
+            "required": ["kind", "receipt_ref"],
+            "additionalProperties": false
+          },
+          "input_durability": {
+            "type": "object",
+            "properties": {
+              "selections": {"type": "string"},
+              "facts": {"type": "string"},
+              "pack_refs": {"type": "string"}
+            },
+            "required": ["selections", "facts", "pack_refs"],
+            "additionalProperties": false
+          },
+          "evaluator_identity": {
+            "type": "object",
+            "properties": {
+              "schema": {"type": "string"},
+              "version": {"type": "string"},
+              "semantic_digest": {"type": "string"}
+            },
+            "required": ["schema", "version", "semantic_digest"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["intake", "evaluation", "evaluation_replay_exact", "request_ref_reserved", "request_outcome", "input_durability", "evaluator_identity"],
+        "additionalProperties": false
+      },
+      "description_key": "command.intakes.wizard.gaps.apply.description",
+      "error_codes": ["invalid_request", "unauthenticated", "forbidden", "not_found", "conflict", "unavailable", "internal"],
+      "http": {"method": "POST", "path": "/api/v1/commands/orquesta.intakes.wizard.gaps.apply"},
+      "mcp": {"tool": "orquesta.intakes.wizard.gaps.apply", "annotations": {"read_only": false, "destructive": true, "idempotent": true, "open_world": false}},
+      "cli": {"path": ["intakes", "wizard", "gaps", "apply"]}
     },
     {
       "id": "orquesta.intakes.create", "version": "1", "kind": "command", "handler": "CreateIntake", "permission": "goals.create", "audience": "principal", "execution_bound": false, "replay_mode": "application_receipt",

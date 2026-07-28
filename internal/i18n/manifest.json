@@ -66,6 +66,7 @@
         "catalog:command.intakes.get.description",
         "catalog:command.intakes.recommendations.accept.description",
         "catalog:command.intakes.wizard.dossier.prepare.description",
+        "catalog:command.intakes.wizard.gaps.apply.description",
         "catalog:command.mailbox.acknowledge.description",
         "catalog:command.mailbox.admit.description",
         "catalog:command.mailbox.block.description",

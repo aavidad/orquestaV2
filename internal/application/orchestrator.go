@@ -15,6 +15,7 @@ const (
 type Dependencies struct {
 	State                   StateRepository
 	IntakeStore             IntakeStore
+	WizardGapsOutcomes      WizardGapsOutcomeStore
 	IntakeDossierStore      IntakeDossierStore
 	Access                  AccessRepository
 	Launcher                AgentLauncher
@@ -46,6 +47,7 @@ type Dependencies struct {
 type Orchestrator struct {
 	state                   StateRepository
 	intake                  *IntakeService
+	wizardGaps              *WizardGapsService
 	intakeDossier           *IntakeDossierService
 	access                  AccessRepository
 	launcher                AgentLauncher
@@ -75,6 +77,9 @@ type Orchestrator struct {
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
 	switch {
+	case (dependencies.IntakeStore == nil) !=
+		(dependencies.WizardGapsOutcomes == nil):
+		return nil, errors.New("application.wizard_gaps_store_composition_invalid")
 	case dependencies.State == nil:
 		return nil, errors.New("application.state_required")
 	case dependencies.Access == nil:
@@ -124,9 +129,16 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		controller = unsupportedAgentController{}
 	}
 	var intakeService *IntakeService
+	var wizardGapsService *WizardGapsService
 	if dependencies.IntakeStore != nil {
 		var err error
 		intakeService, err = NewIntakeService(dependencies.IntakeStore)
+		if err != nil {
+			return nil, err
+		}
+		wizardGapsService, err = NewWizardGapsService(
+			intakeService, dependencies.WizardGapsOutcomes,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -145,6 +157,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 	return &Orchestrator{
 		state:                   dependencies.State,
 		intake:                  intakeService,
+		wizardGaps:              wizardGapsService,
 		intakeDossier:           intakeDossierService,
 		access:                  dependencies.Access,
 		launcher:                dependencies.Launcher,

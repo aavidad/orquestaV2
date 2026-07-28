@@ -23,6 +23,8 @@ func TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter(t *testing.T) {
 		result.Record.Receipt.Operation != IntakeOperationApply ||
 		result.Record.Receipt.RequestRef != request.RequestRef ||
 		!result.RequestRefReserved ||
+		result.RequestOutcome.Kind != WizardGapsRequestOutcomeIntakeMutation ||
+		result.RequestOutcome.ReceiptRef != result.Record.Receipt.Ref ||
 		result.EvaluatorIdentity != request.EvaluatorIdentity ||
 		result.InputDurability != wizardGapsDurability() ||
 		result.InputDurability.Selections != "intake_decisions" ||
@@ -42,6 +44,69 @@ func TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter(t *testing.T) {
 	}
 	assertWizardQuestionProjection(t, result, gaps.DimensionU3)
 	assertWizardQuestionProjection(t, result, gaps.DimensionU12)
+}
+
+func TestWizardGapsRequestOutcomeValidationFailsClosed(t *testing.T) {
+	const intakeReceiptRef = "intake-receipt:" +
+		"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	mutation := ApplyWizardGapsResult{
+		Record: IntakeRecord{
+			Receipt: IntakeReceipt{Ref: intakeReceiptRef},
+		},
+		RequestRefReserved: true,
+		RequestOutcome: WizardGapsRequestOutcome{
+			Kind:       WizardGapsRequestOutcomeIntakeMutation,
+			ReceiptRef: intakeReceiptRef,
+		},
+	}
+	noOp := mutation
+	noOp.RequestOutcome = WizardGapsRequestOutcome{
+		Kind: WizardGapsRequestOutcomeNoOp,
+		ReceiptRef: "wizard-gaps-outcome:" +
+			"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}
+	if err := ValidateApplyWizardGapsResult(mutation); err != nil {
+		t.Fatalf("valid mutation: %v", err)
+	}
+	if err := ValidateApplyWizardGapsResult(noOp); err != nil {
+		t.Fatalf("valid no-op: %v", err)
+	}
+	tests := map[string]ApplyWizardGapsResult{
+		"unreserved": func() ApplyWizardGapsResult {
+			value := mutation
+			value.RequestRefReserved = false
+			return value
+		}(),
+		"unknown kind": func() ApplyWizardGapsResult {
+			value := mutation
+			value.RequestOutcome.Kind = "unknown"
+			return value
+		}(),
+		"mutation receipt mismatch": func() ApplyWizardGapsResult {
+			value := mutation
+			value.RequestOutcome.ReceiptRef = "intake-receipt:" +
+				"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+			return value
+		}(),
+		"no-op uses snapshot receipt": func() ApplyWizardGapsResult {
+			value := noOp
+			value.RequestOutcome.ReceiptRef = value.Record.Receipt.Ref
+			return value
+		}(),
+		"unsupported exact evaluation": func() ApplyWizardGapsResult {
+			value := mutation
+			value.EvaluationReplayExact = true
+			return value
+		}(),
+	}
+	for name, result := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateApplyWizardGapsResult(result); err == nil ||
+				err.Error() != "application.wizard_gaps_request_outcome_invalid" {
+				t.Fatalf("err=%v", err)
+			}
+		})
+	}
 }
 
 func TestWizardGapsAddsNewlyActivatedQuestionsWithoutDuplicatingPersistedRefs(
@@ -150,6 +215,8 @@ func TestWizardGapsExactReplayReconstructsHistoricalIntakeRevision(t *testing.T)
 		t.Fatal(err)
 	}
 	if replayed.Changed ||
+		replayed.RequestOutcome.Kind != WizardGapsRequestOutcomeIntakeMutation ||
+		replayed.RequestOutcome.ReceiptRef != first.Record.Receipt.Ref ||
 		replayed.Record.Receipt != first.Record.Receipt ||
 		replayed.Record.State.Revision() != first.Record.State.Revision() ||
 		system.store.applyCalls != applyCalls {
@@ -528,7 +595,7 @@ func TestWizardGapsProjectsExplicitPackAsRequestScopedContext(t *testing.T) {
 	}
 }
 
-func TestWizardGapsNoOpCreatesNoMutationOrReceipt(t *testing.T) {
+func TestWizardGapsNoOpCreatesNoIntakeMutationAndReservesOutcome(t *testing.T) {
 	system, service := newWizardGapsTestSystem(t)
 	first, err := service.ApplyWizardGaps(
 		context.Background(),
@@ -551,16 +618,68 @@ func TestWizardGapsNoOpCreatesNoMutationOrReceipt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Changed ||
-		result.RequestRefReserved ||
+		!result.RequestRefReserved ||
+		result.RequestOutcome.Kind != WizardGapsRequestOutcomeNoOp ||
+		!validWizardGapsNoOpOutcomeRef(result.RequestOutcome.ReceiptRef) ||
+		result.RequestOutcome.ReceiptRef == result.Record.Receipt.Ref ||
 		result.Record.Receipt != first.Record.Receipt ||
 		result.Record.State.Revision() != first.Record.State.Revision() ||
-		system.store.applyCalls != applyCalls {
+		system.store.applyCalls != applyCalls ||
+		system.store.wizardReserveCalls != 1 {
 		t.Fatalf(
 			"result=%+v calls=%d/%d",
 			result,
 			applyCalls,
 			system.store.applyCalls,
 		)
+	}
+}
+
+type conflictingWizardGapsOutcomeStore struct {
+	*memoryIntakeStore
+}
+
+func (store conflictingWizardGapsOutcomeStore) ReplayWizardGapsNoOp(
+	context.Context,
+	WizardGapsNoOpReplayRequest,
+) (WizardGapsNoOpOutcome, bool, error) {
+	return WizardGapsNoOpOutcome{}, false, nil
+}
+
+func (store conflictingWizardGapsOutcomeStore) ReserveWizardGapsNoOp(
+	context.Context,
+	WizardGapsNoOpReservation,
+) (WizardGapsNoOpOutcome, bool, error) {
+	return WizardGapsNoOpOutcome{}, false, &StateError{Code: StateConflict}
+}
+
+func TestWizardGapsNoOpReservationConflictWithoutReplayFailsClosed(t *testing.T) {
+	system, service := newWizardGapsTestSystem(t)
+	first, err := service.ApplyWizardGaps(
+		context.Background(),
+		wizardGapsRequest(t, system, "request:wizard-gaps-conflict-base", 1),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err = NewWizardGapsService(
+		system.service,
+		conflictingWizardGapsOutcomeStore{memoryIntakeStore: system.store},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.ApplyWizardGaps(
+		context.Background(),
+		wizardGapsRequest(
+			t,
+			system,
+			"request:wizard-gaps-conflict-noop",
+			first.Record.State.Revision(),
+		),
+	)
+	if !IsStateError(err, StateConflict) {
+		t.Fatalf("reservation conflict err=%v", err)
 	}
 }
 
@@ -589,7 +708,7 @@ func newWizardGapsTestSystem(
 	t.Helper()
 	system := newIntakeTestSystem(t)
 	mustCreateIntake(t, system)
-	service, err := NewWizardGapsService(system.service)
+	service, err := NewWizardGapsService(system.service, system.store)
 	if err != nil {
 		t.Fatal(err)
 	}

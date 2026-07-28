@@ -43,6 +43,7 @@ type applicationAPI interface {
 	CreateIntake(context.Context, application.Access, application.CreateIntakeRequest) (application.IntakeResult, error)
 	GetIntake(context.Context, application.Access, application.GetIntakeRequest) (application.IntakeRecord, error)
 	ApplyIntake(context.Context, application.Access, application.ApplyIntakeRequest) (application.IntakeResult, error)
+	ApplyWizardGaps(context.Context, application.Access, application.ApplyWizardGapsRequest) (application.ApplyWizardGapsResult, error)
 	AcceptIntakeRecommendations(context.Context, application.Access, application.AcceptIntakeRecommendationsRequest) (application.IntakeResult, error)
 	GetIntakeContext(context.Context, application.Access, application.GetIntakeContextRequest) (intake.Context, error)
 	PrepareIntakeDossier(context.Context, application.Access, application.PrepareIntakeDossierRequest) (application.IntakeDossierResult, error)
@@ -63,6 +64,7 @@ var expectedHandlerPermissions = map[string]string{
 	"GetMailbox": "goals.get", "ListMailbox": "goals.get", "AcknowledgeMailbox": "goals.get", "BlockMailbox": "goals.get",
 	"OpenCouncilRound": "goals.direct", "SkipCouncil": "council.skip",
 	"CreateIntake": "goals.create", "GetIntake": "goals.get", "ApplyIntake": "goals.create",
+	"ApplyWizardGaps":             "goals.create",
 	"AcceptIntakeRecommendations": "goals.create", "GetIntakeContext": "goals.get",
 	"PrepareIntakeDossier": "goals.create", "PrepareWizardDossier": "goals.create",
 	"GetIntakeDossier": "goals.get", "ConfirmIntakeDossier": "goals.create",
@@ -91,6 +93,7 @@ func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
 			return handleCreateIntake(ctx, dispatcher.application, bound, payload, dispatcher.intakePolicy)
 		},
 		"GetIntake": wrap(handleGetIntake), "ApplyIntake": wrap(handleApplyIntake),
+		"ApplyWizardGaps":             wrap(handleApplyWizardGaps),
 		"AcceptIntakeRecommendations": wrap(handleAcceptIntakeRecommendations),
 		"GetIntakeContext":            wrap(handleGetIntakeContext),
 		"PrepareIntakeDossier":        wrap(handlePrepareIntakeDossier),

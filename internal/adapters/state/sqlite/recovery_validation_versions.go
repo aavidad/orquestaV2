@@ -11,21 +11,22 @@ import (
 )
 
 const (
-	recoverySchemaV09        = 5
-	recoverySchemaV10        = 6
-	recoverySchemaV12        = 7
-	recoverySchemaV13        = 8
-	recoverySchemaV14        = 9
-	recoverySchemaV15        = 10
-	recoverySchemaV16        = 11
-	recoverySchemaV17        = 12
-	recoverySchemaV18        = 13
-	recoverySchemaV19        = 14
-	recoverySchemaV20        = 15
-	recoverySchemaV21        = 16
-	recoverySchemaV23Intake  = 17
-	recoverySchemaV23Dossier = 18
-	recoverySchemaV23        = 19
+	recoverySchemaV09             = 5
+	recoverySchemaV10             = 6
+	recoverySchemaV12             = 7
+	recoverySchemaV13             = 8
+	recoverySchemaV14             = 9
+	recoverySchemaV15             = 10
+	recoverySchemaV16             = 11
+	recoverySchemaV17             = 12
+	recoverySchemaV18             = 13
+	recoverySchemaV19             = 14
+	recoverySchemaV20             = 15
+	recoverySchemaV21             = 16
+	recoverySchemaV23Intake       = 17
+	recoverySchemaV23Dossier      = 18
+	recoverySchemaV23Confirmation = 19
+	recoverySchemaV23             = 20
 )
 
 func migrationSchemaRef(migrations []migration) string {
@@ -42,7 +43,9 @@ func recoveryMigrationPrefix(migrations []migration, version int) ([]migration, 
 		version != recoverySchemaV15 && version != recoverySchemaV16 && version != recoverySchemaV17 &&
 		version != recoverySchemaV18 && version != recoverySchemaV19 && version != recoverySchemaV20 &&
 		version != recoverySchemaV21 && version != recoverySchemaV23Intake &&
-		version != recoverySchemaV23Dossier && version != recoverySchemaV23 {
+		version != recoverySchemaV23Dossier &&
+		version != recoverySchemaV23Confirmation &&
+		version != recoverySchemaV23 {
 		return nil, errors.New("sqlite.recovery_schema_version_invalid")
 	}
 	if version > len(migrations) || migrations[version-1].version != version {

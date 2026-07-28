@@ -109,8 +109,11 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		if version >= recoverySchemaV23Dossier {
 			validators = append(validators, validateRecoveryV23Dossiers)
 		}
-		if version >= recoverySchemaV23 {
+		if version >= recoverySchemaV23Confirmation {
 			validators = append(validators, validateRecoveryV23DossierConfirmations)
+		}
+		if version >= recoverySchemaV23 {
+			validators = append(validators, validateRecoveryV23WizardGapsOutcomes)
 		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {

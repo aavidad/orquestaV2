@@ -99,6 +99,43 @@ func (orchestrator *Orchestrator) ApplyIntake(
 	return orchestrator.intake.ApplyIntake(ctx, request)
 }
 
+// ApplyWizardGaps binds authenticated authority before the versioned Wizard
+// evaluator compiles findings into the shared Intake writer.
+func (orchestrator *Orchestrator) ApplyWizardGaps(
+	ctx context.Context,
+	access Access,
+	request ApplyWizardGapsRequest,
+) (ApplyWizardGapsResult, error) {
+	if orchestrator == nil || orchestrator.wizardGaps == nil {
+		return ApplyWizardGapsResult{}, errors.New("application.unavailable")
+	}
+	authorizationRequestRef, err := IntakeAuthorizationRequestRef(
+		IntakeOperationApply, request.RequestRef,
+	)
+	if err != nil {
+		return ApplyWizardGapsResult{}, err
+	}
+	principal, projectRef, err := access.values()
+	if err != nil {
+		return ApplyWizardGapsResult{}, err
+	}
+	authorization, err := orchestrator.authorizeIdempotentWithRequestRef(
+		ctx,
+		access,
+		identity.PermissionGoalsCreate,
+		projectRef.String(),
+		orchestrator.clock.Now(),
+		authorizationRequestRef,
+	)
+	if err != nil {
+		return ApplyWizardGapsResult{}, err
+	}
+	request.ActorRef = principal.ActorRef
+	request.ProjectRef = projectRef
+	request.AuthorizationReceipt = authorization
+	return orchestrator.wizardGaps.ApplyWizardGaps(ctx, request)
+}
+
 func (orchestrator *Orchestrator) PrepareIntakeDossier(
 	ctx context.Context,
 	access Access,

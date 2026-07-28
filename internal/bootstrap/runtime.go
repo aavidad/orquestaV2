@@ -612,7 +612,8 @@ func buildOrchestratorDependencies(
 		composition = execution[0]
 	}
 	return application.Dependencies{
-		State: repository, IntakeStore: repository, IntakeDossierStore: repository, Access: repository,
+		State: repository, IntakeStore: repository, WizardGapsOutcomes: repository,
+		IntakeDossierStore: repository, Access: repository,
 		Launcher: agent, Observer: agent, Controller: controller, Artifacts: artifacts,
 		WorkspaceManager: workspace, VersionControl: workspace,
 		TestAttestor: testAttestor.attestor, TestAttestationPolicy: testAttestor.policy,

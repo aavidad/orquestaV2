@@ -25,6 +25,7 @@
   "command.intakes.get.description": "Inspect the versioned state of an intake.",
   "command.intakes.recommendations.accept.description": "Atomically accept the recommendations from one exact intake round.",
   "command.intakes.wizard.dossier.prepare.description": "Prepare the Wizard dossier from one exact intake revision and its built-in template.",
+  "command.intakes.wizard.gaps.apply.description": "Evaluate Wizard gaps and apply their causal questions to the shared intake.",
   "command.mailbox.acknowledge.description": "Acknowledge consumption of a mailbox delivery.",
   "command.mailbox.admit.description": "Admit a causal delivery into the mailbox.",
   "command.mailbox.block.description": "Block a mailbox delivery with a durable cause.",

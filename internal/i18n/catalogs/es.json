@@ -25,6 +25,7 @@
   "command.intakes.get.description": "Consulta el estado versionado de un intake.",
   "command.intakes.recommendations.accept.description": "Acepta de forma atómica las recomendaciones de una ronda exacta del intake.",
   "command.intakes.wizard.dossier.prepare.description": "Prepara el dossier del Wizard desde una revisión exacta del intake y su plantilla integrada.",
+  "command.intakes.wizard.gaps.apply.description": "Evalúa los huecos del Wizard y aplica sus preguntas causales al intake compartido.",
   "command.mailbox.acknowledge.description": "Confirma el consumo de una entrega del buzón.",
   "command.mailbox.admit.description": "Admite una entrega causal en el buzón.",
   "command.mailbox.block.description": "Bloquea una entrega del buzón con causa durable.",
