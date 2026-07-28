@@ -747,6 +747,7 @@ func (adapter *Adapter) completeExecutionLocked(
 		clearBytes(terminal.Diagnostic)
 		terminal.Diagnostic = nil
 		terminal.DiagnosticTruncated = false
+		applyCompletionPostMortem(&terminal, completion)
 	}
 	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
 	if err != nil {
@@ -773,6 +774,25 @@ func (adapter *Adapter) completeExecutionLocked(
 	adapter.releaseProcessOwnershipLocked(state)
 	adapter.settleExecutionLocked(state)
 	_ = adapter.removeCompletionArtifacts(state.runPath)
+}
+
+func applyCompletionPostMortem(terminal *terminalRecord, completion *completionProof) {
+	if terminal == nil || completion == nil {
+		return
+	}
+	exited := completion.Exited
+	exitCode := completion.ExitCode
+	signal := completion.Signal
+	resultFound := completion.ResultFound
+	diagnosticSize := completion.DiagnosticSize
+	terminal.SupervisorCause = completion.Cause
+	terminal.Exited = &exited
+	terminal.ExitCode = &exitCode
+	terminal.Signal = &signal
+	terminal.ResultFound = &resultFound
+	terminal.DiagnosticSize = &diagnosticSize
+	terminal.DiagnosticSHA256 = completion.DiagnosticHash
+	terminal.DiagnosticTruncated = completion.DiagnosticTruncated
 }
 
 func (adapter *Adapter) settleExecutionLocked(state *executionState) {

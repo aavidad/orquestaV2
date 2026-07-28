@@ -333,11 +333,19 @@ func TestAdapterBoundsFailureDiagnosticAndReturnsOnlyTypedCode(t *testing.T) {
 				}
 				return
 			}
-			if len(terminal.Diagnostic) != 0 || terminal.DiagnosticTruncated {
+			if len(terminal.Diagnostic) != 0 ||
+				terminal.SupervisorCause != supervisorCauseNatural ||
+				terminal.Exited == nil || !*terminal.Exited ||
+				terminal.ExitCode == nil || *terminal.ExitCode != 23 ||
+				terminal.Signal == nil || *terminal.Signal != 0 ||
+				terminal.ResultFound == nil ||
+				terminal.DiagnosticSize == nil ||
+				!validTerminalSHA256(terminal.DiagnosticSHA256) ||
+				!terminal.DiagnosticTruncated {
 				t.Fatalf(
-					"supervised diagnostic persisted: bytes=%d truncated=%v",
+					"supervised post-mortem invalid: bytes=%d terminal=%+v",
 					len(terminal.Diagnostic),
-					terminal.DiagnosticTruncated,
+					terminal,
 				)
 			}
 			terminalPayload, err := os.ReadFile(filepath.Join(

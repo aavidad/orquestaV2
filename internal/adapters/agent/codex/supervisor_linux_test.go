@@ -333,6 +333,17 @@ func TestSupervisorIndependentTimeoutPublishesCausalProof(t *testing.T) {
 	if identity, err := platformInspectProcess(record); err != nil || identity != processIdentityGone {
 		t.Fatalf("timeout left supervisor group live: identity=%v error=%v", identity, err)
 	}
+	terminal := readPersistedTerminal(t, config, executionPath(request.ExecutionRef))
+	if terminal.SupervisorCause != supervisorCauseTimeout ||
+		terminal.Exited == nil || *terminal.Exited ||
+		terminal.ExitCode == nil || *terminal.ExitCode != 0 ||
+		terminal.Signal == nil || *terminal.Signal == 0 ||
+		terminal.ResultFound == nil ||
+		terminal.DiagnosticSize == nil ||
+		!validTerminalSHA256(terminal.DiagnosticSHA256) ||
+		len(terminal.Diagnostic) != 0 {
+		t.Fatalf("timeout post-mortem = %+v", terminal)
+	}
 }
 
 func TestSupervisorCgroupDrainsSetsidNaturalAndPreservesExternalSibling(t *testing.T) {
@@ -1174,6 +1185,21 @@ func TestSupervisorProofDoesNotPersistRawDiagnostic(t *testing.T) {
 	if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeProcessFailed {
 		t.Fatalf("nonzero exit after restart = %+v", observation)
 	}
+	terminal := readPersistedTerminal(t, config, executionPath(request.ExecutionRef))
+	assertTerminalPostMortemMatchesProof(t, terminal, proof)
+	terminalPayload, err := os.ReadFile(filepath.Join(runDirectory, terminalFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sensitive := range []string{
+		"private delayed failure diagnostic",
+		helperCredentialInitial,
+		helperSessionBearer,
+	} {
+		if strings.Contains(string(terminalPayload), sensitive) {
+			t.Fatalf("terminal persisted sensitive diagnostic material %q", sensitive)
+		}
+	}
 	for _, name := range []string{completionProofFileName} {
 		if _, err := os.Stat(filepath.Join(runDirectory, name)); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("%s survived terminal publication: %v", name, err)
@@ -1492,6 +1518,25 @@ func readCompletionProofFile(t *testing.T, proofPath string) completionProof {
 		t.Fatal(err)
 	}
 	return proof
+}
+
+func assertTerminalPostMortemMatchesProof(
+	t *testing.T,
+	terminal terminalRecord,
+	proof completionProof,
+) {
+	t.Helper()
+	if terminal.SupervisorCause != proof.Cause ||
+		terminal.Exited == nil || *terminal.Exited != proof.Exited ||
+		terminal.ExitCode == nil || *terminal.ExitCode != proof.ExitCode ||
+		terminal.Signal == nil || *terminal.Signal != proof.Signal ||
+		terminal.ResultFound == nil || *terminal.ResultFound != proof.ResultFound ||
+		terminal.DiagnosticSize == nil || *terminal.DiagnosticSize != proof.DiagnosticSize ||
+		terminal.DiagnosticSHA256 != proof.DiagnosticHash ||
+		terminal.DiagnosticTruncated != proof.DiagnosticTruncated ||
+		len(terminal.Diagnostic) != 0 {
+		t.Fatalf("terminal post-mortem=%+v proof=%+v", terminal, proof)
+	}
 }
 
 func writeCompletionProofFile(t *testing.T, proofPath string, proof completionProof) {

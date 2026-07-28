@@ -32,3 +32,27 @@ func TestSyncDirectoryAndParentUsesCausalChildFirstOrder(t *testing.T) {
 		t.Fatalf("failed sync: order=%#v error=%v", synced, err)
 	}
 }
+
+func TestTerminalPostMortemKeepsHistoricalAbsenceCompatible(t *testing.T) {
+	for _, schemaVersion := range []int{
+		legacyStateSchemaVersion,
+		intermediateStateSchemaVersion,
+		accountlessStateSchemaVersion,
+		profileStateSchemaVersion,
+		stateSchemaVersion,
+	} {
+		if err := validateTerminalPostMortem(terminalRecord{
+			SchemaVersion:       schemaVersion,
+			DiagnosticTruncated: true,
+		}); err != nil {
+			t.Fatalf("historical V%d terminal rejected: %v", schemaVersion, err)
+		}
+	}
+
+	if err := validateTerminalPostMortem(terminalRecord{
+		SchemaVersion:   stateSchemaVersion,
+		SupervisorCause: supervisorCauseNatural,
+	}); ErrorCode(err) != CodeStateInvalid {
+		t.Fatalf("partial post-mortem error=%v code=%q", err, ErrorCode(err))
+	}
+}

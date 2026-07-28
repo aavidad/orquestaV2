@@ -66,7 +66,14 @@ type terminalRecord struct {
 	ErrorCode           string            `json:"error_code,omitempty"`
 	ObservedAt          time.Time         `json:"observed_at"`
 	Diagnostic          []byte            `json:"diagnostic,omitempty"`
-	DiagnosticTruncated bool              `json:"diagnostic_truncated,omitempty"`
+	SupervisorCause     string            `json:"supervisor_cause,omitempty"`
+	Exited              *bool             `json:"exited,omitempty"`
+	ExitCode            *int              `json:"exit_code,omitempty"`
+	Signal              *int              `json:"signal,omitempty"`
+	ResultFound         *bool             `json:"result_found,omitempty"`
+	DiagnosticSize      *int64            `json:"diagnostic_size,omitempty"`
+	DiagnosticSHA256    string            `json:"diagnostic_sha256,omitempty"`
+	DiagnosticTruncated bool              `json:"diagnostic_truncated"`
 }
 
 // launchUpgradeRecord binds the causal fields introduced in schema V4 to one
@@ -718,6 +725,9 @@ func (adapter *Adapter) loadTerminal(runPath, requestHash, specHash string, maxO
 		terminal.RequestHash != requestHash || terminal.ObservedAt.IsZero() {
 		return terminalRecord{}, false, &Error{Code: CodeStateInvalid}
 	}
+	if err := validateTerminalPostMortem(terminal); err != nil {
+		return terminalRecord{}, false, err
+	}
 	observation := terminal.observation(goal.ExecutionRef{}, specHash)
 	observation.ExecutionRef, _ = goal.NewExecutionRef("execution:state-validation")
 	if err := ports.ValidateAgentObservation(observation, maxOutput); err != nil {
@@ -727,6 +737,46 @@ func (adapter *Adapter) loadTerminal(runPath, requestHash, specHash string, maxO
 		return terminalRecord{}, false, err
 	}
 	return terminal, true, nil
+}
+
+func validateTerminalPostMortem(terminal terminalRecord) error {
+	hasPostMortem := terminal.SupervisorCause != "" ||
+		terminal.Exited != nil ||
+		terminal.ExitCode != nil ||
+		terminal.Signal != nil ||
+		terminal.ResultFound != nil ||
+		terminal.DiagnosticSize != nil ||
+		terminal.DiagnosticSHA256 != ""
+	if !hasPostMortem {
+		return nil
+	}
+	if terminal.SchemaVersion != stateSchemaVersion ||
+		(terminal.SupervisorCause != supervisorCauseNatural &&
+			terminal.SupervisorCause != supervisorCauseTimeout &&
+			terminal.SupervisorCause != supervisorCauseStop) ||
+		terminal.Exited == nil ||
+		terminal.ExitCode == nil ||
+		terminal.Signal == nil ||
+		terminal.ResultFound == nil ||
+		terminal.DiagnosticSize == nil ||
+		*terminal.DiagnosticSize < 0 ||
+		!validTerminalSHA256(terminal.DiagnosticSHA256) ||
+		len(terminal.Diagnostic) != 0 ||
+		*terminal.Exited == (*terminal.Signal != 0) ||
+		(*terminal.Exited && (*terminal.ExitCode < 0 || *terminal.ExitCode > 255)) ||
+		(!*terminal.Exited && *terminal.ExitCode != 0) {
+		return &Error{Code: CodeStateInvalid}
+	}
+	return nil
+}
+
+func validTerminalSHA256(value string) bool {
+	const prefix = "sha256:"
+	if len(value) != len(prefix)+sha256.Size*2 || value[:len(prefix)] != prefix {
+		return false
+	}
+	decoded, err := hex.DecodeString(value[len(prefix):])
+	return err == nil && hex.EncodeToString(decoded) == value[len(prefix):]
 }
 
 func (terminal terminalRecord) observation(executionRef goal.ExecutionRef, specHash string) ports.AgentObservation {
