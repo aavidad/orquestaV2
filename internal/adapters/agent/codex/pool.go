@@ -50,7 +50,8 @@ type PoolConfig struct {
 // persistent account. It owns no execution lifecycle or routing store:
 // request.json journals remain the durable routing authority.
 type Pool struct {
-	profiles []*poolProfile
+	profiles          []*poolProfile
+	aggregateCapacity int
 
 	mu         sync.Mutex
 	closed     bool
@@ -114,7 +115,8 @@ func NewPool(config PoolConfig) (*Pool, error) {
 	}
 	lifecycle, cancelLifecycle := context.WithCancelCause(context.Background())
 	pool := &Pool{
-		profiles: profiles, routes: make(map[string]*poolRoute),
+		profiles: profiles, aggregateCapacity: config.Adapter.MaxConcurrentExecutions,
+		routes:    make(map[string]*poolRoute),
 		lifecycle: lifecycle, cancelLifecycle: cancelLifecycle,
 		shutdownDone: make(chan struct{}),
 	}
@@ -130,6 +132,9 @@ func preparePoolConfig(config PoolConfig) ([]poolProfileSpec, string, error) {
 		base.AccountHomeRoot != "" || base.AccountProfile != "" ||
 		base.CredentialStore != nil || base.CredentialRef != "" {
 		return nil, "", &Error{Code: CodePoolConfigInvalid}
+	}
+	if base.MaxConcurrentExecutions <= 0 {
+		return nil, "", &Error{Code: CodeMaxConcurrentInvalid}
 	}
 	poolRoot, root, err := openPrivateRoot(base.WorkRoot)
 	if err != nil {
@@ -237,14 +242,38 @@ func preparePoolProfileDirectories(root *os.Root, configured map[string]struct{}
 		return err
 	}
 	for _, entry := range entries {
-		if _, present := configured[entry.Name()]; !present {
-			return &Error{Code: CodePoolProfileWithdrawal}
-		}
-		if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
+		entryPath := path.Join(poolProfilesDirectory, entry.Name())
+		info, statErr := root.Lstat(entryPath)
+		if statErr != nil || entry.Type()&os.ModeSymlink != 0 ||
+			info.Mode()&os.ModeSymlink != 0 || !entry.IsDir() || !info.IsDir() ||
+			info.Mode().Perm()&0o077 != 0 {
 			return &Error{Code: CodeWorkRootInvalid}
+		}
+		if _, present := configured[entry.Name()]; present {
+			continue
+		}
+		if !validPoolProfileDirectoryName(entry.Name()) {
+			return &Error{Code: CodeWorkRootInvalid}
+		}
+		retiredEntries, err := readRootDirectory(root, entryPath)
+		if err != nil {
+			return err
+		}
+		if len(retiredEntries) != 0 {
+			return &Error{Code: CodePoolProfileWithdrawal}
 		}
 	}
 	return nil
+}
+
+func validPoolProfileDirectoryName(value string) bool {
+	encoded := strings.TrimPrefix(value, poolProfilePrefix)
+	if poolProfilePrefix+encoded != value || len(encoded) != 64 ||
+		encoded != strings.ToLower(encoded) {
+		return false
+	}
+	decoded, err := hex.DecodeString(encoded)
+	return err == nil && len(decoded) == 32
 }
 
 func readRootDirectory(root *os.Root, directory string) ([]os.DirEntry, error) {
@@ -531,10 +560,62 @@ func (pool *Pool) route(
 			pool.mu.Unlock()
 			return nil, false, &Error{Code: CodeExecutionNotFound}
 		}
+		active, err := pool.aggregateActiveCountLocked()
+		if err != nil {
+			pool.mu.Unlock()
+			return nil, false, err
+		}
+		if active >= pool.aggregateCapacity {
+			pool.mu.Unlock()
+			return nil, false, &Error{
+				Code: CodeCapacityUnavailable, TemporaryFailure: true,
+			}
+		}
 		pool.routes[key] = &poolRoute{selecting: make(chan struct{})}
 		pool.mu.Unlock()
 		return nil, true, nil
 	}
+}
+
+// aggregateActiveCountLocked derives aggregate occupancy from the same
+// request/terminal journals used for routing. A selecting route is the only
+// in-memory reservation and exists solely across the pre-journal launch
+// frontier. Ambiguous or corrupt durable state never frees capacity.
+func (pool *Pool) aggregateActiveCountLocked() (int, error) {
+	active := 0
+	for key, route := range pool.routes {
+		if route == nil {
+			return 0, &Error{Code: CodePoolRoutingInvalid}
+		}
+		if route.selecting != nil {
+			active++
+			continue
+		}
+		if route.profile == nil {
+			return 0, &Error{Code: CodePoolRoutingInvalid}
+		}
+		executionRef, err := goal.NewExecutionRef(key)
+		if err != nil || executionRef.String() != key {
+			return 0, &Error{Code: CodePoolRoutingInvalid, Cause: err}
+		}
+		record, runPath, found, err := route.profile.adapter.loadLaunchRecord(executionRef)
+		if err != nil {
+			return 0, err
+		}
+		if !found {
+			return 0, &Error{Code: CodePoolRoutingInvalid}
+		}
+		_, terminal, err := route.profile.adapter.loadCausalTerminal(
+			runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes,
+		)
+		if err != nil {
+			return 0, err
+		}
+		if !terminal {
+			active++
+		}
+	}
+	return active, nil
 }
 
 func (pool *Pool) scanExecutionRouteLocked(
@@ -576,6 +657,13 @@ func (pool *Pool) finishSelection(
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	selection := pool.routes[key]
+	if pool.closed {
+		if selection != nil && selection.selecting != nil {
+			close(selection.selecting)
+		}
+		delete(pool.routes, key)
+		return nil
+	}
 	owner, found, err := pool.scanExecutionRouteLocked(executionRef)
 	if err == nil && requireJournal && !found {
 		err = &Error{Code: CodePoolRoutingInvalid}
@@ -702,16 +790,26 @@ func (pool *Pool) Shutdown(ctx context.Context) error {
 }
 
 func (pool *Pool) finalizeShutdown() {
-	pool.operations.Wait()
 	errs := make([]error, len(pool.profiles))
 	var shutdowns sync.WaitGroup
 	shutdowns.Add(len(pool.profiles))
 	for index, profile := range pool.profiles {
 		go func(index int, adapter *Adapter) {
 			defer shutdowns.Done()
-			errs[index] = adapter.Close()
+			// Adapter.Shutdown may return its caller timeout while its unique
+			// finalizer continues waiting for operation owners. Pool must not
+			// publish completion until that durable/process cleanup is real.
+			_ = adapter.Close()
+			<-adapter.shutdownDone
+			adapter.mu.Lock()
+			errs[index] = adapter.shutdownErr
+			adapter.mu.Unlock()
 		}(index, profile.adapter)
 	}
+	// Child lifecycles start first so an Adapter operation blocked in external
+	// authority receives its own shutdown cancellation. Pool operations then
+	// drain without replacing the callerContext retained by accepted runs.
+	pool.operations.Wait()
 	shutdowns.Wait()
 	pool.mu.Lock()
 	pool.shutdownErr = errors.Join(errs...)

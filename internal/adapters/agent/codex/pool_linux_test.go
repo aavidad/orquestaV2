@@ -96,6 +96,44 @@ func TestPoolUsesDistinctPersistentHomesAndSpillsCapacity(t *testing.T) {
 	}
 }
 
+func TestPoolHonorsAggregateCapacityAndReplayDoesNotConsumeSlot(t *testing.T) {
+	config, _ := poolTestFixture(t)
+	config.Adapter.MaxConcurrentExecutions = 1
+	pool := openTestPool(t, config)
+
+	firstContext, cancelFirst := context.WithCancel(context.Background())
+	defer cancelFirst()
+	first := testRequest(t, "pool-aggregate-first", "helper:fd-audit-block helper:account-home", 1024)
+	firstReceipt, err := pool.Launch(firstContext, first)
+	if err != nil {
+		t.Fatalf("Launch(first) error = %v", err)
+	}
+	secondContext, cancelSecond := context.WithCancel(context.Background())
+	defer cancelSecond()
+	second := testRequest(t, "pool-aggregate-second", "helper:fd-audit-block helper:account-home", 1024)
+	if _, err := pool.Launch(secondContext, second); ErrorCode(err) != CodeCapacityUnavailable ||
+		!capacityDefinitelyNotApplied(err) {
+		t.Fatalf("Launch(second) error=%v code=%q definitely_not_applied=%v",
+			err, ErrorCode(err), capacityDefinitelyNotApplied(err))
+	}
+
+	cancelFirst()
+	if terminal := awaitPoolTerminal(t, pool, first.ExecutionRef); terminal.Status != ports.AgentFailed {
+		t.Fatalf("first terminal = %+v", terminal)
+	}
+	replayed, err := pool.Launch(context.Background(), first)
+	if err != nil || replayed != firstReceipt {
+		t.Fatalf("Launch(terminal replay)=%+v error=%v want=%+v", replayed, err, firstReceipt)
+	}
+	if _, err := pool.Launch(secondContext, second); err != nil {
+		t.Fatalf("Launch(after terminal replay) error = %v", err)
+	}
+	cancelSecond()
+	if terminal := awaitPoolTerminal(t, pool, second.ExecutionRef); terminal.Status != ports.AgentFailed {
+		t.Fatalf("second terminal = %+v", terminal)
+	}
+}
+
 func TestPoolConcurrentIdempotentLaunchPublishesOneJournalAndProcess(t *testing.T) {
 	config, _ := poolTestFixture(t)
 	pool := openTestPool(t, config)
@@ -257,6 +295,85 @@ func TestPoolFansOutCompositionBindingsAndControls(t *testing.T) {
 	}
 }
 
+func TestPoolShutdownCancelsBlockedLaunchAuthorityWithoutDeadlock(t *testing.T) {
+	config, _ := poolTestFixture(t)
+	pool := openTestPool(t, config)
+	resolver := &poolBlockingSessionResolver{started: make(chan struct{})}
+	if err := pool.BindSessionResolver(resolver); err != nil {
+		t.Fatalf("BindSessionResolver() error = %v", err)
+	}
+	request := testRequest(t, "pool-blocked-resolver", "helper:account-home helper:success", 1024)
+	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:pool-blocked-resolver")
+	launchDone := make(chan error, 1)
+	go func() {
+		_, err := pool.Launch(context.Background(), request)
+		launchDone <- err
+	}()
+	select {
+	case <-resolver.started:
+	case <-time.After(time.Second):
+		t.Fatal("session resolver did not start")
+	}
+
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelShutdown()
+	if err := pool.Shutdown(shutdownContext); err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	select {
+	case err := <-launchDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("blocked Launch error = %v, want context cancellation", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("blocked Launch did not cooperate with Pool shutdown")
+	}
+}
+
+func TestPoolShutdownTimeoutDoesNotPublishCompletionBeforeAdapterRelease(t *testing.T) {
+	config, _ := poolTestFixture(t)
+	config.Adapter.SupervisorStartTimeout = 25 * time.Millisecond
+	pool, err := NewPool(config)
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	_, releaseAdapter, err := pool.profiles[0].adapter.beginOperation(context.Background())
+	if err != nil {
+		t.Fatalf("beginOperation(adapter) error = %v", err)
+	}
+	released := false
+	defer func() {
+		if !released {
+			releaseAdapter()
+		}
+	}()
+
+	timeoutContext, cancelTimeout := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancelTimeout()
+	if err := pool.Shutdown(timeoutContext); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Shutdown(timeout) error = %v", err)
+	}
+	time.Sleep(2 * config.Adapter.SupervisorStartTimeout)
+	select {
+	case <-pool.shutdownDone:
+		t.Fatal("Pool published shutdown before child adapter released")
+	default:
+	}
+
+	releaseAdapter()
+	released = true
+	if err := pool.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown(after release) error = %v", err)
+	}
+	reopened, err := NewPool(config)
+	if err != nil {
+		t.Fatalf("NewPool(after real shutdown) error = %v", err)
+	}
+	if err := reopened.Close(); err != nil {
+		t.Fatalf("Close(reopened) error = %v", err)
+	}
+}
+
 func TestPoolAllowsAdditionButRejectsMaterializedProfileWithdrawal(t *testing.T) {
 	config, _ := poolTestFixture(t)
 	firstConfig := config
@@ -292,6 +409,52 @@ func TestPoolAllowsAdditionButRejectsMaterializedProfileWithdrawal(t *testing.T)
 	withdrawn.AccountHomes = append([]AccountHome(nil), config.AccountHomes[1:]...)
 	if pool, err := NewPool(withdrawn); pool != nil || ErrorCode(err) != CodePoolProfileWithdrawal {
 		t.Fatalf("NewPool(withdrawn)=%v error=%v code=%q", pool, err, ErrorCode(err))
+	}
+}
+
+func TestPoolAllowsEmptyProfileRetirementWithoutDeletingWorkRoot(t *testing.T) {
+	config, _ := poolTestFixture(t)
+	pool, err := NewPool(config)
+	if err != nil {
+		t.Fatalf("NewPool() error = %v", err)
+	}
+	retiredRef, err := deriveAccountProfileRef(
+		config.AccountHomes[1].Root,
+		config.AccountHomes[1].Profile,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retiredDirectory, err := poolProfileDirectoryName(retiredRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retiredWorkRoot := filepath.Join(
+		config.Adapter.WorkRoot, poolProfilesDirectory, retiredDirectory,
+	)
+	if err := pool.Close(); err != nil {
+		t.Fatalf("Close(pool) error = %v", err)
+	}
+
+	rotated := config
+	rotated.AccountHomes = append([]AccountHome(nil), config.AccountHomes[:1]...)
+	remaining, err := NewPool(rotated)
+	if err != nil {
+		t.Fatalf("NewPool(empty retirement) error = %v", err)
+	}
+	if _, err := os.Stat(retiredWorkRoot); err != nil {
+		t.Fatalf("retired empty work root was removed: %v", err)
+	}
+	if err := remaining.Close(); err != nil {
+		t.Fatalf("Close(remaining) error = %v", err)
+	}
+
+	readded, err := NewPool(config)
+	if err != nil {
+		t.Fatalf("NewPool(re-add empty profile) error = %v", err)
+	}
+	if err := readded.Close(); err != nil {
+		t.Fatalf("Close(readded) error = %v", err)
 	}
 }
 
@@ -434,6 +597,27 @@ func (*poolSessionResolver) RecoverCodexSession(
 	ports.AgentLaunchRequest,
 ) (Session, error) {
 	return Session{}, errors.New("unused")
+}
+
+type poolBlockingSessionResolver struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (resolver *poolBlockingSessionResolver) ResolveCodexSession(
+	ctx context.Context,
+	_ ports.AgentLaunchRequest,
+) (Session, error) {
+	resolver.once.Do(func() { close(resolver.started) })
+	<-ctx.Done()
+	return Session{}, ctx.Err()
+}
+
+func (resolver *poolBlockingSessionResolver) RecoverCodexSession(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+) (Session, error) {
+	return resolver.ResolveCodexSession(ctx, request)
 }
 
 type poolWorkspaceResolver struct{}
