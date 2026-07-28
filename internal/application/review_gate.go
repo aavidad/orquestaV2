@@ -20,14 +20,14 @@ func ValidatePersistedCouncilSubject(record GoalRecord, subject council.Subject)
 		record.Goal.AppSpec().Generation() != goal.AppSpecGeneration(subject.AppSpecGeneration) {
 		return errors.New("council.persisted_subject_invalid")
 	}
-	author, found := persistedCouncilAuthor(record, subject)
-	if !found {
-		return errors.New("council.persisted_subject_invalid")
-	}
 	change, found := persistedCouncilChange(record, subject)
 	policy, policyFound := item.CouncilPolicy()
 	if !found || !policyFound || policy != subject.Policy ||
-		!persistedCouncilGenerationMatches(item, subject) || change.ExecutionRef != author.Ref {
+		!persistedCouncilGenerationMatches(item, subject) {
+		return errors.New("council.persisted_subject_invalid")
+	}
+	author, found := persistedCouncilAuthor(record, subject, change.ExecutionRef)
+	if !found {
 		return errors.New("council.persisted_subject_invalid")
 	}
 	matches := 0
@@ -92,17 +92,19 @@ func persistedCouncilWorkItem(record GoalRecord, subject council.Subject) (goal.
 	return goal.WorkItem{}, false
 }
 
-func persistedCouncilAuthor(record GoalRecord, subject council.Subject) (ExecutionRecord, bool) {
-	for _, candidate := range record.Executions {
-		if candidate.Purpose == ExecutionPurposeAuthor && candidate.GoalRef.String() == subject.GoalRef &&
-			candidate.WorkItemRef.String() == subject.WorkItemRef &&
-			candidate.PlanGeneration == goal.PlanGeneration(subject.PlanGeneration) &&
-			candidate.AppSpecGeneration == goal.AppSpecGeneration(subject.AppSpecGeneration) &&
-			candidate.SpecHash == subject.SpecHash {
-			return candidate, true
-		}
+func persistedCouncilAuthor(record GoalRecord, subject council.Subject,
+	executionRef goal.ExecutionRef,
+) (ExecutionRecord, bool) {
+	candidate, found := executionByRef(record.Executions, executionRef)
+	if !found || candidate.Purpose != ExecutionPurposeAuthor ||
+		candidate.GoalRef.String() != subject.GoalRef ||
+		candidate.WorkItemRef.String() != subject.WorkItemRef ||
+		candidate.PlanGeneration != goal.PlanGeneration(subject.PlanGeneration) ||
+		candidate.AppSpecGeneration != goal.AppSpecGeneration(subject.AppSpecGeneration) ||
+		candidate.SpecHash != subject.SpecHash {
+		return ExecutionRecord{}, false
 	}
-	return ExecutionRecord{}, false
+	return candidate, true
 }
 
 func persistedCouncilChange(record GoalRecord, subject council.Subject) (ChangeSet, bool) {
