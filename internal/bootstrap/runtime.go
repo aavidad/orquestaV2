@@ -966,7 +966,13 @@ func productionAgentFactory(
 	}
 	credentialRef := snapshot.RuntimeCodexCredentialRef()
 	if credentialRef == "" {
-		return productionAgentAdapter(snapshot, clock, promptRenderer, nil)
+		return productionAgentAdapterWithGoToolchainTrust(
+			snapshot,
+			clock,
+			promptRenderer,
+			nil,
+			codexGoToolchainOwnerTrusted,
+		)
 	}
 	store, err := credentiallocal.Open(credentiallocal.Options{
 		Path: snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
@@ -986,13 +992,17 @@ func productionAgentFactory(
 func productionAgentAdapter(
 	snapshot config.Snapshot, clock application.Clock, promptRenderer codex.PromptRenderer, credentialStore credentials.Store,
 ) (*codex.Adapter, error) {
-	return productionAgentAdapterWithGoToolchainTrust(
+	adapterConfig, err := productionCodexAdapterConfigWithGoToolchainTrust(
 		snapshot,
 		clock,
 		promptRenderer,
 		credentialStore,
 		codexGoToolchainOwnerTrusted,
 	)
+	if err != nil {
+		return nil, err
+	}
+	return codex.New(adapterConfig)
 }
 
 func productionAgentAdapterWithGoToolchainTrust(
@@ -1001,13 +1011,49 @@ func productionAgentAdapterWithGoToolchainTrust(
 	promptRenderer codex.PromptRenderer,
 	credentialStore credentials.Store,
 	ownerTrusted codexGoToolchainTrust,
-) (*codex.Adapter, error) {
+) (AgentAdapter, error) {
+	adapterConfig, err := productionCodexAdapterConfigWithGoToolchainTrust(
+		snapshot,
+		clock,
+		promptRenderer,
+		credentialStore,
+		ownerTrusted,
+	)
+	if err != nil {
+		return nil, err
+	}
+	profiles := snapshot.RuntimeCodexAccountProfiles()
+	if len(profiles) == 0 {
+		return codex.New(adapterConfig)
+	}
+	accountHomes := make([]codex.AccountHome, len(profiles))
+	for index, profile := range profiles {
+		accountHomes[index] = codex.AccountHome{
+			Root:    adapterConfig.AccountHomeRoot,
+			Profile: profile,
+		}
+	}
+	adapterConfig.AccountHomeRoot = ""
+	adapterConfig.AccountProfile = ""
+	return codex.NewPool(codex.PoolConfig{
+		Adapter:      adapterConfig,
+		AccountHomes: accountHomes,
+	})
+}
+
+func productionCodexAdapterConfigWithGoToolchainTrust(
+	snapshot config.Snapshot,
+	clock application.Clock,
+	promptRenderer codex.PromptRenderer,
+	credentialStore credentials.Store,
+	ownerTrusted codexGoToolchainTrust,
+) (codex.Config, error) {
 	if snapshot.RuntimeProvider() != "codex" {
-		return nil, errors.New("bootstrap.runtime_provider_unsupported")
+		return codex.Config{}, errors.New("bootstrap.runtime_provider_unsupported")
 	}
 	environment, err := config.ResolveChildEnvironment(snapshot.RuntimeCodexEnvAllowlist())
 	if err != nil {
-		return nil, err
+		return codex.Config{}, err
 	}
 	environment, err = prepareCodexGoEnvironmentWithTrust(
 		environment,
@@ -1016,13 +1062,13 @@ func productionAgentAdapterWithGoToolchainTrust(
 		ownerTrusted,
 	)
 	if err != nil {
-		return nil, err
+		return codex.Config{}, err
 	}
 	accountHomeRoot := snapshot.RuntimeCodexAccountHomeRoot()
 	if accountHomeRoot != "" {
 		accountHomeRoot, err = canonicalRuntimePath(accountHomeRoot)
 		if err != nil {
-			return nil, errors.New("bootstrap.account_home_path_invalid")
+			return codex.Config{}, errors.New("bootstrap.account_home_path_invalid")
 		}
 	}
 	adapterConfig := codex.Config{
@@ -1046,12 +1092,12 @@ func productionAgentAdapterWithGoToolchainTrust(
 	credentialRef := snapshot.RuntimeCodexCredentialRef()
 	if credentialRef != "" {
 		if credentialStore == nil {
-			return nil, errors.New("bootstrap.credential_store_required")
+			return codex.Config{}, errors.New("bootstrap.credential_store_required")
 		}
 		adapterConfig.CredentialStore = credentialStore
 		adapterConfig.CredentialRef = credentials.CredentialRef(credentialRef)
 	}
-	return codex.New(adapterConfig)
+	return adapterConfig, nil
 }
 
 type credentialAgent struct {
