@@ -458,6 +458,9 @@ func (repository *Repository) applyDirectorPlanChange(
 	if err := insertDirectorDecision(ctx, transaction, state.Decision, state.ProjectRef); err != nil {
 		return application.DirectorDecisionRecord{}, err
 	}
+	if _, err := readGoalRecord(ctx, transaction, state.GoalRef.String()); err != nil {
+		return application.DirectorDecisionRecord{}, err
+	}
 	commitNow, err := repository.transactionTime()
 	if err != nil {
 		return application.DirectorDecisionRecord{}, err

@@ -466,10 +466,35 @@ func workItemStagedOutputExecution(
 		execution.FailureCode == string(goal.ReplanCauseReviewChangesRequested) {
 		return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
 	}
+	if supersededFailedCandidatePreserved(record.Goal, item, execution) {
+		return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
+	}
 	if item.State() != goal.WorkItemStateInterrupted || execution.State != application.ExecutionFailed {
 		return application.ExecutionRecord{}, false
 	}
 	return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
+}
+
+func supersededFailedCandidatePreserved(
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution application.ExecutionRecord,
+) bool {
+	interruptCause, interrupted := item.InterruptCause()
+	boundExecution, bound := item.Execution()
+	if item.State() != goal.WorkItemStateSuperseded ||
+		!interrupted || interruptCause != goal.WorkItemInterruptExecutionFailed ||
+		!bound || boundExecution != execution.Ref ||
+		execution.State != application.ExecutionFailed {
+		return false
+	}
+	for _, successor := range aggregate.WorkItems() {
+		reworkOf, linked := successor.ReworkOf()
+		if linked && reworkOf == item.Ref() {
+			return true
+		}
+	}
+	return false
 }
 
 func canceledStagedOutputPreserved(
