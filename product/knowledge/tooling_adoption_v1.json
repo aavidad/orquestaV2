@@ -1,0 +1,372 @@
+{
+  "schema_version": 1,
+  "document_kind": "tooling_adoption_read_model",
+  "cutoff_date": "2026-07-29",
+  "roadmap_source": "product/roadmap.json",
+  "status_semantics": {
+    "accredited": "Existe capacidad V2 acreditada con evidencia ejecutable.",
+    "partial": "Hay una parte acreditada, pero falta el contrato completo descrito.",
+    "candidate": "Diseño, código o evidencia legacy útil; V2 aún no lo acredita.",
+    "conditional": "Solo se adopta si una evaluación demuestra ventaja.",
+    "debt": "Necesidad aceptada sin implementación V2 acreditada."
+  },
+  "rules": [
+    "Este fichero es un read-model: product/roadmap.json sigue siendo autoridad de capacidad y estado.",
+    "Una herramienta estudiada no se presenta como producto hasta alcanzar accredited.",
+    "No instalar ni cablear una herramienta sin capability, owner, permisos, coste, prueba y retirada.",
+    "La ausencia de acreditación crea deuda visible; no autoriza introducirla en otro vertical.",
+    "Las alternativas condicionales se comparan contra la opción local más simple."
+  ],
+  "entries": [
+    {
+      "key": "tool_registry_sdk",
+      "name": "Registro único de tools y Tool SDK neutral",
+      "capability_ids": ["TLS-01", "TLS-02", "TLS-03", "TLS-04", "TLS-05", "EXT-09"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "tools_skills_sdk",
+      "decision": "adoptar",
+      "next_gate": "Registro versionado con schemas, permisos, coste, receipts y paridad de un conector interno/externo."
+    },
+    {
+      "key": "mcp_public_surface",
+      "name": "Servidor MCP público y registro común de comandos",
+      "capability_ids": ["UI-02", "EVD-09"],
+      "status": "accredited",
+      "v2_evidence": ["product/evidence/v20_command_registry.json", "product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "command_registry",
+      "decision": "mantener",
+      "next_gate": "Conservar paridad HTTP, MCP y CLI en cada comando nuevo."
+    },
+    {
+      "key": "skill_registry",
+      "name": "Catálogo de skills SKILL.md con carga progresiva",
+      "capability_ids": ["TLS-06", "TLS-07", "TLS-08", "TLS-09"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": ["docs/op_121_catalogo_skills_fase1.md"],
+      "owner_vertical": "tools_skills_sdk",
+      "decision": "adoptar",
+      "next_gate": "Registro V2 con versión, scope, hash, trust, tests, revocación y rollback."
+    },
+    {
+      "key": "skill_creator",
+      "name": "Creador gobernado de skills ante huecos reales",
+      "capability_ids": ["TLS-06", "TLS-09", "TLS-11", "TLS-12"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": ["docs/op_121_catalogo_skills_fase1.md"],
+      "owner_vertical": "tools_skills_sdk",
+      "decision": "adoptar_despues_del_registro",
+      "next_gate": "Detectar hueco, proponer skill aislada y exigir review/test antes de activarla."
+    },
+    {
+      "key": "plugins_rulepacks",
+      "name": "Plugins y rule/workflow packs versionados",
+      "capability_ids": ["TLS-10", "TLS-11", "TLS-12", "TLS-13", "EXT-15"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "tools_skills_sdk",
+      "decision": "adoptar",
+      "next_gate": "Fixture de instalación, permisos, disable/remove, revocación y rollback sin entrar en core."
+    },
+    {
+      "key": "tooling_bootstrap_doctor",
+      "name": "Bootstrap y doctor reproducible de herramientas",
+      "capability_ids": ["TLS-14", "OPS-15"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": ["scripts/bootstrap_agent_tooling.sh"],
+      "owner_vertical": "tools_skills_sdk",
+      "decision": "adoptar",
+      "next_gate": "Manifiesto de versiones/licencias/permisos, smoke y estado seguro con UI/broker opt-in."
+    },
+    {
+      "key": "minimal_context_bundle",
+      "name": "Context bundle mínimo y handoff compacto",
+      "capability_ids": ["CTX-01", "CTX-02", "ORC-19"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json", "docs/diseno_orquesta_codebase_broker_2026-06-30.md"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "adoptar",
+      "next_gate": "Bundle sellado por WorkItem con refs, límites y recuperación reproducible."
+    },
+    {
+      "key": "caveman_compact_profile",
+      "name": "Perfil caveman/compacto para trabajo mecánico",
+      "capability_ids": ["CTX-03", "CTX-07"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "adoptar_si_preserva_completitud",
+      "next_gate": "Eval de coste, reglas omitidas y calidad en inventario, búsqueda y subagentes."
+    },
+    {
+      "key": "artifact_refs_outside_prompt",
+      "name": "Artefactos fuera del prompt mediante resumen, hash y ref",
+      "capability_ids": ["CTX-04", "EVD-01"],
+      "status": "partial",
+      "v2_evidence": ["product/evidence/v01_v04_foundation.json", "product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "completar",
+      "next_gate": "Agente resuelve artefacto grande solo por ref/hash y receipt conserva causalidad."
+    },
+    {
+      "key": "prompt_cache",
+      "name": "Prompt caching por prefijos estables",
+      "capability_ids": ["CTX-05"],
+      "status": "conditional",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "evaluar_por_provider",
+      "next_gate": "Benchmark de ahorro, latencia e invalidación; sin política del provider dentro del core."
+    },
+    {
+      "key": "phase_context_compaction",
+      "name": "Compactación verificable en límites de fase o sesión",
+      "capability_ids": ["CTX-06", "ORC-22"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json", "scripts/docs/checkpoint_started_t284_context_compression_benchmark.txt"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "adoptar_si_no_pierde_estado",
+      "next_gate": "Pérdida cero de reglas, refs, decisiones, tests y bloqueos tras resume."
+    },
+    {
+      "key": "model_routing",
+      "name": "Routing por coste, riesgo, capacidad y calidad observada",
+      "capability_ids": ["CTX-07", "ORC-26", "AGT-02", "AGT-11", "AGT-12"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "adoptar",
+      "next_gate": "Catálogo vivo y eval que usa modelos baratos en mecánico y escala por riesgo/fallo medido."
+    },
+    {
+      "key": "code_context_broker",
+      "name": "Broker central de contexto de código",
+      "capability_ids": ["ORC-19", "EXT-08", "CTX-01"],
+      "status": "partial",
+      "v2_evidence": ["docs/diseno_orquesta_codebase_broker_2026-06-30.md", "product/roadmap.json"],
+      "legacy_evidence": [
+        "/home/alberto/Trabajo/orquesta/modulos/orquesta-context/code_context_broker_v0.go",
+        "/home/alberto/Trabajo/orquesta/cmd/orquesta-server/code_context_repo_map_v0.go"
+      ],
+      "owner_vertical": "context_rag_evals",
+      "decision": "portar_contrato_no_modulo",
+      "next_gate": "Un único lease, fallback rg, límites/TTL/cache y apagado cooperativo sin indexadores por subagente."
+    },
+    {
+      "key": "fts5_bm25",
+      "name": "SQLite FTS5/BM25 como retrieval local inicial",
+      "capability_ids": ["CTX-08", "ORC-21"],
+      "status": "candidate",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "baseline_preferida",
+      "next_gate": "Dataset versionado con recall, latencia, coste y fallback determinista."
+    },
+    {
+      "key": "hybrid_embeddings_bm25",
+      "name": "Búsqueda híbrida embeddings y BM25",
+      "capability_ids": ["CTX-09", "CTX-12"],
+      "status": "conditional",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "solo_con_benchmark_positivo",
+      "next_gate": "Mejora reproducible de recall frente a FTS/BM25 que compense coste y operación."
+    },
+    {
+      "key": "reranking",
+      "name": "Reranking de resultados",
+      "capability_ids": ["CTX-10", "CTX-12"],
+      "status": "conditional",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "solo_tras_fallo_de_recall",
+      "next_gate": "Caso de recall fallido, eval comparativa y presupuesto explícito."
+    },
+    {
+      "key": "vector_database",
+      "name": "Base de datos vectorial separada",
+      "capability_ids": ["CTX-11", "CTX-12"],
+      "status": "conditional",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "no_adoptar_sin_escala_o_ha",
+      "next_gate": "Demostrar necesidad de escala/HA y ventaja sobre SQLite híbrido."
+    },
+    {
+      "key": "context_evaluations",
+      "name": "Evals de calidad, coste, latencia y recall",
+      "capability_ids": ["CTX-12", "ORC-26"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "context_rag_evals",
+      "decision": "adoptar_antes_de_optimizaciones",
+      "next_gate": "Harness versionado que compara rg, FTS, híbrido, reranker y perfiles de modelo."
+    },
+    {
+      "key": "credential_store",
+      "name": "CredentialStore opaco y entorno mínimo",
+      "capability_ids": ["OPS-03", "OPS-05", "OPS-08", "OPS-30"],
+      "status": "accredited",
+      "v2_evidence": ["product/evidence/v08_credentials.json", "product/evidence/v07_config.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "credentials",
+      "decision": "mantener",
+      "next_gate": "Conservar negativos de fuga, scope, rotación, revocación y allowlist exacta."
+    },
+    {
+      "key": "codex_multi_home_profiles",
+      "name": "Perfiles Codex con HOME y auth físicamente aislados",
+      "capability_ids": ["AGT-03", "OPS-03", "OPS-08"],
+      "status": "partial",
+      "v2_evidence": [
+        "internal/bootstrap/account_profile_test.go",
+        "docs/reconstruccion/corte_pool_multihome_codex_2026-07-28.md"
+      ],
+      "legacy_evidence": [],
+      "owner_vertical": "runtime_codex",
+      "decision": "completar_pool_multicuenta",
+      "next_gate": "Una instancia, dos perfiles concurrentes, restart/stop selectivo y cero residuos."
+    },
+    {
+      "key": "git_worktrees",
+      "name": "Git y worktrees mediante adaptador y refs opacas",
+      "capability_ids": ["EXT-10"],
+      "status": "accredited",
+      "v2_evidence": ["product/evidence/v16_workspace_git.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "workspace_git",
+      "decision": "mantener",
+      "next_gate": "Conservar binding físico tree/base, write-set, CAS e integración causal."
+    },
+    {
+      "key": "bubblewrap_attestor",
+      "name": "Bubblewrap non-root para TestAttestor",
+      "capability_ids": ["EVD-04", "EVD-13"],
+      "status": "accredited",
+      "v2_evidence": ["product/evidence/v17_test_attestor.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "test_attestor",
+      "decision": "mantener_con_limite_conocido",
+      "next_gate": "No ampliar su argv/mount set; conservar negativos de namespace, red, HOME y cgroup."
+    },
+    {
+      "key": "firecracker_microvm",
+      "name": "Firecracker/microVM para aislamiento fuerte",
+      "capability_ids": ["EVD-04", "EVD-13", "EXT-21"],
+      "status": "candidate",
+      "v2_evidence": [
+        "docs/arquitectura_comunicacion_agentes_firecracker_2026-07-25.md",
+        "docs/reconstruccion/corte_alcance_v23_firecracker_diferido_2026-07-26.md"
+      ],
+      "legacy_evidence": [],
+      "owner_vertical": "agent_microvm_network",
+      "decision": "adoptar_como_adaptador_opt_in",
+      "next_gate": "E2E físico: guest sin host local/red directa, broker autenticado, egress limitado y cleanup."
+    },
+    {
+      "key": "runtime_observability",
+      "name": "Observabilidad pasiva de agentes y runtimes",
+      "capability_ids": ["OPS-19"],
+      "status": "partial",
+      "v2_evidence": ["docs/diseno_observabilidad_pasiva_runtimes_en.md", "product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "operations_telemetry",
+      "decision": "completar",
+      "next_gate": "Métricas/logs/trazas sin consultar al agente y con identidad Goal/execution/PID/worktree."
+    },
+    {
+      "key": "cpu_progress_watchdog",
+      "name": "Watchdog cooperativo de CPU sin progreso",
+      "capability_ids": ["OPS-18"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "operations_telemetry",
+      "decision": "adoptar",
+      "next_gate": "Fixture distingue trabajo caro de proceso estancado y para solo identidad exacta."
+    },
+    {
+      "key": "runtime_retention_shutdown",
+      "name": "Shutdown, retención y limpieza gobernada",
+      "capability_ids": ["OPS-16", "OPS-17"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "operations_telemetry",
+      "decision": "adoptar",
+      "next_gate": "Cero procesos propios y sweep que respeta artefactos, leases y evidencias vivas."
+    },
+    {
+      "key": "agent_provider_family",
+      "name": "Codex, Hermes, Claude, Gemini, Ollama y runtimes OpenAI-compatible",
+      "capability_ids": ["AGT-01", "AGT-02", "AGT-03", "AGT-04", "AGT-05", "AGT-06", "AGT-07", "AGT-08", "AGT-09", "AGT-10", "AGT-11", "AGT-12"],
+      "status": "partial",
+      "v2_evidence": ["product/evidence/v22_codex_real_e2e.json", "product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "agent_adapters",
+      "decision": "completar_por_adaptadores",
+      "next_gate": "Cada provider prueba launch/observe/stop/resume/capabilities sin cambiar core."
+    },
+    {
+      "key": "research_document_tools",
+      "name": "Búsqueda web, PDF/texto, ingesta y expansión documental",
+      "capability_ids": ["EXT-03", "EXT-04", "EXT-05", "EXT-07"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "domain_plugins",
+      "decision": "adoptar_como_conectores",
+      "next_gate": "Fixture por conector con refs citables, límites, permisos, idempotencia y receipt."
+    },
+    {
+      "key": "office_structured_data_tools",
+      "name": "Presentaciones, CSV/XLSX/ODS/JSON/Parquet, SQL externo, OCR y export",
+      "capability_ids": ["EXT-06", "EXT-16", "EXT-17", "EXT-18", "EXT-19"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "domain_plugins",
+      "decision": "adoptar_como_conectores",
+      "next_gate": "Roundtrip estructural y negativos de fórmulas, enlaces, credenciales y corrupción por formato."
+    },
+    {
+      "key": "media_computer_use_tools",
+      "name": "Imagen, audio, shell sandboxed y computer-use",
+      "capability_ids": ["EXT-20", "EXT-21", "EXT-22"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "domain_plugins",
+      "decision": "adoptar_por_riesgo_y_permiso",
+      "next_gate": "Contrato de efecto, sandbox, aprobación y receipt específico por medio/superficie."
+    },
+    {
+      "key": "external_collaboration_connectors",
+      "name": "Git forges, email, Telegram y conectores externos MCP/HTTP",
+      "capability_ids": ["EXT-11", "EXT-12", "EXT-13", "EXT-15"],
+      "status": "debt",
+      "v2_evidence": ["product/roadmap.json"],
+      "legacy_evidence": [],
+      "owner_vertical": "domain_plugins",
+      "decision": "adoptar_como_conectores",
+      "next_gate": "Permisos, secreto por ref, idempotencia, efecto externo autorizado y receipt."
+    }
+  ]
+}
