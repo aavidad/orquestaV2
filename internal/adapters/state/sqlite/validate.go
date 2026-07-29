@@ -544,12 +544,17 @@ func canceledAwaitingCommitPreserved(
 	}
 	matches := 0
 	for _, receipt := range record.ConsumptionReceipts {
+		// A commit with unknown external outcome has no local ChangeSet, but its
+		// immutable receipt still owns the staged artifact after cancellation.
+		retiredBeforeEffect := receipt.Outcome == application.ActionConsumedCompleted &&
+			receipt.ErrorCode == "application.action_retired"
+		unknownCommitEffect := receipt.Outcome == application.ActionConsumedQuarantined &&
+			receipt.ErrorCode == "application.effect_unknown_applied"
 		if receipt.Kind != application.ActionCommitChange ||
 			receipt.ActionRef != "action:commit-change:"+execution.Ref.String() ||
 			receipt.GoalRef != execution.GoalRef || receipt.WorkItemRef != execution.WorkItemRef ||
 			receipt.ExecutionRef != execution.Ref || receipt.PlanGeneration != execution.PlanGeneration ||
-			receipt.Outcome != application.ActionConsumedCompleted ||
-			receipt.ErrorCode != "application.action_retired" ||
+			(!retiredBeforeEffect && !unknownCommitEffect) ||
 			receipt.ChangeRef.String() == "" || receipt.EffectReceiptRef != "" {
 			continue
 		}
