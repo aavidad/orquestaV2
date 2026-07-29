@@ -520,11 +520,6 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 				)
 			} else {
 				switch {
-				case isCouncilExecution(latestExecution):
-					handled = orchestrator.replaceCouncilExecution(
-						ctx, claim, latest, latestExecution, "agent.launch_failed", failedExecutionMayRetry,
-						orchestrator.clock.Now(), unknownUsage(), 0, true,
-					)
 				case latestItem.CancelRequested():
 					handled = orchestrator.settleCanceledLaunchRejection(
 						ctx, claim, latest, latestItem, latestExecution, attempt.Ref, "agent.launch_failed",
@@ -532,6 +527,11 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 				case isTemporaryAgentError(launchErr):
 					handled = orchestrator.requeueUnappliedEffect(
 						ctx, claim, latestExecution, attempt.Ref, "agent.temporarily_unavailable",
+					)
+				case isCouncilExecution(latestExecution):
+					handled = orchestrator.replaceCouncilExecution(
+						ctx, claim, latest, latestExecution, "agent.launch_failed", failedExecutionMayRetry,
+						orchestrator.clock.Now(), unknownUsage(), 0, true,
 					)
 				default:
 					handled = orchestrator.replaceExecutionAttempt(

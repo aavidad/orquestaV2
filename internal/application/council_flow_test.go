@@ -9,6 +9,7 @@ import (
 
 	"orquesta/internal/council"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -127,6 +128,65 @@ func TestCouncilMalformedContributionRetriesWithoutChangingAuthor(t *testing.T) 
 	}
 	if failed != 1 || retry != 1 {
 		t.Fatalf("Council retry failed=%d retry=%d", failed, retry)
+	}
+}
+
+func TestCouncilTemporaryCapacityKeepsTheSameExecutionsUntilSlotsRecover(t *testing.T) {
+	system := newCouncilSystem(t, council.PolicyAuto)
+	system.processCommit(t)
+	system.process(t, ActionAttestTest, ActionLaunchAgent, ActionLaunchAgent, ActionObserveAgent, ActionObserveAgent)
+
+	before := system.record(t)
+	original := councilExecutions(before)
+	if len(original) != len(council.Roles()) {
+		t.Fatalf("Council cohort before temporary capacity=%+v", original)
+	}
+	originalRefs := make(map[goal.ExecutionRef]struct{}, len(original))
+	for _, execution := range original {
+		originalRefs[execution.Ref] = struct{}{}
+	}
+
+	agent := system.orchestrator.launcher.(*scriptedAgent)
+	agent.mu.Lock()
+	agent.launchErr = definitelyUnappliedTemporaryError{}
+	agent.mu.Unlock()
+	system.process(t, ActionLaunchAgent, ActionLaunchAgent, ActionLaunchAgent)
+
+	requeued := system.record(t)
+	actual := councilExecutions(requeued)
+	if len(actual) != len(original) {
+		t.Fatalf("temporary capacity changed Council cardinality: before=%+v after=%+v", original, actual)
+	}
+	for _, execution := range actual {
+		_, same := originalRefs[execution.Ref]
+		if !same || execution.AttemptNo != 1 || execution.ReplacesExecutionRef.String() != "" ||
+			execution.State != ExecutionDispatching || execution.FailureCode != "" {
+			t.Fatalf("temporary capacity replaced or failed Council execution: %+v", execution)
+		}
+	}
+	if len(requeued.BudgetSettlements) < len(council.Roles()) {
+		t.Fatalf("temporary capacity lacks exact releases: %+v", requeued.BudgetSettlements)
+	}
+	for _, settlement := range requeued.BudgetSettlements[len(requeued.BudgetSettlements)-len(council.Roles()):] {
+		if !governance.IsExactZeroRelease(settlement) {
+			t.Fatalf("temporary capacity settlement is not an exact zero release: %+v", settlement)
+		}
+	}
+
+	agent.mu.Lock()
+	agent.launchErr = nil
+	agent.mu.Unlock()
+	clock := system.orchestrator.clock.(*mutableClock)
+	clock.Advance(system.orchestrator.observationDelay)
+	system.process(t, ActionLaunchAgent, ActionLaunchAgent, ActionLaunchAgent)
+
+	recovered := system.record(t)
+	for _, execution := range councilExecutions(recovered) {
+		_, same := originalRefs[execution.Ref]
+		if !same || execution.AttemptNo != 1 || execution.ReplacesExecutionRef.String() != "" ||
+			execution.State != ExecutionRunning || execution.FailureCode != "" {
+			t.Fatalf("capacity recovery did not launch the original Council execution: %+v", execution)
+		}
 	}
 }
 
