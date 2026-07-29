@@ -1057,7 +1057,10 @@
       "assertions": [
         "chat and form mutate one versioned intake state",
         "explicit dossier confirmation creates the plan",
-        "question rounds and amendments remain causal"
+        "question rounds and amendments remain causal",
+        "intake gaps help dossier templates and causal plan creation remain in V23",
+        "web surface and branding remain owned by V24",
+        "concrete repository analysis connectors remain owned by V28"
       ]
     },
     {
@@ -1070,7 +1073,8 @@
       "assertions": [
         "WCAG 2.2 AA automated and keyboard matrix passes",
         "RBAC and project isolation pass in browser E2E",
-        "timeline and branch state match application queries"
+        "timeline and branch state match application queries",
+        "wizard web surface branding and themes are presentation owned by V24"
       ]
     },
     {
@@ -1122,6 +1126,7 @@
       "assertions": [
         "connectors use opaque refs and public contracts",
         "no connector reads internal state or filesystem",
+        "concrete repository analysis is a governed V28 connector while V23 keeps only work_existing selection and opaque refs",
         "research document data media shell and browser effects obey permissions",
         "GitHub GitLab and Gitea implement one neutral Forge port and remote publish pull request and merge require exact credentials egress permission target CAS idempotency and immutable receipts"
       ]
@@ -1998,15 +2003,16 @@
       "kind": "intake",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "wizard",
+      "owner_context": "domain_plugins",
       "dependencies": [
-        "intent_appspec",
-        "goal_dag_phases",
+        "workspace_git",
+        "test_attestor",
         "command_registry",
-        "i18n"
+        "tools_skills_sdk",
+        "context_rag_evals"
       ],
       "acceptance_contracts": [
-        "AC-V23-WIZARD"
+        "AC-V28-DOMAIN-PLUGINS"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2064,15 +2070,15 @@
       "kind": "intake",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "wizard",
+      "owner_context": "web_admin",
       "dependencies": [
-        "intent_appspec",
-        "goal_dag_phases",
+        "identity_projects_rbac",
         "command_registry",
-        "i18n"
+        "i18n",
+        "wizard"
       ],
       "acceptance_contracts": [
-        "AC-V23-WIZARD"
+        "AC-V24-WEB-ADMIN"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -4021,15 +4027,15 @@
       "decision": "accept",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "wizard",
+      "owner_context": "web_admin",
       "dependencies": [
-        "intent_appspec",
-        "goal_dag_phases",
+        "identity_projects_rbac",
         "command_registry",
-        "i18n"
+        "i18n",
+        "wizard"
       ],
       "acceptance_contracts": [
-        "AC-V23-WIZARD"
+        "AC-V24-WEB-ADMIN"
       ],
       "status": "declared",
       "evidence_refs": [],

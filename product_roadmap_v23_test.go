@@ -11,10 +11,17 @@ import (
 const roadmapV23ContractID = "AC-V23-WIZARD"
 
 type roadmapV23Fixture struct {
-	ContractID     string                   `json:"contract_id"`
-	Classification roadmapV23Classification `json:"capability_classification"`
-	SealStatus     string                   `json:"seal_status"`
-	ReceiptPath    string                   `json:"receipt_path"`
+	ContractID     string                    `json:"contract_id"`
+	Classification roadmapV23Classification  `json:"capability_classification"`
+	ScopeTransfers []roadmapV23ScopeTransfer `json:"scope_transfers"`
+	SealStatus     string                    `json:"seal_status"`
+	ReceiptPath    string                    `json:"receipt_path"`
+}
+
+type roadmapV23ScopeTransfer struct {
+	CapabilityID       string `json:"capability_id"`
+	ToVertical         string `json:"to_vertical"`
+	AcceptanceContract string `json:"acceptance_contract"`
 }
 
 type roadmapV23Classification struct {
@@ -65,6 +72,58 @@ func TestProductRoadmapV23ScopeIsExhaustiveAndDeclared(t *testing.T) {
 			!entry.CutoverRequired {
 			t.Errorf("accepted V23 capability %s has invalid release semantics: %#v", id, entry)
 		}
+	}
+
+	wantTransfers := []roadmapV23ScopeTransfer{
+		{CapabilityID: "UI-05", ToVertical: "web_admin", AcceptanceContract: "AC-V24-WEB-ADMIN"},
+		{CapabilityID: "WIZ-13", ToVertical: "web_admin", AcceptanceContract: "AC-V24-WEB-ADMIN"},
+		{CapabilityID: "WIZ-10", ToVertical: "domain_plugins", AcceptanceContract: "AC-V28-DOMAIN-PLUGINS"},
+	}
+	if !reflect.DeepEqual(fixture.ScopeTransfers, wantTransfers) {
+		t.Fatalf("V23 scope transfers=%+v want=%+v", fixture.ScopeTransfers, wantTransfers)
+	}
+	for _, transfer := range wantTransfers {
+		entry, vertical := index.entries[transfer.CapabilityID], index.verticals[transfer.ToVertical]
+		if entry.OwnerContext != vertical.ID ||
+			!reflect.DeepEqual(entry.Dependencies, vertical.DependsOn) ||
+			!reflect.DeepEqual(entry.AcceptanceContracts, []string{transfer.AcceptanceContract}) {
+			t.Errorf("transferred capability %s has no explicit target ownership: %#v",
+				transfer.CapabilityID, entry)
+		}
+	}
+	contract := index.contracts[roadmapV23ContractID]
+	if !reflect.DeepEqual(contract.Assertions, []string{
+		"chat and form mutate one versioned intake state",
+		"explicit dossier confirmation creates the plan",
+		"question rounds and amendments remain causal",
+		"intake gaps help dossier templates and causal plan creation remain in V23",
+		"web surface and branding remain owned by V24",
+		"concrete repository analysis connectors remain owned by V28",
+	}) {
+		t.Fatalf("V23 gate reintroduced a transferred scope: %v", contract.Assertions)
+	}
+	if webContract := index.contracts["AC-V24-WEB-ADMIN"]; !reflect.DeepEqual(
+		webContract.Assertions,
+		[]string{
+			"WCAG 2.2 AA automated and keyboard matrix passes",
+			"RBAC and project isolation pass in browser E2E",
+			"timeline and branch state match application queries",
+			"wizard web surface branding and themes are presentation owned by V24",
+		},
+	) {
+		t.Fatalf("V24 gate lost transferred web scope: %v", webContract.Assertions)
+	}
+	if pluginContract := index.contracts["AC-V28-DOMAIN-PLUGINS"]; !reflect.DeepEqual(
+		pluginContract.Assertions,
+		[]string{
+			"connectors use opaque refs and public contracts",
+			"no connector reads internal state or filesystem",
+			"concrete repository analysis is a governed V28 connector while V23 keeps only work_existing selection and opaque refs",
+			"research document data media shell and browser effects obey permissions",
+			"GitHub GitLab and Gitea implement one neutral Forge port and remote publish pull request and merge require exact credentials egress permission target CAS idempotency and immutable receipts",
+		},
+	) {
+		t.Fatalf("V28 gate lost transferred repository analysis scope: %v", pluginContract.Assertions)
 	}
 }
 
@@ -152,18 +211,21 @@ func readRoadmapV23Fixture(t *testing.T) roadmapV23Fixture {
 }
 
 func roadmapV23ExpectedCapabilityIDs() []string {
-	ids := make([]string, 0, 29)
+	ids := make([]string, 0, 26)
 	for number := 1; number <= 25; number++ {
+		if number == 10 || number == 13 {
+			continue
+		}
 		ids = append(ids, "WIZ-"+roadmapTwoDigits(number))
 	}
-	ids = append(ids, "STG-01", "STG-03", "STG-07", "UI-05")
+	ids = append(ids, "STG-01", "STG-03", "STG-07")
 	sort.Strings(ids)
 	return ids
 }
 
 func roadmapV23ClassifiedIDs(t *testing.T, classification roadmapV23Classification) []string {
 	t.Helper()
-	seen := make(map[string]string, 29)
+	seen := make(map[string]string, 26)
 	for class, ids := range map[string][]string{
 		"candidate": classification.Candidate,
 		"partial":   classification.Partial,
@@ -177,8 +239,8 @@ func roadmapV23ClassifiedIDs(t *testing.T, classification roadmapV23Classificati
 			seen[id] = class
 		}
 	}
-	if len(seen) != 29 {
-		t.Fatalf("fixture classifies %d unique V23 IDs, want 29", len(seen))
+	if len(seen) != 26 {
+		t.Fatalf("fixture classifies %d unique V23 IDs, want 26", len(seen))
 	}
 	ids := make([]string, 0, len(seen))
 	for id := range seen {

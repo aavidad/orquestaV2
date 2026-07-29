@@ -26,7 +26,6 @@
       "WIZ-06",
       "WIZ-08",
       "WIZ-09",
-      "WIZ-10",
       "WIZ-11",
       "WIZ-16",
       "WIZ-17",
@@ -40,15 +39,29 @@
       "STG-03",
       "STG-07"
     ],
-    "pending": [
-      "WIZ-13",
-      "UI-05"
-    ],
+    "pending": [],
     "rejected": [
       "WIZ-12",
       "WIZ-14"
     ]
   },
+  "scope_transfers": [
+    {
+      "capability_id": "UI-05",
+      "to_vertical": "web_admin",
+      "acceptance_contract": "AC-V24-WEB-ADMIN"
+    },
+    {
+      "capability_id": "WIZ-13",
+      "to_vertical": "web_admin",
+      "acceptance_contract": "AC-V24-WEB-ADMIN"
+    },
+    {
+      "capability_id": "WIZ-10",
+      "to_vertical": "domain_plugins",
+      "acceptance_contract": "AC-V28-DOMAIN-PLUGINS"
+    }
+  ],
   "phase_criteria": [
     "criterion:v23-one-versioned-intake",
     "criterion:v23-gap-derived-questions",
@@ -512,7 +525,6 @@
     "dossier_generation",
     "roadmap_promotion",
     "seal_and_receipt",
-    "web_surface",
     "wizard_gap_exact_evaluation_snapshot_and_replay",
     "wizard_help_surface"
   ],

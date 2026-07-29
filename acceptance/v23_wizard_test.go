@@ -28,6 +28,7 @@ type v23WizardFixture struct {
 	ImplementationStatus string                  `json:"implementation_status"`
 	TaskContext          v23WizardTaskContext    `json:"task_context"`
 	Classification       v23WizardClassification `json:"capability_classification"`
+	ScopeTransfers       []v23ScopeTransfer      `json:"scope_transfers"`
 	PhaseCriteria        []string                `json:"phase_criteria"`
 	PackagePath          string                  `json:"package_path"`
 	StateSchema          string                  `json:"state_schema"`
@@ -89,6 +90,12 @@ type v23WizardClassification struct {
 	Partial   []string `json:"partial"`
 	Pending   []string `json:"pending"`
 	Rejected  []string `json:"rejected"`
+}
+
+type v23ScopeTransfer struct {
+	CapabilityID       string `json:"capability_id"`
+	ToVertical         string `json:"to_vertical"`
+	AcceptanceContract string `json:"acceptance_contract"`
 }
 
 func TestAcceptanceV23WizardIntakeContract(t *testing.T) {
@@ -357,6 +364,13 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid task context: %+v", fixture.TaskContext)
 	}
 	assertV23CapabilityClassification(t, fixture.Classification)
+	if !reflect.DeepEqual(fixture.ScopeTransfers, []v23ScopeTransfer{
+		{CapabilityID: "UI-05", ToVertical: "web_admin", AcceptanceContract: "AC-V24-WEB-ADMIN"},
+		{CapabilityID: "WIZ-13", ToVertical: "web_admin", AcceptanceContract: "AC-V24-WEB-ADMIN"},
+		{CapabilityID: "WIZ-10", ToVertical: "domain_plugins", AcceptanceContract: "AC-V28-DOMAIN-PLUGINS"},
+	}) {
+		t.Fatalf("invalid V23 scope transfers: %+v", fixture.ScopeTransfers)
+	}
 	if !reflect.DeepEqual(fixture.PhaseCriteria, []string{
 		"criterion:v23-one-versioned-intake",
 		"criterion:v23-gap-derived-questions",
@@ -697,8 +711,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	}
 	wantDeferred := []string{
 		"dossier_generation", "roadmap_promotion", "seal_and_receipt",
-		"web_surface", "wizard_gap_exact_evaluation_snapshot_and_replay",
-		"wizard_help_surface",
+		"wizard_gap_exact_evaluation_snapshot_and_replay", "wizard_help_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
@@ -916,17 +929,17 @@ func assertV23CapabilityClassification(t *testing.T, classification v23WizardCla
 			"WIZ-03", "WIZ-04", "WIZ-05", "WIZ-07", "WIZ-15", "WIZ-18", "WIZ-23",
 		},
 		Partial: []string{
-			"WIZ-01", "WIZ-02", "WIZ-06", "WIZ-08", "WIZ-09", "WIZ-10",
-			"WIZ-11", "WIZ-16", "WIZ-17", "WIZ-19", "WIZ-20", "WIZ-21",
+			"WIZ-01", "WIZ-02", "WIZ-06", "WIZ-08", "WIZ-09", "WIZ-11",
+			"WIZ-16", "WIZ-17", "WIZ-19", "WIZ-20", "WIZ-21",
 			"WIZ-22", "WIZ-24", "WIZ-25", "STG-01", "STG-03", "STG-07",
 		},
-		Pending:  []string{"WIZ-13", "UI-05"},
+		Pending:  []string{},
 		Rejected: []string{"WIZ-12", "WIZ-14"},
 	}
 	if !reflect.DeepEqual(classification, want) {
 		t.Fatalf("V23 capability classification = %+v want=%+v", classification, want)
 	}
-	seen := make(map[string]string, 29)
+	seen := make(map[string]string, 26)
 	for class, ids := range map[string][]string{
 		"candidate": classification.Candidate,
 		"partial":   classification.Partial,
@@ -940,8 +953,8 @@ func assertV23CapabilityClassification(t *testing.T, classification v23WizardCla
 			seen[id] = class
 		}
 	}
-	if len(seen) != 29 {
-		t.Fatalf("V23 classification covers %d unique capabilities, want 29", len(seen))
+	if len(seen) != 26 {
+		t.Fatalf("V23 classification covers %d unique capabilities, want 26", len(seen))
 	}
 }
 
