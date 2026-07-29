@@ -234,6 +234,13 @@ adaptador de provider no mantiene su propio catálogo duplicado.
 - modelos baratos y comunicación compacta se usan en inventarios, búsquedas y
   trabajo mecánico; se escala razonamiento por riesgo o fallo medido.
 
+Antes de adoptar, descartar o volver a estudiar una herramienta, consulta
+`product/knowledge/tooling_adoption_v1.json` y
+`docs/reconstruccion/inventario_herramientas_transversales_2026-07-29.md`.
+Ese read-model distingue producto acreditado, adopción parcial, candidato,
+alternativa condicional y deuda; nunca sustituye al estado de
+`product/roadmap.json`.
+
 OPES es composición consumidora externa. Nunca se importa ni comparte DB o
 filesystem interno con Orquesta. Trabajo OPES usa instancia temporal y refs
 opacas; producción requiere aprobación y scope exacto. Material existente se
