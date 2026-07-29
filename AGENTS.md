@@ -244,6 +244,20 @@ publica sin QA de dominio.
 
 ### Inicio obligatorio de tarea
 
+Antes de diseñar o modificar un módulo o función, consulta el read-model local
+sin IA:
+
+```bash
+scripts/consultar_lecciones_legacy.sh \
+  --capability ID \
+  --path RUTA \
+  --operation OPERACION
+```
+
+La salida es advisory: enlaza lecciones, invariantes y pruebas existentes, pero
+no bloquea trabajo ni crea autoridad de cierre. Una consulta sin coincidencia
+se documenta como hueco; no se sustituye por un rail de palabras.
+
 ```text
 capability IDs:
 invariante:
