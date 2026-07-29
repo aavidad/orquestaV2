@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 )
 
@@ -248,7 +249,19 @@ func (orchestrator *Orchestrator) buildDirectorPlanState(ctx context.Context, re
 	if policyErr != nil {
 		return ApplyDirectorPlanState{}, policyErr
 	}
-	if goalPolicy.PolicyHash == orchestrator.budgetPolicy.PolicyHash {
+	if request.Cause != "" {
+		source, found := current.Goal.WorkItem(request.SourceWorkItemRef)
+		execution, executionFound := executionByRef(current.Executions, request.SourceExecutionRef)
+		if !found || !executionFound || execution.WorkItemRef != source.Ref() ||
+			execution.AttemptNo != request.SourceExecutionAttempt {
+			return ApplyDirectorPlanState{}, &StateError{Code: StateConflict}
+		}
+		demand := source.BudgetDemand()
+		if governance.ValidateBudgetDemand(demand) != nil || execution.MaxOutputBytes <= 0 {
+			return ApplyDirectorPlanState{}, ErrWorkItemBudgetDemandInvalid
+		}
+		goalPolicy.DefaultDemand = demand.Resources
+	} else if goalPolicy.PolicyHash == orchestrator.budgetPolicy.PolicyHash {
 		goalPolicy.DefaultDemand = orchestrator.budgetPolicy.DefaultWorkItemDemand
 	}
 	plan, err := orchestrator.compilePlanExtension(ctx, current.Goal, request.Plan, goalPolicy, now)

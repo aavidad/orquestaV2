@@ -14,8 +14,9 @@ import (
 )
 
 var (
-	ErrPlanParentUnknown     = errors.New("application.plan_parent_unknown")
-	ErrPlanDependencyUnknown = errors.New("application.plan_dependency_unknown")
+	ErrPlanParentUnknown           = errors.New("application.plan_parent_unknown")
+	ErrPlanDependencyUnknown       = errors.New("application.plan_dependency_unknown")
+	ErrWorkItemBudgetDemandInvalid = errors.New("application.work_item_budget_demand_invalid")
 )
 
 // PlanSpec uses request-local keys; application generates durable refs.
@@ -352,7 +353,7 @@ func compileWorkItemSpec(
 	demand := effectiveDemand(spec.BudgetDemand, scope.defaultDemand)
 	fits, fitErr := governance.Fits(scope.goalLimit, demand.Resources)
 	if fitErr != nil || !fits || demand.Resources.ProcessSlots == 0 {
-		return goal.WorkItem{}, errors.New("application.work_item_budget_demand_invalid")
+		return goal.WorkItem{}, ErrWorkItemBudgetDemandInvalid
 	}
 	return goal.NewWorkItem(goal.NewWorkItemInput{
 		Ref: ref, Goal: scope.goalRef, Actor: scope.actorRef,
@@ -440,6 +441,10 @@ func (orchestrator *Orchestrator) scheduleReady(
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		maxOutputBytes, err := orchestrator.readyWorkItemMaxOutputBytes(aggregate, item, existing)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 		execution := ExecutionRecord{
 			Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
 			AttemptNo: 1, MaxExecutionAttempts: orchestrator.maxExecutionAttempts,
@@ -447,7 +452,7 @@ func (orchestrator *Orchestrator) scheduleReady(
 			SpecHash: aggregate.SpecHash(),
 			State:    ExecutionQueued, ArtifactMediaType: agentArtifactMediaType,
 			IdempotencyKey: "execution:" + executionRef.String(),
-			MaxOutputBytes: orchestrator.maxOutputBytes,
+			MaxOutputBytes: maxOutputBytes,
 			CreatedAt:      at,
 			Purpose:        ExecutionPurposeWork,
 		}
@@ -482,6 +487,51 @@ func (orchestrator *Orchestrator) scheduleReady(
 		scheduled[item.Ref()] = struct{}{}
 	}
 	return executions, actions, events, nil
+}
+
+// readyWorkItemMaxOutputBytes reconstructs rework scheduling exclusively from
+// durable Goal and execution state. A successor may become ready long after
+// ProposeDirectorPlan returned, so command-local overrides are not causal
+// authority. A bound source resolves its exact execution; split_pending is the
+// only unbound source and must have one unambiguous work execution.
+func (orchestrator *Orchestrator) readyWorkItemMaxOutputBytes(
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	existing []ExecutionRecord,
+) (int64, error) {
+	sourceRef, rework := item.ReworkOf()
+	if !rework {
+		return orchestrator.maxOutputBytes, nil
+	}
+	source, found := aggregate.WorkItem(sourceRef)
+	if !found {
+		return 0, &StateError{Code: StateConflict}
+	}
+	var causal ExecutionRecord
+	if executionRef, bound := source.Execution(); bound {
+		var executionFound bool
+		causal, executionFound = executionByRef(existing, executionRef)
+		if !executionFound || causal.WorkItemRef != sourceRef {
+			return 0, &StateError{Code: StateConflict}
+		}
+	} else {
+		candidates := 0
+		for _, execution := range existing {
+			if execution.WorkItemRef != sourceRef ||
+				execution.Purpose != ExecutionPurposeWork && execution.Purpose != ExecutionPurposeAuthor {
+				continue
+			}
+			causal = execution
+			candidates++
+		}
+		if candidates != 1 {
+			return 0, &StateError{Code: StateConflict}
+		}
+	}
+	if causal.MaxOutputBytes <= 0 {
+		return 0, ErrWorkItemBudgetDemandInvalid
+	}
+	return causal.MaxOutputBytes, nil
 }
 
 func (orchestrator *Orchestrator) scheduleHistoricalReady(

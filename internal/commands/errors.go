@@ -82,7 +82,8 @@ func classifyApplicationError(err error) string {
 	case application.IsStateError(err, application.StateInvalid):
 		return CodeInternal
 	case errors.Is(err, application.ErrPlanParentUnknown),
-		errors.Is(err, application.ErrPlanDependencyUnknown):
+		errors.Is(err, application.ErrPlanDependencyUnknown),
+		errors.Is(err, application.ErrWorkItemBudgetDemandInvalid):
 		return CodeInvalidRequest
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		return CodeUnavailable

@@ -303,6 +303,19 @@ func newSQLiteV16OrchestratorWithStateAttestorAndSessions(
 	attestor application.TestAttestor,
 	sessions ports.ExecutionSessionBroker,
 ) *application.Orchestrator {
+	return newSQLiteV16OrchestratorWithStateAttestorSessionsAndMaxOutput(
+		t, system, state, attestor, sessions, 1024,
+	)
+}
+
+func newSQLiteV16OrchestratorWithStateAttestorSessionsAndMaxOutput(
+	t *testing.T,
+	system *sqliteV15System,
+	state application.StateRepository,
+	attestor application.TestAttestor,
+	sessions ports.ExecutionSessionBroker,
+	maxOutputBytes int64,
+) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: system.repository,
@@ -313,7 +326,7 @@ func newSQLiteV16OrchestratorWithStateAttestorAndSessions(
 			Ref: "test-attestation-policy:sqlite", Digest: strings.Repeat("b", 64),
 		},
 		Clock: system.clock, IDs: system.ids,
-		MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
+		MaxOutputBytes: maxOutputBytes, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, MaxChildrenPerParent: 6,
 		ClaimLease: time.Minute, AttestTestClaimLease: 20 * time.Minute,
 		DirectorLeaseDuration: 30 * time.Second,

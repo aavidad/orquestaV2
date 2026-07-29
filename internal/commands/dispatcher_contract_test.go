@@ -180,6 +180,7 @@ func TestCouncilErrorsAreTypedAndNormalized(t *testing.T) {
 		{fmt.Errorf("wrapped: %w", council.ErrSubjectMismatch), CodeConflict},
 		{fmt.Errorf("wrapped: %w", application.ErrPlanParentUnknown), CodeInvalidRequest},
 		{fmt.Errorf("wrapped: %w", application.ErrPlanDependencyUnknown), CodeInvalidRequest},
+		{fmt.Errorf("wrapped: %w", application.ErrWorkItemBudgetDemandInvalid), CodeInvalidRequest},
 		{errors.New("council.open_request_invalid"), CodeInvalidRequest},
 		{errors.New("council.resolution_required"), CodeConflict},
 	}
