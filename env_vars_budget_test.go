@@ -156,28 +156,44 @@ func TestEnvVarsBudgetMEJ106V0(t *testing.T) {
 func collectEnvNamesV0(t *testing.T, root string) []string {
 	t.Helper()
 	seen := map[string]bool{}
-	for _, dir := range []string{"cmd", "modulos"} {
-		walkErr := filepath.Walk(filepath.Join(root, dir), func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
+	collect := func(content []byte) {
+		for _, name := range envNamePatternV0.FindAllString(string(content), -1) {
+			if strings.HasSuffix(name, "_") {
+				continue
 			}
-			if info.IsDir() || !strings.HasSuffix(path, ".go") {
-				return nil
-			}
-			content, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return readErr
-			}
-			for _, name := range envNamePatternV0.FindAllString(string(content), -1) {
-				if strings.HasSuffix(name, "_") {
-					continue
-				}
-				seen[name] = true
-			}
+			seen[name] = true
+		}
+	}
+	activeRoot := filepath.Join(root, "cmd", "orquesta")
+	walkErr := filepath.Walk(activeRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".go") {
 			return nil
+		}
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		collect(content)
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("recorrer cmd/orquesta: %v", walkErr)
+	}
+	for _, sourceRoot := range []string{
+		"cmd/orquesta-bootstrap-diagnostic",
+		"cmd/orquesta-cli",
+		"cmd/orquesta-guardian",
+		"cmd/orquesta-server",
+		"modulos",
+	} {
+		snapshot := traceLoadGitIndexSnapshot(t, root, sourceRoot, func(path string) bool {
+			return strings.HasSuffix(path, ".go")
 		})
-		if walkErr != nil {
-			t.Fatalf("recorrer %s: %v", dir, walkErr)
+		for _, content := range snapshot.Contents {
+			collect(content)
 		}
 	}
 	names := make([]string, 0, len(seen))
@@ -200,9 +216,10 @@ func findRepoRootForEnvVarsBudgetMEJ106V0(t *testing.T) string {
 		t.Fatalf("getwd: %v", err)
 	}
 	for {
-		if hasDirEnvVarsBudgetMEJ106V0(dir, "cmd") &&
-			hasDirEnvVarsBudgetMEJ106V0(dir, "modulos") &&
-			hasDirEnvVarsBudgetMEJ106V0(dir, "scripts") {
+		if hasDirEnvVarsBudgetMEJ106V0(dir, "cmd/orquesta") &&
+			hasDirEnvVarsBudgetMEJ106V0(dir, "scripts") &&
+			hasFileEnvVarsBudgetMEJ106V0(dir, "go.mod") &&
+			hasFileEnvVarsBudgetMEJ106V0(dir, "product/roadmap.json") {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -216,4 +233,9 @@ func findRepoRootForEnvVarsBudgetMEJ106V0(t *testing.T) string {
 func hasDirEnvVarsBudgetMEJ106V0(root string, name string) bool {
 	info, err := os.Stat(filepath.Join(root, name))
 	return err == nil && info.IsDir()
+}
+
+func hasFileEnvVarsBudgetMEJ106V0(root string, name string) bool {
+	info, err := os.Stat(filepath.Join(root, name))
+	return err == nil && info.Mode().IsRegular()
 }

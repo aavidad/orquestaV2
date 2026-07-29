@@ -44,28 +44,44 @@ func collectStatusSurfaceEndpointsTPer502V0(t *testing.T, root string) []string 
 	endpointLiteral := regexp.MustCompile(`"/api/v0/[^"]*"`)
 	interesting := regexp.MustCompile(`(?i)(status|stats|readiness|observe|health|cockpit|control)`)
 	seen := map[string]struct{}{}
-	for _, base := range []string{"cmd", "modulos"} {
-		err := filepath.WalkDir(filepath.Join(root, base), func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
+	collect := func(content []byte) {
+		for _, match := range endpointLiteral.FindAllString(string(content), -1) {
+			endpoint := strings.Trim(match, `"`)
+			if interesting.MatchString(strings.ToLower(endpoint)) {
+				seen[endpoint] = struct{}{}
 			}
-			if entry.IsDir() || filepath.Ext(path) != ".go" {
-				return nil
-			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			for _, match := range endpointLiteral.FindAllString(string(content), -1) {
-				endpoint := strings.Trim(match, `"`)
-				if interesting.MatchString(strings.ToLower(endpoint)) {
-					seen[endpoint] = struct{}{}
-				}
-			}
+		}
+	}
+	activeRoot := filepath.Join(root, "cmd", "orquesta")
+	err := filepath.WalkDir(activeRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(path) != ".go" {
 			return nil
-		})
+		}
+		content, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("scan %s: %v", base, err)
+			return err
+		}
+		collect(content)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan cmd/orquesta: %v", err)
+	}
+	for _, sourceRoot := range []string{
+		"cmd/orquesta-bootstrap-diagnostic",
+		"cmd/orquesta-cli",
+		"cmd/orquesta-guardian",
+		"cmd/orquesta-server",
+		"modulos",
+	} {
+		snapshot := traceLoadGitIndexSnapshot(t, root, sourceRoot, func(path string) bool {
+			return filepath.Ext(path) == ".go"
+		})
+		for _, content := range snapshot.Contents {
+			collect(content)
 		}
 	}
 	endpoints := make([]string, 0, len(seen))
@@ -83,7 +99,9 @@ func findRepoRootForStatusSurfaceBudgetTPer502V0(t *testing.T) string {
 		t.Fatalf("getwd: %v", err)
 	}
 	for {
-		if hasDirTPer502V0(dir, "cmd") && hasDirTPer502V0(dir, "modulos") {
+		if hasDirTPer502V0(dir, "cmd/orquesta") &&
+			hasFileTPer502V0(dir, "go.mod") &&
+			hasFileTPer502V0(dir, "product/roadmap.json") {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -97,4 +115,9 @@ func findRepoRootForStatusSurfaceBudgetTPer502V0(t *testing.T) string {
 func hasDirTPer502V0(root string, name string) bool {
 	info, err := os.Stat(filepath.Join(root, name))
 	return err == nil && info.IsDir()
+}
+
+func hasFileTPer502V0(root string, name string) bool {
+	info, err := os.Stat(filepath.Join(root, name))
+	return err == nil && info.Mode().IsRegular()
 }
