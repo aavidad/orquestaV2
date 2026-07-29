@@ -75,6 +75,8 @@ type traceSourceDisposition struct {
 func TestTraceabilityRebuildPendingSourceInventory(t *testing.T) {
 	var ledger tracePendingSourceLedger
 	traceDecodeStrict(t, "product/traceability/pending_sources.json", &ledger)
+	legacySources := traceLoadLegacySourceSnapshot(t, ".")
+	dispositions := traceDispositionSourcesByRef(t)
 	if ledger.DocumentKind != "pending_source_inventory" || ledger.SchemaVersion != 1 || len(ledger.Sources) != 4 {
 		t.Fatalf("invalid pending source ledger header: %#v", ledger)
 	}
@@ -94,8 +96,8 @@ func TestTraceabilityRebuildPendingSourceInventory(t *testing.T) {
 			t.Fatalf("duplicate pending source id %q", source.ID)
 		}
 		seen[source.ID] = struct{}{}
-		paths := traceExpandSourcePaths(t, source)
-		gotDigest := traceFileManifestDigest(t, paths)
+		paths := traceExpandSourcePaths(t, source, legacySources)
+		gotDigest := traceFileManifestDigest(t, paths, dispositions, legacySources)
 		if len(paths) != source.ExpectedFileCount || gotDigest != source.ManifestSHA256 {
 			t.Errorf("pending source %q drift: files=%d digest=%s, want files=%d digest=%s",
 				source.ID, len(paths), gotDigest, source.ExpectedFileCount, source.ManifestSHA256)
@@ -123,9 +125,10 @@ func TestTraceabilityRebuildPendingSourceInventory(t *testing.T) {
 func TestTraceabilityRebuildSourceDispositions(t *testing.T) {
 	var pending tracePendingSourceLedger
 	traceDecodeStrict(t, "product/traceability/pending_sources.json", &pending)
+	legacySources := traceLoadLegacySourceSnapshot(t, ".")
 	expected := make(map[string]string)
 	for _, source := range pending.Sources {
-		for _, path := range traceExpandSourcePaths(t, source) {
+		for _, path := range traceExpandSourcePaths(t, source, legacySources) {
 			if previous, duplicate := expected[path]; duplicate {
 				t.Fatalf("source %q appears in both %q and %q inventories", path, previous, source.Kind)
 			}
@@ -202,7 +205,7 @@ func TestTraceabilityRebuildSourceDispositions(t *testing.T) {
 			t.Fatalf("duplicate source disposition %q", entry.SourceRef)
 		}
 		seen[entry.SourceRef] = struct{}{}
-		gotHash := traceFileSHA256(t, entry.SourceRef)
+		gotHash := traceBytesSHA256(traceReadDispositionSource(t, entry, legacySources))
 		if gotHash != entry.SourceSHA256 {
 			t.Errorf("source %q digest=%s, want %s", entry.SourceRef, gotHash, entry.SourceSHA256)
 		}
@@ -290,27 +293,48 @@ func traceSourceHasRole(source traceSourceDisposition, role string) bool {
 	return false
 }
 
-func traceExpandSourcePaths(t *testing.T, source tracePendingSource) []string {
+func traceExpandSourcePaths(t *testing.T, source tracePendingSource, legacySources traceGitIndexSnapshot) []string {
 	t.Helper()
 	unique := make(map[string]struct{})
 	for _, exactPath := range source.ExactPaths {
-		if _, err := os.Stat(exactPath); err != nil {
+		if strings.HasPrefix(exactPath, "modulos/") {
+			if _, exists := legacySources.Contents[exactPath]; !exists {
+				t.Fatalf("pending source %q exact path %q is absent from Git index snapshot", source.ID, exactPath)
+			}
+		} else if _, err := os.Stat(exactPath); err != nil {
 			t.Fatalf("pending source %q exact path %q: %v", source.ID, exactPath, err)
 		}
 		unique[filepath.ToSlash(exactPath)] = struct{}{}
 	}
 	for _, pattern := range source.PathPatterns {
-		matches, err := filepath.Glob(filepath.FromSlash(pattern))
-		if err != nil {
-			t.Fatalf("pending source %q invalid pattern %q: %v", source.ID, pattern, err)
+		var matches []string
+		if strings.HasPrefix(pattern, "modulos/") {
+			for path := range legacySources.Contents {
+				matched, err := filepath.Match(filepath.FromSlash(pattern), filepath.FromSlash(path))
+				if err != nil {
+					t.Fatalf("pending source %q invalid pattern %q: %v", source.ID, pattern, err)
+				}
+				if matched {
+					matches = append(matches, path)
+				}
+			}
+			sort.Strings(matches)
+		} else {
+			var err error
+			matches, err = filepath.Glob(filepath.FromSlash(pattern))
+			if err != nil {
+				t.Fatalf("pending source %q invalid pattern %q: %v", source.ID, pattern, err)
+			}
 		}
 		if len(matches) == 0 {
 			t.Fatalf("pending source %q pattern %q matches no files", source.ID, pattern)
 		}
 		for _, match := range matches {
-			info, err := os.Stat(match)
-			if err != nil || !info.Mode().IsRegular() {
-				t.Fatalf("pending source %q path %q is not a regular file", source.ID, match)
+			if !strings.HasPrefix(match, "modulos/") {
+				info, err := os.Stat(match)
+				if err != nil || !info.Mode().IsRegular() {
+					t.Fatalf("pending source %q path %q is not a regular file", source.ID, match)
+				}
 			}
 			unique[filepath.ToSlash(match)] = struct{}{}
 		}
@@ -323,14 +347,20 @@ func traceExpandSourcePaths(t *testing.T, source tracePendingSource) []string {
 	return paths
 }
 
-func traceFileManifestDigest(t *testing.T, paths []string) string {
+func traceFileManifestDigest(
+	t *testing.T,
+	paths []string,
+	dispositions map[string]traceSourceDisposition,
+	legacySources traceGitIndexSnapshot,
+) string {
 	t.Helper()
 	lines := make([]string, 0, len(paths))
 	for _, path := range paths {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
+		disposition, exists := dispositions[path]
+		if !exists {
+			t.Fatalf("pending source %q has no source disposition", path)
 		}
+		content := traceReadDispositionSource(t, disposition, legacySources)
 		sum := sha256.Sum256(content)
 		lines = append(lines, path+"|sha256:"+hex.EncodeToString(sum[:]))
 	}
@@ -345,6 +375,43 @@ func traceFileSHA256(t *testing.T, path string) string {
 	}
 	sum := sha256.Sum256(content)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func traceReadDispositionSource(
+	t *testing.T,
+	source traceSourceDisposition,
+	legacySources traceGitIndexSnapshot,
+) []byte {
+	t.Helper()
+	return traceReadFrozenGitIndexOverlayFile(
+		t,
+		source.SourceRef,
+		source.SourceSHA256,
+		source.ReasonCode == "active_bug_ledger_source",
+		legacySources,
+	)
+}
+
+func traceReadDispositionSourceLines(
+	t *testing.T,
+	source traceSourceDisposition,
+	legacySources traceGitIndexSnapshot,
+) []string {
+	t.Helper()
+	return traceBytesLines(t, traceReadDispositionSource(t, source, legacySources))
+}
+
+func traceDispositionSourcesByRef(t *testing.T) map[string]traceSourceDisposition {
+	t.Helper()
+	entries := traceReadDispositionJSONL(t, "product/traceability/source_dispositions.jsonl")
+	byRef := make(map[string]traceSourceDisposition, len(entries))
+	for _, entry := range entries {
+		if _, duplicate := byRef[entry.SourceRef]; duplicate {
+			t.Fatalf("duplicate source disposition %q", entry.SourceRef)
+		}
+		byRef[entry.SourceRef] = entry
+	}
+	return byRef
 }
 
 func traceReadDispositionJSONL(t *testing.T, path string) []traceSourceDisposition {

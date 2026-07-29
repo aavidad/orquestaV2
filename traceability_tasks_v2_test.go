@@ -263,6 +263,7 @@ func traceTestCanonicalTaskEntriesV2(t *testing.T) {
 	v2ValidateTaskPolicy(t, policy)
 
 	sources := v2ReadJSONL[v2TaskSource](t, v2TaskSourcesPath)
+	legacySources := traceLoadLegacySourceSnapshot(t, ".")
 	entries := v2ReadJSONL[v2TaskEntry](t, v2TaskEntriesPath)
 	exclusions := v2ReadJSONL[v2TaskExclusion](t, v2TaskExclusionsPath)
 	capabilities := v2ReadCapabilities(t)
@@ -292,10 +293,7 @@ func traceTestCanonicalTaskEntriesV2(t *testing.T) {
 	detectedBySource := make(map[string]int)
 	strictCount, broadCount := 0, 0
 	for _, source := range orderedTaskSources {
-		content, err := os.ReadFile(source.SourceRef)
-		if err != nil {
-			t.Fatal(err)
-		}
+		content := traceReadGitIndexOverlayFile(t, source.SourceRef, legacySources)
 		if got := v2SHA(content); got != source.SourceSHA256 {
 			t.Fatalf("task source hash drift %s: %s != %s", source.SourceRef, got, source.SourceSHA256)
 		}

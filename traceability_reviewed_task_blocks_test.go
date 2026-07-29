@@ -65,6 +65,7 @@ type reviewedTaskBlockReviewExpectation struct {
 
 func TestTraceabilityRebuildReviewedTaskBlocks(t *testing.T) {
 	blocks := v2ReadJSONL[v2ReviewedTaskBlock](t, reviewedTaskBlocksPath)
+	legacySources := traceLoadLegacySourceSnapshot(t, ".")
 	if len(blocks) != 170 {
 		t.Fatalf("reviewed task blocks=%d, want 170", len(blocks))
 	}
@@ -106,7 +107,7 @@ func TestTraceabilityRebuildReviewedTaskBlocks(t *testing.T) {
 			t.Fatalf("reviewed task block %s has empty summary", block.BlockRef)
 		}
 
-		source := reviewedTaskBlockLoadSource(t, sources, block.SourceRef)
+		source := reviewedTaskBlockLoadSource(t, sources, block.SourceRef, legacySources)
 		if block.SourceSHA256 != source.sha256 {
 			t.Fatalf(
 				"reviewed task block %s source hash=%s, want %s",
@@ -507,6 +508,7 @@ func reviewedTaskBlockLoadSource(
 	t *testing.T,
 	cache map[string]reviewedTaskBlockSource,
 	sourceRef string,
+	legacySources traceGitIndexSnapshot,
 ) reviewedTaskBlockSource {
 	t.Helper()
 	if cached, exists := cache[sourceRef]; exists {
@@ -516,10 +518,7 @@ func reviewedTaskBlockLoadSource(
 	if sourceRef == "" || filepath.IsAbs(sourceRef) || clean != sourceRef || strings.HasPrefix(clean, "../") {
 		t.Fatalf("reviewed task block has non-canonical source_ref %q", sourceRef)
 	}
-	content, err := os.ReadFile(sourceRef)
-	if err != nil {
-		t.Fatalf("read reviewed task block source %s: %v", sourceRef, err)
-	}
+	content := traceReadGitIndexOverlayFile(t, sourceRef, legacySources)
 	source := reviewedTaskBlockSource{
 		sha256: v2SHA(content),
 		lines:  v2SplitLines(content),

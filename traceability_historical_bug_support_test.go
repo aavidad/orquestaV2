@@ -89,6 +89,7 @@ func traceValidateHistoricalBugRows(
 	bugSources map[string]traceSourceDisposition,
 	accepted map[string]struct{},
 	richRowSourceRefs []string,
+	legacySources traceGitIndexSnapshot,
 ) map[string]traceHistoricalBugRow {
 	t.Helper()
 	rowsBySource := make(map[string][]traceHistoricalBugRow)
@@ -108,7 +109,7 @@ func traceValidateHistoricalBugRows(
 	sourceLines := make(map[string][]string, len(bugSources))
 	detectedRows := make(map[string]struct{})
 	for sourceRef := range bugSources {
-		lines := traceReadSourceLines(t, sourceRef)
+		lines := traceReadDispositionSourceLines(t, bugSources[sourceRef], legacySources)
 		if _, reviewedRichSource := richRowSources[sourceRef]; !reviewedRichSource {
 			sourceLines[sourceRef] = lines
 			continue
@@ -204,7 +205,7 @@ func traceValidateHistoricalBugRows(
 			if !traceStringSliceContains(row.CitedExistingTestRefs, row.LessonTestRef) {
 				t.Fatalf("rich historical bug row %s:%d primary lesson is not cited", row.SourceRef, row.SourceLine)
 			}
-			traceRequireExistingLessonRef(t, row.LessonTestRef)
+			traceRequireExistingLessonRef(t, row.LessonTestRef, legacySources)
 		}
 		if row.Disposition != wantDisposition {
 			t.Fatalf("rich historical bug row %s:%d disposition=%q, want %q",
@@ -233,6 +234,7 @@ func traceExtractHistoricalBugOccurrences(
 	rowsByLine map[string]traceHistoricalBugRow,
 	basePattern *regexp.Regexp,
 	slashPattern *regexp.Regexp,
+	legacySources traceGitIndexSnapshot,
 ) []traceHistoricalBugOccurrence {
 	t.Helper()
 	sourceRefs := make([]string, 0, len(bugSources))
@@ -243,7 +245,7 @@ func traceExtractHistoricalBugOccurrences(
 	entries := make([]traceHistoricalBugOccurrence, 0, 1500)
 	seenRefs := make(map[string]struct{})
 	for _, sourceRef := range sourceRefs {
-		lines := traceReadSourceLines(t, sourceRef)
+		lines := traceReadDispositionSourceLines(t, bugSources[sourceRef], legacySources)
 		var sealedRows []traceHistoricalBugRow
 		for _, row := range rowsByLine {
 			if row.SourceRef == sourceRef {
@@ -589,19 +591,19 @@ func traceDocumentField(lines []string, prefix string) string {
 	return ""
 }
 
-func traceRequireExistingLessonRef(t *testing.T, ref string) {
+func traceRequireExistingLessonRef(t *testing.T, ref string, legacySources traceGitIndexSnapshot) {
 	t.Helper()
 	parts := strings.Split(ref, "#")
 	if len(parts) > 2 || strings.TrimSpace(parts[0]) == "" {
 		t.Fatalf("invalid historical bug lesson ref %q", ref)
 	}
-	if _, err := os.Stat(parts[0]); err != nil {
-		t.Fatalf("historical bug lesson ref %q: %v", ref, err)
-	}
+	content := traceReadGitIndexOverlayFile(t, parts[0], legacySources)
 	if len(parts) == 2 {
 		if !strings.HasSuffix(parts[0], "_test.go") || !strings.HasPrefix(parts[1], "Test") {
 			t.Fatalf("invalid Go historical bug lesson ref %q", ref)
 		}
-		traceRequireGoTestRef(t, ref, true)
+		if !strings.Contains(string(content), "func "+parts[1]+"(") {
+			t.Fatalf("closed lesson test %q is absent", ref)
+		}
 	}
 }
