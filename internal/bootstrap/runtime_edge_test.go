@@ -294,8 +294,9 @@ func TestBuildDetectsRuntimeRootAliasesThroughSymlinkParent(t *testing.T) {
 
 func TestBuildRejectsCredentialRecoveryNamespaceCollisionsBeforeEffects(t *testing.T) {
 	tests := []struct {
-		name      string
-		configure func(*testing.T, string, string, string) string
+		name           string
+		crossValidated bool
+		configure      func(*testing.T, string, string, string) string
 	}{
 		{name: "state directory", configure: func(t *testing.T, root, configPath, reservedPath string) string {
 			replaceTestConfigValue(t, configPath,
@@ -332,6 +333,13 @@ func TestBuildRejectsCredentialRecoveryNamespaceCollisionsBeforeEffects(t *testi
 			)
 			return configPath
 		}},
+		{name: "local principals manifest", crossValidated: true, configure: func(t *testing.T, _ string, configPath, reservedPath string) string {
+			replaceTestConfigValue(t, configPath,
+				"local_token_path = ",
+				"local_principals_manifest_path = "+strconv.Quote(reservedPath)+"\nlocal_token_path = ",
+			)
+			return configPath
+		}},
 		{name: "config source", configure: func(t *testing.T, _ string, configPath, reservedPath string) string {
 			if err := os.MkdirAll(filepath.Dir(reservedPath), 0o700); err != nil {
 				t.Fatal(err)
@@ -362,7 +370,11 @@ func TestBuildRejectsCredentialRecoveryNamespaceCollisionsBeforeEffects(t *testi
 					return countingFactory(&atomic.Int64{})(snapshot, clock)
 				},
 			})
-			if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
+			validError := err != nil && err.Error() == "bootstrap.runtime_paths_overlap"
+			if test.crossValidated {
+				validError = config.HasErrorCode(err, config.ErrorCrossValidation)
+			}
+			if runtime != nil || !validError {
 				t.Fatalf("credential reserved path collision = %v, %v", runtime, err)
 			}
 			if factoryCalls.Load() != 0 {

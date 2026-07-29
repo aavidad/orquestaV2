@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-28.1",
+  "$id": "urn:orquesta:config:2026-07-29.0",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -300,6 +300,46 @@
           "x-sensitive": false,
           "x-validator-ids": [
             "opaque_ref"
+          ]
+        },
+        "local_principals_manifest_max_bytes": {
+          "default": 65536,
+          "maximum": 1048576,
+          "minimum": 1024,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_MAX_BYTES",
+          "x-restart-required": true,
+          "x-scope": "identity",
+          "x-semantic-ref": "orquesta.config.identity.local_principals_manifest_max_bytes",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "local_principals_manifest_max_entries": {
+          "default": 32,
+          "maximum": 256,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_MAX_ENTRIES",
+          "x-restart-required": true,
+          "x-scope": "identity",
+          "x-semantic-ref": "orquesta.config.identity.local_principals_manifest_max_entries",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "local_principals_manifest_path": {
+          "default": "",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_PATH",
+          "x-restart-required": true,
+          "x-scope": "identity",
+          "x-semantic-ref": "orquesta.config.identity.local_principals_manifest_path",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "optional_path"
           ]
         },
         "local_token_path": {
@@ -1276,8 +1316,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-28.1",
-  "x-registry-hash": "sha256:a1db38af4f99380c5cae11c4bd879c5bfdc4fcdd113605a5ac59da2c368838a8",
+  "x-registry-revision": "2026-07-29.0",
+  "x-registry-hash": "sha256:7ad0b79b399b5424ec78498e56bcb7582ba149b63e6d2bd86c3b452236dab2b5",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1338,7 +1378,8 @@
         "runtime.codex.account_home_root",
         "workspace.local.root",
         "config.effective_path",
-        "identity.local_token_path"
+        "identity.local_token_path",
+        "identity.local_principals_manifest_path"
       ]
     },
     {

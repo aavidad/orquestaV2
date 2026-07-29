@@ -294,6 +294,35 @@ func TestManagerReservedPathsRejectEveryStoreSidecarBeforeCommit(t *testing.T) {
 	}
 }
 
+func TestResolveAndManagerRejectCredentialRecoveryPathForLocalManifest(t *testing.T) {
+	const credentialPath = "/tmp/orquesta-manager-credentials.json"
+	const recoveryPath = credentialPath + ".next"
+	content := []byte("[credentials.local]\npath = \"" + credentialPath +
+		"\"\n[identity]\nlocal_principals_manifest_path = \"" + recoveryPath + "\"\n")
+	if _, err := Resolve(ResolveOptions{TOML: content}); !HasErrorCode(err, ErrorCrossValidation) {
+		t.Fatalf("resolve accepted credential recovery path as manifest: %v", err)
+	}
+
+	active := managerTestSnapshot(t, nil)
+	store := newManagerFakeStore(nil)
+	manager := newTestManager(t, store, active, nil)
+	view, err := manager.View(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = manager.Update(context.Background(), UpdateRequest{
+		ActorRef: "actor:test", RequestRef: "request:manifest-credential-recovery",
+		ExpectedRevision: view.SourceRevision, Confirm: true,
+		Changes: []Change{
+			{Key: KeyCredentialsLocalPath, Value: credentialPath},
+			{Key: KeyIdentityLocalPrincipalsManifestPath, Value: recoveryPath},
+		},
+	})
+	if !HasErrorCode(err, ErrorCrossValidation) || store.commitCount() != 0 {
+		t.Fatalf("manager accepted credential recovery path: err=%v commits=%d", err, store.commitCount())
+	}
+}
+
 func TestManagerReplayDoesNotRevalidateCommandAgainstLaterState(t *testing.T) {
 	active := managerTestSnapshot(t, nil)
 	store := newManagerFakeStore(nil)

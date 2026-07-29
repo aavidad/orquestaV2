@@ -691,6 +691,21 @@ func composeIdentityRuntime(
 		if err != nil {
 			return identityRuntimeComposition{}, err
 		}
+		if snapshot.IdentityLocalPrincipalsManifestPath() != "" {
+			secondaries, manifestErr := localtoken.OpenManifest(localtoken.ManifestOptions{
+				Path: snapshot.IdentityLocalPrincipalsManifestPath(), OwnerUID: os.Geteuid(),
+				MaxDocumentBytes: snapshot.IdentityLocalPrincipalsManifestMaxBytes(),
+				MaxEntries:       int(snapshot.IdentityLocalPrincipalsManifestMaxEntries()),
+				Reserved:         []identity.Principal{principal},
+			})
+			if manifestErr != nil {
+				return identityRuntimeComposition{}, manifestErr
+			}
+			provider, err = localtoken.Combine(provider, secondaries)
+			if err != nil {
+				return identityRuntimeComposition{}, err
+			}
+		}
 		return identityRuntimeComposition{
 			provider: provider, localPrincipal: principal, localHierarchy: hierarchy, provisionLocal: true,
 		}, nil
@@ -1187,6 +1202,22 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		overlapsAny(accountHomeRoot, stateDirectory, artifactRoot, workRoot, cacheRoot,
 			effectivePath, tokenDirectory, credentialPath, workspaceRoot) {
 		return errors.New("bootstrap.runtime_paths_overlap")
+	}
+	if snapshot.IdentityLocalPrincipalsManifestPath() != "" {
+		manifestPath, err := canonicalRuntimePath(snapshot.IdentityLocalPrincipalsManifestPath())
+		if err != nil {
+			return errors.New("bootstrap.local_principals_manifest_path_invalid")
+		}
+		if manifestPath == tokenPath ||
+			overlapsAny(manifestPath, stateDirectory, artifactRoot, workRoot, cacheRoot,
+				effectivePath, credentialPath, workspaceRoot, accountHomeRoot) {
+			return errors.New("bootstrap.runtime_paths_overlap")
+		}
+		for _, reservedPath := range credentialReservedPaths {
+			if pathsOverlap(manifestPath, reservedPath) {
+				return errors.New("bootstrap.runtime_paths_overlap")
+			}
+		}
 	}
 	for _, reservedPath := range credentialReservedPaths {
 		if overlapsAny(reservedPath, stateDirectory, artifactRoot, workRoot, cacheRoot,

@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-28.1`
+Registry revision: `2026-07-29.0`
 
-Registry hash: `sha256:a1db38af4f99380c5cae11c4bd879c5bfdc4fcdd113605a5ac59da2c368838a8`
+Registry hash: `sha256:7ad0b79b399b5424ec78498e56bcb7582ba149b63e6d2bd86c3b452236dab2b5`
 
 Precedence: `default < file < env`
 
@@ -71,6 +71,9 @@ Source limit: `1048576` bytes
 | `identity.provider` | `string` | `"local_token"` | `ORQUESTA_IDENTITY_PROVIDER` | `true` | `allowed_values` |
 | `identity.local_actor` | `string` | `"actor:local-owner"` | `ORQUESTA_IDENTITY_LOCAL_ACTOR` | `true` | `opaque_ref` |
 | `identity.local_token_path` | `path` | `"./var/secrets/local-owner.token"` | `ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH` | `true` | `non_empty_path` |
+| `identity.local_principals_manifest_path` | `optional_path` | `""` | `ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_PATH` | `true` | `optional_path` |
+| `identity.local_principals_manifest_max_bytes` | `integer` | `65536` | `ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_MAX_BYTES` | `true` | `integer_bounds` |
+| `identity.local_principals_manifest_max_entries` | `integer` | `32` | `ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_MAX_ENTRIES` | `true` | `integer_bounds` |
 | `identity.oidc.issuer` | `string` | `""` | `ORQUESTA_IDENTITY_OIDC_ISSUER` | `true` | `trimmed_optional_string` |
 | `identity.oidc.audience` | `string` | `""` | `ORQUESTA_IDENTITY_OIDC_AUDIENCE` | `true` | `trimmed_optional_string` |
 | `identity.oidc.required_groups` | `string_list` | `[]` | `ORQUESTA_IDENTITY_OIDC_REQUIRED_GROUPS` | `true` | `unique_non_empty_string_list` |
@@ -106,7 +109,7 @@ Source limit: `1048576` bytes
 - `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`; maximum duration `24h`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
-- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.cache_root`, `runtime.codex.account_home_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`
+- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.cache_root`, `runtime.codex.account_home_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`, `identity.local_principals_manifest_path`
 - `identity_provider_requirements`: `identity.provider`, `identity.oidc.issuer`, `identity.oidc.audience`, `identity.oidc.clock_skew`, `identity.oidc.upstream_timeout`
 - `test_attestor_provider_requirements`: `test_attestor.provider`, `test_attestor.timeout`, `test_attestor.bubblewrap.command`, `test_attestor.microvm.launcher_socket`, `test_attestor.microvm.expected_asset_digest`, `test_attestor.microvm.guest_memory_mib`, `test_attestor.go.toolchain_root`, `runtime.max_output_bytes`, `test_attestor.max_subject_bytes`, `test_attestor.max_concurrent_runs`, `repository.local.seed_path`, `test_attestor.resources.cgroup_root`, `test_attestor.resources.memory_max_bytes`, `test_attestor.resources.pids_max`, `test_attestor.resources.cpu_quota_micros`, `server.shutdown_timeout`, `scheduler.attest_test_claim_lease`, `scheduler.execution_timeout`; microVM minimum guest `128 MiB`, cgroup headroom `1073741824` bytes, operational reserve `2147483648` bytes, maximum CPU quota `3200000` micros
 

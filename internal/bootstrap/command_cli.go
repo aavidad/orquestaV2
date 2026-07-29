@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
@@ -202,7 +203,11 @@ func readCommandCredential(path string, maximum int64) (identity.Credential, err
 }
 
 func privateCredentialFile(info os.FileInfo) bool {
-	return info != nil && info.Mode()&os.ModeSymlink == 0 && info.Mode().IsRegular() && info.Mode().Perm() == 0o600
+	if info == nil || info.Mode() != 0o600 {
+		return false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && stat != nil && stat.Uid == uint32(os.Geteuid()) && stat.Nlink == 1
 }
 
 type commandCredentialTransport struct {

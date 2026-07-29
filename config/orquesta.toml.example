@@ -82,6 +82,9 @@ cpu_quota_micros = 200000
 provider = "local_token"
 local_actor = "actor:local-owner"
 local_token_path = "./var/secrets/local-owner.token"
+local_principals_manifest_path = ""
+local_principals_manifest_max_bytes = 65536
+local_principals_manifest_max_entries = 32
 
 [identity.oidc]
 issuer = ""

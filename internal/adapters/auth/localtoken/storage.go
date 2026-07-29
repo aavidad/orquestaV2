@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"orquesta/internal/identity"
 )
@@ -22,33 +23,67 @@ const (
 )
 
 type Authenticator struct {
-	token        string
-	digest       [sha256.Size]byte
-	principal    identity.Principal
-	hasPrincipal bool
+	token    string
+	digest   [sha256.Size]byte
+	bindings []credentialBinding
+}
+
+type credentialBinding struct {
+	digest    [sha256.Size]byte
+	principal identity.Principal
 }
 
 // Open loads the existing local token or creates it once with private
 // permissions. Invalid existing state is never replaced silently.
 func Open(configuredPath string) (*Authenticator, error) {
+	return open(configuredPath, os.Geteuid())
+}
+
+func open(configuredPath string, ownerUID int) (*Authenticator, error) {
 	tokenPath, err := normalizePath(configuredPath)
 	if err != nil {
 		return nil, err
 	}
+	if ownerUID < 0 {
+		return nil, &Error{Code: CodePathInvalid}
+	}
 	directory := filepath.Dir(tokenPath)
-	if err := ensurePrivateDirectory(directory); err != nil {
+	if err := ensurePrivateDirectory(directory, uint32(ownerUID)); err != nil {
 		return nil, err
 	}
 
-	token, found, err := loadToken(tokenPath)
+	token, found, err := loadToken(tokenPath, uint32(ownerUID))
 	if err != nil {
 		return nil, err
 	}
 	if !found {
-		token, err = createToken(tokenPath, directory)
+		token, err = createToken(tokenPath, directory, uint32(ownerUID))
 		if err != nil {
 			return nil, err
 		}
+	}
+	return &Authenticator{token: token, digest: sha256.Sum256([]byte(token))}, nil
+}
+
+func openExisting(configuredPath string, ownerUID int) (*Authenticator, error) {
+	tokenPath, err := normalizePath(configuredPath)
+	if err != nil || ownerUID < 0 {
+		return nil, &Error{Code: CodePathInvalid, Cause: err}
+	}
+	directory := filepath.Dir(tokenPath)
+	if err := validateDirectoryChain(directory); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(directory)
+	if err != nil || !privateDirectory(info, uint32(ownerUID)) {
+		return nil, &Error{Code: CodeDirectoryPermissions, Cause: err}
+	}
+	token, found, err := loadToken(tokenPath, uint32(ownerUID))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, &Error{Code: CodeTokenFileInvalid}
 	}
 	return &Authenticator{token: token, digest: sha256.Sum256([]byte(token))}, nil
 }
@@ -72,14 +107,12 @@ func (authenticator *Authenticator) ForPrincipal(principal identity.Principal) (
 	if err := identity.ValidatePrincipal(principal); err != nil || principal.Method != AuthenticationMethod {
 		return nil, &Error{Code: CodePrincipalInvalid, Cause: err}
 	}
-	if authenticator.hasPrincipal {
+	if len(authenticator.bindings) != 0 {
 		return nil, &Error{Code: CodePrincipalInvalid}
 	}
 	return &Authenticator{
-		token:        authenticator.token,
-		digest:       authenticator.digest,
-		principal:    principal,
-		hasPrincipal: true,
+		token: authenticator.token, digest: authenticator.digest,
+		bindings: []credentialBinding{{digest: authenticator.digest, principal: principal}},
 	}, nil
 }
 
@@ -94,7 +127,7 @@ func normalizePath(configuredPath string) (string, error) {
 	return absolute, nil
 }
 
-func ensurePrivateDirectory(directory string) error {
+func ensurePrivateDirectory(directory string, ownerUID uint32) error {
 	_, initialErr := os.Lstat(directory)
 	created := errors.Is(initialErr, fs.ErrNotExist)
 	if initialErr != nil && !created {
@@ -120,7 +153,7 @@ func ensurePrivateDirectory(directory string) error {
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return &Error{Code: CodeDirectoryInvalid, Cause: err}
 	}
-	if info.Mode().Perm() != 0o700 {
+	if !privateDirectory(info, ownerUID) {
 		return &Error{Code: CodeDirectoryPermissions}
 	}
 	return nil
@@ -189,16 +222,17 @@ func validateDirectoryChain(directory string) error {
 	}
 }
 
-func loadToken(tokenPath string) (string, bool, error) {
+func loadToken(tokenPath string, ownerUID uint32) (string, bool, error) {
 	info, err := os.Lstat(tokenPath)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", false, nil
 	}
-	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+	maximum := base64.RawURLEncoding.EncodedLen(tokenByteSize)
+	if err != nil || !privateRegular(info, ownerUID, int64(maximum)) {
+		if err == nil && info.Mode().IsRegular() && info.Mode().Perm() != 0o600 {
+			return "", false, &Error{Code: CodeTokenFilePermissions}
+		}
 		return "", false, &Error{Code: CodeTokenFileInvalid, Cause: err}
-	}
-	if info.Mode().Perm() != 0o600 {
-		return "", false, &Error{Code: CodeTokenFilePermissions}
 	}
 
 	file, err := os.Open(tokenPath)
@@ -207,20 +241,27 @@ func loadToken(tokenPath string) (string, bool, error) {
 	}
 	defer file.Close()
 	openedInfo, err := file.Stat()
-	if err != nil || !openedInfo.Mode().IsRegular() || !os.SameFile(info, openedInfo) {
+	if err != nil || !privateRegular(openedInfo, ownerUID, int64(maximum)) || !os.SameFile(info, openedInfo) {
 		return "", false, &Error{Code: CodeTokenFileInvalid, Cause: err}
 	}
-	if openedInfo.Mode().Perm() != 0o600 {
-		return "", false, &Error{Code: CodeTokenFilePermissions}
-	}
 
-	maximum := base64.RawURLEncoding.EncodedLen(tokenByteSize)
 	content, err := io.ReadAll(io.LimitReader(file, int64(maximum+1)))
 	if err != nil {
 		return "", false, &Error{Code: CodeTokenFileInvalid, Cause: err}
 	}
 	if len(content) != maximum {
 		return "", false, &Error{Code: CodeTokenInvalid}
+	}
+	finalInfo, err := file.Stat()
+	if err != nil || !privateRegular(finalInfo, ownerUID, int64(maximum)) ||
+		!os.SameFile(openedInfo, finalInfo) || finalInfo.Size() != openedInfo.Size() ||
+		!finalInfo.ModTime().Equal(openedInfo.ModTime()) {
+		return "", false, &Error{Code: CodeTokenFileInvalid, Cause: err}
+	}
+	pathInfo, err := os.Lstat(tokenPath)
+	if err != nil || !privateRegular(pathInfo, ownerUID, int64(maximum)) ||
+		!os.SameFile(finalInfo, pathInfo) {
+		return "", false, &Error{Code: CodeTokenFileInvalid, Cause: err}
 	}
 	token := string(content)
 	decoded, err := base64.RawURLEncoding.DecodeString(token)
@@ -230,7 +271,7 @@ func loadToken(tokenPath string) (string, bool, error) {
 	return token, true, nil
 }
 
-func createToken(tokenPath, directory string) (string, error) {
+func createToken(tokenPath, directory string, ownerUID uint32) (string, error) {
 	random := make([]byte, tokenByteSize)
 	if _, err := rand.Read(random); err != nil {
 		return "", &Error{Code: CodeRandomFailed, Cause: err}
@@ -263,7 +304,7 @@ func createToken(tokenPath, directory string) (string, error) {
 
 	if err := os.Link(temporaryPath, tokenPath); err != nil {
 		if errors.Is(err, fs.ErrExist) {
-			existing, found, loadErr := loadToken(tokenPath)
+			existing, found, loadErr := loadToken(tokenPath, ownerUID)
 			if loadErr != nil {
 				return "", loadErr
 			}
@@ -281,7 +322,7 @@ func createToken(tokenPath, directory string) (string, error) {
 		return "", &Error{Code: CodePersistFailed, Cause: err}
 	}
 
-	stored, found, err := loadToken(tokenPath)
+	stored, found, err := loadToken(tokenPath, ownerUID)
 	if err != nil {
 		return "", err
 	}
@@ -289,6 +330,25 @@ func createToken(tokenPath, directory string) (string, error) {
 		return "", &Error{Code: CodeTokenInvalid}
 	}
 	return stored, nil
+}
+
+func privateDirectory(info os.FileInfo, ownerUID uint32) bool {
+	stat, ok := fileIdentity(info)
+	return ok && info.Mode() == os.ModeDir|0o700 && stat.Uid == ownerUID
+}
+
+func privateRegular(info os.FileInfo, ownerUID uint32, maximum int64) bool {
+	stat, ok := fileIdentity(info)
+	return ok && info.Mode() == 0o600 && info.Size() > 0 && info.Size() <= maximum &&
+		stat.Uid == ownerUID && stat.Nlink == 1
+}
+
+func fileIdentity(info os.FileInfo) (*syscall.Stat_t, bool) {
+	if info == nil {
+		return nil, false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return stat, ok && stat != nil
 }
 
 func syncDirectory(directory string) error {

@@ -361,8 +361,11 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 	workspaceRoot, workspaceOK := canonical(KeyWorkspaceLocalRoot)
 	effectivePath, effectiveOK := canonical(KeyConfigEffectivePath)
 	tokenPath, tokenOK := canonical(KeyIdentityLocalTokenPath)
+	manifestPath, manifestOK := canonical(KeyIdentityLocalPrincipalsManifestPath)
+	manifestConfigured, _ := values[KeyIdentityLocalPrincipalsManifestPath].value.(string)
 	if !stateOK || !artifactOK || !credentialOK || !workOK || !cacheOK ||
-		!workspaceOK || !effectiveOK || !tokenOK {
+		!workspaceOK || !effectiveOK || !tokenOK ||
+		(strings.TrimSpace(manifestConfigured) != "" && !manifestOK) {
 		return false
 	}
 	stateDirectory, tokenDirectory := filepath.Dir(statePath), filepath.Dir(tokenPath)
@@ -393,6 +396,23 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 			[2]string{accountHomeRoot, tokenDirectory},
 		)
 	}
+	if manifestOK {
+		credentialRecoveryPath := credentialPath + ".next"
+		pairs = append(pairs,
+			[2]string{manifestPath, stateDirectory},
+			[2]string{manifestPath, artifactRoot},
+			[2]string{manifestPath, credentialPath},
+			[2]string{manifestPath, credentialRecoveryPath},
+			[2]string{manifestPath, workRoot},
+			[2]string{manifestPath, cacheRoot},
+			[2]string{manifestPath, workspaceRoot},
+			[2]string{manifestPath, effectivePath},
+			[2]string{manifestPath, tokenPath},
+		)
+		if accountHomeOK {
+			pairs = append(pairs, [2]string{manifestPath, accountHomeRoot})
+		}
+	}
 	for _, pair := range pairs {
 		if pathsOverlap(pair[0], pair[1]) {
 			return false
@@ -409,6 +429,9 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		}
 		if accountHomeOK {
 			otherPaths = append(otherPaths, accountHomeRoot)
+		}
+		if manifestOK {
+			otherPaths = append(otherPaths, manifestPath)
 		}
 		for _, other := range otherPaths {
 			if pathsOverlap(configPath, other) {

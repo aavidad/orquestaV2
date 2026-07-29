@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-28.1",
+  "revision": "2026-07-29.0",
   "precedence": [
     "default",
     "file",
@@ -69,7 +69,8 @@
         "runtime.codex.account_home_root",
         "workspace.local.root",
         "config.effective_path",
-        "identity.local_token_path"
+        "identity.local_token_path",
+        "identity.local_principals_manifest_path"
       ]
     },
     {
@@ -926,6 +927,52 @@
       "validator_ids": [
         "non_empty_path"
       ]
+    },
+    {
+      "key": "identity.local_principals_manifest_path",
+      "go_name": "IdentityLocalPrincipalsManifestPath",
+      "semantic_ref": "orquesta.config.identity.local_principals_manifest_path",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_PATH",
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "identity.local_principals_manifest_max_bytes",
+      "go_name": "IdentityLocalPrincipalsManifestMaxBytes",
+      "semantic_ref": "orquesta.config.identity.local_principals_manifest_max_bytes",
+      "type": "integer",
+      "default": 65536,
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_MAX_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 1048576
+    },
+    {
+      "key": "identity.local_principals_manifest_max_entries",
+      "go_name": "IdentityLocalPrincipalsManifestMaxEntries",
+      "semantic_ref": "orquesta.config.identity.local_principals_manifest_max_entries",
+      "type": "integer",
+      "default": 32,
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_LOCAL_PRINCIPALS_MANIFEST_MAX_ENTRIES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 256
     },
     {
       "key": "identity.oidc.issuer",

@@ -23,12 +23,21 @@ func TestCommandRejectsSymlinkAndOversizedCredentials(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
+	hardlinkTarget := filepath.Join(root, "hardlink-target")
+	if err := os.WriteFile(hardlinkTarget, []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	hardlink := filepath.Join(root, "hardlink")
+	if err := os.Link(hardlinkTarget, hardlink); err != nil {
+		t.Fatal(err)
+	}
 	for _, test := range []struct {
 		name    string
 		path    string
 		maximum int64
 	}{
 		{name: "symlink", path: link, maximum: 128},
+		{name: "hardlink", path: hardlink, maximum: 128},
 		{name: "oversized", path: target, maximum: 3},
 	} {
 		t.Run(test.name, func(t *testing.T) {
