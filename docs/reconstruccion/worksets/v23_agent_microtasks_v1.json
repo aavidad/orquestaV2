@@ -1,0 +1,1186 @@
+{
+  "schema_version": 1,
+  "document_kind": "orquesta_agent_microtask_plan",
+  "vertical": "V23",
+  "contract": "AC-V23-WIZARD",
+  "base_commit": "232ed4ef4485c596c55d708182244de207dee7bd",
+  "status": "planned",
+  "final_contract": "Un único intake versionado para chat y formulario; confirmación explícita del dossier crea el plan; rondas, ayudas y enmiendas conservan causalidad.",
+  "authority_state": {
+    "intake": "internal/intake",
+    "dossier_projection": "internal/application/intake_dossier_projection.go",
+    "wizard_gaps": "internal/application/wizard_gaps.go",
+    "durable_store": "internal/adapters/state/sqlite",
+    "public_commands": "internal/bootstrap",
+    "acceptance": "acceptance/fixtures/v23_wizard.json",
+    "seal": "product/evidence/v23_wizard.json"
+  },
+  "current_baseline": {
+    "implementation_status": "partial_green_unsealed",
+    "acceptance_accredited": false,
+    "completed_integration_scopes": [
+      "application_idempotency",
+      "application_dossier_builder",
+      "command_registry_binding",
+      "durable_cas_persistence_and_restart",
+      "durable_dossier_persistence",
+      "public_dossier_commands",
+      "causal_plan_creation",
+      "canonical_round_default",
+      "explicit_confirmation",
+      "freeze_after_confirmation",
+      "intake_dependency_reopen_projection",
+      "intake_pure_context_reemission",
+      "intake_recommendation_batch_compiler",
+      "public_pure_context_command",
+      "public_recommendation_batch_command",
+      "public_wizard_dossier_prepare",
+      "public_wizard_gap_application",
+      "versioned_wizard_gaps_evaluator_identity",
+      "wizard_gap_application_compiler_fail_closed",
+      "wizard_catalog_foundation_and_15_domain_packs",
+      "wizard_gap_explicit_outcome_receipt",
+      "wizard_gap_input_receipt_durability",
+      "wizard_gap_noop_request_reservation_and_historical_replay",
+      "wizard_gap_reconciliation"
+    ],
+    "deferred_scopes": [
+      "dossier_generation",
+      "roadmap_promotion",
+      "seal_and_receipt",
+      "web_surface",
+      "wizard_gap_exact_evaluation_snapshot_and_replay",
+      "wizard_help_surface"
+    ],
+    "capability_classification": {
+      "candidate": 7,
+      "partial": 18,
+      "pending": 2,
+      "rejected": 2,
+      "total": 29
+    }
+  },
+  "scope_transfers": [
+    {
+      "capability_id": "UI-05",
+      "from": "V23",
+      "to": "V24",
+      "reason": "La superficie web pertenece al vertical de administración web y no debe bloquear el núcleo determinista del Wizard."
+    },
+    {
+      "capability_id": "WIZ-13",
+      "from": "V23",
+      "to": "V24",
+      "reason": "Marca, tema y apariencia son responsabilidades de presentación web."
+    },
+    {
+      "capability_id": "WIZ-10",
+      "from": "V23",
+      "to": "V28",
+      "reason": "V23 conserva selección work_existing y refs opacas; el conector concreto de Analizador pertenece a integraciones."
+    }
+  ],
+  "scope_rules": [
+    "No reimplementar ninguno de los 24 scopes ya integrados.",
+    "No introducir proveedor LLM, RAG, Analizador concreto, web ni Firecracker en V23.",
+    "Las tareas de caracterización no pueden editar producción; un fallo crea una microtarea hija nueva.",
+    "Roadmap, fixture y receipt tienen escritor único y se modifican solo en tareas serializadas.",
+    "Cada tarea debe entregar commit pequeño en castellano, pruebas exactas y evidence_bundle."
+  ],
+  "phases": [
+    {
+      "ref": "phase-instance:v23:scope",
+      "key": "phase:v23-scope",
+      "template_ref": "phase-template:v23-scope"
+    },
+    {
+      "ref": "phase-instance:v23:implementation",
+      "key": "phase:v23-implementation",
+      "template_ref": "phase-template:v23-implementation"
+    },
+    {
+      "ref": "phase-instance:v23:gate",
+      "key": "phase:v23-gate",
+      "template_ref": "phase-template:v23-gate"
+    },
+    {
+      "ref": "phase-instance:v23:seal",
+      "key": "phase:v23-seal",
+      "template_ref": "phase-template:v23-seal"
+    }
+  ],
+  "tasks": [
+    {
+      "order": 1,
+      "work_item_key": "v23_01_scope_freeze",
+      "title": "Congelar el alcance pequeño de V23",
+      "status": "planned",
+      "phase": "phase:v23-scope",
+      "role": "role:worker",
+      "reasoning_effort": "high",
+      "security_criticality": "normal",
+      "objective": "Alinear roadmap, ruta y aceptación: V23 conserva intake, gaps, ayudas, dossier, plantillas y creación causal del plan; UI-05/WIZ-13 pasan a V24 y el conector concreto WIZ-10 a V28.",
+      "capability_ids": [
+        "UI-05",
+        "WIZ-10",
+        "WIZ-13"
+      ],
+      "closes_scopes": [
+        "web_surface"
+      ],
+      "target": {
+        "file": "product/roadmap.json",
+        "symbol": "AC-V23-WIZARD"
+      },
+      "preconditions": [
+        "La fixture V23 sigue partial_green_unsealed.",
+        "V24 es dueño de web admin y V28 de integraciones externas."
+      ],
+      "postconditions": [
+        "Ninguna capacidad desaparece; cada capacidad transferida conserva destino explícito.",
+        "Los tests de roadmap impiden reintroducir web, marca o Analizador concreto como gate de V23."
+      ],
+      "dependencies": [],
+      "read_set": [
+        "docs/reconstruccion/analisis_y_contrato_v23_wizard.md",
+        "docs/reconstruccion/ruta_total_100.md",
+        "acceptance/fixtures/v23_wizard.json",
+        "product/roadmap.json"
+      ],
+      "write_set": [
+        "product/roadmap.json",
+        "product_roadmap_v23_test.go",
+        "docs/reconstruccion/ruta_total_100.md",
+        "acceptance/fixtures/v23_wizard.json",
+        "acceptance/v23_wizard_test.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-01-roadmap",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            ".",
+            "-run",
+            "^TestProductRoadmapV23"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Una capacidad transferida queda sin vertical propietario.",
+        "V23 vuelve a exigir web, branding o un adaptador Analizador concreto."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output",
+        "scope_transfer_receipt"
+      ],
+      "max_files_changed": 5,
+      "max_loc": 180,
+      "max_minutes": 45,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "WIZ-01",
+        "path": "product/roadmap.json",
+        "operation": "plan"
+      }
+    },
+    {
+      "order": 2,
+      "work_item_key": "v23_02_snapshot_application",
+      "title": "Vincular snapshot exacto en aplicación",
+      "status": "planned",
+      "phase": "phase:v23-implementation",
+      "role": "role:worker",
+      "reasoning_effort": "high",
+      "security_criticality": "sensitive",
+      "objective": "Usar ResultSnapshot ya existente para ligar bytes canónicos y digest al resultado y al receipt de inputs sin duplicar el evaluador.",
+      "capability_ids": [
+        "WIZ-22"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "internal/application/wizard_gaps.go",
+        "symbol": "ApplyWizardGapsResult"
+      },
+      "preconditions": [
+        "internal/wizard/gaps/result_snapshot.go es la única serialización canónica.",
+        "EvaluationReplayExact continúa false hasta verificar persistencia y recuperación."
+      ],
+      "postconditions": [
+        "Resultado y record portan snapshot/digest validados.",
+        "La aplicación no conoce SQLite ni inventa otra serialización."
+      ],
+      "dependencies": [
+        "v23_01_scope_freeze"
+      ],
+      "read_set": [
+        "internal/wizard/gaps/result_snapshot.go",
+        "internal/application/wizard_gaps.go",
+        "internal/application/wizard_gaps_inputs.go"
+      ],
+      "write_set": [
+        "internal/application/wizard_gaps_snapshot.go",
+        "internal/application/wizard_gaps_snapshot_test.go",
+        "internal/application/wizard_gaps.go",
+        "internal/application/wizard_gaps_inputs.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-02-application",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./internal/application",
+            "-run",
+            "^TestWizardGapsApplicationBindsExactResultSnapshot$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Digest correcto con bytes no canónicos.",
+        "Snapshot de otra revisión o catálogo.",
+        "EvaluationReplayExact activado antes del store."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output"
+      ],
+      "max_files_changed": 4,
+      "max_loc": 240,
+      "max_minutes": 60,
+      "parallel_group": "wave_v23_core_a",
+      "preflight": {
+        "capability": "WIZ-22",
+        "path": "internal/application",
+        "operation": "replay"
+      }
+    },
+    {
+      "order": 3,
+      "work_item_key": "v23_03_snapshot_schema",
+      "title": "Añadir esquema durable del snapshot",
+      "status": "planned",
+      "phase": "phase:v23-implementation",
+      "role": "role:worker",
+      "reasoning_effort": "high",
+      "security_criticality": "sensitive",
+      "objective": "Crear una migración forward-only para bytes y digest del snapshot exacto, sin alterar receipts históricos.",
+      "capability_ids": [
+        "WIZ-22"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "internal/adapters/state/sqlite/migrations/022_wizard_gaps_result_snapshots.sql",
+        "symbol": "wizard_gaps_result_snapshots"
+      },
+      "preconditions": [
+        "Contrato de aplicación de v23_02 disponible.",
+        "Schema 21 abre y migra sin pérdida."
+      ],
+      "postconditions": [
+        "Tabla/columnas tienen claves causales y restricciones de tamaño.",
+        "Migración repetida es segura y el registro canónico conoce la versión."
+      ],
+      "dependencies": [
+        "v23_02_snapshot_application"
+      ],
+      "read_set": [
+        "internal/adapters/state/sqlite/migrations",
+        "internal/adapters/state/sqlite/migrations.go"
+      ],
+      "write_set": [
+        "internal/adapters/state/sqlite/migrations/022_wizard_gaps_result_snapshots.sql",
+        "internal/adapters/state/sqlite/migrations.go",
+        "internal/adapters/state/sqlite/migrations_test.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-03-schema",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./internal/adapters/state/sqlite",
+            "-run",
+            "^TestWizardGapsSnapshotSchemaMigrationIsLossless$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Fila sin revisión causal.",
+        "Snapshot vacío o superior al límite.",
+        "Migración desde schema 21 cambia un receipt existente."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output"
+      ],
+      "max_files_changed": 3,
+      "max_loc": 180,
+      "max_minutes": 50,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "STATE-03",
+        "path": "internal/adapters/state/sqlite",
+        "operation": "migration"
+      }
+    },
+    {
+      "order": 4,
+      "work_item_key": "v23_04_snapshot_store",
+      "title": "Persistir snapshot exacto con CAS",
+      "status": "planned",
+      "phase": "phase:v23-implementation",
+      "role": "role:worker",
+      "reasoning_effort": "high",
+      "security_criticality": "sensitive",
+      "objective": "Escribir y leer bytes/digest exactos dentro de la misma transacción causal del receipt de gaps.",
+      "capability_ids": [
+        "WIZ-22",
+        "STATE-03"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "internal/adapters/state/sqlite/wizard_gaps_inputs.go",
+        "symbol": "ReplayWizardGapsInput"
+      },
+      "preconditions": [
+        "Migración v23_03 aplicada.",
+        "El store no reevalúa gaps."
+      ],
+      "postconditions": [
+        "Primera escritura guarda receipt y snapshot atómicamente.",
+        "Replay devuelve exactamente los bytes guardados.",
+        "Misma request con payload distinto conserva conflicto CAS."
+      ],
+      "dependencies": [
+        "v23_03_snapshot_schema"
+      ],
+      "read_set": [
+        "internal/application/wizard_gaps_snapshot.go",
+        "internal/adapters/state/sqlite/wizard_gaps_inputs.go"
+      ],
+      "write_set": [
+        "internal/adapters/state/sqlite/wizard_gaps_snapshots.go",
+        "internal/adapters/state/sqlite/wizard_gaps_snapshots_test.go",
+        "internal/adapters/state/sqlite/wizard_gaps_inputs.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-04-store",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./internal/adapters/state/sqlite",
+            "-run",
+            "^TestWizardGapsSnapshotSQLiteExactReplayAndConflict$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Receipt commit y snapshot rollback.",
+        "Snapshot de otra request_ref.",
+        "Replay recompone el resultado actual en lugar del histórico."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output"
+      ],
+      "max_files_changed": 3,
+      "max_loc": 260,
+      "max_minutes": 70,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "STATE-03",
+        "path": "internal/adapters/state/sqlite",
+        "operation": "cas"
+      }
+    },
+    {
+      "order": 5,
+      "work_item_key": "v23_05_snapshot_recovery",
+      "title": "Cerrar corrupción y recuperación del snapshot",
+      "status": "planned",
+      "phase": "phase:v23-implementation",
+      "role": "role:worker",
+      "reasoning_effort": "xhigh",
+      "security_criticality": "critical",
+      "objective": "Validar snapshot/digest al abrir, reiniciar y recuperar; rechazar corrupción coherente sin bloquear almacenes históricos anteriores al schema nuevo.",
+      "capability_ids": [
+        "WIZ-22",
+        "STATE-03",
+        "OPS-21"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "internal/adapters/state/sqlite/validation_versions.go",
+        "symbol": "wizard gaps snapshot validation"
+      },
+      "preconditions": [
+        "Store exacto v23_04 verde.",
+        "Política de recovery existente sigue siendo autoridad."
+      ],
+      "postconditions": [
+        "Tamper de bytes, digest, revisión o catálogo falla cerrado.",
+        "Restart conserva replay exacto.",
+        "Schema 21 histórico migra con replay no exacto explícito."
+      ],
+      "dependencies": [
+        "v23_04_snapshot_store"
+      ],
+      "read_set": [
+        "internal/adapters/state/sqlite/validation_versions.go",
+        "internal/adapters/state/sqlite/recovery.go",
+        "internal/adapters/state/sqlite/wizard_gaps_snapshots.go"
+      ],
+      "write_set": [
+        "internal/adapters/state/sqlite/wizard_gaps_snapshot_validation.go",
+        "internal/adapters/state/sqlite/wizard_gaps_snapshot_validation_test.go",
+        "internal/adapters/state/sqlite/validation_versions.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-05-recovery",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./internal/adapters/state/sqlite",
+            "-run",
+            "^TestV23WizardGapsSnapshotRecoveryRejectsTamper$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Bytes y digest alterados de forma coherente.",
+        "Snapshot válido ligado a revisión distinta.",
+        "Apertura legacy declara exactitud inexistente."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output",
+        "corruption_matrix"
+      ],
+      "max_files_changed": 3,
+      "max_loc": 300,
+      "max_minutes": 80,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "OPS-21",
+        "path": "internal/adapters/state/sqlite",
+        "operation": "recovery"
+      }
+    },
+    {
+      "order": 6,
+      "work_item_key": "v23_06_snapshot_public",
+      "title": "Exponer replay histórico exacto",
+      "status": "planned",
+      "phase": "phase:v23-implementation",
+      "role": "role:worker",
+      "reasoning_effort": "high",
+      "security_criticality": "sensitive",
+      "objective": "Proyectar el snapshot verificado por comando público y activar evaluation_replay_exact solo cuando el resultado histórico fue restaurado exactamente.",
+      "capability_ids": [
+        "WIZ-22",
+        "EXT-03"
+      ],
+      "closes_scopes": [
+        "wizard_gap_exact_evaluation_snapshot_and_replay"
+      ],
+      "target": {
+        "file": "internal/bootstrap/handlers_wizard_gaps.go",
+        "symbol": "wizard gaps replay handler"
+      },
+      "preconditions": [
+        "Aplicación, store y recovery exactos están verdes.",
+        "El registro de comandos ya contiene evaluation_replay_exact."
+      ],
+      "postconditions": [
+        "Misma request tras cambio de catálogo devuelve evaluación histórica byte-equivalente.",
+        "Un receipt legacy devuelve replay no exacto sin mentir.",
+        "Restart real del bootstrap conserva exactitud."
+      ],
+      "dependencies": [
+        "v23_05_snapshot_recovery"
+      ],
+      "read_set": [
+        "internal/application/wizard_gaps.go",
+        "internal/bootstrap/handlers_wizard_gaps.go",
+        "internal/bootstrap/wizard_gaps_e2e_test.go"
+      ],
+      "write_set": [
+        "internal/application/wizard_gaps.go",
+        "internal/bootstrap/handlers_wizard_gaps.go",
+        "internal/bootstrap/wizard_gaps_snapshot_e2e_test.go",
+        "acceptance/v23_wizard_snapshot_test.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-06-public",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./internal/bootstrap",
+            "-run",
+            "^TestV23WizardGapsPublicReplayReturnsExactHistoricalEvaluation$"
+          ],
+          "working_directory": "."
+        },
+        {
+          "ref": "required-test:v23-06-acceptance",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./acceptance",
+            "-run",
+            "^TestV23WizardGapExactReplay$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Boolean true con reevaluación actual.",
+        "Boolean true sin snapshot durable.",
+        "Respuesta pública filtra bytes internos del store."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output",
+        "restart_receipt"
+      ],
+      "max_files_changed": 4,
+      "max_loc": 300,
+      "max_minutes": 80,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "EXT-03",
+        "path": "internal/bootstrap",
+        "operation": "replay"
+      }
+    },
+    {
+      "order": 7,
+      "work_item_key": "v23_07_dossier_characterization",
+      "title": "Acreditar la generación determinista del dossier",
+      "status": "planned",
+      "phase": "phase:v23-implementation",
+      "role": "role:worker",
+      "reasoning_effort": "medium",
+      "security_criticality": "normal",
+      "objective": "Caracterizar la proyección canónica ya existente: secciones, diagramas, decisiones, riesgos, plan y replay estable; no crear un segundo generador.",
+      "capability_ids": [
+        "WIZ-03",
+        "WIZ-04",
+        "WIZ-05",
+        "WIZ-07"
+      ],
+      "closes_scopes": [
+        "dossier_generation"
+      ],
+      "target": {
+        "file": "acceptance/v23_wizard_dossier_generation_test.go",
+        "symbol": "TestV23DossierGenerationContractUsesCanonicalProjection"
+      },
+      "preconditions": [
+        "NewIntakeDossierProjection sigue siendo autoridad.",
+        "Tarea es read-only respecto a producción."
+      ],
+      "postconditions": [
+        "Test exacto prueba mínimo 11 secciones, diagramas y replay estable.",
+        "Si falla conducta productiva, tarea bloquea y crea hija; no amplía su write-set."
+      ],
+      "dependencies": [
+        "v23_01_scope_freeze"
+      ],
+      "read_set": [
+        "internal/application/intake_dossier_projection.go",
+        "internal/application/wizard_dossier_preparation.go",
+        "internal/intake"
+      ],
+      "write_set": [
+        "acceptance/v23_wizard_dossier_generation_test.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-07-dossier",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./acceptance",
+            "-run",
+            "^TestV23DossierGenerationContractUsesCanonicalProjection$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Dossier muta intake.",
+        "Replay cambia orden o digest.",
+        "Test intenta reparar producción dentro de la misma tarea."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output",
+        "characterization_receipt"
+      ],
+      "max_files_changed": 1,
+      "max_loc": 220,
+      "max_minutes": 40,
+      "parallel_group": "wave_v23_core_a",
+      "preflight": {
+        "capability": "WIZ-03",
+        "path": "internal/application",
+        "operation": "dossier"
+      }
+    },
+    {
+      "order": 8,
+      "work_item_key": "v23_08_help_characterization",
+      "title": "Acreditar ayuda contextual sin mutación",
+      "status": "planned",
+      "phase": "phase:v23-implementation",
+      "role": "role:worker",
+      "reasoning_effort": "medium",
+      "security_criticality": "normal",
+      "objective": "Caracterizar help/explain-all existente: contexto por pregunta, ejemplos y claves i18n completas, sin cambiar revisión ni respuestas.",
+      "capability_ids": [
+        "WIZ-06",
+        "WIZ-08",
+        "WIZ-09"
+      ],
+      "closes_scopes": [
+        "wizard_help_surface"
+      ],
+      "target": {
+        "file": "acceptance/v23_wizard_help_test.go",
+        "symbol": "TestV23WizardHelpSurfaceIsCompleteAndReadOnly"
+      },
+      "preconditions": [
+        "ReemitContext y GetIntakeContext ya son autoridad.",
+        "Cobertura de claves de catálogo integrada."
+      ],
+      "postconditions": [
+        "Ayuda de una pregunta y explain-all son deterministas y no mutan estado.",
+        "Claves help/example existen en es/en.",
+        "Fallo productivo crea microtarea hija independiente."
+      ],
+      "dependencies": [
+        "v23_01_scope_freeze"
+      ],
+      "read_set": [
+        "internal/intake/interactions.go",
+        "internal/application/intake_interactions.go",
+        "internal/i18n",
+        "internal/wizard/catalog"
+      ],
+      "write_set": [
+        "acceptance/v23_wizard_help_test.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-08-help",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./acceptance",
+            "-run",
+            "^TestV23WizardHelpSurfaceIsCompleteAndReadOnly$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Ayuda incrementa revisión.",
+        "Explain-all omite preguntas activas.",
+        "Clave localizada ausente se sustituye por string ad hoc."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output",
+        "characterization_receipt"
+      ],
+      "max_files_changed": 1,
+      "max_loc": 220,
+      "max_minutes": 40,
+      "parallel_group": "wave_v23_core_a",
+      "preflight": {
+        "capability": "WIZ-06",
+        "path": "internal/intake",
+        "operation": "help"
+      }
+    },
+    {
+      "order": 9,
+      "work_item_key": "v23_09_capability_matrix",
+      "title": "Recalcular la matriz V23 por evidencia",
+      "status": "planned",
+      "phase": "phase:v23-gate",
+      "role": "role:worker",
+      "reasoning_effort": "high",
+      "security_criticality": "normal",
+      "objective": "Actualizar clasificación candidate/partial/pending únicamente desde tests exactos y registrar capacidades transferidas sin acreditarlas en V23.",
+      "capability_ids": [
+        "WIZ-01",
+        "WIZ-02",
+        "WIZ-06",
+        "WIZ-22"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "acceptance/fixtures/v23_wizard.json",
+        "symbol": "capability_classification"
+      },
+      "preconditions": [
+        "v23_06, v23_07 y v23_08 verdes.",
+        "Scope freeze aplicado."
+      ],
+      "postconditions": [
+        "Cada promoción cita test exacto y fichero integrado.",
+        "Conteo total coincide con capacidades cuyo dueño formal sigue siendo V23.",
+        "Fixture continúa not_sealed."
+      ],
+      "dependencies": [
+        "v23_06_snapshot_public",
+        "v23_07_dossier_characterization",
+        "v23_08_help_characterization"
+      ],
+      "read_set": [
+        "acceptance/v23_wizard_snapshot_test.go",
+        "acceptance/v23_wizard_dossier_generation_test.go",
+        "acceptance/v23_wizard_help_test.go",
+        "product/roadmap.json"
+      ],
+      "write_set": [
+        "acceptance/fixtures/v23_wizard.json",
+        "acceptance/v23_wizard_test.go",
+        "docs/reconstruccion/analisis_y_contrato_v23_wizard.md"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-09-matrix",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./acceptance",
+            "-run",
+            "^TestAcceptanceV23WizardCapabilityClassification$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Promoción basada en narrativa.",
+        "Capacidad transferida contada como V23.",
+        "Fixture se marca sealed antes de reviews."
+      ],
+      "output_artifacts": [
+        "commit",
+        "test_output",
+        "classification_receipt"
+      ],
+      "max_files_changed": 3,
+      "max_loc": 220,
+      "max_minutes": 50,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "WIZ-01",
+        "path": "acceptance",
+        "operation": "attest"
+      }
+    },
+    {
+      "order": 10,
+      "work_item_key": "v23_10_candidate_gate",
+      "title": "Ejecutar el gate candidato V23",
+      "status": "planned",
+      "phase": "phase:v23-gate",
+      "role": "role:worker",
+      "reasoning_effort": "medium",
+      "security_criticality": "sensitive",
+      "objective": "Congelar sujetos y ejecutar suites focales, arquitectura, race y diff; publicar handoff candidato sin modificar producción.",
+      "capability_ids": [
+        "WIZ-01",
+        "WIZ-22",
+        "OPS-02"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "docs/reconstruccion/corte_v23_candidato.md",
+        "symbol": "candidate gate"
+      },
+      "preconditions": [
+        "Matriz V23 coherente.",
+        "Worktree limpio salvo salida de gate declarada."
+      ],
+      "postconditions": [
+        "Handoff contiene OID, sujetos, comandos, resultados y digest.",
+        "Ningún fallo se convierte en verde narrativo."
+      ],
+      "dependencies": [
+        "v23_09_capability_matrix"
+      ],
+      "read_set": [
+        "acceptance/fixtures/v23_wizard.json",
+        "internal/application",
+        "internal/adapters/state/sqlite",
+        "internal/bootstrap"
+      ],
+      "write_set": [
+        "docs/reconstruccion/corte_v23_candidato.md",
+        "product/evidence/candidates/v23_wizard_candidate.json"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-10-acceptance",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./acceptance",
+            "-run",
+            "^Test.*V23.*$"
+          ],
+          "working_directory": "."
+        },
+        {
+          "ref": "required-test:v23-10-race",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-race",
+            "-count=1",
+            "./internal/application",
+            "./internal/adapters/state/sqlite"
+          ],
+          "working_directory": "."
+        },
+        {
+          "ref": "required-test:v23-10-diff",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            ".",
+            "-run",
+            "^TestNeutralOrchestrationPackagesDoNotImportProductAdapters$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Gate omite un sujeto modificado.",
+        "Race o test flaky se reintenta hasta verde sin incidencia.",
+        "Candidate receipt se confunde con seal."
+      ],
+      "output_artifacts": [
+        "commit",
+        "candidate_handoff",
+        "candidate_receipt",
+        "test_output"
+      ],
+      "max_files_changed": 2,
+      "max_loc": 260,
+      "max_minutes": 90,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "OPS-02",
+        "path": "acceptance",
+        "operation": "attest"
+      }
+    },
+    {
+      "order": 11,
+      "work_item_key": "v23_11_primary_review",
+      "title": "Revisión primaria independiente",
+      "status": "planned",
+      "phase": "phase:v23-gate",
+      "role": "role:reviewer",
+      "reasoning_effort": "high",
+      "security_criticality": "sensitive",
+      "objective": "Revisar contrato, causalidad, migración, compatibilidad y evidencia desde un launch distinto del autor.",
+      "capability_ids": [
+        "ORC-05",
+        "OPS-20"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "product/evidence/reviews/v23_wizard_primary.json",
+        "symbol": "primary review ballot"
+      },
+      "preconditions": [
+        "Candidate handoff v23_10 inmutable.",
+        "Reviewer no es autor de las tareas 2 a 10."
+      ],
+      "postconditions": [
+        "Ballot cita hallazgos por fichero/símbolo y resultado PASS o REWORK.",
+        "REWORK crea tareas causales; no edita producción."
+      ],
+      "dependencies": [
+        "v23_10_candidate_gate"
+      ],
+      "read_set": [
+        "docs/reconstruccion/corte_v23_candidato.md",
+        "product/evidence/candidates/v23_wizard_candidate.json",
+        "internal/application",
+        "internal/adapters/state/sqlite",
+        "internal/bootstrap",
+        "acceptance"
+      ],
+      "write_set": [
+        "product/evidence/reviews/v23_wizard_primary.json"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-11-review",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./acceptance",
+            "-run",
+            "^Test.*V23.*$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Reviewer coincide con autor.",
+        "PASS sin revisar snapshot tamper y schema 21.",
+        "Review corrige código dentro de su write-set."
+      ],
+      "output_artifacts": [
+        "review_ballot",
+        "findings"
+      ],
+      "max_files_changed": 1,
+      "max_loc": 180,
+      "max_minutes": 50,
+      "parallel_group": "wave_v23_reviews",
+      "preflight": {
+        "capability": "ORC-05",
+        "path": "product/evidence",
+        "operation": "review"
+      }
+    },
+    {
+      "order": 12,
+      "work_item_key": "v23_12_adversarial_review",
+      "title": "Revisión adversarial independiente",
+      "status": "planned",
+      "phase": "phase:v23-gate",
+      "role": "role:adversarial-reviewer",
+      "reasoning_effort": "xhigh",
+      "security_criticality": "critical",
+      "objective": "Intentar romper exactitud histórica, CAS, recovery, autoridad única, scope y sellado desde un launch distinto.",
+      "capability_ids": [
+        "ORC-05",
+        "OPS-20",
+        "STATE-03"
+      ],
+      "closes_scopes": [],
+      "target": {
+        "file": "product/evidence/reviews/v23_wizard_adversarial.json",
+        "symbol": "adversarial review ballot"
+      },
+      "preconditions": [
+        "Candidate handoff v23_10 inmutable.",
+        "Adversarial reviewer no coincide con autor ni reviewer primario."
+      ],
+      "postconditions": [
+        "Ballot cubre tamper coherente, replay tras cambio de catálogo, concurrencia y falsa acreditación.",
+        "REWORK conserva árbol causal y no altera candidato."
+      ],
+      "dependencies": [
+        "v23_10_candidate_gate"
+      ],
+      "read_set": [
+        "docs/reconstruccion/corte_v23_candidato.md",
+        "product/evidence/candidates/v23_wizard_candidate.json",
+        "internal/wizard/gaps/result_snapshot.go",
+        "internal/adapters/state/sqlite",
+        "acceptance/fixtures/v23_wizard.json"
+      ],
+      "write_set": [
+        "product/evidence/reviews/v23_wizard_adversarial.json"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-12-review",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./internal/adapters/state/sqlite",
+            "-run",
+            "^TestV23WizardGapsSnapshotRecoveryRejectsTamper$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Digest se usa como sustituto de validación canónica.",
+        "Replay exacto depende del catálogo actual.",
+        "Scope transfer se trata como eliminación.",
+        "Mismo agente firma dos roles."
+      ],
+      "output_artifacts": [
+        "adversarial_ballot",
+        "attack_matrix"
+      ],
+      "max_files_changed": 1,
+      "max_loc": 220,
+      "max_minutes": 60,
+      "parallel_group": "wave_v23_reviews",
+      "preflight": {
+        "capability": "OPS-20",
+        "path": "product/evidence",
+        "operation": "review"
+      }
+    },
+    {
+      "order": 13,
+      "work_item_key": "v23_13_seal",
+      "title": "Sellar V23 con evidencia inmutable",
+      "status": "planned",
+      "phase": "phase:v23-seal",
+      "role": "role:integrator",
+      "reasoning_effort": "xhigh",
+      "security_criticality": "critical",
+      "objective": "Integrar únicamente tras dos reviews PASS, ejecutar gate final y publicar receipt/output/roadmap sin reescribir evidencia previa.",
+      "capability_ids": [
+        "WIZ-01",
+        "WIZ-22",
+        "ORC-05",
+        "OPS-20"
+      ],
+      "closes_scopes": [
+        "roadmap_promotion",
+        "seal_and_receipt"
+      ],
+      "target": {
+        "file": "product/evidence/v23_wizard.json",
+        "symbol": "V23 immutable evidence"
+      },
+      "preconditions": [
+        "Reviews primaria y adversarial son PASS y pertenecen a launches distintos.",
+        "Candidate OID y sujetos no cambiaron.",
+        "No hay rework pendiente."
+      ],
+      "postconditions": [
+        "AC-V23-WIZARD queda implemented solo con receipt PASS válido.",
+        "Fixture queda sealed y enlaza receipt/output/digests.",
+        "V24 puede comenzar sin depender de código no sellado."
+      ],
+      "dependencies": [
+        "v23_11_primary_review",
+        "v23_12_adversarial_review"
+      ],
+      "read_set": [
+        "product/evidence/candidates/v23_wizard_candidate.json",
+        "product/evidence/reviews/v23_wizard_primary.json",
+        "product/evidence/reviews/v23_wizard_adversarial.json",
+        "acceptance/fixtures/v23_wizard.json",
+        "product/roadmap.json"
+      ],
+      "write_set": [
+        "product/evidence/v23_wizard.json",
+        "product/evidence/v23_wizard.output.txt",
+        "product/roadmap.json",
+        "acceptance/fixtures/v23_wizard.json",
+        "product_roadmap_v23_test.go"
+      ],
+      "required_tests": [
+        {
+          "ref": "required-test:v23-13-acceptance",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            "./acceptance",
+            "-run",
+            "^Test.*V23.*$"
+          ],
+          "working_directory": "."
+        },
+        {
+          "ref": "required-test:v23-13-roadmap",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            ".",
+            "-run",
+            "^TestProductRoadmapV23"
+          ],
+          "working_directory": "."
+        },
+        {
+          "ref": "required-test:v23-13-diff",
+          "tool_ref": "tool:go",
+          "arguments": [
+            "test",
+            "-mod=vendor",
+            "-count=1",
+            ".",
+            "-run",
+            "^TestNeutralOrchestrationPackagesDoNotImportProductAdapters$"
+          ],
+          "working_directory": "."
+        }
+      ],
+      "negative_cases": [
+        "Seal con un review ausente, REWORK o mismo launch.",
+        "Sujetos difieren del candidato.",
+        "Roadmap promocionado antes de receipt inmutable.",
+        "Receipt acredita capacidades transferidas."
+      ],
+      "output_artifacts": [
+        "commit",
+        "immutable_receipt",
+        "output_log",
+        "roadmap_transition"
+      ],
+      "max_files_changed": 5,
+      "max_loc": 300,
+      "max_minutes": 90,
+      "parallel_group": "",
+      "preflight": {
+        "capability": "ORC-05",
+        "path": "product/evidence",
+        "operation": "seal"
+      }
+    }
+  ]
+}
