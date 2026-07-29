@@ -4,12 +4,123 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"orquesta/internal/application"
 	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+func TestSQLiteCancelQuarantinedCommitKeepsGoalReadableAndRevokesSessionAfterRestart(t *testing.T) {
+	ctx := context.Background()
+	system := newSQLiteV15System(t, 2)
+	broker := &sqliteExecutionSessionBroker{
+		at: system.clock.Now(), revokeFailures: 1,
+	}
+	system.orchestrator = newSQLiteV16OrchestratorWithSessions(t, system, broker)
+	submitted, err := system.orchestrator.Submit(ctx, system.access, application.SubmitRequest{
+		RequestRef: "request:sqlite-quarantined-commit", Statement: "preserve quarantined commit evidence", Confirm: true,
+		Plan: &application.PlanSpec{
+			Phases: []application.PhaseSpec{{
+				Ref: "phase-instance:sqlite-quarantined-commit", Key: "phase:sqlite-quarantined-commit",
+				TemplateRef: "phase-template:sqlite-quarantined-commit",
+			}},
+			WorkItems: []application.WorkItemSpec{{
+				Key: "writer", Objective: "write isolated evidence", Phase: "phase:sqlite-quarantined-commit",
+				Role: "role:writer", WriteSet: []string{"internal/quarantined-commit"},
+				CouncilPolicy:  council.PolicyAuto,
+				RequiredTests:  sqliteRequiredTestSpecs("required-test:sqlite-quarantined-commit"),
+				OutputContract: goal.OutputContractEvidenceBundle,
+			}},
+		},
+	})
+	sqliteTestNoError(t, err)
+	processSQLiteV16Actions(t, system,
+		application.ActionPrepareWorkspace,
+		application.ActionLaunchAgent,
+		application.ActionObserveAgent,
+	)
+
+	claim := claimSQLiteV15(t, system, "claim:sqlite-quarantined-commit-before-crash")
+	if claim.Action.Kind != application.ActionCommitChange {
+		t.Fatalf("claimed action=%s want=%s", claim.Action.Kind, application.ActionCommitChange)
+	}
+	attempt := sqliteV15Attempt(claim, system.clock.Now())
+	if _, created, err := system.repository.RecordEffectAttempt(ctx, application.RecordEffectAttemptState{
+		Claim: claim, Attempt: attempt, OperationAt: system.clock.Now(),
+	}); err != nil || !created {
+		t.Fatalf("record commit attempt created=%v err=%v", created, err)
+	}
+	system.clock.Advance(2 * time.Minute)
+	quarantined, err := system.orchestrator.ProcessNext(ctx, "worker:sqlite-quarantined-commit-recovery")
+	if err == nil || err.Error() != "application.effect_unknown_applied" ||
+		!quarantined.Processed || quarantined.Action != application.ActionCommitChange {
+		t.Fatalf("quarantine commit result=%+v err=%v", quarantined, err)
+	}
+	beforeCancel, err := system.repository.GetGoal(ctx, submitted.Record.Goal.Ref())
+	if err != nil || beforeCancel.Executions[0].State != application.ExecutionAwaitingCommit {
+		t.Fatalf("read quarantined commit state=%+v err=%v", beforeCancel.Executions, err)
+	}
+
+	cancelRequest := application.ControlRequest{
+		RequestRef: "request:sqlite-cancel-quarantined-commit", Operation: application.ControlCancel,
+		Target: application.ControlTargetGoal, GoalRef: beforeCancel.Goal.Ref(),
+		ExpectedGoalRevision: beforeCancel.Goal.Revision(), ExpectedPlanGeneration: beforeCancel.Goal.PlanGeneration(),
+		ExpectedAppSpecGeneration: beforeCancel.Goal.AppSpec().Generation(), ExpectedSpecHash: beforeCancel.Goal.SpecHash(),
+		Reason: "cancel without discarding quarantined staged evidence",
+	}
+	canceled, err := system.orchestrator.Control(ctx, system.access, cancelRequest)
+	if err != nil || !canceled.Created || canceled.Control.Status != application.ControlConfirmed {
+		t.Fatalf("cancel quarantined commit result=%+v err=%v", canceled, err)
+	}
+	afterCancel, err := system.repository.GetGoal(ctx, beforeCancel.Goal.Ref())
+	if err != nil || afterCancel.Goal.State() != goal.GoalStateCanceled ||
+		afterCancel.Executions[0].State != application.ExecutionCanceled {
+		t.Fatalf("immediate canceled read goal=%s executions=%+v err=%v",
+			afterCancel.Goal.State(), afterCancel.Executions, err)
+	}
+
+	firstRevoke, err := system.orchestrator.ProcessNext(ctx, "worker:sqlite-revoke-first")
+	if err != nil || !firstRevoke.Processed || firstRevoke.Action != application.ActionRevokeSession ||
+		broker.revokes != 1 || !broker.revoked {
+		t.Fatalf("first revoke result=%+v calls=%d revoked=%v err=%v",
+			firstRevoke, broker.revokes, broker.revoked, err)
+	}
+	if _, err := system.repository.GetGoal(ctx, beforeCancel.Goal.Ref()); err != nil {
+		t.Fatalf("read after requeued revocation: %v", err)
+	}
+	if _, _, err := validateRecoveryDatabase(ctx, system.repository.db); err != nil {
+		t.Fatalf("pending revocation recovery: %s", sqliteTestErrorChain(err))
+	}
+
+	system.clock.Advance(2 * time.Second)
+	sqliteTestNoError(t, system.repository.Close())
+	system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
+	system.orchestrator = newSQLiteV16OrchestratorWithSessions(t, system, broker)
+	restarted, err := system.repository.GetGoal(ctx, beforeCancel.Goal.Ref())
+	if err != nil || restarted.Goal.State() != goal.GoalStateCanceled {
+		t.Fatalf("restart canceled read goal=%s err=%v", restarted.Goal.State(), err)
+	}
+	secondRevoke, err := system.orchestrator.ProcessNext(ctx, "worker:sqlite-revoke-restart")
+	if err != nil || !secondRevoke.Processed || secondRevoke.Action != application.ActionRevokeSession ||
+		broker.revokes != 2 || broker.replays != 1 {
+		t.Fatalf("idempotent revoke result=%+v calls=%d replays=%d err=%v",
+			secondRevoke, broker.revokes, broker.replays, err)
+	}
+	var receipts int
+	err = system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM action_consumption_receipts
+WHERE kind='revoke_execution_session' AND execution_ref=? AND outcome='completed'`,
+		restarted.Executions[0].Ref.String(),
+	).Scan(&receipts)
+	if err != nil || receipts != 1 {
+		t.Fatalf("revocation receipts=%d err=%v", receipts, err)
+	}
+	if _, _, err := validateRecoveryDatabase(ctx, system.repository.db); err != nil {
+		t.Fatalf("completed revocation recovery: %s", sqliteTestErrorChain(err))
+	}
+}
 
 func TestSQLiteCancelAwaitingCommitWithDeniedEffectRetiresAction(t *testing.T) {
 	for _, target := range []application.ControlTarget{
