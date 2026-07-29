@@ -102,9 +102,13 @@ No programar producción desde este Goal: solo contrato, manifiesto y test.
 - Goal: `goal:5a18a5071ae6bc9b0e13dc5c35f6eeda`.
 - Ejecución:
   `execution:95f3efc68a5f2494ab06ca80bd5f3e0c`.
-- Estado al cerrar: autor activo.
+- Estado al cerrar: autor en `awaiting_integration`, atestación Firecracker
+  `passed` con `exit_code=0`; revisiones principal y adversarial en cola.
 - Candidato base preservado:
   `change-set:60b53618de802cfe892cadc6c46f1e39`.
+- Change-set corregido:
+  `change-set:b3fe43c194156e13d524ded6cdd9e426`, head
+  `6d3990266f47b9f0fdf96c56b11d7453c0173d41`.
 - Única corrección esperada: conservar el cambio y renombrar el test a
   `TestReviewerLaunchRequestPublishesReviewPayloadLimits`.
 - Prueba focal:
