@@ -11,7 +11,7 @@ import (
 	"orquesta/internal/config"
 )
 
-func TestComposeSelfWatchdogKeepsDisabledCompositionDependencyFree(t *testing.T) {
+func TestSelfWatchdogCompositionKeepsDisabledCompositionDependencyFree(t *testing.T) {
 	loop, err := ComposeSelfWatchdog(config.SelfWatchdogPolicy{}, selfwatchdog.Identity{}, SelfWatchdogDependencies{})
 	if err != nil {
 		t.Fatalf("disabled composition: %v", err)
@@ -24,7 +24,7 @@ func TestComposeSelfWatchdogKeepsDisabledCompositionDependencyFree(t *testing.T)
 	}
 }
 
-func TestComposeSelfWatchdogRequiresEveryBoundary(t *testing.T) {
+func TestSelfWatchdogCompositionRequiresEveryBoundary(t *testing.T) {
 	_, err := ComposeSelfWatchdog(bootstrapWatchdogPolicy(), selfwatchdog.Identity{
 		OwnerRef: "owner:orquesta", InstanceRef: "process:bootstrap", FencingToken: 1,
 	}, SelfWatchdogDependencies{})

@@ -35,7 +35,7 @@ func TestSelfWatchdogPolicyValidatesEnabledProjection(t *testing.T) {
 	}
 }
 
-func TestDisabledSelfWatchdogPolicyNeedsNoShadowDefaults(t *testing.T) {
+func TestSelfWatchdogDisabledPolicyNeedsNoShadowDefaults(t *testing.T) {
 	if err := (SelfWatchdogPolicy{}).Validate(); err != nil {
 		t.Fatalf("disabled empty policy: %v", err)
 	}

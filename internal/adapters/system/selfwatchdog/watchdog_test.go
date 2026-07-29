@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestSustainedCPUWithoutProgressPublishesEvidenceAndStopsOnlyOwnComposition(t *testing.T) {
+func TestSelfWatchdogSustainedCPUWithoutProgressPublishesEvidenceAndStopsOnlyOwnComposition(t *testing.T) {
 	base := time.Unix(1_800_000_000, 0).UTC()
 	telemetry := &fakeTelemetry{samples: []TelemetrySample{
 		telemetryAt(base),
@@ -80,7 +80,7 @@ func TestSustainedCPUWithoutProgressPublishesEvidenceAndStopsOnlyOwnComposition(
 	}
 }
 
-func TestEveryTypedOperationalCauseSuppressesShutdown(t *testing.T) {
+func TestSelfWatchdogEveryTypedOperationalCauseSuppressesShutdown(t *testing.T) {
 	tests := map[string]func(*ProgressSnapshot){
 		"Goal":                         func(snapshot *ProgressSnapshot) { snapshot.ActiveGoals = 1 },
 		"test":                         func(snapshot *ProgressSnapshot) { snapshot.ActiveTests = 1 },
@@ -113,7 +113,7 @@ func TestEveryTypedOperationalCauseSuppressesShutdown(t *testing.T) {
 	}
 }
 
-func TestRecentDurableProgressSuppressesAndLowCPUResetsSustainedWindow(t *testing.T) {
+func TestSelfWatchdogRecentDurableProgressSuppressesAndLowCPUResetsSustainedWindow(t *testing.T) {
 	base := time.Unix(1_800_000_200, 0).UTC()
 	recent := progressAt(base)
 	recent.LastDurableProgressAt = base.Add(-time.Minute)
@@ -147,7 +147,7 @@ func TestRecentDurableProgressSuppressesAndLowCPUResetsSustainedWindow(t *testin
 	}
 }
 
-func TestPendingIncidentIsCanceledWhenAGoalBecomesActive(t *testing.T) {
+func TestSelfWatchdogPendingIncidentIsCanceledWhenAGoalBecomesActive(t *testing.T) {
 	base := time.Unix(1_800_000_250, 0).UTC()
 	activeGoal := progressAt(base.Add(3 * time.Minute))
 	activeGoal.ActiveGoals = 1
@@ -189,7 +189,7 @@ func TestPendingIncidentIsCanceledWhenAGoalBecomesActive(t *testing.T) {
 	}
 }
 
-func TestRestartDoesNotInheritHighCPUWindowFromPreviousProcessInstance(t *testing.T) {
+func TestSelfWatchdogRestartDoesNotInheritHighCPUWindowFromPreviousProcessInstance(t *testing.T) {
 	base := time.Unix(1_800_000_300, 0).UTC()
 	state := &fakeCheckpointStore{}
 	evidence := newFakeEvidence()
@@ -238,7 +238,7 @@ func TestRestartDoesNotInheritHighCPUWindowFromPreviousProcessInstance(t *testin
 	}
 }
 
-func TestRestartRequiresStrictlyNewerInstanceFence(t *testing.T) {
+func TestSelfWatchdogRestartRequiresStrictlyNewerInstanceFence(t *testing.T) {
 	base := time.Unix(1_800_000_325, 0).UTC()
 	state := &fakeCheckpointStore{
 		found:    true,
@@ -277,7 +277,7 @@ func TestRestartRequiresStrictlyNewerInstanceFence(t *testing.T) {
 	}
 }
 
-func TestCheckpointCASRejectsAConcurrentStaleWriter(t *testing.T) {
+func TestSelfWatchdogCheckpointCASRejectsAConcurrentStaleWriter(t *testing.T) {
 	state := &fakeCheckpointStore{
 		found: true, revision: 1,
 		checkpoint: Checkpoint{
@@ -310,7 +310,7 @@ func TestCheckpointCASRejectsAConcurrentStaleWriter(t *testing.T) {
 	}
 }
 
-func TestSpoofedCheckpointCannotPublishOrRequestShutdown(t *testing.T) {
+func TestSelfWatchdogSpoofedCheckpointCannotPublishOrRequestShutdown(t *testing.T) {
 	base := time.Unix(1_800_000_350, 0).UTC()
 	identity := Identity{
 		OwnerRef: "owner:orquesta", InstanceRef: "process:spoofed", FencingToken: 1,
@@ -356,7 +356,7 @@ func TestSpoofedCheckpointCannotPublishOrRequestShutdown(t *testing.T) {
 	}
 }
 
-func TestSpoofedEffectReceiptsAreRejected(t *testing.T) {
+func TestSelfWatchdogSpoofedEffectReceiptsAreRejected(t *testing.T) {
 	base := time.Unix(1_800_000_375, 0).UTC()
 	tests := map[string]struct {
 		evidence *fakeEvidence
@@ -402,7 +402,7 @@ func TestSpoofedEffectReceiptsAreRejected(t *testing.T) {
 	}
 }
 
-func TestEffectRetriesRemainIdempotentAcrossCheckpointFailures(t *testing.T) {
+func TestSelfWatchdogEffectRetriesRemainIdempotentAcrossCheckpointFailures(t *testing.T) {
 	tests := map[string]int{
 		"evidence acknowledgement": 4,
 		"shutdown acknowledgement": 5,
@@ -457,7 +457,7 @@ func TestEffectRetriesRemainIdempotentAcrossCheckpointFailures(t *testing.T) {
 	}
 }
 
-func TestShutdownAdmissionRetryUsesPersistedIntentAndStableKey(t *testing.T) {
+func TestSelfWatchdogShutdownAdmissionRetryUsesPersistedIntentAndStableKey(t *testing.T) {
 	base := time.Unix(1_800_000_450, 0).UTC()
 	shutdown := newFakeShutdown()
 	shutdown.failAttempt = 1
@@ -508,7 +508,7 @@ func TestShutdownAdmissionRetryUsesPersistedIntentAndStableKey(t *testing.T) {
 	}
 }
 
-func TestMissingOrStaleObservationsFailSafeWithoutEffects(t *testing.T) {
+func TestSelfWatchdogMissingOrStaleObservationsFailSafeWithoutEffects(t *testing.T) {
 	base := time.Unix(1_800_000_500, 0).UTC()
 	tests := map[string]struct {
 		telemetry TelemetrySample
