@@ -157,7 +157,7 @@ V03 conserva:
 - 339 disposiciones de fuente;
 - 349 bugs del rebuild en el corte consultado.
 
-Pero 156 lecciones históricas siguen en `pending_invariant_test` con referencias
+Pero 200 lecciones históricas siguen en `pending_invariant_test` con referencias
 `planned:`. El censo existe; parte aún no es ratchet. Deben cerrarse por riesgo
 y cercanía al write-set, no copiando tests en masa.
 
