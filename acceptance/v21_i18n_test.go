@@ -272,22 +272,24 @@ func v21AssertManifest(t *testing.T, root string, fixture v21Fixture, manifest v
 	}
 	active, future := []string{}, []string{}
 	seen := map[string]struct{}{}
-	wantPolicies := map[string]string{
+	activePolicies := map[string]string{
 		"cli": "catalog_only", "command_registry": "registry_keys_catalog_values",
 		"http": "machine_envelope_catalog_presenter", "mcp": "catalog_only",
-		"public_docs":   "localized_document_bundle",
-		"notifications": "catalog_required_before_activation",
-		"prompts":       "catalog_only",
-		"web":           "catalog_required_before_activation",
-		"wizard":        "catalog_required_before_activation",
+		"public_docs": "localized_document_bundle",
+		"prompts":     "catalog_only",
+		"wizard":      "catalog_only",
 	}
 	surfaceIDs := make(map[string]struct{}, len(manifest.Surfaces))
 	for _, surface := range manifest.Surfaces {
 		surfaceIDs[surface.ID] = struct{}{}
 	}
 	for _, surface := range manifest.Surfaces {
+		wantPolicy := activePolicies[surface.ID]
+		if surface.State == "future" {
+			wantPolicy = "catalog_required_before_activation"
+		}
 		if strings.TrimSpace(surface.ID) != surface.ID || surface.ID == "" ||
-			surface.LiteralPolicy != wantPolicies[surface.ID] {
+			wantPolicy == "" || surface.LiteralPolicy != wantPolicy {
 			t.Fatalf("invalid V21 surface: %+v", surface)
 		}
 		if _, duplicate := seen[surface.ID]; duplicate {

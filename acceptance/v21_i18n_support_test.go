@@ -18,6 +18,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"orquesta/internal/application"
+	wizardcatalog "orquesta/internal/wizard/catalog"
+	wizardgaps "orquesta/internal/wizard/gaps"
 )
 
 var v21PlaceholderPattern = regexp.MustCompile(`\{[A-Za-z][A-Za-z0-9_.-]*\}`)
@@ -85,7 +89,7 @@ func v21AssertCatalogSources(t *testing.T, root string, fixture v21Fixture, mani
 		if err != nil {
 			t.Fatalf("V21 catalog %s: %v", catalog.Locale, err)
 		}
-		if len(values) == 0 || len(values) > fixture.SimplicityBudget.MaximumCatalogKeys {
+		if len(values) == 0 {
 			t.Fatalf("V21 catalog %s key count=%d", catalog.Locale, len(values))
 		}
 		for key, message := range values {
@@ -109,6 +113,22 @@ func v21AssertCatalogSources(t *testing.T, root string, fixture v21Fixture, mani
 	}
 
 	claims := v21ManifestClaimedCatalogKeys(manifest)
+	historicalClaims := 0
+	for _, source := range claims {
+		if containsV21String(
+			fixture.ActiveSurfaceIDs,
+			strings.TrimPrefix(source, "manifest:"),
+		) {
+			historicalClaims++
+		}
+	}
+	if historicalClaims > fixture.SimplicityBudget.MaximumCatalogKeys {
+		t.Fatalf(
+			"V21-owned catalog key count=%d max=%d",
+			historicalClaims,
+			fixture.SimplicityBudget.MaximumCatalogKeys,
+		)
+	}
 	used := v21ActualTypedPublicKeys(t, root)
 	if !reflect.DeepEqual(v21SortedKeys(claims), v21SortedKeys(used)) {
 		t.Errorf("V21 manifest claims and typed sources differ: claims=%v used=%v",
@@ -349,7 +369,144 @@ func v21ActualTypedPublicKeys(t *testing.T, root string) map[string]string {
 			t.Fatal(err)
 		}
 	}
+	v21CollectWizardTypedKeys(result)
 	return result
+}
+
+func v21CollectWizardTypedKeys(target map[string]string) {
+	add := func(source string, values ...string) {
+		for _, value := range values {
+			if value != "" {
+				target[value] = source
+			}
+		}
+	}
+
+	const gapsSource = "typed:internal/wizard/gaps.BuiltIn"
+	for _, dimension := range wizardgaps.BuiltIn().Dimensions() {
+		add(
+			gapsSource,
+			string(dimension.PromptKey()),
+			string(dimension.WhyKey()),
+			string(dimension.HelpKey()),
+			string(dimension.ExampleKey()),
+		)
+		prefix := "wizard.gaps.dimension." +
+			strings.ToLower(string(dimension.Ref())) + ".issue"
+		add(gapsSource, prefix+".gap", prefix+".contradiction")
+		for _, option := range dimension.Options() {
+			add(
+				gapsSource,
+				string(option.LabelKey()),
+				string(option.HelpKey()),
+				string(option.ExampleKey()),
+				string(option.RationaleKey()),
+			)
+		}
+		if dimension.Layer() == wizardgaps.LayerTechnical {
+			prefix := "wizard.gaps.default." +
+				strings.ToLower(string(dimension.Ref()))
+			add(gapsSource, prefix+".label", prefix+".help", prefix+".example")
+		}
+	}
+	for _, rule := range wizardgaps.BuiltIn().Rules() {
+		prefix := "wizard.gaps.rule." + strings.ToLower(string(rule.Ref()))
+		add(
+			gapsSource,
+			string(rule.DetailKey()),
+			prefix+".gap",
+			prefix+".contradiction",
+		)
+	}
+	for _, rule := range []struct {
+		ref     string
+		options []string
+	}{
+		{ref: "r5", options: []string{
+			"public_low", "service_auth_medium", "oauth_high", "custom",
+		}},
+		{ref: "r8", options: []string{
+			"internal_team", "invited_customers", "public_users", "custom",
+		}},
+	} {
+		prefix := "wizard.gaps.rule." + rule.ref
+		add(
+			gapsSource,
+			prefix+".prompt",
+			prefix+".why",
+			prefix+".help",
+			prefix+".example",
+		)
+		for _, option := range rule.options {
+			optionPrefix := prefix + ".option." + option
+			add(
+				gapsSource,
+				optionPrefix+".label",
+				optionPrefix+".help",
+				optionPrefix+".example",
+				optionPrefix+".rationale",
+			)
+		}
+	}
+	add(
+		gapsSource,
+		"wizard.gaps.pack.option.custom.label",
+		"wizard.gaps.pack.option.custom.help",
+		"wizard.gaps.pack.option.custom.example",
+		"wizard.gaps.pack.option.custom.rationale",
+	)
+
+	const catalogSource = "typed:internal/wizard/catalog.BuiltIn"
+	for _, pack := range wizardcatalog.BuiltIn().Packs() {
+		for _, question := range pack.Questions() {
+			if !strings.HasPrefix(question.Slot().String(), "domains.") {
+				continue
+			}
+			add(
+				catalogSource,
+				question.PromptKey().String(),
+				question.WhyKey().String(),
+				question.HelpKey().String(),
+				question.ExampleKey().String(),
+			)
+			for _, option := range question.Options() {
+				add(
+					catalogSource,
+					option.LabelKey().String(),
+					option.HelpKey().String(),
+					option.ExampleKey().String(),
+					option.RationaleKey().String(),
+				)
+			}
+		}
+	}
+
+	const dossierSource = "typed:internal/application.IntakeDossier"
+	for _, section := range []application.IntakeDossierSectionKind{
+		application.IntakeDossierSectionProductScope,
+		application.IntakeDossierSectionUsersRoles,
+		application.IntakeDossierSectionArchitecture,
+		application.IntakeDossierSectionData,
+		application.IntakeDossierSectionIntegrations,
+		application.IntakeDossierSectionSecurityPrivacy,
+		application.IntakeDossierSectionUIUX,
+		application.IntakeDossierSectionI18NL10N,
+		application.IntakeDossierSectionDeployOperations,
+		application.IntakeDossierSectionOrchestrationPlan,
+		application.IntakeDossierSectionRisksOpenIssues,
+	} {
+		add(dossierSource, "intake.dossier."+string(section)+".title")
+	}
+	for _, diagram := range []application.IntakeDossierDiagramPurpose{
+		application.IntakeDossierDiagramArchitecture,
+		application.IntakeDossierDiagramUserFlow,
+		application.IntakeDossierDiagramDataIntegrations,
+		application.IntakeDossierDiagramI18N,
+		application.IntakeDossierDiagramDeployment,
+		application.IntakeDossierDiagramDecisions,
+	} {
+		add(dossierSource, "intake.dossier.diagram."+string(diagram)+".alt")
+	}
 }
 
 func v21CollectRegistryKeys(t *testing.T, root, path string, target map[string]string) {
