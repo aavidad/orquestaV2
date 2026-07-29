@@ -9,8 +9,6 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -156,15 +154,22 @@ func TestTraceabilityRebuildLegacyGoCensus(t *testing.T) {
 
 func traceComputeLegacyGoCensus(t *testing.T, ledger traceLegacyGoLedger) traceComputedCensus {
 	t.Helper()
-	entries, err := os.ReadDir(ledger.SourceRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
-	modules := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry.IsDir() {
-			modules = append(modules, filepath.ToSlash(filepath.Join(ledger.SourceRoot, entry.Name())))
+	snapshot := traceLoadGitIndexSnapshot(t, ".", ledger.SourceRoot, func(path string) bool {
+		return filepath.Ext(path) == ".go" &&
+			!strings.HasSuffix(path, ledger.SourcePolicy.ExcludeTestSuffix) &&
+			!traceExcluded(path, false, ledger.SourcePolicy.ExactExclusions)
+	})
+	moduleSet := make(map[string]struct{})
+	for _, entry := range snapshot.Entries {
+		relative := strings.TrimPrefix(entry.Path, ledger.SourceRoot+"/")
+		moduleName, _, found := strings.Cut(relative, "/")
+		if found && strings.HasPrefix(moduleName, "orquesta-") {
+			moduleSet[ledger.SourceRoot+"/"+moduleName] = struct{}{}
 		}
+	}
+	modules := make([]string, 0, len(moduleSet))
+	for modulePath := range moduleSet {
+		modules = append(modules, modulePath)
 	}
 	sort.Strings(modules)
 
@@ -176,47 +181,29 @@ func traceComputeLegacyGoCensus(t *testing.T, ledger traceLegacyGoLedger) traceC
 	fileCount := 0
 	symbolCount := 0
 	fset := token.NewFileSet()
-	for _, modulePath := range modules {
-		err := filepath.WalkDir(modulePath, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			slashPath := filepath.ToSlash(path)
-			if entry.IsDir() {
-				if slashPath != modulePath && traceExcluded(slashPath, true, ledger.SourcePolicy.ExactExclusions) {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if filepath.Ext(path) != ".go" || strings.HasSuffix(path, ledger.SourcePolicy.ExcludeTestSuffix) ||
-				traceExcluded(slashPath, false, ledger.SourcePolicy.ExactExclusions) {
-				return nil
-			}
-			content, err := os.ReadFile(path)
-			if err != nil {
-				return err
-			}
-			parsed, err := parser.ParseFile(fset, path, content, parser.SkipObjectResolution)
-			if err != nil {
-				return fmt.Errorf("parse %s: %w", slashPath, err)
-			}
-			fileCount++
-			fileSum := sha256.Sum256(content)
-			lines = append(lines, "file|"+slashPath+"|"+hex.EncodeToString(fileSum[:]))
-			packageKey := filepath.ToSlash(filepath.Dir(path)) + "|" + parsed.Name.Name
-			packages[packageKey] = struct{}{}
-			for _, declaration := range parsed.Decls {
-				symbolLines, err := traceDeclarationSymbols(fset, slashPath, declaration)
-				if err != nil {
-					return err
-				}
-				symbolCount += len(symbolLines)
-				lines = append(lines, symbolLines...)
-			}
-			return nil
-		})
+	contentPaths := make([]string, 0, len(snapshot.Contents))
+	for path := range snapshot.Contents {
+		contentPaths = append(contentPaths, path)
+	}
+	sort.Strings(contentPaths)
+	for _, path := range contentPaths {
+		content := snapshot.Contents[path]
+		parsed, err := parser.ParseFile(fset, path, content, parser.SkipObjectResolution)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		fileCount++
+		fileSum := sha256.Sum256(content)
+		lines = append(lines, "file|"+path+"|"+hex.EncodeToString(fileSum[:]))
+		packageKey := filepath.ToSlash(filepath.Dir(path)) + "|" + parsed.Name.Name
+		packages[packageKey] = struct{}{}
+		for _, declaration := range parsed.Decls {
+			symbolLines, err := traceDeclarationSymbols(fset, path, declaration)
+			if err != nil {
+				t.Fatal(err)
+			}
+			symbolCount += len(symbolLines)
+			lines = append(lines, symbolLines...)
 		}
 	}
 	for packageKey := range packages {

@@ -108,7 +108,8 @@ type traceMarkdownReviewFixtureSet struct {
 
 func TestTraceabilityRebuildLegacyMarkdownSourceRoles(t *testing.T) {
 	reviewFixtures := traceReadMarkdownReviewFixtures(t)
-	paths := traceMarkdownFilesystemScope(t)
+	moduleDocs := traceLoadGitIndexSnapshot(t, ".", "modulos", traceMarkdownModuleDocPath)
+	paths := traceMarkdownFilesystemScope(t, moduleDocs)
 	legacyPaths, rebuildAuthorityPaths := traceMarkdownPartitionFilesystemScope(paths)
 	entries := traceReadMarkdownSourceRoles(t)
 	if len(entries) != len(legacyPaths) {
@@ -155,10 +156,7 @@ func TestTraceabilityRebuildLegacyMarkdownSourceRoles(t *testing.T) {
 		}
 		seen[entry.SourceRef] = struct{}{}
 
-		content, err := os.ReadFile(entry.SourceRef)
-		if err != nil {
-			t.Fatal(err)
-		}
+		content := traceReadMarkdownSource(t, entry.SourceRef, moduleDocs)
 		if got := traceMarkdownSHA256(content); got != entry.SourceSHA256 {
 			t.Fatalf("markdown source digest drift %s: got %s want %s", entry.SourceRef, got, entry.SourceSHA256)
 		}
@@ -408,7 +406,7 @@ func traceMarkdownPartitionFilesystemScope(paths []string) (legacy, rebuildAutho
 	return legacy, rebuildAuthority
 }
 
-func traceMarkdownFilesystemScope(t *testing.T) []string {
+func traceMarkdownFilesystemScope(t *testing.T, moduleDocs traceGitIndexSnapshot) []string {
 	t.Helper()
 	set := make(map[string]struct{})
 	err := filepath.WalkDir("docs", func(path string, entry os.DirEntry, err error) error {
@@ -423,18 +421,8 @@ func traceMarkdownFilesystemScope(t *testing.T) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	modules, err := filepath.Glob("modulos/orquesta-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, module := range modules {
-		matches, globErr := filepath.Glob(filepath.Join(module, "docs", "*.md"))
-		if globErr != nil {
-			t.Fatal(globErr)
-		}
-		for _, path := range matches {
-			set[filepath.ToSlash(path)] = struct{}{}
-		}
+	for path := range moduleDocs.Contents {
+		set[path] = struct{}{}
 	}
 	skills, err := filepath.Glob("skills/*/SKILL.md")
 	if err != nil {
@@ -449,6 +437,31 @@ func traceMarkdownFilesystemScope(t *testing.T) []string {
 	}
 	sort.Strings(paths)
 	return paths
+}
+
+func traceMarkdownModuleDocPath(path string) bool {
+	parts := strings.Split(path, "/")
+	return len(parts) == 4 &&
+		parts[0] == "modulos" &&
+		strings.HasPrefix(parts[1], "orquesta-") &&
+		parts[2] == "docs" &&
+		strings.HasSuffix(parts[3], ".md")
+}
+
+func traceReadMarkdownSource(t *testing.T, path string, moduleDocs traceGitIndexSnapshot) []byte {
+	t.Helper()
+	if strings.HasPrefix(path, "modulos/") {
+		content, ok := moduleDocs.Contents[path]
+		if !ok {
+			t.Fatalf("legacy module Markdown %q is absent from Git index snapshot", path)
+		}
+		return content
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return content
 }
 
 func traceReadMarkdownSourceRoles(t *testing.T) []traceMarkdownSourceRole {
