@@ -890,7 +890,7 @@
             "-count=1",
             ".",
             "-run",
-            "^TestNeutralOrchestrationPackagesDoNotImportProductAdapters$"
+            "^TestRebuildArchitecture$"
           ],
           "working_directory": "."
         }
@@ -1155,7 +1155,7 @@
             "-count=1",
             ".",
             "-run",
-            "^TestNeutralOrchestrationPackagesDoNotImportProductAdapters$"
+            "^TestRebuildArchitecture$"
           ],
           "working_directory": "."
         }
