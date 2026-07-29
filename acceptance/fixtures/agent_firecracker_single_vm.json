@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "fixture_id": "agent_firecracker_single_vm",
+  "contract_kind": "neutral_characterization_of_existing_implementation_decision",
+  "authority": {
+    "decision_id": "agent_microvm_network",
+    "status": "planned_not_applied",
+    "capability_refs": [
+      "AGT-01",
+      "AGT-03",
+      "EVD-13",
+      "ORC-15"
+    ],
+    "roadmap_decision": {
+      "id": "agent_microvm_network",
+      "status": "planned_not_applied",
+      "capability_refs": [
+        "AGT-01",
+        "AGT-03",
+        "EVD-13",
+        "ORC-15"
+      ],
+      "transport": "vsock_only",
+      "allowed_services": [
+        "orquesta_broker",
+        "controlled_egress_proxy"
+      ],
+      "forbidden_connectivity": [
+        "guest_ip_network",
+        "tap",
+        "bridge",
+        "nat",
+        "inbound",
+        "east_west",
+        "direct_internet"
+      ],
+      "authentication": "single_use_credential_store_proof_and_attestation",
+      "test_attestor_scope": "unchanged_no_network_no_vsock",
+      "test_refs": [
+        "internal/ports/agent_microvm_network_test.go",
+        "internal/ports/agent_microvm_launch_auth_test.go",
+        "internal/ports/agent_microvm_vsock_cid_test.go",
+        "internal/adapters/agent/firecracker/networkplan/renderer_test.go",
+        "internal/adapters/agent/firecracker/networkauth/verifier_test.go",
+        "internal/adapters/agent/firecracker/vsocklease/allocator_test.go"
+      ]
+    }
+  },
+  "bounded_example": {
+    "maximum_microvms": 1,
+    "selection_scope": "one_execution_attempt",
+    "runtime_wiring": "absent",
+    "physical_execution": "not_claimed"
+  },
+  "connectivity": {
+    "transport": "vsock_only",
+    "allowed_services": [
+      "orquesta_broker",
+      "controlled_egress_proxy"
+    ],
+    "forbidden_connectivity": [
+      "guest_ip_network",
+      "tap",
+      "bridge",
+      "nat",
+      "inbound",
+      "east_west",
+      "direct_internet"
+    ]
+  },
+  "credential_store_proof": {
+    "store": "CredentialStore",
+    "use": "single_use",
+    "replay": "denied",
+    "test_ref": "internal/adapters/agent/firecracker/networkauth/verifier_test.go",
+    "test_names": [
+      "TestVerifierAuthorizesOnceAndRejectsIdenticalReplay",
+      "TestVerifierConcurrentReplayHasSingleWinner"
+    ]
+  },
+  "test_attestor_separation": {
+    "scope": "unchanged_no_network_no_vsock",
+    "network": "absent",
+    "vsock": "absent",
+    "test_ref": "internal/e2e/firecrackerattestor/supervisor_test.go",
+    "test_name": "TestValidatePhaseRejectsEveryRequiredPhysicalInvariant"
+  },
+  "catalog_absences": {
+    "new_vertical": false,
+    "new_capability": false,
+    "new_acceptance_contract": false,
+    "new_receipt": false,
+    "guest_agent_claim": false
+  },
+  "required_test": {
+    "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAgentFirecrackerSingleVM' && go test -mod=vendor -count=1 ./internal/adapters/agent/firecracker/networkauth -run '^(TestVerifierAuthorizesOnceAndRejectsIdenticalReplay|TestVerifierConcurrentReplayHasSingleWinner)$' && go test -mod=vendor -count=1 ./internal/e2e/firecrackerattestor -run '^TestValidatePhaseRejectsEveryRequiredPhysicalInvariant$'",
+    "reject_no_tests_to_run": true
+  },
+  "decision_files": [
+    "product/roadmap.json",
+    "product_roadmap_test.go",
+    "acceptance/fixtures/agent_firecracker_single_vm.json",
+    "acceptance/agent_firecracker_single_vm_contract_test.go",
+    "docs/corte_agente_firecracker_uno_2026-07-29.md",
+    "docs/arquitectura_comunicacion_agentes_firecracker_2026-07-25.md",
+    "docs/decision_atestacion_bubblewrap_microvm_2026-07-25.md",
+    "docs/reconstruccion/corte_alcance_v23_firecracker_diferido_2026-07-26.md",
+    "docs/reconstruccion/HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md",
+    "docs/inventario_bugs_orquesta_2026-06-30.md"
+  ]
+}

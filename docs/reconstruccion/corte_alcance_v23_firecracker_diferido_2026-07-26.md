@@ -43,6 +43,23 @@ autoriza implementación. Cuando se abran deberán incorporarse mediante
 contratos, dependencias, presupuesto, negativos, restart/recovery y evidencia
 propios.
 
+## Corrección autoritativa de 2026-07-29
+
+La autorización `input:operator-authorization-2026-07-29` ratifica
+`agent_microvm_network` como única decisión de implementación. Su estado sigue
+`planned_not_applied`, con transporte `vsock_only`, servicios exactos
+`orquesta_broker` y `controlled_egress_proxy`, y prohibición de red IP del
+guest, TAP, bridge, NAT, inbound, east-west e Internet directo.
+
+La fixture neutral `acceptance/fixtures/agent_firecracker_single_vm.json`
+caracteriza el subconjunto de una microVM y conserva la prueba de
+`CredentialStore` de un uso. No crea otra decisión, vertical, capability,
+acceptance contract, receipt ni afirmación de ejecución física.
+
+Este ratchet no convierte Firecracker en gate de V23, no altera el default
+`test_attestor.provider=disabled` y no modifica `TestAttestor`, que continúa
+sin red ni vsock.
+
 ## Reglas para no reabrir el error
 
 - una incidencia Firecracker no bloquea trabajo del Wizard;
@@ -53,6 +70,7 @@ propios.
   infraestructura Firecracker;
 - no se extrae ni reescribe ahora el adaptador existente: queda opt-in y fuera
   del camino de V23;
+- la fixture de una microVM no puede promover estado ni reutilizar receipts;
 - Bubblewrap tampoco se reabre hasta que Orquesta sea autoprogramable.
 
 ## Qué sigue realmente en V23

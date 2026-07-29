@@ -1,10 +1,11 @@
 # Arquitectura de comunicación de agentes Firecracker
 
-Fecha: 2026-07-25. Actualización: 2026-07-26. Estado: implementación del primer
-corte autorizada; no cableada ni acreditada físicamente. Autoridad:
+Fecha: 2026-07-25. Actualizaciones: 2026-07-26 y 2026-07-29. Estado:
+implementación del primer corte autorizada, todavía sin wiring ni acreditación
+física. Autoridad:
 `AGENTS.md`, `product/roadmap.json`,
 `decision_atestacion_bubblewrap_microvm_2026-07-25.md`,
-BUG-ORQ-20260725-467 y BUG-ORQ-20260726-507.
+BUG-ORQ-20260725-467, BUG-ORQ-20260726-507 y BUG-ORQ-20260729-593.
 
 ## Alcance y precondición
 
@@ -17,6 +18,12 @@ Será una capability independiente, con contratos, presupuesto y acreditación
 de composición propios. No presupone que workspaces, rootfs, caches, tmpfs/RAM
 ni checkpoints frecuentes sean adecuados; cada uno requiere decisión y prueba
 de coste, aislamiento, persistencia y recovery.
+
+La autorización `input:operator-authorization-2026-07-29` ratifica la autoridad
+existente `agent_microvm_network`; no añade otra decisión. La fixture neutral de
+una microVM acota un caso de esa misma autoridad sin crear capability, vertical,
+acceptance contract, receipt ni atribución sobre el software del guest. El
+estado canónico continúa `planned_not_applied`.
 
 ## Invariantes de aislamiento
 
@@ -67,8 +74,8 @@ entre VMs.
 
 ## Transporte, egress y frontera de red
 
-La microVM de agente no tiene NIC, TAP, bridge, rutas IP ni NAT. El único
-transporte es vsock y la allowlist contiene:
+La microVM de agente no tiene IP, NIC, TAP, bridge, rutas IP ni NAT. El único
+transporte es vsock. Para el diseño amplio, la allowlist conceptual contiene:
 
 1. el gateway/broker Orquesta autenticado;
 2. un proxy o buscador controlado que aplique política, identidad, cuota y
@@ -81,6 +88,19 @@ HTTP convencional dentro del guest, un adaptador local enlaza loopback guest
 con el servicio vsock autorizado; no crea una interfaz IP fuera del guest.
 NAT queda prohibido para este perfil: no existe fallback a TAP, bridge,
 `iptables`/`nftables` o red compartida.
+
+La caracterización neutral de una microVM conserva los nombres semánticos de la
+decisión única: `orquesta_broker` y `controlled_egress_proxy`. Todo ello viaja
+por vsock hacia servicios host. HTTP en claro, servicios no allowlisted,
+inbound, east-west, Internet directo y bypass del proxy quedan denegados. La
+fixture no materializa un broker general ni comunicación entre agentes.
+
+El agente no monta el repositorio ni el filesystem del host. Su microVM recibe
+por vsock un snapshot o bundle y trabaja con su propio Git dentro de un
+filesystem aislado; el resultado vuelve como changeset o bundle al broker para
+validación e integración en el host. El perfil mínimo de `TestAttestor`, que no
+incluye Git ni `.git`, es un contrato distinto y no debe reutilizarse como
+atajo de acceso al workspace local.
 
 El host CID de vsock y los puertos exactos de broker/proxy se fijan en una
 política sellada. La identidad de lanzamiento liga proyecto, Goal, WorkItem,
@@ -105,6 +125,13 @@ evidencia estructurada, nunca una credencial ni una autoridad reutilizable.
 Solo refs, versión y digests entran en política/receipt; el secreto y el proof
 permanecen en el callback de credenciales y en memoria transitoria. Política,
 plan efectivo, autorización y receipt llevan digests independientes.
+
+La autenticación de `agent_microvm_network` exige una credencial de un solo uso
+con scope de intento y allowlist exacta. Se obtiene mediante `CredentialStore`
+después de atestar el lanzamiento; el secreto y el proof no se persisten. Los
+tests `TestVerifierAuthorizesOnceAndRejectsIdenticalReplay` y
+`TestVerifierConcurrentReplayHasSingleWinner` prueban un solo uso también ante
+replay y carrera.
 
 El CID guest tampoco es una identidad ni se elige libremente en el launcher.
 Un puerto neutral reserva por lease un CID `>= 3`, un backend content-addressed
@@ -194,6 +221,9 @@ la evidencia de aislamiento exigida por `EVD-13` y el broker futuro relacionado
 con `ORC-15`. No añade una capacidad 258 ni cambia el estado acreditado de esos
 IDs: el plan declara `planned_not_applied`.
 
+La fixture de una microVM no cambia ese estado ni añade una segunda decisión
+canónica.
+
 Gateway, proxy, política o su verificación indisponibles, ambiguos o inválidos
 producen denegación fail-closed: no se crea una conectividad degradada, no se
 abre fallback directo y el agente recibe una causa estructurada recuperable por
@@ -230,8 +260,8 @@ El corte 2026-07-26 implementa:
   NAT, inbound, east-west o Internet directo, allowlist vsock exacta, lease CID
   y recibo ligado también a los bytes exactos del documento renderizado.
 
-No implementa ni simula conectividad física. La siguiente dependencia causal
-es un corte separado con:
+No implementa ni simula conectividad física. Para el frente amplio, la
+siguiente dependencia causal es un corte separado con:
 
 1. adaptador físico de atestación y wiring del
    `AgentMicroVMLaunchAuthorizer` ya implementado, de modo que solo una
@@ -245,6 +275,10 @@ es un corte separado con:
    resolución/redirect/puerto/cuota y receipts;
 4. E2E multi-microVM físico con negativos y cleanup antes de cambiar
    `planned_not_applied`.
+
+La fixture neutral permite comprobar el subconjunto de una única microVM sin
+interfaz IP, con los dos servicios vsock exactos y credencial de un uso. No
+declara wiring, ejecución, acreditación ni receipt.
 
 ## Aceptación y pruebas de composición
 
@@ -294,6 +328,12 @@ arranque. Debe incluir, como mínimo:
 Los receipts de estas pruebas deben ligar la configuración efectiva, digests de
 imagen/política/reglas, refs causales y sujeto acreditado. Un resultado de
 `TestAttestor` o una prueba aislada de red no sustituye esta acreditación.
+
+Todo E2E futuro debe acreditar por valores semánticos exactos —ausencia de IP y
+de cada mecanismo de red, allowlist
+`orquesta_broker`/`controlled_egress_proxy`, uso único de credencial y cada
+observación de cleanup—. Igualdad de tamaños de listas no constituye el
+ratchet.
 
 ## Estado de validación de la rama
 

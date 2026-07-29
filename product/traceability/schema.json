@@ -970,7 +970,7 @@
         "schema_version": {"const": 1},
         "bug_id": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+$"},
         "capability_ids": {
-          "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+          "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true,
           "items": {"$ref": "#/$defs/capabilityId"}
         },
         "review_note": {"type": "string", "minLength": 40}
@@ -989,7 +989,7 @@
         },
         "occurrences_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
         "capability_reasons": {
-          "type": "array", "minItems": 1, "maxItems": 3,
+          "type": "array", "minItems": 1, "maxItems": 4,
           "items": {
             "type": "object", "additionalProperties": false,
             "required": ["capability_id", "reason"],

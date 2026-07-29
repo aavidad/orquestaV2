@@ -156,6 +156,8 @@
         "docs/relevo_claude_orquestador_2026-07-03.md",
         "docs/runbooks/handoff_claude_mejora_continua_orquesta_2026-07-03.md",
         "docs/runbooks/handoff_codex_orquesta_remoto_telegram_supervisor_2026-07-05.md",
+        "docs/runbooks/instalacion_launcher_firecracker_2026-07-25.md",
+        "docs/runbooks/resultado_smoke_sqlite_v23_2026-07-26.md",
         "docs/runbooks/smoke_goal_first_checkpoint_only_high_consumption_real_2026-07-03.md",
         "docs/runbooks/smoke_goal_first_forced_stop_backend_real_2026-07-04.md",
         "docs/runbooks/smoke_goal_first_provider_process_real_2026-07-04.md",
@@ -168,8 +170,8 @@
         "docs/incidencias/*.md",
         "docs/runbooks/incidencia_*.md"
       ],
-      "expected_file_count": 152,
-      "manifest_sha256": "sha256:98c31c3fa630b31cf8d7a778f8471534ebcf92f030d909a39600f7919eed21c7",
+      "expected_file_count": 156,
+      "manifest_sha256": "sha256:57b272f243d61af8229a8237d8a23347a476ff75bf15c11fe1a2242fc64d2fa3",
       "next_gate": "Implement and execute each pending invariant lesson test; a historical incident remains open evidence until that test is accredited."
     },
     {

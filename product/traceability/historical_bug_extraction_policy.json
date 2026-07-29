@@ -29,21 +29,21 @@
   "capability_authority": "product/roadmap.json#capability_entries",
   "closure_policy": "historical_status_and_cited_tests_never_imply_rebuild_closure",
   "baseline": {
-    "source_count": 160,
-    "sources_with_explicit_id": 80,
-    "sources_without_explicit_id": 80,
-    "sources_without_id_lessons_sha256": "sha256:38e96147b204ba570ac873771ee8969c6c24ed6a1bfdc900b0a78c3a578c1dd9",
+    "source_count": 164,
+    "sources_with_explicit_id": 83,
+    "sources_without_explicit_id": 81,
+    "sources_without_id_lessons_sha256": "sha256:f1394412187fd1e1ad49a875adddd5d4ee39194da08c7bdf0aa04383ad6f87f5",
     "rich_row_count": 244,
-    "occurrence_count": 1300,
-    "id_count": 342,
+    "occurrence_count": 1307,
+    "id_count": 348,
     "row_covered_id_count": 202,
-    "narrative_only_id_count": 140,
-    "narrative_review_binding_count": 140,
+    "narrative_only_id_count": 146,
+    "narrative_review_binding_count": 146,
     "rich_row_enrichment_count": 4,
-    "rows_sha256": "sha256:8612f1f08fbd3f342f71992a6b5e3966ce6738f306cadcb62510a48d71e94a19",
-    "occurrences_sha256": "sha256:d271c761958a3069db4793bf999fe779c0d4ef8117367b5a31fb955ae2766c41",
-    "narrative_review_bindings_sha256": "sha256:23c9ff104c848f8997c484da1ae7b0b32474d6f2048bb4858c04a2f9e6b34a53",
+    "rows_sha256": "sha256:b2300df45dd166fd30100e6699c71abc1bdd593d5b20c440bcaf7487dc1b1af0",
+    "occurrences_sha256": "sha256:3c155260e5c2a05feaef7e9937d58169c845d5f2d0da1555e11e8eeff624bb1f",
+    "narrative_review_bindings_sha256": "sha256:42722c450f037d5c72529114facfb02ad07a7f713738594ec795cbddabcdd231",
     "rich_row_enrichments_sha256": "sha256:cb23222242a6902106a6d51267894827a633df9a74fa104404ef2011ea67010e",
-    "ids_sha256": "sha256:06214563e77af3d324081236503a34f45db6f4f4a1477708755ee084e37c0a2d"
+    "ids_sha256": "sha256:2b29dad3c4513395bbce524db92c7b99871e66c4ad536f1f6b5849e50932b311"
   }
 }

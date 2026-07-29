@@ -7,6 +7,19 @@ Rama: `integracion/v23-intake-durable`.
 La revisión autoritativa es el commit que contiene este documento. El árbol se
 dejó limpio y sincronizado con `origin`.
 
+## Corrección autoritativa de 2026-07-29
+
+La autorización `input:operator-authorization-2026-07-29` conserva una sola
+autoridad: `agent_microvm_network`, `planned_not_applied`, bajo `AGT-01`,
+`AGT-03`, `EVD-13` y `ORC-15`. La fixture neutral de una microVM no crea otra
+decisión, vertical, capability, acceptance contract ni receipt.
+
+El contrato mantiene `vsock_only`, los servicios exactos `orquesta_broker` y
+`controlled_egress_proxy`, y prohíbe red IP del guest, TAP, bridge, NAT,
+inbound, east-west e Internet directo. La autorización exige prueba de
+`CredentialStore` de un uso. `TestAttestor` conserva su alcance independiente,
+sin red ni vsock.
+
 ## 1. Estado que no debe reinterpretarse
 
 | Superficie | Estado |
@@ -18,6 +31,7 @@ dejó limpio y sincronizado con `origin`.
 | Runtime legacy | fuera de la vista activa y prohibido como dependencia |
 | Firecracker | código opt-in conservado; no es gate de V23 |
 | V38/V39 | candidatos documentados, todavía no verticales canónicas |
+| Fixture de una microVM | caracterización neutral de `agent_microvm_network`; no cambia estado |
 
 V1-V37 no son generaciones del antiguo Director. Son verticales causales del
 producto reconstruido. “Sin dependencia del legacy” significa que el producto
@@ -104,6 +118,10 @@ Esto no constituye todavía un runtime completo de agentes Firecracker. No hay
 wiring productivo que lance todos los agentes en microVM, ni se acredita una
 ola de 16, RAM/tmpfs, checkpoints o red de producción.
 
+La corrección de 2026-07-29 añade una fixture neutral sobre esta preparación:
+una sola microVM sin red IP, acotada por los dos servicios vsock canónicos. No
+es otra decisión ni prueba que authorizer, allocator o proxy estén cableados.
+
 ## 4. Ubicación de las ideas posteriores
 
 | Candidato | Contenido | Estado |
@@ -123,6 +141,11 @@ exige una decisión posterior que actualice de forma atómica:
 No añadir V38/V39 silenciosamente ni reutilizar evidencia de V17/V23. El corte
 de autoridad completo es
 `corte_alcance_v23_firecracker_diferido_2026-07-26.md`.
+
+La fixture recuperada vive en
+`acceptance/fixtures/agent_firecracker_single_vm.json`. Su nombre neutral evita
+formalizar un número de vertical y ratchea únicamente la autoridad existente;
+no reutiliza ningún receipt.
 
 Bubblewrap con `MAX_ARGS=65536` permanece como deuda congelada. No compilar,
 instalar ni reabrirla antes de acreditar Orquesta autoprogramable.

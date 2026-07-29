@@ -69,23 +69,23 @@
     },
     {
       "path": "product/traceability/historical_bug_extraction_policy.json",
-      "sha256": "sha256:0c0e604d38089bbe74cb939850ca1cee23ee7d9d25cd2cc4c3ada8b1edb26ff9"
+      "sha256": "sha256:249cdb7f72095f8bb77e3e81b3b65a1488ae7a5347be72a371f20e221be1a1e1"
     },
     {
       "path": "product/traceability/historical_bug_id_review_bindings.jsonl",
-      "sha256": "sha256:5017f4759d3a61391336c36217d5cf2530cee8fadb99e9f620a2df4ebbf1cc1a"
+      "sha256": "sha256:42722c450f037d5c72529114facfb02ad07a7f713738594ec795cbddabcdd231"
     },
     {
       "path": "product/traceability/historical_bug_id_reviews.jsonl",
-      "sha256": "sha256:1b5839a2e0f4f5366bb25ff3f9f7f904054a3dbe029557dd315733308771f5d0"
+      "sha256": "sha256:107c17c30f7bc0f842dacb344f392ab0c2900372edb4dd95d47057c27788e78f"
     },
     {
       "path": "product/traceability/historical_bug_ids.jsonl",
-      "sha256": "sha256:0f5517b6a3545335197a9117f5345ece76e5fad3eab3ed659517ed7be1092663"
+      "sha256": "sha256:2b29dad3c4513395bbce524db92c7b99871e66c4ad536f1f6b5849e50932b311"
     },
     {
       "path": "product/traceability/historical_bug_occurrences.jsonl",
-      "sha256": "sha256:5a0caec58be4bf0f8f1ac3b6ddf3883567134d4da8741b9c877c78c9aa24f108"
+      "sha256": "sha256:3c155260e5c2a05feaef7e9937d58169c845d5f2d0da1555e11e8eeff624bb1f"
     },
     {
       "path": "product/traceability/historical_bug_row_enrichments.jsonl",
@@ -93,7 +93,7 @@
     },
     {
       "path": "product/traceability/historical_bug_rows.jsonl",
-      "sha256": "sha256:872c2543f754c251c20a8d627f49c0a767643f58aa6c83f4f24700f87a15cd35"
+      "sha256": "sha256:b2300df45dd166fd30100e6699c71abc1bdd593d5b20c440bcaf7487dc1b1af0"
     },
     {
       "path": "product/traceability/legacy_go.json",
@@ -101,11 +101,11 @@
     },
     {
       "path": "product/traceability/markdown_source_roles.jsonl",
-      "sha256": "sha256:d9157c0a813b6696f42797a93ae1ecdd7406e185a3a49294d0e671659340b406"
+      "sha256": "sha256:acb591fb4c588bc80a655513e04d10671bfeedb5c423875d97e53537c1537796"
     },
     {
       "path": "product/traceability/pending_sources.json",
-      "sha256": "sha256:57e4f524daaaa4b00b75923112aefac4afdc29fe47b0275e9ba60e7ddba24e30"
+      "sha256": "sha256:bc3380ebb2a5accb5ac98fad1be502869c5b3ce5937af1ff635d8b52db7f749d"
     },
     {
       "path": "product/traceability/reviewed_task_blocks.jsonl",
@@ -113,11 +113,11 @@
     },
     {
       "path": "product/traceability/schema.json",
-      "sha256": "sha256:cf9dcd9a8782d2cc70a4f4d459b111cd9b23ee53e8fd8fdf23f6f0e27d944e68"
+      "sha256": "sha256:d60468f8ae19392af78fb630b44b38ecad291578b07ac8a3607686dd0f795538"
     },
     {
       "path": "product/traceability/source_dispositions.jsonl",
-      "sha256": "sha256:0f3b04fd560be2fea9a879eece21853618868ae046d32931e443c0b8cb0fc0f0"
+      "sha256": "sha256:2ade0b188da524a9eeb3df5d36e27b7199bf035812b89dea53a4470be208b056"
     },
     {
       "path": "product/traceability/task_candidate_exclusions.jsonl",
@@ -145,9 +145,9 @@
     "product/traceability/task_source_capability_map.jsonl"
   ],
   "source_dispositions": {
-    "total": 335,
+    "total": 339,
     "task": 164,
-    "bug": 152,
+    "bug": 156,
     "skill": 19
   },
   "tasks": {
@@ -168,12 +168,12 @@
     "reviewed_block_entry_count": 68
   },
   "bugs": {
-    "source_count": 160,
-    "rich_row_count": 239,
-    "occurrence_count": 1295,
-    "id_count": 337,
-    "row_covered_id_count": 197,
-    "narrative_only_id_count": 140
+    "source_count": 164,
+    "rich_row_count": 244,
+    "occurrence_count": 1307,
+    "id_count": 348,
+    "row_covered_id_count": 202,
+    "narrative_only_id_count": 146
   },
   "closure_inferred_count": 0,
   "rejected_task": {

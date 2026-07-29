@@ -74,28 +74,28 @@ equivalencia. Esas pruebas siguen siendo el gate pendiente antes de retirar
 código o usar una tarea histórica como evidencia de producto.
 
 `historical_bug_extraction_policy.json` congela el universo literal `BUG-ORQ`
-de 160 fuentes con rol bug: 152 primarias y ocho fuentes task con rol adicional.
+de 164 fuentes con rol bug: 156 primarias y ocho fuentes task con rol adicional.
 `historical_bug_rows.jsonl` conserva 244
 filas Markdown ricas (240 del inventario vivo y cuatro de la incidencia de
 invariantes causales), con estado original, área, hipótesis, acción,
 capabilities y lesson candidato sin acreditar. El detector normaliza sufijos
-compactos como `...-211/212/213/214` y materializa 1.300 ocurrencias exactas —ref,
+compactos como `...-211/212/213/214` y materializa 1.307 ocurrencias exactas —ref,
 línea, columna y hash— en `historical_bug_occurrences.jsonl`.
 
-Los 342 IDs normalizados quedan en `historical_bug_ids.jsonl`: 202 heredan la
-unión exacta de sus filas ricas y 140 `narrative_only` usan una revisión
+Los 348 IDs normalizados quedan en `historical_bug_ids.jsonl`: 202 heredan la
+unión exacta de sus filas ricas y 146 `narrative_only` usan una revisión
 semántica explícita de `historical_bug_id_reviews.jsonl`, ligada a sus
 ocurrencias por `historical_bug_id_review_bindings.jsonl`. Las cuatro filas
 ricas redactadas desde documentos narrativos conservan procedencia semántica en
 `historical_bug_row_enrichments.jsonl`. Todos conservan
 `closure_evidence=not_verified`; un test histórico citado es solo candidato de
-lección, no cierre del rebuild. De las 160 fuentes, 80 no declaran ningún ID
+lección, no cierre del rebuild. De las 164 fuentes, 81 no declaran ningún ID
 `BUG-ORQ`; el gate las mantiene dentro del universo mediante su lesson de
 fuente, con digest propio, para que no desaparezcan por carecer de token.
 
 La extracción mecánica puede inspeccionarse sin sustituir ledgers con
 `ORQUESTA_TRACEABILITY_EMIT_HISTORICAL_BUG_OCCURRENCES=1`; la proyección final
-de IDs, después de revisar las 140 asignaciones narrativas, con
+de IDs, después de revisar las 146 asignaciones narrativas, con
 `ORQUESTA_TRACEABILITY_EMIT_HISTORICAL_BUG_IDS=1`. Ambos flags se aplican al
 test focal `TestTraceabilityRebuildHistoricalBugIDs`.
 

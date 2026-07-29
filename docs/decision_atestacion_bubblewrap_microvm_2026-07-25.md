@@ -1,7 +1,8 @@
 # Decisión operativa: atestación Bubblewrap y microVM
 
 Fecha: 2026-07-25. Estado: vigente para la frontera técnica; el orden de
-activación fue corregido el 2026-07-26. Autoridad: `AGENTS.md`,
+activación fue corregido el 2026-07-26 y la autoridad de red de agentes se
+ratificó el 2026-07-29. Autoridad: `AGENTS.md`,
 `product/roadmap.json`, contrato V17 e
 `inventario_bugs_orquesta_2026-06-30.md`. Esta decisión no acredita por sí sola
 un nuevo adaptador ni cambia el lifecycle. El corte de alcance vigente está en
@@ -97,10 +98,10 @@ ese momento no se interpreta esta documentación como orden de instalación.
 Firecracker 1.16.1 y `jailer` están presentes como binarios `root:root 0755`.
 La tag `v1.16.1` resuelve al commit
 `2038188f145fb81b8d098147a10e9d9f392fd22f` (tag object
-`e527ccfc54495dabac96f1835db61a40afa15115`). La línea de trabajo activa es
-únicamente conserva materiales para la futura activación opt-in V38 de
-`TestAttestor`; presencia de binarios no equivale a acreditar el proveedor ni
-a habilitar Firecracker para agentes.
+`e527ccfc54495dabac96f1835db61a40afa15115`). La línea de trabajo conserva
+únicamente materiales para la futura activación opt-in V38 de `TestAttestor`;
+presencia de binarios no equivale a acreditar el proveedor ni a habilitar
+Firecracker para agentes.
 
 El startup preflight microVM debe fallar cerrado salvo que pruebe KVM RW para la
 identidad runtime no-root; kernel e imagen guest mínimos digeridos/root-owned;
@@ -123,6 +124,17 @@ exactos y cero VM, proceso, socket o cgroup residual. Un fallo no cae a
 Bubblewrap en el mismo intento. El rollback selecciona un proveedor previamente
 acreditado solo para intentos nuevos o detiene fail-closed.
 
+Estas restricciones describen exclusivamente el adaptador
+`MicroVMTestAttestor`: V38 continúa sin red y sin vsock. La autoridad distinta
+para red de agentes sigue siendo `agent_microvm_network`, con estado
+`planned_not_applied`; no modifica `TestAttestor` ni reutiliza su receipt.
+
+La fixture neutral de una microVM solo caracteriza esa autoridad existente:
+sin IP, TAP, bridge, NAT, inbound, east-west ni Internet directo; transporte
+`vsock_only` a `orquesta_broker` y `controlled_egress_proxy`; y credencial de un
+uso obtenida mediante `CredentialStore`. No añade wiring, E2E físico, receipt
+ni afirmación sobre el contenido ejecutado dentro del guest.
+
 ## Orden de trabajo y deuda deliberadamente diferida
 
 El orden vinculante corregido es:
@@ -132,6 +144,11 @@ cerrar V23 por su contrato Wizard -> Orquesta autoprogramable
 -> V38 candidata: activar TestAttestor Firecracker
 -> V39 candidata: evaluar agentes, red acotada y RAM/tmpfs
 ```
+
+La autorización `input:operator-authorization-2026-07-29` no altera ese orden
+para V23, V38 o el runtime amplio. Solo permite conservar la caracterización
+neutral anterior bajo `agent_microvm_network`; ningún verde actual cambia
+`planned_not_applied`.
 
 Mover todos los agentes a Firecracker no forma parte de V23 ni de este
 adaptador. Tampoco se implementan ahora workspaces, rootfs o caches de agentes

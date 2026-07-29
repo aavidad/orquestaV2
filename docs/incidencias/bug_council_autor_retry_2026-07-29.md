@@ -1,7 +1,7 @@
 # Incidencia: autor del Council resuelto por intento no causal tras retry
 
 Fecha: 2026-07-29.
-ID: `BUG-ORQ-20260729-COUNCIL-AUTHOR-RETRY`.
+ID: `BUG-ORQ-20260729-590`.
 Estado: corregida, revisada e integrada como desbloqueo operativo; pendiente de
 promoción del servidor residente.
 
