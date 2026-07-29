@@ -450,6 +450,9 @@ func workItemStagedOutputExecution(
 	if !changeFound {
 		return application.ExecutionRecord{}, false
 	}
+	if canceledFailedStagedOutputPreserved(record, item, execution) {
+		return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
+	}
 	if canceledStagedOutputPreserved(record, item, execution) {
 		return execution, true
 	}
@@ -473,6 +476,37 @@ func workItemStagedOutputExecution(
 		return application.ExecutionRecord{}, false
 	}
 	return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
+}
+
+func canceledFailedStagedOutputPreserved(
+	record application.GoalRecord,
+	item goal.WorkItem,
+	execution application.ExecutionRecord,
+) bool {
+	interruptCause, interrupted := item.InterruptCause()
+	interruptedAt, hasInterruptedAt := item.InterruptedAt()
+	finishedAt, finished := item.FinishedAt()
+	if item.State() != goal.WorkItemStateCanceled || execution.State != application.ExecutionFailed ||
+		!interrupted || interruptCause != goal.WorkItemInterruptExecutionFailed ||
+		!hasInterruptedAt || !interruptedAt.Equal(execution.FinishedAt) ||
+		!finished || finishedAt.Before(interruptedAt) {
+		return false
+	}
+	matches := 0
+	for _, control := range record.Controls {
+		exactTarget := control.Target == application.ControlTargetGoal ||
+			control.Target == application.ControlTargetWorkItem && control.WorkItemRef == item.Ref()
+		if control.Operation != application.ControlCancel ||
+			control.GoalRef != execution.GoalRef || !exactTarget ||
+			(control.Status != application.ControlRequested &&
+				control.Status != application.ControlConfirmed) ||
+			!finishedAt.Equal(control.RequestedAt) ||
+			application.ValidatePersistedControlRecord(control) != nil {
+			continue
+		}
+		matches++
+	}
+	return matches == 1
 }
 
 func supersededFailedCandidatePreserved(
