@@ -212,11 +212,14 @@ prohibido”.
 
 ## Próximo orden
 
-1. Convertir `LEGACY-001` en contrato y prueba focal de descomposición.
-2. Adjuntar resultado del preflight a planificación como receipt advisory.
-3. Priorizar `pending_invariant_test` por write-set de cada tarea.
-4. Reanudar V23 con tareas cortas, disjuntas y revisables.
-5. Mantener Firecracker/microVM como adaptador separado; no gate de V23.
+1. Ejecutar V23 mediante
+   `docs/reconstruccion/worksets/v23_agent_microtasks_v1.json`: 13 tareas
+   acotadas, cuatro fases y write-sets disjuntos donde existe paralelismo.
+2. Convertir `LEGACY-001` en contrato general y prueba focal de descomposición.
+3. Adjuntar resultado del preflight a planificación como receipt advisory.
+4. Priorizar `pending_invariant_test` por write-set de cada tarea.
+5. Mantener Firecracker/microVM y herramientas transversales como adaptadores
+   separados; no convertirlos en gate de V23.
 
 ## Estado al cerrar
 
