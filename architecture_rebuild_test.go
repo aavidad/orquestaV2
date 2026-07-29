@@ -189,25 +189,8 @@ func TestRebuildArchitecture(t *testing.T) {
 
 	t.Run("adapters_depend_only_on_inward_contracts", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/adapters") {
-			allowed := []string{
-				"orquesta/internal/application",
-				"orquesta/internal/council",
-				"orquesta/internal/credentials",
-				"orquesta/internal/goal",
-				"orquesta/internal/governance",
-				"orquesta/internal/identity",
-				"orquesta/internal/intake",
-				"orquesta/internal/ports",
-				"orquesta/internal/review",
-			}
-			if rebuildArchitecturePathUnder(file.path, "internal/adapters/config") {
-				allowed = append(allowed, "orquesta/internal/config")
-			}
 			for _, imported := range file.imports {
-				if rebuildArchitectureIsSharedAdapterProtocol(imported.path) {
-					continue
-				}
-				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, allowed...); reason != "" {
+				if reason := rebuildArchitectureAdapterImportReason(file.path, imported.path); reason != "" {
 					rebuildArchitectureImportError(t, file, imported, "internal/adapters "+reason)
 				}
 			}
@@ -218,6 +201,23 @@ func TestRebuildArchitecture(t *testing.T) {
 			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureLauncherContract+"/mutant") ||
 			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol+"/mutant") {
 			t.Fatal("shared protocol exceptions must remain exact and outside internal/adapters")
+		}
+		for _, accepted := range []string{
+			"orquesta/internal/wizard/catalog",
+			"orquesta/internal/wizard/gaps",
+		} {
+			if reason := rebuildArchitectureAdapterImportReason("internal/adapters/state/sqlite/example.go", accepted); reason != "" {
+				t.Errorf("adapter rejected exact inward Wizard package %q: %s", accepted, reason)
+			}
+		}
+		for _, mutant := range []string{
+			"orquesta/internal/wizard/catalog/mutant",
+			"orquesta/internal/wizard/gaps/mutant",
+			"orquesta/internal/wizard/stages",
+		} {
+			if reason := rebuildArchitectureAdapterImportReason("internal/adapters/state/sqlite/example.go", mutant); reason == "" {
+				t.Errorf("adapter accepted undeclared Wizard package %q", mutant)
+			}
 		}
 	})
 
@@ -326,14 +326,61 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
-	t.Run("command_is_thin_bootstrap", func(t *testing.T) {
+	t.Run("command_profiles_are_exact", func(t *testing.T) {
+		seenProfiles := make(map[string]struct{})
 		for _, file := range rebuildArchitectureFilesUnder(files, "cmd/orquesta") {
+			directory := filepath.ToSlash(filepath.Dir(file.path))
+			seenProfiles[directory] = struct{}{}
 			for _, imported := range file.imports {
-				if rebuildArchitectureCommandImportAllowed(imported.path) {
+				if reason := rebuildArchitectureCommandImportReason(file.path, imported.path); reason == "" {
 					continue
+				} else {
+					rebuildArchitectureImportError(t, file, imported, reason)
 				}
-				rebuildArchitectureImportError(t, file, imported, "cmd/orquesta may import only the standard library and internal/bootstrap, internal/config, or internal/i18n")
 			}
+		}
+		wantProfiles := map[string]struct{}{
+			"cmd/orquesta":                          {},
+			"cmd/orquesta/firecracker-attestor-e2e": {},
+			"cmd/orquesta/firecracker-launcher":     {},
+			"cmd/orquesta/test-guest":               {},
+		}
+		if !reflect.DeepEqual(seenProfiles, wantProfiles) {
+			t.Errorf("cmd/orquesta profiles=%v, want exact documented profiles=%v", seenProfiles, wantProfiles)
+		}
+	})
+
+	t.Run("command_policy_rejects_mutants", func(t *testing.T) {
+		for name, mutant := range map[string]struct {
+			FilePath   string
+			ImportPath string
+			Allowed    bool
+		}{
+			"product_stdlib":                      {FilePath: "cmd/orquesta/main.go", ImportPath: "context", Allowed: true},
+			"product_bootstrap":                   {FilePath: "cmd/orquesta/main.go", ImportPath: "orquesta/internal/bootstrap", Allowed: true},
+			"product_adapter":                     {FilePath: "cmd/orquesta/main.go", ImportPath: "orquesta/internal/adapters/state/sqlite"},
+			"product_cgo":                         {FilePath: "cmd/orquesta/main.go", ImportPath: "C"},
+			"product_fake_stdlib":                 {FilePath: "cmd/orquesta/main.go", ImportPath: "notastdlib"},
+			"launcher_exact":                      {FilePath: "cmd/orquesta/firecracker-launcher/main.go", ImportPath: "orquesta/internal/adapters/attestor/firecrackerlauncher", Allowed: true},
+			"launcher_adapter_child":              {FilePath: "cmd/orquesta/firecracker-launcher/main.go", ImportPath: "orquesta/internal/adapters/attestor/firecrackerlauncher/mutant"},
+			"launcher_bootstrap":                  {FilePath: "cmd/orquesta/firecracker-launcher/main.go", ImportPath: "orquesta/internal/bootstrap"},
+			"attestor_e2e_exact":                  {FilePath: "cmd/orquesta/firecracker-attestor-e2e/main.go", ImportPath: "orquesta/internal/e2e/firecrackerattestor", Allowed: true},
+			"attestor_e2e_unix":                   {FilePath: "cmd/orquesta/firecracker-attestor-e2e/main.go", ImportPath: "golang.org/x/sys/unix", Allowed: true},
+			"attestor_e2e_unix_child":             {FilePath: "cmd/orquesta/firecracker-attestor-e2e/main.go", ImportPath: "golang.org/x/sys/unix/mutant"},
+			"guest_exact":                         {FilePath: "cmd/orquesta/test-guest/main_linux.go", ImportPath: "orquesta/internal/adapters/attestor/firecrackerguest", Allowed: true},
+			"guest_client":                        {FilePath: "cmd/orquesta/test-guest/main_linux.go", ImportPath: "orquesta/internal/adapters/attestor/firecrackerclient"},
+			"unknown_auxiliary_stdlib":            {FilePath: "cmd/orquesta/unknown/main.go", ImportPath: "context"},
+			"nested_known_auxiliary_exact_import": {FilePath: "cmd/orquesta/firecracker-launcher/nested/main.go", ImportPath: "orquesta/internal/adapters/attestor/firecrackerlauncher"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				reason := rebuildArchitectureCommandImportReason(mutant.FilePath, mutant.ImportPath)
+				if mutant.Allowed && reason != "" {
+					t.Errorf("allowed import rejected: %s", reason)
+				}
+				if !mutant.Allowed && reason == "" {
+					t.Error("command policy accepted forbidden import")
+				}
+			})
 		}
 	})
 
@@ -768,6 +815,31 @@ func rebuildArchitectureOnlyInternalPackages(importPath string, allowed ...strin
 	return "may not depend on " + importPath
 }
 
+func rebuildArchitectureAdapterImportReason(filePath, importPath string) string {
+	if rebuildArchitectureIsSharedAdapterProtocol(importPath) {
+		return ""
+	}
+	if importPath == "orquesta/internal/wizard/catalog" ||
+		importPath == "orquesta/internal/wizard/gaps" {
+		return ""
+	}
+	allowed := []string{
+		"orquesta/internal/application",
+		"orquesta/internal/council",
+		"orquesta/internal/credentials",
+		"orquesta/internal/goal",
+		"orquesta/internal/governance",
+		"orquesta/internal/identity",
+		"orquesta/internal/intake",
+		"orquesta/internal/ports",
+		"orquesta/internal/review",
+	}
+	if rebuildArchitecturePathUnder(filePath, "internal/adapters/config") {
+		allowed = append(allowed, "orquesta/internal/config")
+	}
+	return rebuildArchitectureOnlyInternalPackages(importPath, allowed...)
+}
+
 func rebuildArchitectureIsStandardLibraryImport(importPath string) bool {
 	if importPath == "" || strings.HasPrefix(importPath, "orquesta/") {
 		return false
@@ -843,16 +915,49 @@ func rebuildArchitectureEnvFunction(name string) bool {
 	}
 }
 
-func rebuildArchitectureCommandImportAllowed(importPath string) bool {
-	for _, allowed := range []string{
-		"orquesta/internal/bootstrap",
-		"orquesta/internal/config",
-		"orquesta/internal/i18n",
-	} {
-		if importPath == allowed || strings.HasPrefix(importPath, allowed+"/") {
-			return true
+func rebuildArchitectureCommandImportReason(filePath, importPath string) string {
+	directory := filepath.ToSlash(filepath.Dir(filePath))
+	allowedImports, knownProfile := map[string][]string{
+		"cmd/orquesta": {
+			"orquesta/internal/bootstrap",
+			"orquesta/internal/config",
+			"orquesta/internal/i18n",
+		},
+		"cmd/orquesta/firecracker-attestor-e2e": {
+			"golang.org/x/sys/unix",
+			"orquesta/internal/adapters/attestor/firecrackerclient",
+			"orquesta/internal/e2e/firecrackerattestor",
+			"orquesta/internal/e2e/firecrackerattestorworkload",
+		},
+		"cmd/orquesta/firecracker-launcher": {
+			"orquesta/internal/adapters/attestor/firecrackerlauncher",
+		},
+		"cmd/orquesta/test-guest": {
+			"golang.org/x/sys/unix",
+			"orquesta/internal/adapters/attestor/firecrackerguest",
+		},
+	}[directory]
+	if !knownProfile {
+		return "cmd/orquesta contains an unregistered command profile"
+	}
+	if rebuildArchitectureCommandIsStandardLibraryImport(importPath) {
+		return ""
+	}
+	for _, allowed := range allowedImports {
+		if importPath == allowed {
+			return ""
+		}
+		if directory == "cmd/orquesta" && strings.HasPrefix(importPath, allowed+"/") {
+			return ""
 		}
 	}
+	if directory == "cmd/orquesta" {
+		return "product command may import only the standard library and internal/bootstrap, internal/config, or internal/i18n"
+	}
+	return "auxiliary command imports must match its exact documented profile"
+}
+
+func rebuildArchitectureCommandIsStandardLibraryImport(importPath string) bool {
 	if importPath == "C" {
 		return false
 	}
