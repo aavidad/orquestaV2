@@ -1,6 +1,7 @@
 package acceptance_test
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"reflect"
@@ -152,6 +154,11 @@ func TestAcceptanceV02AuthorityRulesReceipt(t *testing.T) {
 func v02SurfaceDigest(t *testing.T, repositoryRoot string, surface v02FrozenSurface) (int, string) {
 	t.Helper()
 	root := filepath.Join(repositoryRoot, filepath.FromSlash(surface.Root))
+	if _, err := os.Lstat(root); errors.Is(err, fs.ErrNotExist) {
+		return v02SurfaceDigestFromGitIndex(t, repositoryRoot, surface)
+	} else if err != nil {
+		t.Fatalf("stat frozen surface %s: %v", surface.Root, err)
+	}
 	excluded := make(map[string]struct{}, len(surface.ExcludePrefixes))
 	for _, prefix := range surface.ExcludePrefixes {
 		excluded[strings.TrimSuffix(filepath.ToSlash(prefix), "/")] = struct{}{}
@@ -224,6 +231,139 @@ func v02SurfaceDigest(t *testing.T, repositoryRoot string, surface v02FrozenSurf
 		}
 	}
 	return len(files), "sha256:" + hex.EncodeToString(digest.Sum(nil))
+}
+
+type v02IndexFile struct {
+	Path       string
+	ObjectID   string
+	Executable bool
+}
+
+// v02SurfaceDigestFromGitIndex preserves the frozen legacy check when sparse
+// checkout deliberately hides its source tree. It reads only indexed blobs;
+// it never materializes modulos/** in the worktree.
+func v02SurfaceDigestFromGitIndex(
+	t *testing.T,
+	repositoryRoot string,
+	surface v02FrozenSurface,
+) (int, string) {
+	t.Helper()
+	excluded := make(map[string]struct{}, len(surface.ExcludePrefixes))
+	for _, prefix := range surface.ExcludePrefixes {
+		excluded[strings.TrimSuffix(filepath.ToSlash(prefix), "/")] = struct{}{}
+	}
+	indexed := v02ListIndexedSurfaceFiles(t, repositoryRoot, surface.Root, excluded)
+	digest := sha256.New()
+	contents := v02ReadIndexedBlobs(t, repositoryRoot, indexed)
+	for _, file := range indexed {
+		evidenceWriteFrame(t, digest, []byte(file.Path))
+		executable := byte(0)
+		if file.Executable {
+			executable = 1
+		}
+		evidenceWriteFrame(t, digest, []byte{executable})
+		var size [8]byte
+		binary.BigEndian.PutUint64(size[:], uint64(len(contents[file.ObjectID])))
+		if _, err := digest.Write(size[:]); err != nil {
+			t.Fatalf("hash indexed frozen file size %s: %v", file.Path, err)
+		}
+		if _, err := digest.Write(contents[file.ObjectID]); err != nil {
+			t.Fatalf("hash indexed frozen file %s: %v", file.Path, err)
+		}
+	}
+	return len(indexed), "sha256:" + hex.EncodeToString(digest.Sum(nil))
+}
+
+func v02ListIndexedSurfaceFiles(
+	t *testing.T,
+	repositoryRoot,
+	root string,
+	excluded map[string]struct{},
+) []v02IndexFile {
+	t.Helper()
+	output, err := exec.Command("git", "-C", repositoryRoot, "ls-files", "-s", "-z", "--", root).Output()
+	if err != nil {
+		t.Fatalf("list indexed frozen surface %s: %v", root, err)
+	}
+	var files []v02IndexFile
+	seen := make(map[string]struct{})
+	for _, entry := range strings.Split(string(output), "\x00") {
+		if entry == "" {
+			continue
+		}
+		metadata, filename, found := strings.Cut(entry, "\t")
+		fields := strings.Fields(metadata)
+		if !found || len(fields) != 3 || fields[2] != "0" ||
+			len(fields[1]) != 40 || v02PathExcluded(filename, excluded) {
+			if !found || len(fields) != 3 || fields[2] != "0" || len(fields[1]) != 40 {
+				t.Fatalf("invalid indexed frozen entry %q", entry)
+			}
+			continue
+		}
+		if _, duplicate := seen[filename]; duplicate {
+			t.Fatalf("duplicate indexed frozen file %s", filename)
+		}
+		seen[filename] = struct{}{}
+		files = append(files, v02IndexFile{
+			Path: filename, ObjectID: fields[1], Executable: fields[0] == "100755",
+		})
+	}
+	sort.Slice(files, func(left, right int) bool { return files[left].Path < files[right].Path })
+	return files
+}
+
+func v02ReadIndexedBlobs(
+	t *testing.T,
+	repositoryRoot string,
+	files []v02IndexFile,
+) map[string][]byte {
+	t.Helper()
+	command := exec.Command("git", "-C", repositoryRoot, "cat-file", "--batch")
+	input, err := command.StdinPipe()
+	if err != nil {
+		t.Fatalf("open indexed blob input: %v", err)
+	}
+	output, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatalf("open indexed blob output: %v", err)
+	}
+	if err := command.Start(); err != nil {
+		t.Fatalf("start indexed blob reader: %v", err)
+	}
+	for _, file := range files {
+		if _, err := io.WriteString(input, file.ObjectID+"\n"); err != nil {
+			t.Fatalf("request indexed blob %s: %v", file.Path, err)
+		}
+	}
+	if err := input.Close(); err != nil {
+		t.Fatalf("close indexed blob input: %v", err)
+	}
+	reader := bufio.NewReader(output)
+	contents := make(map[string][]byte, len(files))
+	for _, file := range files {
+		header, err := reader.ReadString('\n')
+		fields := strings.Fields(strings.TrimSuffix(header, "\n"))
+		if err != nil || len(fields) != 3 || fields[0] != file.ObjectID || fields[1] != "blob" {
+			t.Fatalf("read indexed blob header %s: %q, err=%v", file.Path, header, err)
+		}
+		size, err := strconv.Atoi(fields[2])
+		if err != nil || size < 0 {
+			t.Fatalf("read indexed blob size %s: %q, err=%v", file.Path, fields[2], err)
+		}
+		content := make([]byte, size)
+		if _, err := io.ReadFull(reader, content); err != nil {
+			t.Fatalf("read indexed blob content %s: %v", file.Path, err)
+		}
+		var newline [1]byte
+		if _, err := io.ReadFull(reader, newline[:]); err != nil || newline[0] != '\n' {
+			t.Fatalf("read indexed blob terminator %s: %v", file.Path, err)
+		}
+		contents[file.ObjectID] = content
+	}
+	if err := command.Wait(); err != nil {
+		t.Fatalf("finish indexed blob reader: %v", err)
+	}
+	return contents
 }
 
 func v02PathExcluded(relative string, excluded map[string]struct{}) bool {
@@ -352,7 +492,38 @@ var v02SharedDomainPackages = map[string]struct{}{
 // application writer. They are kept separate from v02SharedDomainPackages so
 // Goal cannot silently acquire another lifecycle dependency.
 var v02ApplicationDomainPackages = map[string]struct{}{
-	"orquesta/internal/intake": {},
+	"orquesta/internal/intake":         {},
+	"orquesta/internal/wizard/catalog": {},
+	"orquesta/internal/wizard/gaps":    {},
+	"orquesta/internal/wizard/stages":  {},
+}
+
+func v02ApplicationDomainImportAllowed(importPath string) bool {
+	_, allowed := v02ApplicationDomainPackages[importPath]
+	return allowed
+}
+
+func TestV02ApplicationDomainImportAllowlistRejectsOutwardMutants(t *testing.T) {
+	want := map[string]struct{}{
+		"orquesta/internal/intake":         {},
+		"orquesta/internal/wizard/catalog": {},
+		"orquesta/internal/wizard/gaps":    {},
+		"orquesta/internal/wizard/stages":  {},
+	}
+	if !reflect.DeepEqual(v02ApplicationDomainPackages, want) {
+		t.Fatalf("application domain allowlist = %v, want %v", v02ApplicationDomainPackages, want)
+	}
+	for _, mutant := range []string{
+		"orquesta/internal/wizard",
+		"orquesta/internal/wizard/other",
+		"orquesta/internal/adapters/state/sqlite",
+		"orquesta/internal/interfaces/http",
+		"orquesta/internal/bootstrap",
+	} {
+		if v02ApplicationDomainImportAllowed(mutant) {
+			t.Errorf("outward mutant import admitted: %s", mutant)
+		}
+	}
 }
 
 func v02VersionedGoalType(name string) bool {
@@ -454,7 +625,7 @@ func v02AssertExecutionAndProviderSeparation(t *testing.T, sources v02SourceSet,
 			if _, allowed := v02SharedDomainPackages[importPath]; allowed {
 				continue
 			}
-			if _, allowed := v02ApplicationDomainPackages[importPath]; allowed {
+			if v02ApplicationDomainImportAllowed(importPath) {
 				continue
 			}
 			position := sources.FileSet.Position(spec.Pos())
