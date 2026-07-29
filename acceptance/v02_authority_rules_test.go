@@ -153,6 +153,9 @@ func TestAcceptanceV02AuthorityRulesReceipt(t *testing.T) {
 
 func v02SurfaceDigest(t *testing.T, repositoryRoot string, surface v02FrozenSurface) (int, string) {
 	t.Helper()
+	if v02SurfaceHasSkipWorktreeFiles(t, repositoryRoot, surface.Root) {
+		return v02SurfaceDigestFromGitIndex(t, repositoryRoot, surface)
+	}
 	root := filepath.Join(repositoryRoot, filepath.FromSlash(surface.Root))
 	if _, err := os.Lstat(root); errors.Is(err, fs.ErrNotExist) {
 		return v02SurfaceDigestFromGitIndex(t, repositoryRoot, surface)
@@ -231,6 +234,20 @@ func v02SurfaceDigest(t *testing.T, repositoryRoot string, surface v02FrozenSurf
 		}
 	}
 	return len(files), "sha256:" + hex.EncodeToString(digest.Sum(nil))
+}
+
+func v02SurfaceHasSkipWorktreeFiles(t *testing.T, repositoryRoot, root string) bool {
+	t.Helper()
+	output, err := exec.Command("git", "-C", repositoryRoot, "ls-files", "-v", "-z", "--", root).Output()
+	if err != nil {
+		t.Fatalf("inspect indexed frozen surface %s: %v", root, err)
+	}
+	for _, entry := range strings.Split(string(output), "\x00") {
+		if strings.HasPrefix(entry, "S ") {
+			return true
+		}
+	}
+	return false
 }
 
 type v02IndexFile struct {
@@ -319,24 +336,23 @@ func v02ReadIndexedBlobs(
 ) map[string][]byte {
 	t.Helper()
 	command := exec.Command("git", "-C", repositoryRoot, "cat-file", "--batch")
-	input, err := command.StdinPipe()
-	if err != nil {
-		t.Fatalf("open indexed blob input: %v", err)
+	var requests strings.Builder
+	requests.Grow(len(files) * 41)
+	for _, file := range files {
+		requests.WriteString(file.ObjectID)
+		requests.WriteByte('\n')
 	}
+	// Supplying a non-file Reader makes os/exec copy requests concurrently
+	// while this function drains stdout. Writing every request through a
+	// StdinPipe before reading stdout can deadlock once cat-file fills its
+	// output pipe and stops consuming more requests.
+	command.Stdin = strings.NewReader(requests.String())
 	output, err := command.StdoutPipe()
 	if err != nil {
 		t.Fatalf("open indexed blob output: %v", err)
 	}
 	if err := command.Start(); err != nil {
 		t.Fatalf("start indexed blob reader: %v", err)
-	}
-	for _, file := range files {
-		if _, err := io.WriteString(input, file.ObjectID+"\n"); err != nil {
-			t.Fatalf("request indexed blob %s: %v", file.Path, err)
-		}
-	}
-	if err := input.Close(); err != nil {
-		t.Fatalf("close indexed blob input: %v", err)
 	}
 	reader := bufio.NewReader(output)
 	contents := make(map[string][]byte, len(files))
