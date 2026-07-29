@@ -1,6 +1,7 @@
 package i18n
 
 import (
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -69,6 +70,32 @@ func TestWizardSpanishLabelsAreTranslated(t *testing.T) {
 	}
 }
 
+func TestWizardBaseHelpExampleKeyRatchet(t *testing.T) {
+	questions := 0
+	options := 0
+	actual := make([]string, 0, 46)
+	for _, question := range catalog.BuiltIn().ComposeAll().Questions() {
+		if strings.HasPrefix(question.Slot().String(), "domains.") {
+			continue
+		}
+		questions++
+		actual = append(actual, question.HelpKey().String(), question.ExampleKey().String())
+		for _, option := range question.Options() {
+			options++
+			actual = append(actual, option.HelpKey().String(), option.ExampleKey().String())
+		}
+	}
+	sort.Strings(actual)
+	expected := wizardBaseHelpExampleKeys()
+	sort.Strings(expected)
+	if questions != 7 || options != 16 || len(actual) != 46 {
+		t.Fatalf("base Wizard presentation shape questions=%d options=%d keys=%d want=7/16/46", questions, options, len(actual))
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("base Wizard help/example keys:\ngot  %q\nwant %q", actual, expected)
+	}
+}
+
 func wizardPresentationKeys() []string {
 	keys := make(map[string]struct{})
 	add := func(values ...string) {
@@ -114,6 +141,7 @@ func wizardPresentationKeys() []string {
 		"wizard.gaps.pack.option.custom.example",
 		"wizard.gaps.pack.option.custom.rationale",
 	)
+	add(wizardBaseHelpExampleKeys()...)
 	for _, pack := range catalog.BuiltIn().Packs() {
 		for _, question := range pack.Questions() {
 			if !strings.HasPrefix(question.Slot().String(), "domains.") {
@@ -156,4 +184,55 @@ func wizardPresentationKeys() []string {
 	}
 	sort.Strings(values)
 	return values
+}
+
+func wizardBaseHelpExampleKeys() []string {
+	return []string{
+		"wizard.question.app_template.example",
+		"wizard.question.app_template.help",
+		"wizard.question.app_template.option.api_service.example",
+		"wizard.question.app_template.option.api_service.help",
+		"wizard.question.app_template.option.automation.example",
+		"wizard.question.app_template.option.automation.help",
+		"wizard.question.app_template.option.web_application.example",
+		"wizard.question.app_template.option.web_application.help",
+		"wizard.question.assistance_level.example",
+		"wizard.question.assistance_level.help",
+		"wizard.question.assistance_level.option.contextual.example",
+		"wizard.question.assistance_level.option.contextual.help",
+		"wizard.question.assistance_level.option.explain_all.example",
+		"wizard.question.assistance_level.option.explain_all.help",
+		"wizard.question.data_sensitivity.example",
+		"wizard.question.data_sensitivity.help",
+		"wizard.question.data_sensitivity.option.internal.example",
+		"wizard.question.data_sensitivity.option.internal.help",
+		"wizard.question.data_sensitivity.option.personal.example",
+		"wizard.question.data_sensitivity.option.personal.help",
+		"wizard.question.data_sensitivity.option.public.example",
+		"wizard.question.data_sensitivity.option.public.help",
+		"wizard.question.data_sensitivity.option.regulated.example",
+		"wizard.question.data_sensitivity.option.regulated.help",
+		"wizard.question.inference_mode.example",
+		"wizard.question.inference_mode.help",
+		"wizard.question.inference_mode.option.assistant_optional.example",
+		"wizard.question.inference_mode.option.assistant_optional.help",
+		"wizard.question.inference_mode.option.deterministic.example",
+		"wizard.question.inference_mode.option.deterministic.help",
+		"wizard.question.objective.example",
+		"wizard.question.objective.help",
+		"wizard.question.quality_profile.example",
+		"wizard.question.quality_profile.help",
+		"wizard.question.quality_profile.option.high_assurance.example",
+		"wizard.question.quality_profile.option.high_assurance.help",
+		"wizard.question.quality_profile.option.regulated.example",
+		"wizard.question.quality_profile.option.regulated.help",
+		"wizard.question.quality_profile.option.standard.example",
+		"wizard.question.quality_profile.option.standard.help",
+		"wizard.question.work_mode.example",
+		"wizard.question.work_mode.help",
+		"wizard.question.work_mode.option.create_new.example",
+		"wizard.question.work_mode.option.create_new.help",
+		"wizard.question.work_mode.option.work_existing.example",
+		"wizard.question.work_mode.option.work_existing.help",
+	}
 }
