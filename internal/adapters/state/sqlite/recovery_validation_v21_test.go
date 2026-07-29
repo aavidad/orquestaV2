@@ -12,6 +12,7 @@ func TestV21RecoveryRejectsImpossibleExecutionSessionRevocations(t *testing.T) {
 		{"ref", "", `UPDATE outbox SET ref='action:revoke-execution-session:other' WHERE kind='revoke_execution_session'`},
 		{"plan", "outbox_identity_immutable", `UPDATE outbox SET plan_generation=plan_generation+1 WHERE kind='revoke_execution_session'`},
 		{"item", "outbox_identity_immutable", `UPDATE outbox SET work_item_generation=work_item_generation+1 WHERE kind='revoke_execution_session'`},
+		{"stale_item_without_receipt", "outbox_identity_immutable", `UPDATE outbox SET work_item_generation=work_item_generation-1 WHERE kind='revoke_execution_session'`},
 		{"fields", "", `UPDATE outbox SET last_error_code='application.other_failure' WHERE kind='revoke_execution_session'`},
 		{"fence", "", `UPDATE outbox SET claim_token='token:foreign',claimed_by='worker:foreign',claimed_until=available_at+1000000000,delivery_attempt=1,fence=(SELECT fence+1 FROM work_item_fences LIMIT 1) WHERE kind='revoke_execution_session'`},
 		{"terminal", "", `UPDATE executions SET state='running',finished_at=NULL WHERE ref=(SELECT execution_ref FROM outbox WHERE kind='revoke_execution_session')`},
@@ -51,6 +52,19 @@ func TestV21RecoveryRequiresCompleteExactSessionRevocations(t *testing.T) {
 		}
 		rewriteRecoveryTrigger(t, system.repository.db, "action_consumption_receipts_immutable_update", func() {
 			mustV10Exec(t, system.repository.db, `UPDATE action_consumption_receipts SET governance_version=1 WHERE kind='revoke_execution_session'`)
+		})
+		requireV21RevocationError(t, system, "sqlite.recovery_v21_execution_session_revocation_invalid")
+	})
+	t.Run("stale_generation_does_not_borrow_receipt", func(t *testing.T) {
+		system := seedV21PendingExecutionRevocation(t, "stale-generation-receipt")
+		result, err := system.orchestrator.ProcessNext(context.Background(), "worker:v21-revoke-stale-generation")
+		if err != nil || !result.Processed || result.Action != application.ActionRevokeSession {
+			t.Fatalf("consume revocation result=%+v err=%v", result, err)
+		}
+		rewriteRecoveryTrigger(t, system.repository.db, "outbox_identity_immutable", func() {
+			mustV10Exec(t, system.repository.db, `
+UPDATE outbox SET work_item_generation=work_item_generation-1
+WHERE kind='revoke_execution_session'`)
 		})
 		requireV21RevocationError(t, system, "sqlite.recovery_v21_execution_session_revocation_invalid")
 	})

@@ -79,6 +79,8 @@ WHERE action.kind='revoke_execution_session' AND (
  execution.ref IS NULL OR execution.execution_session_ref='' OR
  execution.state NOT IN ('succeeded','failed','canceled','stopped') OR execution.finished_at IS NULL OR
  action.plan_generation<>execution.plan_generation OR action.work_item_generation>item.revision OR
+ (action.work_item_generation<item.revision AND
+  (action.completed_at IS NULL OR receipt.action_ref IS NULL)) OR
  action.mailbox_message_ref IS NOT NULL OR action.control_ref IS NOT NULL OR action.change_ref<>'' OR
  action.expected_target_oid<>'' OR action.admission_request_ref<>'' OR action.admission_request_fingerprint<>'' OR
  action.governance_version<>0 OR action.effect_intent_ref IS NOT NULL OR action.review_gate_digest<>'' OR

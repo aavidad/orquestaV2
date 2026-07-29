@@ -450,7 +450,7 @@ func workItemStagedOutputExecution(
 	if !changeFound {
 		return application.ExecutionRecord{}, false
 	}
-	if canceledFailedStagedOutputPreserved(record, item, execution) {
+	if canceledFailedAttestationStagedOutputPreserved(record, item, execution) {
 		return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
 	}
 	if canceledStagedOutputPreserved(record, item, execution) {
@@ -478,7 +478,7 @@ func workItemStagedOutputExecution(
 	return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
 }
 
-func canceledFailedStagedOutputPreserved(
+func canceledFailedAttestationStagedOutputPreserved(
 	record application.GoalRecord,
 	item goal.WorkItem,
 	execution application.ExecutionRecord,
@@ -487,6 +487,7 @@ func canceledFailedStagedOutputPreserved(
 	interruptedAt, hasInterruptedAt := item.InterruptedAt()
 	finishedAt, finished := item.FinishedAt()
 	if item.State() != goal.WorkItemStateCanceled || execution.State != application.ExecutionFailed ||
+		execution.FailureCode != "test_attestor.required_tests_failed" ||
 		!interrupted || interruptCause != goal.WorkItemInterruptExecutionFailed ||
 		!hasInterruptedAt || !interruptedAt.Equal(execution.FinishedAt) ||
 		!finished || finishedAt.Before(interruptedAt) {

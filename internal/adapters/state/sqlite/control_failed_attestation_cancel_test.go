@@ -87,6 +87,19 @@ func TestSQLiteCancelFailedAttestationKeepsGoalReadableAndRevokesSessionAfterRes
 		t.Fatalf("split attestation goal=%s items=%+v executions=%+v",
 			before.Goal.State(), before.Goal.WorkItems(), before.Executions)
 	}
+	var revokedActionGeneration, revokedReceiptGeneration goal.Revision
+	var revokedCompletedAt int64
+	err = system.repository.db.QueryRow(`
+SELECT action.work_item_generation,receipt.work_item_generation,action.completed_at
+FROM outbox action
+JOIN action_consumption_receipts receipt ON receipt.action_ref=action.ref
+WHERE action.kind='revoke_execution_session' AND action.execution_ref=?`,
+		failedExecution.Ref.String(),
+	).Scan(&revokedActionGeneration, &revokedReceiptGeneration, &revokedCompletedAt)
+	if err != nil || revokedActionGeneration != revokedReceiptGeneration || revokedCompletedAt == 0 {
+		t.Fatalf("exact completed revocation action_gen=%d receipt_gen=%d completed=%d err=%v",
+			revokedActionGeneration, revokedReceiptGeneration, revokedCompletedAt, err)
+	}
 	baselineRevokes, baselineReplays := broker.revokes, broker.replays
 
 	canceled, err := system.orchestrator.Control(ctx, system.access, application.ControlRequest{
@@ -112,6 +125,7 @@ func TestSQLiteCancelFailedAttestationKeepsGoalReadableAndRevokesSessionAfterRes
 	if after.Goal.State() != goal.GoalStateCanceled ||
 		failedItem.State() != goal.WorkItemStateCanceled || !interrupted ||
 		interruptCause != goal.WorkItemInterruptExecutionFailed ||
+		failedItem.Revision() <= revokedActionGeneration ||
 		failedExecution.State != application.ExecutionFailed ||
 		failedExecution.FailureCode != "test_attestor.required_tests_failed" ||
 		liveItem.State() != goal.WorkItemStateCanceled ||
