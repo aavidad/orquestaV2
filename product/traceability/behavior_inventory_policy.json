@@ -1,0 +1,64 @@
+{
+  "document_kind": "behavior_inventory_policy",
+  "schema_version": 1,
+  "authority": "initial_contract_without_completion_or_accreditation_claim",
+  "coverage_state": "initial_confirmed_gaps_only",
+  "required_gap_refs": [
+    "GAP-AGENT-RUNTIME-ELASTIC",
+    "GAP-AGENT-RUNTIME-FIRECRACKER-PHYSICAL",
+    "GAP-AGENT-SESSION-LIVE-INSTRUCTION",
+    "GAP-QUOTA-OBSERVATION-SELECTION"
+  ],
+  "anchor_kinds": [
+    "function",
+    "test",
+    "doc",
+    "config",
+    "migration",
+    "surface"
+  ],
+  "state_axes": {
+    "census": [
+      "discovered",
+      "classified",
+      "reviewed"
+    ],
+    "characterization": [
+      "not_required",
+      "pending",
+      "passed"
+    ],
+    "implementation": [
+      "absent",
+      "planned",
+      "partial",
+      "implemented",
+      "wired",
+      "exercised"
+    ],
+    "equivalence": [
+      "unassessed",
+      "partial",
+      "equivalent",
+      "not_applicable"
+    ],
+    "accreditation": [
+      "ineligible",
+      "pending",
+      "accredited",
+      "invalidated"
+    ],
+    "retirement": [
+      "blocked",
+      "eligible",
+      "retired",
+      "not_applicable"
+    ]
+  },
+  "invariants": [
+    "El censo o la revisión de una conducta nunca demuestra por sí solos equivalencia con V2.",
+    "La equivalencia exige una prueba explícita y no acredita por sí sola una capacidad del producto.",
+    "Una brecha verificada exige una prueba ejecutable y evidencia V2 no planificada.",
+    "La retirada permanece bloqueada hasta demostrar equivalencia o inaplicabilidad y ausencia de consumidores."
+  ]
+}

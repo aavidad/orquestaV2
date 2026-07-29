@@ -59,6 +59,12 @@
     },
     {
       "$ref": "#/$defs/historicalBugID"
+    },
+    {
+      "$ref": "#/$defs/behaviorInventoryPolicy"
+    },
+    {
+      "$ref": "#/$defs/behaviorInventoryEntry"
     }
   ],
   "$defs": {
@@ -1055,6 +1061,161 @@
         "closure_evidence": {"const": "not_verified"},
         "review_note": {"type": "string", "minLength": 40}
       }
+    },
+    "behaviorAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["side", "kind", "path", "selector", "content_sha256", "role"],
+      "properties": {
+        "side": {"enum": ["legacy", "v2"]},
+        "kind": {"enum": ["function", "test", "doc", "config", "migration", "surface"]},
+        "path": {"type": "string", "minLength": 1},
+        "selector": {"type": "string", "minLength": 1},
+        "content_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "role": {"enum": ["historical_source", "partial_implementation", "characterization_test", "configuration", "distinct_boundary"]}
+      }
+    },
+    "behaviorGapTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gap_ref", "status", "obligation", "test_ref", "evidence_refs"],
+      "properties": {
+        "gap_ref": {"type": "string", "pattern": "^GAP-[A-Z0-9-]+$"},
+        "status": {"enum": ["pending", "in_progress", "verified", "waived"]},
+        "obligation": {"type": "string", "minLength": 30},
+        "test_ref": {"type": "string", "minLength": 1},
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "verified"}}},
+          "then": {
+            "properties": {
+              "evidence_refs": {"type": "array", "minItems": 1}
+            }
+          }
+        }
+      ]
+    },
+    "behaviorInventoryPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_kind", "schema_version", "authority", "coverage_state",
+        "required_gap_refs", "anchor_kinds", "state_axes", "invariants"
+      ],
+      "properties": {
+        "document_kind": {"const": "behavior_inventory_policy"},
+        "schema_version": {"const": 1},
+        "authority": {"const": "initial_contract_without_completion_or_accreditation_claim"},
+        "coverage_state": {"const": "initial_confirmed_gaps_only"},
+        "required_gap_refs": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^GAP-[A-Z0-9-]+$"}
+        },
+        "anchor_kinds": {
+          "const": ["function", "test", "doc", "config", "migration", "surface"]
+        },
+        "state_axes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["census", "characterization", "implementation", "equivalence", "accreditation", "retirement"],
+          "properties": {
+            "census": {"const": ["discovered", "classified", "reviewed"]},
+            "characterization": {"const": ["not_required", "pending", "passed"]},
+            "implementation": {"const": ["absent", "planned", "partial", "implemented", "wired", "exercised"]},
+            "equivalence": {"const": ["unassessed", "partial", "equivalent", "not_applicable"]},
+            "accreditation": {"const": ["ineligible", "pending", "accredited", "invalidated"]},
+            "retirement": {"const": ["blocked", "eligible", "retired", "not_applicable"]}
+          }
+        },
+        "invariants": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 30}
+        }
+      }
+    },
+    "behaviorInventoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "behavior_ref", "title", "capability_ids",
+        "owner_resolution", "source_anchors", "v2_anchors", "states",
+        "equivalence_proof_refs", "accreditation_evidence_refs", "gap_task"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "behavior_ref": {"type": "string", "pattern": "^BEHAVIOR-[A-Z0-9-]+$"},
+        "title": {"type": "string", "minLength": 20},
+        "capability_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/capabilityId"}
+        },
+        "owner_resolution": {"const": "pending_canonical_roadmap_confirmation"},
+        "source_anchors": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/behaviorAnchor"}
+        },
+        "v2_anchors": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/behaviorAnchor"}
+        },
+        "states": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["census", "characterization", "implementation", "equivalence", "accreditation", "retirement"],
+          "properties": {
+            "census": {"enum": ["discovered", "classified", "reviewed"]},
+            "characterization": {"enum": ["not_required", "pending", "passed"]},
+            "implementation": {"enum": ["absent", "planned", "partial", "implemented", "wired", "exercised"]},
+            "equivalence": {"enum": ["unassessed", "partial", "equivalent", "not_applicable"]},
+            "accreditation": {"enum": ["ineligible", "pending", "accredited", "invalidated"]},
+            "retirement": {"enum": ["blocked", "eligible", "retired", "not_applicable"]}
+          }
+        },
+        "equivalence_proof_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "accreditation_evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^product/evidence/.+\\.json$"}
+        },
+        "gap_task": {"$ref": "#/$defs/behaviorGapTask"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"states": {"properties": {"equivalence": {"const": "equivalent"}}}}},
+          "then": {
+            "properties": {
+              "equivalence_proof_refs": {"type": "array", "minItems": 1}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"states": {"properties": {"accreditation": {"const": "accredited"}}}}},
+          "then": {
+            "properties": {
+              "accreditation_evidence_refs": {"type": "array", "minItems": 1}
+            }
+          }
+        }
+      ]
     }
   }
 }
