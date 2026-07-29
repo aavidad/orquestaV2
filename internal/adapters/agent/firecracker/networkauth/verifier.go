@@ -16,6 +16,7 @@ import (
 type LaunchAttestationCheck struct {
 	AttestationRef      string
 	PolicyDigest        string
+	LaunchPlanDigest    string
 	LaunchBindingDigest string
 	ProjectRef          string
 	GoalRef             string
@@ -92,14 +93,16 @@ func (verifier *Verifier) Authorize(
 	if err := verifier.config.Challenges.Consume(ctx, ChallengeConsumeRequest{
 		Ref: request.ChallengeRef, Value: request.Challenge,
 		PolicyDigest: request.ExpectedPolicyDigest, LaunchBindingDigest: policy.LaunchBindingDigest,
-		ExecutionRef: policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
+		LaunchPlanDigest: request.LaunchPlanDigest,
+		ExecutionRef:     policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
 	}); err != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("challenge_denied")
 	}
 	check := LaunchAttestationCheck{
 		AttestationRef: policy.LaunchAttestationRef.String(),
-		PolicyDigest:   request.ExpectedPolicyDigest, LaunchBindingDigest: policy.LaunchBindingDigest,
-		ProjectRef: policy.Scope.ProjectRef.String(), GoalRef: policy.Scope.GoalRef.String(),
+		PolicyDigest:   request.ExpectedPolicyDigest, LaunchPlanDigest: request.LaunchPlanDigest,
+		LaunchBindingDigest: policy.LaunchBindingDigest,
+		ProjectRef:          policy.Scope.ProjectRef.String(), GoalRef: policy.Scope.GoalRef.String(),
 		WorkItemRef: policy.Scope.WorkItemRef.String(), ExecutionRef: policy.Scope.ExecutionRef.String(),
 		AgentRef: policy.Scope.AgentRef, ExecutionAttempt: policy.Scope.ExecutionAttempt,
 	}
@@ -107,7 +110,8 @@ func (verifier *Verifier) Authorize(
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("attestation_denied")
 	}
 	message, err := ports.AgentMicroVMLaunchProofMessage(
-		policy, request.ExpectedPolicyDigest, request.Scheme, request.ChallengeRef, request.Challenge,
+		policy, request.ExpectedPolicyDigest, request.LaunchPlanDigest,
+		request.Scheme, request.ChallengeRef, request.Challenge,
 	)
 	if err != nil {
 		return ports.AgentMicroVMLaunchAuthorizationReceipt{}, authError("request_invalid")
@@ -161,7 +165,8 @@ func (verifier *Verifier) Authorize(
 		ProjectRef: policy.Scope.ProjectRef.String(), GoalRef: policy.Scope.GoalRef.String(),
 		WorkItemRef: policy.Scope.WorkItemRef.String(), ExecutionRef: policy.Scope.ExecutionRef.String(),
 		AgentRef: policy.Scope.AgentRef, PolicyRef: policy.Ref,
-		PolicyDigest: request.ExpectedPolicyDigest, LaunchIdentityRef: policy.LaunchIdentityRef,
+		PolicyDigest: request.ExpectedPolicyDigest, LaunchPlanDigest: request.LaunchPlanDigest,
+		LaunchIdentityRef:       policy.LaunchIdentityRef,
 		LaunchBindingDigest:     policy.LaunchBindingDigest,
 		LaunchCredentialRef:     policy.LaunchCredential.Ref,
 		LaunchCredentialVersion: policy.LaunchCredential.Version,
@@ -218,6 +223,8 @@ func credentialUseRequestRef(request ports.AgentMicroVMLaunchProofRequest) strin
 	_, _ = digest.Write([]byte(request.ExpectedPolicyDigest))
 	_, _ = digest.Write([]byte{0})
 	_, _ = digest.Write([]byte(request.Policy.LaunchBindingDigest))
+	_, _ = digest.Write([]byte{0})
+	_, _ = digest.Write([]byte(request.LaunchPlanDigest))
 	_, _ = digest.Write([]byte{0})
 	_, _ = digest.Write([]byte(request.ChallengeRef))
 	return "request:agent-microvm-launch-proof:" + hex.EncodeToString(digest.Sum(nil))

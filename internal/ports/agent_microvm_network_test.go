@@ -205,3 +205,83 @@ func TestAgentMicroVMNetworkPolicyDigestIsDeterministicAndCausal(t *testing.T) {
 		})
 	}
 }
+
+func TestAgentMicroVMNetworkPlanContractBindsAdapterReceiptAndCausalScope(t *testing.T) {
+	policy := validAgentMicroVMNetworkPolicy(t)
+	policyDigest, err := AgentMicroVMNetworkPolicyDigest(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	planDigest := strings.Repeat("d", 64)
+	contract, err := NewAgentMicroVMNetworkPlanContract(
+		"adapter:firecracker-network-plan",
+		policy.Scope,
+		policyDigest,
+		planDigest,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateAgentMicroVMNetworkPlanContract(
+		contract.AdapterRef,
+		policy.Scope,
+		contract,
+	); err != nil {
+		t.Fatal(err)
+	}
+	substitute, err := NewAgentMicroVMNetworkPlanContract(
+		"adapter:substitute",
+		policy.Scope,
+		policyDigest,
+		planDigest,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if substitute.ReceiptRef == contract.ReceiptRef {
+		t.Fatal("joint adapter and receipt substitution preserved ReceiptRef")
+	}
+	if code := AgentMicroVMNetworkContractErrorCode(
+		ValidateAgentMicroVMNetworkPlanContract(contract.AdapterRef, policy.Scope, substitute),
+	); code != "agent_microvm_network.network_plan_adapter_mismatch" {
+		t.Fatalf("adapter substitution code = %q", code)
+	}
+}
+
+func TestAgentMicroVMNetworkPlanContractRejectsProjectGenerationAndSpecReplay(t *testing.T) {
+	policy := validAgentMicroVMNetworkPolicy(t)
+	policyDigest, err := AgentMicroVMNetworkPolicyDigest(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := NewAgentMicroVMNetworkPlanContract(
+		"adapter:firecracker-network-plan",
+		policy.Scope,
+		policyDigest,
+		strings.Repeat("e", 64),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := map[string]func(*AgentMicroVMNetworkScope){
+		"project": func(scope *AgentMicroVMNetworkScope) {
+			scope.ProjectRef, _ = goal.NewProjectRef("project:replay")
+		},
+		"plan generation": func(scope *AgentMicroVMNetworkScope) { scope.PlanGeneration++ },
+		"app spec generation": func(scope *AgentMicroVMNetworkScope) {
+			scope.AppSpecGeneration++
+		},
+		"spec": func(scope *AgentMicroVMNetworkScope) { scope.SpecHash = strings.Repeat("f", 64) },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			replayedScope := policy.Scope
+			mutate(&replayedScope)
+			if code := AgentMicroVMNetworkContractErrorCode(
+				ValidateAgentMicroVMNetworkPlanContract(contract.AdapterRef, replayedScope, contract),
+			); code != "agent_microvm_network.network_plan_scope_mismatch" {
+				t.Fatalf("scope replay code = %q", code)
+			}
+		})
+	}
+}

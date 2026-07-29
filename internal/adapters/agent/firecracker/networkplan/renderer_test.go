@@ -113,7 +113,7 @@ func TestRenderProducesDeterministicVsockOnlyPlan(t *testing.T) {
 	if !bytes.Equal(first.Document, second.Document) || first.Receipt != second.Receipt {
 		t.Fatalf("render is not deterministic:\nfirst=%s\nsecond=%s", first.Document, second.Document)
 	}
-	if err := ValidateReceipt(request, first); err != nil {
+	if err := ValidateReceipt(config, request, first); err != nil {
 		t.Fatalf("receipt rejected: %v", err)
 	}
 
@@ -122,6 +122,7 @@ func TestRenderProducesDeterministicVsockOnlyPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	if document.Schema != PlanSchema || document.Status != ReceiptStatus ||
+		document.AdapterRef != config.AdapterRef ||
 		document.Transport != Transport || document.HostCID != ports.AgentMicroVMVsockHostCID ||
 		document.GuestCID != request.Policy.GuestCID {
 		t.Fatalf("unexpected plan identity: %+v", document)
@@ -155,6 +156,9 @@ func TestRenderProducesDeterministicVsockOnlyPlan(t *testing.T) {
 		first.Receipt.VsockCIDFencingToken != request.CIDLease.FencingToken ||
 		first.Receipt.VsockCIDLeaseRevision != request.CIDLease.Revision ||
 		first.Receipt.VsockCIDLeaseReceiptRef != request.CIDLease.ReceiptRef ||
+		first.Contract.AdapterRef != config.AdapterRef ||
+		first.Contract.PlanDigest != first.Receipt.PlanDigest ||
+		first.Contract.ReceiptRef != first.Receipt.ReceiptRef ||
 		!strings.HasPrefix(first.Receipt.ReceiptRef, "agent-microvm-network-plan-receipt:") {
 		t.Fatalf("receipt does not bind plan: %+v", first.Receipt)
 	}
@@ -238,15 +242,16 @@ func TestRenderBrokerOnlyHasNoProxyOrEgressPolicy(t *testing.T) {
 }
 
 func TestRenderReceiptBindsBackendAndRejectsMutation(t *testing.T) {
+	config := Config{AdapterRef: "adapter:agent-firecracker-network-plan"}
 	request := validRequest(t)
-	rendered, err := Render(Config{AdapterRef: "adapter:agent-firecracker-network-plan"}, request)
+	rendered, err := Render(config, request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	changedLease := request
 	changedLease.CIDLease.Revision++
 	changedLease.CIDLease.ReceiptRef = ports.AgentMicroVMVsockCIDLeaseReceiptRef(changedLease.CIDLease)
-	other, err := Render(Config{AdapterRef: "adapter:agent-firecracker-network-plan"}, changedLease)
+	other, err := Render(config, changedLease)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,14 +261,74 @@ func TestRenderReceiptBindsBackendAndRejectsMutation(t *testing.T) {
 	}
 	tampered := rendered
 	tampered.Receipt.AgentRef = "agent:other"
-	if code := ErrorCode(ValidateReceipt(request, tampered)); code != "agent_firecracker_network_plan.receipt_mismatch" {
+	if code := ErrorCode(ValidateReceipt(config, request, tampered)); code !=
+		"agent_firecracker_network_plan.receipt_mismatch" {
 		t.Fatalf("tampered receipt code = %q", code)
 	}
 	tampered = rendered
 	tampered.Document = append([]byte(nil), rendered.Document...)
 	tampered.Document[len(tampered.Document)-1] ^= 1
-	if code := ErrorCode(ValidateReceipt(request, tampered)); code !=
+	if code := ErrorCode(ValidateReceipt(config, request, tampered)); code !=
 		"agent_firecracker_network_plan.document_digest_mismatch" {
 		t.Fatalf("tampered document code = %q", code)
+	}
+}
+
+func TestValidateReceiptRejectsV1PlanWithReboundDigest(t *testing.T) {
+	config := Config{AdapterRef: "adapter:agent-firecracker-network-plan"}
+	request := validRequest(t)
+	legacy, err := Render(config, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document planDocument
+	if err := json.Unmarshal(legacy.Document, &document); err != nil {
+		t.Fatal(err)
+	}
+	document.Schema = "orquesta.agent-firecracker-network-plan.v1"
+	legacy.Document, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy.Receipt.PlanDigest = digestBytes(legacy.Document)
+	legacy.Contract, err = ports.NewAgentMicroVMNetworkPlanContract(
+		config.AdapterRef,
+		request.Policy.Scope,
+		request.ExpectedPolicyDigest,
+		legacy.Receipt.PlanDigest,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy.Receipt.ReceiptRef = legacy.Contract.ReceiptRef
+	if code := ErrorCode(ValidateReceipt(config, request, legacy)); code !=
+		"agent_firecracker_network_plan.receipt_mismatch" {
+		t.Fatalf("self-consistent v1 plan code = %q", code)
+	}
+}
+
+func TestValidateReceiptRejectsJointAdapterConfigAndReceiptSubstitution(t *testing.T) {
+	originalConfig := Config{AdapterRef: "adapter:agent-firecracker-network-plan"}
+	request := validRequest(t)
+	original, err := Render(originalConfig, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	substituteConfig := Config{AdapterRef: "adapter:substitute"}
+	substitute, err := Render(substituteConfig, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if substitute.Receipt.AdapterRef != substituteConfig.AdapterRef ||
+		substitute.Contract.AdapterRef != substituteConfig.AdapterRef {
+		t.Fatal("fixture did not substitute adapter, config and receipt together")
+	}
+	if substitute.Receipt.PlanDigest == original.Receipt.PlanDigest ||
+		substitute.Receipt.ReceiptRef == original.Receipt.ReceiptRef {
+		t.Fatal("adapter substitution did not change PlanDigest and ReceiptRef")
+	}
+	if code := ErrorCode(ValidateReceipt(originalConfig, request, substitute)); code !=
+		"agent_firecracker_network_plan.contract_mismatch" {
+		t.Fatalf("joint substitution code = %q", code)
 	}
 }

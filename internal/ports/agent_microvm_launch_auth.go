@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	AgentMicroVMLaunchProofScheme = "hmac-sha256-challenge.v1"
-	agentMicroVMChallengeBytes    = 32
-	agentMicroVMProofBytes        = sha256.Size
+	AgentMicroVMLaunchProofScheme                = "hmac-sha256-challenge.v2"
+	AgentMicroVMLaunchAuthorizationReceiptSchema = "orquesta.agent-microvm-launch-authorization-receipt.v2"
+	agentMicroVMChallengeBytes                   = 32
+	agentMicroVMProofBytes                       = sha256.Size
 )
 
 // AgentMicroVMLaunchProof is callback-scoped proof material, not a durable
@@ -51,6 +52,7 @@ func (AgentMicroVMLaunchProof) MarshalJSON() ([]byte, error) { return json.Marsh
 type AgentMicroVMLaunchProofRequest struct {
 	Policy               AgentMicroVMNetworkPolicy
 	ExpectedPolicyDigest string
+	LaunchPlanDigest     string
 	Scheme               string
 	ChallengeRef         string
 	Challenge            []byte
@@ -71,6 +73,7 @@ type AgentMicroVMLaunchAuthorizationReceipt struct {
 	AgentRef                string
 	PolicyRef               string
 	PolicyDigest            string
+	LaunchPlanDigest        string
 	LaunchIdentityRef       string
 	LaunchBindingDigest     string
 	LaunchCredentialRef     string
@@ -122,6 +125,7 @@ func ValidateAgentMicroVMLaunchProofRequest(request AgentMicroVMLaunchProofReque
 	if _, err := AgentMicroVMLaunchProofMessage(
 		request.Policy,
 		request.ExpectedPolicyDigest,
+		request.LaunchPlanDigest,
 		request.Scheme,
 		request.ChallengeRef,
 		request.Challenge,
@@ -141,10 +145,12 @@ func ValidateAgentMicroVMLaunchProofRequest(request AgentMicroVMLaunchProofReque
 
 // AgentMicroVMLaunchProofMessage is the exact HMAC input shared by guest and
 // verifier. It binds the single-use challenge to policy, launch identity,
-// credential version, attestation and the full causal scope.
+// credential version, attestation, LaunchPlanDigest and the full causal scope.
+// LaunchPlanDigest transitively binds the configured network AdapterRef.
 func AgentMicroVMLaunchProofMessage(
 	policy AgentMicroVMNetworkPolicy,
 	expectedPolicyDigest string,
+	launchPlanDigest string,
 	scheme string,
 	challengeRef string,
 	challenge []byte,
@@ -156,6 +162,9 @@ func AgentMicroVMLaunchProofMessage(
 	if err != nil || expectedPolicyDigest != policyDigest {
 		return nil, agentMicroVMNetworkError("launch_proof_policy_digest_mismatch")
 	}
+	if !validWorkspaceDigest(launchPlanDigest) {
+		return nil, agentMicroVMNetworkError("launch_proof_launch_plan_digest_invalid")
+	}
 	if scheme != AgentMicroVMLaunchProofScheme {
 		return nil, agentMicroVMNetworkError("launch_proof_scheme_invalid")
 	}
@@ -165,6 +174,7 @@ func AgentMicroVMLaunchProofMessage(
 	document := struct {
 		Schema               string `json:"schema"`
 		PolicyDigest         string `json:"policy_digest"`
+		LaunchPlanDigest     string `json:"launch_plan_digest"`
 		LaunchBindingDigest  string `json:"launch_binding_digest"`
 		CredentialRef        string `json:"credential_ref"`
 		CredentialVersion    uint64 `json:"credential_version"`
@@ -173,6 +183,7 @@ func AgentMicroVMLaunchProofMessage(
 		Challenge            []byte `json:"challenge"`
 	}{
 		Schema: AgentMicroVMLaunchProofScheme, PolicyDigest: policyDigest,
+		LaunchPlanDigest:     launchPlanDigest,
 		LaunchBindingDigest:  policy.LaunchBindingDigest,
 		CredentialRef:        policy.LaunchCredential.Ref,
 		CredentialVersion:    policy.LaunchCredential.Version,
@@ -207,6 +218,7 @@ func ValidateAgentMicroVMLaunchAuthorizationReceipt(
 		receipt.AgentRef == policy.Scope.AgentRef,
 		receipt.PolicyRef == policy.Ref,
 		receipt.PolicyDigest == request.ExpectedPolicyDigest,
+		receipt.LaunchPlanDigest == request.LaunchPlanDigest,
 		receipt.LaunchIdentityRef == policy.LaunchIdentityRef,
 		receipt.LaunchBindingDigest == policy.LaunchBindingDigest,
 		receipt.LaunchCredentialRef == policy.LaunchCredential.Ref,
@@ -234,6 +246,16 @@ func ValidateAgentMicroVMLaunchAuthorizationReceipt(
 func AgentMicroVMLaunchAuthorizationReceiptRef(
 	receipt AgentMicroVMLaunchAuthorizationReceipt,
 ) string {
+	return agentMicroVMLaunchAuthorizationReceiptRef(
+		AgentMicroVMLaunchAuthorizationReceiptSchema,
+		receipt,
+	)
+}
+
+func agentMicroVMLaunchAuthorizationReceiptRef(
+	schema string,
+	receipt AgentMicroVMLaunchAuthorizationReceipt,
+) string {
 	document := struct {
 		Schema                  string `json:"schema"`
 		ProjectRef              string `json:"project_ref"`
@@ -243,6 +265,7 @@ func AgentMicroVMLaunchAuthorizationReceiptRef(
 		AgentRef                string `json:"agent_ref"`
 		PolicyRef               string `json:"policy_ref"`
 		PolicyDigest            string `json:"policy_digest"`
+		LaunchPlanDigest        string `json:"launch_plan_digest"`
 		LaunchIdentityRef       string `json:"launch_identity_ref"`
 		LaunchBindingDigest     string `json:"launch_binding_digest"`
 		LaunchCredentialRef     string `json:"launch_credential_ref"`
@@ -255,10 +278,11 @@ func AgentMicroVMLaunchAuthorizationReceiptRef(
 		CredentialUseRequestRef string `json:"credential_use_request_ref"`
 		AuthorizedAt            string `json:"authorized_at"`
 	}{
-		Schema:     "orquesta.agent-microvm-launch-authorization-receipt.v1",
+		Schema:     schema,
 		ProjectRef: receipt.ProjectRef, GoalRef: receipt.GoalRef,
 		WorkItemRef: receipt.WorkItemRef, ExecutionRef: receipt.ExecutionRef,
 		AgentRef: receipt.AgentRef, PolicyRef: receipt.PolicyRef, PolicyDigest: receipt.PolicyDigest,
+		LaunchPlanDigest:  receipt.LaunchPlanDigest,
 		LaunchIdentityRef: receipt.LaunchIdentityRef, LaunchBindingDigest: receipt.LaunchBindingDigest,
 		LaunchCredentialRef:     receipt.LaunchCredentialRef,
 		LaunchCredentialVersion: receipt.LaunchCredentialVersion,

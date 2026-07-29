@@ -11,7 +11,10 @@ import (
 )
 
 const (
-	AgentMicroVMNetworkPolicySchema = "orquesta.agent-microvm-network-policy.v1"
+	AgentMicroVMNetworkPolicySchema       = "orquesta.agent-microvm-network-policy.v1"
+	AgentMicroVMNetworkPlanContractSchema = "orquesta.agent-microvm-network-plan-contract.v1"
+	AgentMicroVMPlannedNotApplied         = "planned_not_applied"
+	AgentMicroVMRequiredBeforeApply       = "required_before_apply"
 
 	AgentMicroVMEgressBrokerOnly        AgentMicroVMEgressMode = "broker_only"
 	AgentMicroVMEgressControlledProxy   AgentMicroVMEgressMode = "broker_and_controlled_proxy"
@@ -73,6 +76,20 @@ type AgentMicroVMNetworkPolicy struct {
 	ControlledProxy      *AgentMicroVMVsockService
 	EgressPolicyRef      string
 	EgressPolicyDigest   string
+}
+
+// AgentMicroVMNetworkPlanContract is the neutral, adapter-produced contract
+// consumed by later launch composition. It contains no networkplan DTO or
+// configuration type. AdapterRef is bound both by PlanDigest at the producer
+// and explicitly by ReceiptRef here.
+type AgentMicroVMNetworkPlanContract struct {
+	Schema       string
+	Status       string
+	AdapterRef   string
+	Scope        AgentMicroVMNetworkScope
+	PolicyDigest string
+	PlanDigest   string
+	ReceiptRef   string
 }
 
 type AgentMicroVMNetworkContractError struct {
@@ -182,6 +199,62 @@ func AgentMicroVMNetworkPolicyDigest(policy AgentMicroVMNetworkPolicy) (string, 
 	return agentMicroVMNetworkDocumentDigest(document), nil
 }
 
+func NewAgentMicroVMNetworkPlanContract(
+	adapterRef string,
+	scope AgentMicroVMNetworkScope,
+	policyDigest string,
+	planDigest string,
+) (AgentMicroVMNetworkPlanContract, error) {
+	switch {
+	case !validWorkspaceLogicalRef(adapterRef):
+		return AgentMicroVMNetworkPlanContract{}, agentMicroVMNetworkError("network_plan_adapter_invalid")
+	case !validAgentMicroVMNetworkScope(scope):
+		return AgentMicroVMNetworkPlanContract{}, agentMicroVMNetworkError("network_plan_scope_invalid")
+	case !validWorkspaceDigest(policyDigest):
+		return AgentMicroVMNetworkPlanContract{}, agentMicroVMNetworkError("network_plan_policy_digest_invalid")
+	case !validWorkspaceDigest(planDigest):
+		return AgentMicroVMNetworkPlanContract{}, agentMicroVMNetworkError("network_plan_digest_invalid")
+	}
+	contract := AgentMicroVMNetworkPlanContract{
+		Schema: AgentMicroVMNetworkPlanContractSchema, Status: AgentMicroVMPlannedNotApplied,
+		AdapterRef: adapterRef, Scope: scope, PolicyDigest: policyDigest, PlanDigest: planDigest,
+	}
+	contract.ReceiptRef = agentMicroVMNetworkPlanReceiptRef(contract.AdapterRef, contract.PlanDigest)
+	return contract, nil
+}
+
+func ValidateAgentMicroVMNetworkPlanContract(
+	expectedAdapterRef string,
+	expectedScope AgentMicroVMNetworkScope,
+	contract AgentMicroVMNetworkPlanContract,
+) error {
+	if !validWorkspaceLogicalRef(expectedAdapterRef) {
+		return agentMicroVMNetworkError("network_plan_expected_adapter_invalid")
+	}
+	if !validAgentMicroVMNetworkScope(expectedScope) {
+		return agentMicroVMNetworkError("network_plan_expected_scope_invalid")
+	}
+	if contract.AdapterRef != expectedAdapterRef {
+		return agentMicroVMNetworkError("network_plan_adapter_mismatch")
+	}
+	if contract.Scope != expectedScope {
+		return agentMicroVMNetworkError("network_plan_scope_mismatch")
+	}
+	expected, err := NewAgentMicroVMNetworkPlanContract(
+		contract.AdapterRef,
+		contract.Scope,
+		contract.PolicyDigest,
+		contract.PlanDigest,
+	)
+	if err != nil {
+		return err
+	}
+	if contract != expected {
+		return agentMicroVMNetworkError("network_plan_contract_mismatch")
+	}
+	return nil
+}
+
 func validAgentMicroVMNetworkScope(scope AgentMicroVMNetworkScope) bool {
 	return scope.ProjectRef.String() != "" &&
 		scope.GoalRef.String() != "" &&
@@ -192,6 +265,19 @@ func validAgentMicroVMNetworkScope(scope AgentMicroVMNetworkScope) bool {
 		scope.ExecutionAttempt > 0 &&
 		goal.IsCanonicalAppSpecHash(scope.SpecHash) &&
 		validWorkspaceLogicalRef(scope.AgentRef)
+}
+
+func agentMicroVMNetworkPlanReceiptRef(adapterRef string, planDigest string) string {
+	document := struct {
+		Schema     string `json:"schema"`
+		AdapterRef string `json:"adapter_ref"`
+		PlanDigest string `json:"plan_digest"`
+	}{
+		Schema:     "orquesta.agent-microvm-network-plan-receipt-ref.v1",
+		AdapterRef: adapterRef,
+		PlanDigest: planDigest,
+	}
+	return "agent-microvm-network-plan-receipt:" + agentMicroVMNetworkDocumentDigest(document)
 }
 
 func validAgentMicroVMVsockService(service AgentMicroVMVsockService) bool {

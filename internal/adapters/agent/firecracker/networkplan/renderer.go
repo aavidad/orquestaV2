@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	PlanSchema       = "orquesta.agent-firecracker-network-plan.v1"
-	ReceiptStatus    = "planned_not_applied"
+	PlanSchema       = "orquesta.agent-firecracker-network-plan.v2"
+	ReceiptStatus    = ports.AgentMicroVMPlannedNotApplied
 	Transport        = "vsock_only"
 	GuestProxyBridge = "guest_loopback_to_vsock"
 )
@@ -73,6 +73,7 @@ type PlanReceipt struct {
 type RenderedPlan struct {
 	Document []byte
 	Receipt  PlanReceipt
+	Contract ports.AgentMicroVMNetworkPlanContract
 }
 
 type Error struct {
@@ -113,12 +114,21 @@ func Render(config Config, request RenderRequest) (RenderedPlan, error) {
 	}
 
 	backendDigest := backendBindingDigest(request.Policy, policyDigest, request.CIDLease)
-	document := planProjection(request, policyDigest, backendDigest)
+	document := planProjection(config.AdapterRef, request, policyDigest, backendDigest)
 	payload, err := json.Marshal(document)
 	if err != nil {
 		return RenderedPlan{}, planError("render_failed")
 	}
 	planDigest := digestBytes(payload)
+	contract, err := ports.NewAgentMicroVMNetworkPlanContract(
+		config.AdapterRef,
+		request.Policy.Scope,
+		policyDigest,
+		planDigest,
+	)
+	if err != nil {
+		return RenderedPlan{}, planError("contract_invalid")
+	}
 	receipt := PlanReceipt{
 		Status: ReceiptStatus, AdapterRef: config.AdapterRef,
 		ProjectRef:   request.Policy.Scope.ProjectRef.String(),
@@ -142,20 +152,31 @@ func Render(config Config, request RenderRequest) (RenderedPlan, error) {
 		VsockBackendRef:            request.CIDLease.VsockBackendRef,
 		BackendBindingDigest:       backendDigest,
 		PlanDigest:                 planDigest, IdempotencyKey: request.IdempotencyKey,
-		ReceiptRef: "agent-microvm-network-plan-receipt:" + planDigest,
+		ReceiptRef: contract.ReceiptRef,
 	}
-	return RenderedPlan{Document: payload, Receipt: receipt}, nil
+	return RenderedPlan{Document: payload, Receipt: receipt, Contract: contract}, nil
 }
 
-func ValidateReceipt(request RenderRequest, candidate RenderedPlan) error {
+// ValidateReceipt anchors validation in the configured adapter. Candidate
+// metadata can never select its own validating configuration.
+func ValidateReceipt(config Config, request RenderRequest, candidate RenderedPlan) error {
 	if digestBytes(candidate.Document) != candidate.Receipt.PlanDigest {
 		return planError("document_digest_mismatch")
 	}
-	rendered, err := Render(Config{AdapterRef: candidate.Receipt.AdapterRef}, request)
+	if err := ports.ValidateAgentMicroVMNetworkPlanContract(
+		config.AdapterRef,
+		request.Policy.Scope,
+		candidate.Contract,
+	); err != nil {
+		return planError("contract_mismatch")
+	}
+	rendered, err := Render(config, request)
 	if err != nil {
 		return err
 	}
-	if !bytes.Equal(candidate.Document, rendered.Document) || candidate.Receipt != rendered.Receipt {
+	if !bytes.Equal(candidate.Document, rendered.Document) ||
+		candidate.Receipt != rendered.Receipt ||
+		candidate.Contract != rendered.Contract {
 		return planError("receipt_mismatch")
 	}
 	return nil
@@ -164,6 +185,7 @@ func ValidateReceipt(request RenderRequest, candidate RenderedPlan) error {
 type planDocument struct {
 	Schema                     string             `json:"schema"`
 	Status                     string             `json:"status"`
+	AdapterRef                 string             `json:"adapter_ref"`
 	Scope                      planScope          `json:"scope"`
 	PolicyRef                  string             `json:"policy_ref"`
 	PolicyDigest               string             `json:"policy_digest"`
@@ -224,13 +246,14 @@ type allowedService struct {
 }
 
 func planProjection(
+	adapterRef string,
 	request RenderRequest,
 	policyDigest string,
 	backendDigest string,
 ) planDocument {
 	policy := request.Policy
 	document := planDocument{
-		Schema: PlanSchema, Status: ReceiptStatus,
+		Schema: PlanSchema, Status: ReceiptStatus, AdapterRef: adapterRef,
 		Scope: planScope{
 			ProjectRef: policy.Scope.ProjectRef.String(), GoalRef: policy.Scope.GoalRef.String(),
 			WorkItemRef: policy.Scope.WorkItemRef.String(), ExecutionRef: policy.Scope.ExecutionRef.String(),

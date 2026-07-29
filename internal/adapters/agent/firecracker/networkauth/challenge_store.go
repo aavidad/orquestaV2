@@ -21,6 +21,7 @@ type ChallengeStoreOptions struct {
 type ChallengeIssueRequest struct {
 	PolicyDigest        string
 	LaunchBindingDigest string
+	LaunchPlanDigest    string
 	ExecutionRef        string
 	AgentRef            string
 }
@@ -36,6 +37,7 @@ type ChallengeConsumeRequest struct {
 	Value               []byte
 	PolicyDigest        string
 	LaunchBindingDigest string
+	LaunchPlanDigest    string
 	ExecutionRef        string
 	AgentRef            string
 }
@@ -60,6 +62,7 @@ type challengeRecord struct {
 	value               [challengeBytes]byte
 	policyDigest        string
 	launchBindingDigest string
+	launchPlanDigest    string
 	executionRef        string
 	agentRef            string
 	expiresAt           time.Time
@@ -80,7 +83,8 @@ func (store *MemoryChallengeStore) Issue(
 	request ChallengeIssueRequest,
 ) (IssuedChallenge, error) {
 	if store == nil || ctx == nil || ctx.Err() != nil || !validDigest(request.PolicyDigest) ||
-		!validDigest(request.LaunchBindingDigest) || !validRef(request.ExecutionRef) ||
+		!validDigest(request.LaunchBindingDigest) || !validDigest(request.LaunchPlanDigest) ||
+		!validRef(request.ExecutionRef) ||
 		!validRef(request.AgentRef) {
 		return IssuedChallenge{}, authError("challenge_issue_invalid")
 	}
@@ -112,6 +116,7 @@ func (store *MemoryChallengeStore) Issue(
 	store.active[ref] = challengeRecord{
 		value: value, policyDigest: request.PolicyDigest,
 		launchBindingDigest: request.LaunchBindingDigest,
+		launchPlanDigest:    request.LaunchPlanDigest,
 		executionRef:        request.ExecutionRef, agentRef: request.AgentRef, expiresAt: expiresAt,
 	}
 	return IssuedChallenge{Ref: ref, Value: append([]byte(nil), value[:]...), ExpiresAt: expiresAt}, nil
@@ -123,7 +128,8 @@ func (store *MemoryChallengeStore) Consume(
 ) error {
 	if store == nil || ctx == nil || ctx.Err() != nil || !validRef(request.Ref) ||
 		len(request.Value) != challengeBytes || !validDigest(request.PolicyDigest) ||
-		!validDigest(request.LaunchBindingDigest) || !validRef(request.ExecutionRef) ||
+		!validDigest(request.LaunchBindingDigest) || !validDigest(request.LaunchPlanDigest) ||
+		!validRef(request.ExecutionRef) ||
 		!validRef(request.AgentRef) {
 		return authError("challenge_consume_invalid")
 	}
@@ -147,6 +153,7 @@ func (store *MemoryChallengeStore) Consume(
 	if valueDigest != recordDigest ||
 		request.PolicyDigest != record.policyDigest ||
 		request.LaunchBindingDigest != record.launchBindingDigest ||
+		request.LaunchPlanDigest != record.launchPlanDigest ||
 		request.ExecutionRef != record.executionRef || request.AgentRef != record.agentRef {
 		return authError("challenge_binding_mismatch")
 	}

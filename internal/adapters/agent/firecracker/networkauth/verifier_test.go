@@ -258,10 +258,12 @@ func newVerifierFixture(t *testing.T) verifierFixture {
 		t.Fatal(err)
 	}
 	credentialStore := &credentialStoreFake{material: []byte("launch-proof-key"), at: now}
+	launchPlanDigest := bytesToDigest([]byte("launch-plan:adapter:firecracker-network-plan"))
 	attestations := &attestationVerifierFake{want: LaunchAttestationCheck{
 		AttestationRef: policy.LaunchAttestationRef.String(),
-		PolicyDigest:   policyDigest, LaunchBindingDigest: policy.LaunchBindingDigest,
-		ProjectRef: policy.Scope.ProjectRef.String(), GoalRef: policy.Scope.GoalRef.String(),
+		PolicyDigest:   policyDigest, LaunchPlanDigest: launchPlanDigest,
+		LaunchBindingDigest: policy.LaunchBindingDigest,
+		ProjectRef:          policy.Scope.ProjectRef.String(), GoalRef: policy.Scope.GoalRef.String(),
 		WorkItemRef: policy.Scope.WorkItemRef.String(), ExecutionRef: policy.Scope.ExecutionRef.String(),
 		AgentRef: policy.Scope.AgentRef, ExecutionAttempt: policy.Scope.ExecutionAttempt,
 	}}
@@ -288,15 +290,18 @@ func (fixture verifierFixture) proofRequest(t *testing.T) ports.AgentMicroVMLaun
 	if err != nil {
 		t.Fatal(err)
 	}
+	launchPlanDigest := bytesToDigest([]byte("launch-plan:adapter:firecracker-network-plan"))
 	challenge, err := fixture.challenges.Issue(context.Background(), ChallengeIssueRequest{
 		PolicyDigest: policyDigest, LaunchBindingDigest: policy.LaunchBindingDigest,
-		ExecutionRef: policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
+		LaunchPlanDigest: launchPlanDigest,
+		ExecutionRef:     policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	message, err := ports.AgentMicroVMLaunchProofMessage(
-		policy, policyDigest, ports.AgentMicroVMLaunchProofScheme, challenge.Ref, challenge.Value,
+		policy, policyDigest, launchPlanDigest,
+		ports.AgentMicroVMLaunchProofScheme, challenge.Ref, challenge.Value,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -309,7 +314,8 @@ func (fixture verifierFixture) proofRequest(t *testing.T) ports.AgentMicroVMLaun
 		t.Fatal(err)
 	}
 	return ports.AgentMicroVMLaunchProofRequest{
-		Policy: policy, ExpectedPolicyDigest: policyDigest, Scheme: ports.AgentMicroVMLaunchProofScheme,
+		Policy: policy, ExpectedPolicyDigest: policyDigest, LaunchPlanDigest: launchPlanDigest,
+		Scheme:       ports.AgentMicroVMLaunchProofScheme,
 		ChallengeRef: challenge.Ref, Challenge: challenge.Value, Proof: proof,
 		RequestedAt: fixture.now.Add(-time.Second),
 	}
@@ -438,6 +444,25 @@ func TestVerifierMissingAndExpiredChallengesDoNotCrossLedgers(t *testing.T) {
 			t.Fatalf("expired challenge crossed a ledger or opening")
 		}
 	})
+}
+
+func TestVerifierRejectsLaunchPlanSubstitutionBeforeLedgers(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	request := fixture.proofRequest(t)
+	defer request.Proof.Destroy()
+	request.LaunchPlanDigest = bytesToDigest([]byte("launch-plan:adapter:substitute"))
+	transactions := newLaunchTransactionFactoryFake()
+	if _, err := fixture.verifier.Authorize(
+		context.Background(),
+		request,
+		transactions,
+	); ErrorCode(err) != "agent_firecracker_network_auth.challenge_denied" {
+		t.Fatalf("launch plan substitution error = %v", err)
+	}
+	if fixture.credentials.useCount.Load() != 0 || fixture.attestations.callCount.Load() != 0 ||
+		transactions.BeginCount() != 0 {
+		t.Fatal("substituted LaunchPlanDigest crossed challenge boundary")
+	}
 }
 
 func TestVerifierConcurrentReplayHasSingleWinner(t *testing.T) {
@@ -651,6 +676,7 @@ func TestMemoryChallengeStoreBindsScopeAndExpires(t *testing.T) {
 	issue := ChallengeIssueRequest{
 		PolicyDigest:        bytesToDigest([]byte("policy")),
 		LaunchBindingDigest: bytesToDigest([]byte("binding")),
+		LaunchPlanDigest:    bytesToDigest([]byte("launch-plan")),
 		ExecutionRef:        "execution:challenge", AgentRef: "agent:codex",
 	}
 	challenge, err := store.Issue(context.Background(), issue)
@@ -663,7 +689,8 @@ func TestMemoryChallengeStoreBindsScopeAndExpires(t *testing.T) {
 	}
 	mismatched := ChallengeConsumeRequest{
 		Ref: challenge.Ref, Value: challenge.Value, PolicyDigest: issue.PolicyDigest,
-		LaunchBindingDigest: issue.LaunchBindingDigest, ExecutionRef: "execution:other",
+		LaunchBindingDigest: issue.LaunchBindingDigest,
+		LaunchPlanDigest:    issue.LaunchPlanDigest, ExecutionRef: "execution:other",
 		AgentRef: issue.AgentRef,
 	}
 	if err := store.Consume(context.Background(), mismatched); ErrorCode(err) !=
