@@ -53,11 +53,12 @@ WHERE action.kind='integrate_change' AND action.completed_at IS NULL`)
 			source := seedSQLiteV18Integration(t, false)
 			path := copyCurrentIntegrationFixtureToV17(t, source)
 			if test.mutate != nil {
-				database, err := sql.Open(driverName, path)
-				sqliteTestNoError(t, err)
+				database := openFastV18MigrationFixture(t, path)
 				test.mutate(t, database)
 				sqliteTestNoError(t, database.Close())
 			}
+			// Fixture synthesis uses OFF durability only. Production Open below
+			// must retain FULL durability while proving atomic migration refusal.
 			_, err := Open(context.Background(), Options{
 				Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 2,
 			})
@@ -149,8 +150,7 @@ func emptySQLiteV17Database(t *testing.T) string {
 	directory := t.TempDir()
 	sqliteTestNoError(t, os.Chmod(directory, 0o700))
 	path := filepath.Join(directory, "v17-empty.db")
-	database, err := sql.Open(driverName, path)
-	sqliteTestNoError(t, err)
+	database := openFastV18MigrationFixture(t, path)
 	migrations, err := loadMigrations()
 	sqliteTestNoError(t, err)
 	sqliteTestNoError(t, applyRecoveryMigrationPrefix(context.Background(), database,
@@ -173,8 +173,7 @@ func copyCurrentIntegrationFixtureToV17(t *testing.T, system *sqliteV15System) s
 	sourcePath := system.path
 	sqliteTestNoError(t, system.repository.Close())
 	targetPath := emptySQLiteV17Database(t)
-	database, err := sql.Open(driverName, targetPath)
-	sqliteTestNoError(t, err)
+	database := openFastV18MigrationFixture(t, targetPath)
 	defer database.Close()
 	_, err = database.Exec(`ATTACH DATABASE ? AS source`, sourcePath)
 	sqliteTestNoError(t, err)
@@ -238,6 +237,21 @@ WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'schema_migrations' OR
 		t.Fatalf("V17 fixture foreign key violations=%d", violations)
 	}
 	return targetPath
+}
+
+func openFastV18MigrationFixture(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	database, err := sql.Open(driverName, buildDSNWithDurability(
+		path, testBusyTimeout.Milliseconds(), fastSQLiteTestDurability,
+	))
+	sqliteTestNoError(t, err)
+	var synchronous int
+	sqliteTestNoError(t, database.QueryRow(`PRAGMA synchronous`).Scan(&synchronous))
+	if synchronous != 0 {
+		_ = database.Close()
+		t.Fatalf("V18 fixture synchronous=%d, want OFF", synchronous)
+	}
+	return database
 }
 
 func historicalV17IntegrationIntent(
