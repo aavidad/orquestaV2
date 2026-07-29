@@ -3,6 +3,7 @@ package orquesta_test
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -206,6 +207,126 @@ func traceGitOutput(repositoryRoot string, arguments ...string) ([]byte, error) 
 		return nil, fmt.Errorf("git %s: %w: %s", strings.Join(arguments, " "), err, strings.TrimSpace(stderr.String()))
 	}
 	return output, nil
+}
+
+func traceLoadLegacySourceSnapshot(t *testing.T, repositoryRoot string) traceGitIndexSnapshot {
+	t.Helper()
+	snapshot := traceGitIndexSnapshot{Contents: make(map[string][]byte)}
+	for _, source := range []struct {
+		root    string
+		include func(string) bool
+	}{
+		{
+			root: "modulos",
+			include: func(path string) bool {
+				return strings.HasSuffix(path, ".md") || strings.HasSuffix(path, "_test.go")
+			},
+		},
+		{
+			root:    "cmd",
+			include: func(path string) bool { return strings.HasSuffix(path, "_test.go") },
+		},
+		{
+			root:    "deploy",
+			include: func(path string) bool { return strings.HasSuffix(path, "_test.go") },
+		},
+		{
+			root:    "scripts",
+			include: func(path string) bool { return strings.HasSuffix(path, ".sh") },
+		},
+	} {
+		part := traceLoadGitIndexSnapshot(t, repositoryRoot, source.root, source.include)
+		snapshot.Entries = append(snapshot.Entries, part.Entries...)
+		for path, content := range part.Contents {
+			if _, duplicate := snapshot.Contents[path]; duplicate {
+				t.Fatalf("duplicate legacy source %q across Git index roots", path)
+			}
+			snapshot.Contents[path] = content
+		}
+	}
+	sort.Slice(snapshot.Entries, func(left, right int) bool {
+		return snapshot.Entries[left].Path < snapshot.Entries[right].Path
+	})
+	return snapshot
+}
+
+func traceReadGitIndexOverlayFile(t *testing.T, path string, legacy traceGitIndexSnapshot) []byte {
+	t.Helper()
+	clean := filepath.ToSlash(filepath.Clean(path))
+	if path == "" || filepath.IsAbs(path) || clean != path || strings.HasPrefix(clean, "../") {
+		t.Fatalf("non-canonical source path %q", path)
+	}
+	if content, exists := legacy.Contents[path]; exists {
+		return content
+	}
+	if strings.HasPrefix(path, "modulos/") ||
+		strings.HasPrefix(path, "cmd/") ||
+		strings.HasPrefix(path, "deploy/") ||
+		strings.HasPrefix(path, "scripts/") {
+		if strings.HasSuffix(path, ".md") ||
+			strings.HasSuffix(path, "_test.go") ||
+			strings.HasSuffix(path, ".sh") {
+			t.Fatalf("legacy source %q is absent from Git index snapshot", path)
+		}
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return content
+}
+
+func traceReadFrozenGitIndexOverlayFile(
+	t *testing.T,
+	path string,
+	wantSHA256 string,
+	allowAppendedContent bool,
+	legacy traceGitIndexSnapshot,
+) []byte {
+	t.Helper()
+	content := traceReadGitIndexOverlayFile(t, path, legacy)
+	if traceBytesSHA256(content) == wantSHA256 {
+		return content
+	}
+	if !allowAppendedContent {
+		t.Fatalf("legacy source %q digest=%s, want %s", path, traceBytesSHA256(content), wantSHA256)
+	}
+
+	hasher := sha256.New()
+	start := 0
+	for start < len(content) {
+		offset := bytes.IndexByte(content[start:], '\n')
+		end := len(content)
+		if offset >= 0 {
+			end = start + offset + 1
+		}
+		_, _ = hasher.Write(content[start:end])
+		if "sha256:"+hex.EncodeToString(hasher.Sum(nil)) == wantSHA256 {
+			return content[:end]
+		}
+		start = end
+	}
+	t.Fatalf("append-only legacy source %q has no prefix with digest %s", path, wantSHA256)
+	return nil
+}
+
+func traceBytesSHA256(content []byte) string {
+	sum := sha256.Sum256(content)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func traceBytesLines(t *testing.T, content []byte) []string {
+	t.Helper()
+	scanner := bufio.NewScanner(bytes.NewReader(content))
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return lines
 }
 
 func TestTraceGitIndexSnapshotReadsSkipWorktreeFiles(t *testing.T) {

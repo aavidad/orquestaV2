@@ -159,6 +159,7 @@ func TestTraceabilityRebuildHistoricalBugIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile historical bug slash pattern: %v", err)
 	}
+	legacySources := traceLoadLegacySourceSnapshot(t, ".")
 
 	accepted := traceAcceptedCapabilities(t)
 	sourceRows := traceReadDispositionJSONL(t, policy.SourcesAuthority)
@@ -173,14 +174,14 @@ func TestTraceabilityRebuildHistoricalBugIDs(t *testing.T) {
 	}
 
 	rows := traceReadHistoricalBugRows(t, policy.RichRowsAuthority)
-	rowsByLine := traceValidateHistoricalBugRows(t, rows, bugSources, accepted, policy.DetectionRule.RichRowSourceRefs)
+	rowsByLine := traceValidateHistoricalBugRows(t, rows, bugSources, accepted, policy.DetectionRule.RichRowSourceRefs, legacySources)
 	rowJSON := traceMarshalJSONLines(t, rows)
 	if len(rows) != policy.Baseline.RichRowCount || traceStringsDigest(rowJSON) != policy.Baseline.RowsSHA256 {
 		t.Fatalf("historical bug rich-row baseline drift: rows=%d digest=%s, want rows=%d digest=%s",
 			len(rows), traceStringsDigest(rowJSON), policy.Baseline.RichRowCount, policy.Baseline.RowsSHA256)
 	}
 
-	extractedOccurrences := traceExtractHistoricalBugOccurrences(t, bugSources, rowsByLine, basePattern, slashPattern)
+	extractedOccurrences := traceExtractHistoricalBugOccurrences(t, bugSources, rowsByLine, basePattern, slashPattern, legacySources)
 	sourcesWithID := make(map[string]struct{})
 	for _, occurrence := range extractedOccurrences {
 		sourcesWithID[occurrence.SourceRef] = struct{}{}
@@ -451,7 +452,7 @@ func TestTraceabilityRebuildHistoricalBugSourceCoverage(t *testing.T) {
 		}
 	}
 	literalSources := make(map[string]struct{})
-	for _, root := range []string{"docs", "modulos", "skills"} {
+	for _, root := range []string{"docs", "skills"} {
 		err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -467,7 +468,6 @@ func TestTraceabilityRebuildHistoricalBugSourceCoverage(t *testing.T) {
 				return nil
 			}
 			inScope := strings.HasPrefix(slashPath, "docs/") ||
-				(strings.HasPrefix(slashPath, "modulos/orquesta-") && strings.Contains(slashPath, "/docs/")) ||
 				(strings.HasPrefix(slashPath, "skills/") && filepath.Base(path) == "SKILL.md" && strings.Count(slashPath, "/") == 2)
 			if !inScope {
 				return nil
@@ -483,6 +483,14 @@ func TestTraceabilityRebuildHistoricalBugSourceCoverage(t *testing.T) {
 		})
 		if err != nil {
 			t.Fatal(err)
+		}
+	}
+	legacySources := traceLoadLegacySourceSnapshot(t, ".")
+	for path, content := range legacySources.Contents {
+		if strings.HasPrefix(path, "modulos/orquesta-") &&
+			strings.Contains(path, "/docs/") &&
+			strings.Contains(string(content), "BUG-ORQ") {
+			literalSources[path] = struct{}{}
 		}
 	}
 
