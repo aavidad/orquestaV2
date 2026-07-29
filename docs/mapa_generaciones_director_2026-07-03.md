@@ -1,3 +1,12 @@
+> Estado documental: histórico — runtime Orquesta pre-rebuild.
+>
+> No es autoridad de producto, backlog ejecutable ni evidencia de cierre para
+> Orquesta V2. La autoridad V2 es `AGENTS.md` →
+> `docs/reconstruccion/LEEME_AGENTE_ORQUESTAV2.md` → `product/roadmap.json` →
+> `product/capabilities.json` y `product/evidence/` →
+> `docs/reconstruccion/ruta_total_100.md`. Para el estado operativo, consultar
+> `docs/reconstruccion/HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
+
 # Mapa canonico de generaciones Director
 
 Fecha: 2026-07-03.
