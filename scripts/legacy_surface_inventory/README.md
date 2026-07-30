@@ -1,8 +1,12 @@
 # Censo histórico de superficies
 
+## Propósito y usuarios
+
 Este programa enumera hechos estructurales de todas las confirmaciones
 alcanzables desde las referencias de un repositorio Git. No hace checkout, no
 materializa árboles y no modifica el repositorio observado.
+
+## Alcance y exclusiones
 
 Su alcance es deliberadamente distinto del censo de funciones Go:
 
@@ -38,7 +42,38 @@ Las familias iniciales son:
 La clasificación es una ayuda para repartir la revisión humana posterior. No
 constituye una decisión de adopción ni una tarea de producto.
 
-## Ejecución
+No ejecuta código, no interpreta utilidad, no crea tareas y no acredita
+capacidades. Un objeto ilegible queda como fallo y nunca se convierte en prueba
+de que una conducta no exista.
+
+## Entradas y salidas
+
+La entrada es un repositorio Git explícito. Las salidas son un JSONL progresivo
+con el grafo normalizado y un manifiesto JSON que fija esquema, algoritmos,
+conteos y huellas. Pueden contener rutas y nombres históricos, por lo que se
+mantienen privadas y fuera del producto hasta su normalización.
+
+## Arquitectura y módulos
+
+- `main.go` valida y coordina una ejecución finita.
+- `git_repository.go`, `git_objects.go` y `graph_helpers.go` leen el grafo
+  inmutable.
+- `classification.go`, `classification_context.go` y
+  `graph_classification.go` aplican la taxonomía finita.
+- `blob_inventory.go` resume contenido por bloques.
+- `model.go` define el contrato estable.
+- `output.go` sella y publica los dos artefactos.
+
+No existe servidor, base de datos, planificador ni proceso residente.
+
+## Autoridad, datos, permisos, secretos y efectos
+
+La aplicación no tiene autoridad sobre Orquesta. Su único efecto es sustituir
+las salidas elegidas. No necesita credenciales, no consulta la red y desactiva
+la carga diferida de objetos Git. Los artefactos se crean con modo `0600` y un
+consumidor debe comprobar su huella antes de usarlos.
+
+## Arranque, diagnóstico, recuperación y parada
 
 ```bash
 go run ./scripts/legacy_surface_inventory \
@@ -64,7 +99,12 @@ debe verificar la huella antes de usarla y reintentar ante discrepancia. Repetir
 el censo sobre las mismas referencias publica de nuevo ambos ficheros y recupera
 la pareja. No se añade un tercer marcador que compita con el manifiesto.
 
-## Registros
+La orden se detiene al terminar o al recibir la señal del proceso. Una
+interrupción no modifica la fuente. Se conserva el resultado previo y se repite
+el censo desde referencias estables; ningún temporal se interpreta como
+resultado acreditado.
+
+## Contratos y pruebas
 
 El JSONL contiene siete tipos:
 
@@ -90,3 +130,13 @@ JSONL y la huella de las referencias. No incluye fecha ni datos variables, por
 lo que dos ejecuciones sobre el mismo estado producen exactamente los mismos
 bytes. Los conteos incluyen los contextos realmente visitados y el máximo de
 estados posibles por árbol.
+
+```bash
+go test -mod=vendor -count=1 ./scripts/legacy_surface_inventory
+go test -mod=vendor -count=1 -race ./scripts/legacy_surface_inventory
+GOFLAGS=-mod=vendor go vet ./scripts/legacy_surface_inventory
+```
+
+Las pruebas cubren clasificación, exclusiones vendorizadas, referencias
+directas, rutas no UTF-8, escala adversarial, determinismo, seguridad de
+destinos, publicación recuperable y ausencia de descarga implícita.
