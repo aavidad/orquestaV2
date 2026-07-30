@@ -136,6 +136,74 @@ func TestProposalStoreRejectsSymlinkAndMalformedHistory(t *testing.T) {
 	}
 }
 
+func TestProposalStoreRejectsUnsafeSideLock(t *testing.T) {
+	_, item := testInventory(t)
+	t.Run("permisos de grupo u otros", func(t *testing.T) {
+		filePath := filepath.Join(t.TempDir(), "propuestas.jsonl")
+		lockPath := filePath + ".lock"
+		if err := os.WriteFile(lockPath, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(lockPath, 0o640); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := newProposalStore(filePath).submit(
+			item,
+			validProposalRequest(item, 0, strings.Repeat("b", 64)),
+		); err == nil {
+			t.Fatal("se aceptó un candado de propuestas público")
+		}
+		if mode := proposalFileMode(t, lockPath); mode != 0o640 {
+			t.Fatalf("el candado público se corrigió silenciosamente: modo=%o", mode)
+		}
+		if _, err := os.Stat(filePath); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("el rechazo publicó historial: %v", err)
+		}
+	})
+	t.Run("enlace simbólico", func(t *testing.T) {
+		directory := t.TempDir()
+		filePath := filepath.Join(directory, "propuestas.jsonl")
+		target := filepath.Join(directory, "candado-real")
+		if err := os.WriteFile(target, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filePath+".lock"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := newProposalStore(filePath).submit(
+			item,
+			validProposalRequest(item, 0, strings.Repeat("c", 64)),
+		); err == nil {
+			t.Fatal("se siguió un enlace simbólico como candado")
+		}
+	})
+}
+
+func TestOpenPrivateProposalLockRejectsIdentityChange(t *testing.T) {
+	directory := t.TempDir()
+	lockPath := filepath.Join(directory, "propuestas.jsonl.lock")
+	if err := os.WriteFile(lockPath, []byte("primero"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.Lstat(lockPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(lockPath, lockPath+".retirado"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lockPath, []byte("segundo"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := openPrivateProposalLock(lockPath, original)
+	if lock != nil {
+		lock.Close()
+	}
+	if err == nil {
+		t.Fatal("se aceptó un candado sustituido entre inspección y apertura")
+	}
+}
+
 func TestProposalStoreRejectsTamperedCanonicalFields(t *testing.T) {
 	_, item := testInventory(t)
 	filePath := filepath.Join(t.TempDir(), "propuestas.jsonl")

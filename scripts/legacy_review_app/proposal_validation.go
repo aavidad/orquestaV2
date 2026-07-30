@@ -2,7 +2,12 @@
 // No decide su aplicación: solo impide registros incompletos o incompatibles.
 package main
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+)
+
+const maxProposalReferenceBytes = 200
 
 var requiredRules = []string{
 	"hexagonal",
@@ -17,8 +22,9 @@ var requiredRules = []string{
 
 func validateProposalRequest(item inventoryItem, request proposalRequest) error {
 	if request.ItemRef != item.ID || request.ItemRevision != item.Revision ||
-		request.ExpectedRevision < 0 || len(request.IdempotencyKey) < 32 ||
-		strings.TrimSpace(request.ActorRef) == "" || strings.TrimSpace(request.ProjectRef) == "" ||
+		!validProposalItemRef(request.ItemRef) || !validProposalItemRevision(request.ItemRevision) ||
+		request.ExpectedRevision < 0 || !validProposalIdempotencyKey(request.IdempotencyKey) ||
+		!validCanonicalOpaqueRef(request.ActorRef) || !validCanonicalOpaqueRef(request.ProjectRef) ||
 		len(strings.TrimSpace(request.Reason)) < 10 || len(strings.TrimSpace(request.FoundedSolution)) < 10 ||
 		request.Confidence < 0 || request.Confidence > 100 || !validDisposition(request.Disposition) {
 		return errInvalidProposal
@@ -41,6 +47,40 @@ func validateProposalRequest(item inventoryItem, request proposalRequest) error 
 		return errInvalidProposal
 	}
 	return nil
+}
+
+func validProposalItemRef(value string) bool {
+	return value != "" && len(value) <= maxProposalReferenceBytes &&
+		value == strings.TrimSpace(value) &&
+		strings.IndexFunc(value, unicode.IsControl) == -1
+}
+
+func validProposalItemRevision(value string) bool {
+	const prefix = "sha256:"
+	if len(value) != len(prefix)+64 || !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	for _, character := range value[len(prefix):] {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func validCanonicalOpaqueRef(value string) bool {
+	return value == strings.TrimSpace(value) && validOpaqueRef(value) &&
+		strings.IndexFunc(value, unicode.IsControl) == -1
+}
+
+func validProposalIdempotencyKey(value string) bool {
+	if len(value) < 32 || len(value) > maxProposalReferenceBytes ||
+		value != strings.TrimSpace(value) {
+		return false
+	}
+	return strings.IndexFunc(value, func(character rune) bool {
+		return unicode.IsSpace(character) || unicode.IsControl(character)
+	}) == -1
 }
 
 func validDisposition(value disposition) bool {

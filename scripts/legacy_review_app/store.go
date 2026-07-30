@@ -1,19 +1,12 @@
-// Este fichero es la única autoridad escritora: conserva propuestas JSONL.
-// No modifica el inventario, el catálogo del producto ni crea tareas.
+// Este fichero es la única autoridad semántica del historial de propuestas:
+// valida solicitudes, revisiones e idempotencia; delega la materialización.
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -87,6 +80,7 @@ func newProposalStore(filePath string) *proposalStore {
 }
 
 func (store *proposalStore) submit(item inventoryItem, request proposalRequest) (proposalResult, error) {
+	request = normalizeProposalRequest(request)
 	if err := validateProposalRequest(item, request); err != nil {
 		return proposalResult{}, err
 	}
@@ -125,11 +119,11 @@ func (store *proposalStore) submit(item inventoryItem, request proposalRequest) 
 		ProposalRevision: next,
 		ExpectedRevision: request.ExpectedRevision,
 		Disposition:      request.Disposition,
-		Reason:           strings.TrimSpace(request.Reason),
-		FoundedSolution:  strings.TrimSpace(request.FoundedSolution),
+		Reason:           request.Reason,
+		FoundedSolution:  request.FoundedSolution,
 		Confidence:       request.Confidence,
 		RuleCompliance:   cloneRules(request.RuleCompliance),
-		RuleNotes:        strings.TrimSpace(request.RuleNotes),
+		RuleNotes:        request.RuleNotes,
 		ActorRef:         request.ActorRef,
 		ProjectRef:       request.ProjectRef,
 		IdempotencyKey:   request.IdempotencyKey,
@@ -151,13 +145,14 @@ func (store *proposalStore) list() ([]proposal, error) {
 
 func (store *proposalStore) lock() (*os.File, error) {
 	lockPath := store.path + ".lock"
-	if err := rejectSymlink(lockPath); err != nil {
-		return nil, err
-	}
 	if err := os.MkdirAll(filepath.Dir(store.path), 0o700); err != nil {
 		return nil, err
 	}
-	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	pathInfo, err := privateProposalLockInfo(lockPath)
+	if err != nil {
+		return nil, err
+	}
+	file, err := openPrivateProposalLock(lockPath, pathInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -168,119 +163,46 @@ func (store *proposalStore) lock() (*os.File, error) {
 	return file, nil
 }
 
-func unlockFile(file *os.File) {
-	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
-	_ = file.Close()
-}
-
-func readProposals(filePath string) ([]proposal, error) {
-	if err := rejectSymlink(filePath); err != nil {
-		return nil, err
-	}
-	file, err := os.Open(filePath)
+func privateProposalLockInfo(lockPath string) (os.FileInfo, error) {
+	info, err := os.Lstat(lockPath)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return nil, err
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return nil, errors.New("el candado de propuestas no es un fichero regular")
 	}
 	if info.Mode().Perm()&0o077 != 0 {
-		return nil, errors.New("el historial de propuestas no es privado")
+		return nil, errors.New("el candado de propuestas no es privado")
 	}
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 1<<20)
-	var result []proposal
-	line := 0
-	for scanner.Scan() {
-		line++
-		if len(bytes.TrimSpace(scanner.Bytes())) == 0 {
-			continue
-		}
-		var item proposal
-		if err := json.Unmarshal(scanner.Bytes(), &item); err != nil {
-			return nil, fmt.Errorf("propuestas línea %d: %w", line, err)
-		}
-		result = append(result, item)
-	}
-	if err := scanner.Err(); err != nil {
+	return info, nil
+}
+
+func openPrivateProposalLock(lockPath string, pathInfo os.FileInfo) (*os.File, error) {
+	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
 		return nil, err
 	}
-	return result, validateStoredProposals(result)
+	openedInfo, openedErr := file.Stat()
+	currentInfo, currentErr := privateProposalLockInfo(lockPath)
+	valid := openedErr == nil && openedInfo.Mode().IsRegular() &&
+		openedInfo.Mode().Perm()&0o077 == 0 && currentErr == nil &&
+		currentInfo != nil && os.SameFile(openedInfo, currentInfo)
+	if pathInfo != nil {
+		valid = valid && os.SameFile(pathInfo, openedInfo)
+	}
+	if !valid {
+		file.Close()
+		return nil, errors.New("el candado de propuestas cambió al abrirlo")
+	}
+	return file, nil
 }
 
-func writeProposals(filePath string, proposals []proposal) error {
-	if err := rejectSymlink(filePath); err != nil {
-		return err
-	}
-	directory := filepath.Dir(filePath)
-	temporary, err := os.CreateTemp(directory, "."+filepath.Base(filePath)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	name := temporary.Name()
-	defer os.Remove(name)
-	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
-		return err
-	}
-	encoder := json.NewEncoder(temporary)
-	encoder.SetEscapeHTML(false)
-	for _, item := range proposals {
-		if err := encoder.Encode(item); err != nil {
-			temporary.Close()
-			return err
-		}
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, filePath)
-}
-
-func validateStoredProposals(proposals []proposal) error {
-	latest := map[string]int{}
-	seenKeys := map[string]struct{}{}
-	for _, item := range proposals {
-		request := proposalRequest{
-			ItemRef:          item.ItemRef,
-			ItemRevision:     item.ItemRevision,
-			ExpectedRevision: item.ExpectedRevision,
-			Disposition:      item.Disposition,
-			Reason:           item.Reason,
-			FoundedSolution:  item.FoundedSolution,
-			Confidence:       item.Confidence,
-			RuleCompliance:   item.RuleCompliance,
-			RuleNotes:        item.RuleNotes,
-			ActorRef:         item.ActorRef,
-			ProjectRef:       item.ProjectRef,
-			IdempotencyKey:   item.IdempotencyKey,
-		}
-		if item.SchemaVersion != 1 || item.ProposalRevision != latest[item.ItemRef]+1 ||
-			item.ExpectedRevision != latest[item.ItemRef] ||
-			validateProposalRequest(inventoryItem{ID: item.ItemRef, Revision: item.ItemRevision}, request) != nil ||
-			digestRequest(request) != item.RequestDigest ||
-			proposalReference(item.ItemRef, item.ProposalRevision, item.RequestDigest) != item.ProposalRef {
-			return errors.New("historial de propuestas no canónico")
-		}
-		if _, err := time.Parse(time.RFC3339Nano, item.CreatedAt); err != nil {
-			return errors.New("fecha de propuesta no canónica")
-		}
-		if _, exists := seenKeys[item.IdempotencyKey]; exists {
-			return errors.New("clave idempotente duplicada")
-		}
-		seenKeys[item.IdempotencyKey] = struct{}{}
-		latest[item.ItemRef] = item.ProposalRevision
-	}
-	return nil
+func unlockFile(file *os.File) {
+	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	_ = file.Close()
 }
 
 func latestRevision(proposals []proposal, itemID string) int {
@@ -291,17 +213,6 @@ func latestRevision(proposals []proposal, itemID string) int {
 		}
 	}
 	return latest
-}
-
-func digestRequest(request proposalRequest) string {
-	content, _ := json.Marshal(request)
-	digest := sha256.Sum256(content)
-	return hex.EncodeToString(digest[:])
-}
-
-func proposalReference(itemID string, revision int, requestDigest string) string {
-	digest := sha256.Sum256([]byte(itemID + "\x00" + fmt.Sprint(revision) + "\x00" + requestDigest))
-	return "propuesta:sha256:" + hex.EncodeToString(digest[:])
 }
 
 func rejectSymlink(filePath string) error {
