@@ -17,9 +17,13 @@ const (
 	legacyPhysicalCensusGatePath = "docs/reconstruccion/estado_compuerta_censo_fisico_2026-07-30.md"
 	sealedCensusPlanPath         = "docs/reconstruccion/plan_ejecucion_censo_fisico_historico_2026-07-30.md"
 	sealedCensusPlanTestPath     = "legacy_physical_census_plan_test.go"
+	physicalSubjectUniversePath  = "product/traceability/legacy_physical_subject_universe_2026-07-30.json"
 	acceptedPhysicalCensorDigest = "33898168cdf41b6ece7702a47d4bd7a073a0652f5b1e0f7a395c91f6d434901f"
 	sealedCensusPlanDigest       = "2a863bb5d2f648ea1844a0653484b060e295a8fd4372f3c48ddb46317ff7dc96"
 	sealedCensusPlanTestDigest   = "87d8a010dc82d49ec823100fa91522abda28498681f90ed308fc7260af276de4"
+	acceptedExpansionDigest      = "593bcb5069241f937c0d10b64b8e183645fd78c66001a72832e1dac01de3336a"
+	physicalSubjectUniverseHash  = "b81478cef265fbb3970925cd09d450b23cd42196858e271c7b26a229fa106f1e"
+	physicalSubjectSetDigest     = "405f5b68f0e886a40bb69751fbb62f60567a15d6879393e9f42c4d1b5a458cc4"
 )
 
 func TestLegacyPhysicalCensusGateRemainsClosed(t *testing.T) {
@@ -41,6 +45,12 @@ func TestLegacyPhysicalCensusGateRemainsClosed(t *testing.T) {
 		"`reviews:two_independent_accepts`",
 		"No existe en el árbol un",
 		"artefacto durable individual por revisor",
+		"adacfef1ecd3cd5c43e5eacbec43eba77f6bcd7c",
+		"sha256:" + acceptedExpansionDigest,
+		physicalSubjectUniversePath,
+		physicalSubjectUniverseHash,
+		"sha256:" + physicalSubjectSetDigest,
+		"8234e64eb8a48ff6ca9cf86896eabff1fb8fc0e3",
 		"`closed: false` permanece",
 		"Ninguna raíz real fue abierta, enumerada o censada",
 		"Es una observación fechada, no una garantía futura.",
@@ -56,23 +66,24 @@ func TestLegacyPhysicalCensusGateRemainsClosed(t *testing.T) {
 		"`GOV-16` queda acreditada",
 		"la ejecución real queda autorizada",
 		"el inventario histórico queda cerrado",
+		"en " + "construcción",
 	} {
 		if strings.Contains(document, forbidden) {
 			t.Fatalf("el estado introdujo el falso cierre %q", forbidden)
 		}
 	}
 	wantGates := map[string]string{
-		"Expansión lógica": "en construcción, no acreditada", "Mapeo físico": "bloqueado",
+		"Expansión lógica": "acreditada", "Mapeo físico": "bloqueado",
 		"Vista estable": "bloqueada", "Recibos": "bloqueados",
 		"Salida física": "bloqueada", "Ejecución real": "bloqueada",
 	}
 	assertStatusMap(t, document, "| Compuerta | Estado factual |", wantGates)
 	wantPlanConditions := map[string]string{
-		"`censador_minimo_acreditado == true`": "satisfecha", "`expansion_97_15_285_382_sellada == true`": "pendiente",
-		"`members_sha256_invalidos == 0`": "pendiente de verificar", "`vista_estable_y_cercado_acreditados == true`": "pendiente",
+		"`censador_minimo_acreditado == true`": "satisfecha", "`expansion_97_15_285_382_sellada == true`": "satisfecha",
+		"`members_sha256_invalidos == 0`": "satisfecha por la expansión", "`vista_estable_y_cercado_acreditados == true`": "pendiente",
 		"`mapeo_1_1_y_1_n_acreditado == true`":                             "pendiente",
 		"`reobservacion_382_en_vista_estable_acreditada == true`":          "pendiente",
-		"`presencias_actuales_inferidas_desde_v3 == 0`":                    "pendiente de verificar",
+		"`presencias_actuales_inferidas_desde_v3 == 0`":                    "satisfecha en la expansión; pendiente de reobservación en el mapeo",
 		"`limites_y_reserva_acreditados == true`":                          "pendiente",
 		"`recibos_e_idempotencia_acreditados == true`":                     "pendiente",
 		"`publicacion_y_recuperacion_acreditadas == true`":                 "satisfecha en el censador",
@@ -85,27 +96,29 @@ func TestLegacyPhysicalCensusGateRemainsClosed(t *testing.T) {
 	assertStatusMap(t, document, "| Condición exacta del plan | Estado del corte |", wantPlanConditions)
 	assertFileDigest(t, sealedCensusPlanPath, sealedCensusPlanDigest)
 	assertFileDigest(t, sealedCensusPlanTestPath, sealedCensusPlanTestDigest)
-	assertConsolidatedReviews(t)
+	assertFileDigest(t, physicalSubjectUniversePath, physicalSubjectUniverseHash)
+	assertConsolidatedReviews(t, []string{"004", "005", "008", "009", "010", "011"}, acceptedPhysicalCensorDigest)
+	assertConsolidatedReviews(t, []string{"012", "013", "014", "015"}, acceptedExpansionDigest)
 	if got := physicalCensorTreeDigest(t); got != acceptedPhysicalCensorDigest {
 		t.Fatalf("sujeto del censador = %s; se esperaba %s", got, acceptedPhysicalCensorDigest)
 	}
 }
 
-func assertConsolidatedReviews(t *testing.T) {
+func assertConsolidatedReviews(t *testing.T, suffixes []string, subjectDigest string) {
 	t.Helper()
 	content, err := os.ReadFile("product/traceability/rebuild_bugs.jsonl")
 	if err != nil {
 		t.Fatalf("leer ledger de defectos: %v", err)
 	}
 	lines := strings.Split(string(content), "\n")
-	for _, suffix := range []string{"004", "005", "008", "009", "010", "011"} {
+	for _, suffix := range suffixes {
 		id, found := "BUG-REBUILD-20260730-"+suffix, false
 		for _, line := range lines {
 			if !strings.Contains(line, `"bug_id":"`+id+`"`) {
 				continue
 			}
 			if !strings.Contains(line, `"status":"closed"`) ||
-				!strings.Contains(line, acceptedPhysicalCensorDigest) ||
+				!strings.Contains(line, subjectDigest) ||
 				!strings.Contains(line, "reviews:two_independent_accepts") {
 				t.Fatalf("dictamen consolidado incoherente para %s", id)
 			}

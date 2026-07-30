@@ -31,7 +31,7 @@ código antiguo que permitirá retirar: ninguno hasta revisar censos acreditados
 test de contrato: conserva sujeto, revisiones, cierres y bloqueos sin consultar infraestructura viva
 negativo/mutación: quitar un bloqueo, cambiar una huella o afirmar cierre hace fallar la prueba
 E2E/gate: no ejecutado; ninguna raíz física histórica fue abierta, enumerada ni censada
-presupuesto: documentación menor de 250 líneas; prueba de 180 líneas como máximo
+presupuesto: documentación de 250 líneas como máximo; prueba de 220 líneas como máximo
 ```
 
 La consulta local de lecciones `GOV-16` para
@@ -65,7 +65,7 @@ separación física, límites, publicación y recuperación conservadora. No
 acreditan la verdad semántica de un censo, la aplicación de expansión, una
 vista estable, el mapeo físico ni los recibos externos.
 
-### Trazabilidad de las dos auditorías
+### Trazabilidad de las dos auditorías del censador
 
 Las referencias durables disponibles son el código congelado en `02c4ad64`, su
 SHA-256 agregado exacto y las seis filas del registro
@@ -80,11 +80,30 @@ fecha y dictamen íntegro. Esta limitación de procedencia se declara
 expresamente: el ledger acredita la conclusión consolidada usada para cerrar
 los seis defectos, pero no permite reconstruir dos recibos individuales.
 
-## Compuertas que siguen cerradas
+### Expansión lógica acreditada posteriormente
+
+La expansión quedó confirmada en
+`adacfef1ecd3cd5c43e5eacbec43eba77f6bcd7c`, sobre el sujeto final
+`sha256:593bcb5069241f937c0d10b64b8e183645fd78c66001a72832e1dac01de3336a`.
+El artefacto durable
+`product/traceability/legacy_physical_subject_universe_2026-07-30.json` tiene
+SHA-256 de bytes
+`b81478cef265fbb3970925cd09d450b23cd42196858e271c7b26a229fa106f1e`
+y sella el conjunto ordenado de 382 sujetos como
+`sha256:405f5b68f0e886a40bb69751fbb62f60567a15d6879393e9f42c4d1b5a458cc4`.
+
+Dos auditorías independientes aceptaron el mismo sujeto de expansión con
+`P0 = 0`, `P1 = 0` y `P2 = 0`. El commit
+`8234e64eb8a48ff6ca9cf86896eabff1fb8fc0e3` conserva en el ledger sus
+conclusiones consolidadas y los cierres de `BUG-REBUILD-20260730-012`,
+`BUG-REBUILD-20260730-013`, `BUG-REBUILD-20260730-014` y
+`BUG-REBUILD-20260730-015`.
+
+## Estado de las compuertas
 
 | Compuerta | Estado factual | Condición para abrirla |
 |---|---|---|
-| Expansión lógica | en construcción, no acreditada | sellar la aplicación y su correspondencia de 112 referencias a 382 sujetos |
+| Expansión lógica | acreditada | conservar el sujeto sellado y consumirlo sin reinterpretación en el mapeo |
 | Mapeo físico | bloqueado | acreditar 1:1 y 1:N, alias, podas, ausencias, reapertura e identidad |
 | Vista estable | bloqueada | mantener fuente de solo lectura y sin fecha de acceso, o exclusión cercada equivalente, desde antes del mapeo |
 | Recibos | bloqueados | acreditar sujeto, intento, lote, confirmación, idempotencia y recuperación |
@@ -97,12 +116,12 @@ estado en este corte es:
 | Condición exacta del plan | Estado del corte |
 |---|---|
 | `censador_minimo_acreditado == true` | satisfecha |
-| `expansion_97_15_285_382_sellada == true` | pendiente |
-| `members_sha256_invalidos == 0` | pendiente de verificar |
+| `expansion_97_15_285_382_sellada == true` | satisfecha |
+| `members_sha256_invalidos == 0` | satisfecha por la expansión |
 | `vista_estable_y_cercado_acreditados == true` | pendiente |
 | `mapeo_1_1_y_1_n_acreditado == true` | pendiente |
 | `reobservacion_382_en_vista_estable_acreditada == true` | pendiente |
-| `presencias_actuales_inferidas_desde_v3 == 0` | pendiente de verificar |
+| `presencias_actuales_inferidas_desde_v3 == 0` | satisfecha en la expansión; pendiente de reobservación en el mapeo |
 | `limites_y_reserva_acreditados == true` | pendiente |
 | `recibos_e_idempotencia_acreditados == true` | pendiente |
 | `publicacion_y_recuperacion_acreditadas == true` | satisfecha en el censador |
@@ -112,10 +131,10 @@ estado en este corte es:
 | `quinta_auditoria_independiente_superada == true` | satisfecha para el censador |
 | `revisor_independiente_asignado == true` | pendiente para la ejecución real |
 
-La aplicación de expansión que está en construcción no cuenta como terminada
-ni permite anticipar presencia. El futuro mapeo debe reobservar los 382 sujetos
-bajo la misma vista estable. Hasta entonces no existe lote físico aceptable,
-no se modifica el manifiesto V3 y `closed: false` permanece.
+La expansión acreditada no anticipa presencia actual. El futuro mapeo debe
+reobservar los 382 sujetos bajo la misma vista estable. Hasta entonces no
+existe lote físico aceptable, no se modifica el manifiesto V3 y
+`closed: false` permanece.
 
 Ninguna raíz real fue abierta, enumerada o censada para aceptar el censador ni
 para producir este registro. Tampoco se creó una instantánea, una salida de
@@ -158,8 +177,8 @@ La vía más corta y con menos piezas nuevas es:
    ficheros POSIX, capacidad mínima de **64 GiB** y prueba efectiva de
    directorio `0700`, ficheros `0600` y reserva de al menos 44 GiB;
 4. sellar vista, identidad, salida y reserva mediante recibos antes de mapear;
-5. acreditar expansión, mapeo y recibos con casos adversariales antes de abrir
-   la primera raíz histórica.
+5. consumir la expansión acreditada y acreditar mapeo y recibos con casos
+   adversariales antes de abrir la primera raíz histórica.
 
 Este documento **no autoriza** detener procesos, desmontar, montar, reformatear,
 reparticionar, copiar, borrar ni ejecutar el censador. Esas operaciones
@@ -173,14 +192,14 @@ prohibido_sin_orden: detener|desmontar|montar|reformatear|reparticionar|copiar|b
 ## Cierre documental
 
 ```text
-hecho: estado sucesor del plan y NO-GO de infraestructura documentados
+hecho: censador y expansión acreditados; NO-GO de las compuertas restantes documentado
 invariante restaurado: censador aceptado no equivale a censo ni GOV-16 cerrados
 autoridad final: futuros recibos acreditados sobre la misma vista y sujetos
 tests/negativos/mutaciones/E2E: contrato documental focal; E2E real no ejecutado
-recibos y revisión acreditada: dos aceptaciones del censador; ningún recibo de censo
-código o decisión retirados: solo la brecha histórica «censador no aceptado»
+recibos y revisión acreditada: dos aceptaciones del censador y dos de la expansión; ningún recibo de censo
+código o decisión retirados: brechas históricas «censador no aceptado» y «expansión no acreditada»
 legacy retirado o bloqueo de retirada: toda retirada sigue bloqueada
 LOC netas y complejidad: documentación y una prueba sin acceso a raíces reales
 riesgos/P0/P1: P0 operativo si se ejecuta sin vista o salida válidas; contenido por NO-GO
-siguiente dependencia causal: acreditar expansión; preparar vista y disco solo con autorización
+siguiente dependencia causal: acreditar mapeo; preparar vista y disco solo con autorización
 ```
