@@ -323,7 +323,11 @@ func TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites(t
 		t.Fatalf("el contrato V38 anticipa ejecución o evidencia: %#v", contract)
 	}
 	wantAssertions := []string{
-		"ORC-28 observa capacidad con fuente tiempo caducidad y calidad; cuota desconocida falla cerrado y reserva consumo liberación agotamiento y restart conservan lease fence e idempotencia",
+		"ORC-28 trata la capacidad física reservable y la cuota del proveedor como hechos separados; una cuota desconocida o agotada cierra la admisión de nuevas reclamaciones y nunca se convierte en un hueco físico liberado",
+		"la cuenta y la colocación opacas se eligen antes de la reclamación atómica; la reserva fija cuenta colocación capacidad cuota lease y fence y el lanzador debe obedecerla sin reselección",
+		"runtime.codex.max_concurrent_executions es solo un guardarraíl local del conector Codex y no gobierna el presupuesto ni el despacho global; el techo global es neutral al proveedor y la admisión es atómica",
+		"con aislamiento microVM todos los hilos turnos y agentes Codex viven dentro de la microVM; en el anfitrión solo puede persistir un app-server mínimo para identidad y cuota sin hilo turno agente ni autoridad de ejecución",
+		"el núcleo persiste por el puerto StateRepository con una sola fuente transaccional activa elegida por composición; SQLite queda para local desarrollo y pruebas PostgreSQL es el adaptador productivo futuro y se prohíbe dual write",
 		"la demanda completa conserva cohortes lógicas exactas de 1 16 70 y 500 sin techo oculto; las olas físicas obligatorias progresan por 1 5 10 16 y 20 sin atribuir 70 o 500 físicos sin recursos medidos",
 		"el subgate A acredita solo el núcleo elástico neutral sin KVM; B conecta Firecracker opt-in sin fallback y una microVM por agente; C exige ola física del mismo candidato y solo A+B+C permiten acreditar V38",
 		"un único despachador global prioriza stop permite progreso de observe con launch saturado y paraleliza únicamente launch_agent sin selector privado solo-launch ni goroutines ociosas",

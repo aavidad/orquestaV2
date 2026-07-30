@@ -10,25 +10,28 @@ import (
 )
 
 type v38ElasticFixture struct {
-	SchemaVersion           int              `json:"schema_version"`
-	FixtureID               string           `json:"fixture_id"`
-	ContractID              string           `json:"contract_id"`
-	Status                  string           `json:"status"`
-	Priority                string           `json:"priority"`
-	CapabilityOwnership     []string         `json:"capability_ownership"`
-	NonOwnedRequirements    v38NonOwned      `json:"non_owned_requirements"`
-	AccreditedPrerequisites []string         `json:"accredited_prerequisites"`
-	CausalDependencies      []string         `json:"causal_dependencies"`
-	Subgates                v38Subgates      `json:"subgates"`
-	Capacity                v38Capacity      `json:"capacity"`
-	Demand                  v38Demand        `json:"demand"`
-	Scheduling              v38Scheduling    `json:"scheduling"`
-	Shutdown                v38Shutdown      `json:"shutdown"`
-	Preservation            v38Preservation  `json:"preservation"`
-	Recovery                v38Recovery      `json:"recovery"`
-	MeasuredLatencies       []string         `json:"measured_latencies"`
-	RequiredTests           v38RequiredTests `json:"required_tests"`
-	CatalogGuards           v38CatalogGuards `json:"catalog_guards"`
+	SchemaVersion           int                `json:"schema_version"`
+	FixtureID               string             `json:"fixture_id"`
+	ContractID              string             `json:"contract_id"`
+	Status                  string             `json:"status"`
+	Priority                string             `json:"priority"`
+	CapabilityOwnership     []string           `json:"capability_ownership"`
+	NonOwnedRequirements    v38NonOwned        `json:"non_owned_requirements"`
+	AccreditedPrerequisites []string           `json:"accredited_prerequisites"`
+	CausalDependencies      []string           `json:"causal_dependencies"`
+	Subgates                v38Subgates        `json:"subgates"`
+	Capacity                v38Capacity        `json:"capacity"`
+	Placement               v38Placement       `json:"placement"`
+	Demand                  v38Demand          `json:"demand"`
+	Scheduling              v38Scheduling      `json:"scheduling"`
+	CodexIsolation          v38CodexIsolation  `json:"codex_isolation"`
+	StateRepository         v38StateRepository `json:"state_repository"`
+	Shutdown                v38Shutdown        `json:"shutdown"`
+	Preservation            v38Preservation    `json:"preservation"`
+	Recovery                v38Recovery        `json:"recovery"`
+	MeasuredLatencies       []string           `json:"measured_latencies"`
+	RequiredTests           v38RequiredTests   `json:"required_tests"`
+	CatalogGuards           v38CatalogGuards   `json:"catalog_guards"`
 }
 
 type v38NonOwned struct {
@@ -61,14 +64,24 @@ type v38Subgates struct {
 }
 
 type v38Capacity struct {
-	Observation  string `json:"observation"`
-	KnownQuota   string `json:"known_quota"`
-	UnknownQuota string `json:"unknown_quota"`
-	Reservation  string `json:"reservation"`
-	Consumption  string `json:"consumption"`
-	Release      string `json:"release"`
-	Exhaustion   string `json:"exhaustion"`
-	Restart      string `json:"restart"`
+	Observation      string `json:"observation"`
+	PhysicalCapacity string `json:"physical_capacity"`
+	ProviderQuota    string `json:"provider_quota"`
+	KnownQuota       string `json:"known_quota"`
+	UnknownQuota     string `json:"unknown_quota"`
+	ExhaustedQuota   string `json:"exhausted_quota"`
+	Reservation      string `json:"reservation"`
+	Consumption      string `json:"consumption"`
+	Release          string `json:"release"`
+	Exhaustion       string `json:"exhaustion"`
+	Restart          string `json:"restart"`
+}
+
+type v38Placement struct {
+	Selection   string `json:"selection"`
+	Claim       string `json:"claim"`
+	Launcher    string `json:"launcher"`
+	Reselection string `json:"reselection"`
 }
 
 type v38Demand struct {
@@ -81,14 +94,32 @@ type v38Demand struct {
 }
 
 type v38Scheduling struct {
-	Dispatcher                string `json:"dispatcher"`
-	ClaimSelection            string `json:"claim_selection"`
-	StopPriority              string `json:"stop_priority"`
-	ObserveProgress           string `json:"observe_progress"`
-	ConcurrentActionKind      string `json:"concurrent_action_kind"`
-	NonLaunchActions          string `json:"non_launch_actions"`
-	PrivateLaunchOnlySelector string `json:"private_launch_only_selector"`
-	IdleWorkerGoroutines      string `json:"idle_worker_goroutines"`
+	Dispatcher                          string `json:"dispatcher"`
+	ClaimSelection                      string `json:"claim_selection"`
+	GlobalAdmission                     string `json:"global_admission"`
+	GlobalCeiling                       string `json:"global_ceiling"`
+	RuntimeCodexMaxConcurrentExecutions string `json:"runtime_codex_max_concurrent_executions"`
+	StopPriority                        string `json:"stop_priority"`
+	ObserveProgress                     string `json:"observe_progress"`
+	ConcurrentActionKind                string `json:"concurrent_action_kind"`
+	NonLaunchActions                    string `json:"non_launch_actions"`
+	PrivateLaunchOnlySelector           string `json:"private_launch_only_selector"`
+	IdleWorkerGoroutines                string `json:"idle_worker_goroutines"`
+}
+
+type v38CodexIsolation struct {
+	GuestExecution     string `json:"guest_execution"`
+	HostAppServer      string `json:"host_app_server"`
+	HostForbiddenScope string `json:"host_forbidden_scope"`
+	HostAuthority      string `json:"host_authority"`
+}
+
+type v38StateRepository struct {
+	Port         string `json:"port"`
+	ActiveSource string `json:"active_source"`
+	SQLite       string `json:"sqlite"`
+	PostgreSQL   string `json:"postgresql"`
+	DualWrite    string `json:"dual_write"`
 }
 
 type v38Shutdown struct {

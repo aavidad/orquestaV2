@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "fixture_id": "v38_agent_runtime_elastic_plan",
   "contract_id": "AC-V38-AGENT-RUNTIME-ELASTIC",
   "status": "planned",
@@ -61,13 +61,22 @@
   },
   "capacity": {
     "observation": "source_timestamp_expiry_and_quality_required",
-    "known_quota": "reported_limit_enforced",
-    "unknown_quota": "fail_closed_for_new_reservations",
+    "physical_capacity": "absolute_reservable_resource_fact",
+    "provider_quota": "separate_admission_fact_never_physical_slot_count",
+    "known_quota": "reported_limit_enforced_without_deriving_physical_slots",
+    "unknown_quota": "fail_closed_and_never_converted_into_available_physical_slot",
+    "exhausted_quota": "fail_closed_and_never_converted_into_available_physical_slot",
     "reservation": "atomic_with_lease_and_fence",
     "consumption": "idempotent_after_accepted_launch_receipt",
     "release": "idempotent_only_after_terminal_or_definitely_not_applied",
     "exhaustion": "same_execution_waits_without_consuming_attempt",
     "restart": "reconstructs_observations_reservations_leases_and_fences"
+  },
+  "placement": {
+    "selection": "opaque_account_and_placement_selected_before_claim",
+    "claim": "atomically_binds_account_placement_capacity_quota_lease_and_fence",
+    "launcher": "must_obey_claimed_account_and_placement",
+    "reselection": "forbidden_after_claim"
   },
   "demand": {
     "logical_cohorts": [
@@ -91,12 +100,28 @@
   "scheduling": {
     "dispatcher": "single_global_application_dispatcher",
     "claim_selection": "global_any_or_without_launch_never_private_launch_only",
+    "global_admission": "atomic_and_provider_neutral",
+    "global_ceiling": "provider_neutral_never_derived_from_connector_limits",
+    "runtime_codex_max_concurrent_executions": "local_connector_guardrail_only_never_global_budget_or_dispatch",
     "stop_priority": "before_new_launches",
     "observe_progress": "required_when_launch_capacity_is_saturated",
     "concurrent_action_kind": "launch_agent_only",
     "non_launch_actions": "serialized_by_global_dispatcher",
     "private_launch_only_selector": "forbidden",
     "idle_worker_goroutines": "forbidden"
+  },
+  "codex_isolation": {
+    "guest_execution": "all_codex_threads_turns_and_agents_inside_microvm",
+    "host_app_server": "minimal_persistent_identity_and_quota_only",
+    "host_forbidden_scope": "threads_turns_agents_and_execution",
+    "host_authority": "no_execution_or_lifecycle_authority"
+  },
+  "state_repository": {
+    "port": "StateRepository",
+    "active_source": "exactly_one_transactional_source_selected_by_composition",
+    "sqlite": "local_development_and_tests_only",
+    "postgresql": "future_production_adapter",
+    "dual_write": "forbidden"
   },
   "shutdown": {
     "scope": "one_exact_agent_without_stopping_the_cohort",
