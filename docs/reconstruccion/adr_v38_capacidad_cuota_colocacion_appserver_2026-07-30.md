@@ -32,9 +32,11 @@ aislamientos:
 Firecracker original resuelve el proceso de la microVM y su API física. No
 resuelve el DAG, la elección de agente, la cuota de proveedor, la reserva
 durable, la colocación, la recuperación de Orquesta, el protocolo de trabajo,
-la preservación de resultados ni el cierre acreditado. La pieza pública
-`agentmicrovm/v1` añadirá esas garantías físicas reutilizables alrededor de
-Firecracker sin bifurcarlo ni reimplementar su monitor de máquinas virtuales.
+la preservación de resultados ni el cierre acreditado. La aplicación hermana
+`agentmicrovm`, en `/home/alberto/Trabajo/agentmicrovm`, añadirá las garantías
+físicas reutilizables alrededor de Firecracker sin bifurcarlo ni reimplementar
+su monitor de máquinas virtuales. Será un proyecto independiente, no un árbol
+público dentro del módulo Orquesta.
 
 ## Consulta previa
 
@@ -189,7 +191,7 @@ protocolo real de `app-server` no permite observar cuota estructurada con la
 versión fijada, A05 queda pendiente y falla cerrado. No se introduce un
 sustituto por fichero, tmux, logs o scraping.
 
-### 5. Codec común, procesos aislados
+### 5. Códec interno, esquema neutral y procesos aislados
 
 `internal/adapters/agent/codex/appserver/` será el único codec específico de
 Codex. Posee únicamente:
@@ -201,12 +203,13 @@ Codex. Posee únicamente:
 - sesión anfitriona de cuota con capacidades nulas y métodos exactos;
 - errores de protocolo estables y descarte del contenido remoto sensible.
 
-Tiene exactamente dos consumidores reales: el controlador anfitrión de cuota y
-el enlace huésped B05. No migra ni modifica el worker de proceso actual. Se
-comparte código, nunca estado vivo. Cada microVM arranca su propio
-`codex app-server` dentro del huésped. El enlace huésped adapta el protocolo
-neutral `guestproto` al codec común y permanece fino. Ningún adaptador
-Firecracker importa este subpaquete Codex.
+Lo consumen dentro de Orquesta el controlador anfitrión de cuota y, cuando
+corresponda, el agente ejecutor de proceso actual. Orquesta deriva un artefacto
+neutral versionado con el esquema necesario para el enlace huésped B05. El proyecto
+hermano implementa ese artefacto sin importar el paquete `internal`, copiar
+credenciales ni compartir estado vivo. Cada microVM arranca su propio
+`codex app-server` dentro del huésped. Ningún paquete de `agentmicrovm` importa
+este subpaquete Codex.
 
 ### 6. Límites neutrales
 
@@ -259,6 +262,66 @@ No añade clase, saldo ni lifecycle de cuota. Q3 amplía el mismo
 observaciones. No existe writer ni store independiente para el binding:
 únicamente `ClaimNextAction` lo inserta atómicamente junto con la reserva.
 
+### 8. `agentmicrovm` es una aplicación hermana independiente
+
+La frontera física se implementará en
+`/home/alberto/Trabajo/agentmicrovm`, con repositorio, `go.mod`, binario
+`agentmicrovm`, configuración tipada, pruebas y documentación propios. No será
+un subárbol, paquete público ni binario de Orquesta. Esta separación está
+justificada por tecnología y aislamiento: posee procesos Firecracker, KVM,
+jailer/cgroups, sockets vsock y recuperación física, pero no adquiere
+ciclo de vida, planificación ni política de dominio.
+
+Orquesta consumirá una única interfaz local versionada
+`agentmicrovm.local.v1`, transportada sobre socket Unix y sin punto de conexión
+remoto.
+El proceso hermano se ejecutará en modo `serve`, supervisado o activado por
+socket durante las ejecuciones que lo necesiten. Un único binario ofrece
+lanzamiento, observación, órdenes, eventos, parada, preservación, recuperación
+y cierre; no se crean servicios por proveedor, fase o función. Un proceso
+de una sola ejecución queda descartado porque no puede recibir órdenes
+posteriores ni
+reconciliar una ejecución después de reiniciar Orquesta.
+
+La autoridad queda separada:
+
+- Orquesta conserva `Goal`, `WorkItem`, `Execution`, admisión, capacidad y
+  cuota, permisos, presupuesto, ciclo de vida y comprobantes de producto;
+- `agentmicrovm` conserva solo su registro físico privado, identificadores
+  opacos, concesiones temporales de CID, cerca, expiración, recuperación y
+  comprobantes físicos;
+- cada aplicación elige y migra su propio almacenamiento; nunca comparten base
+  de datos, sistema de archivos, esquema, migración, transacción, socket de
+  estado ni bloqueo;
+- Orquesta persiste únicamente referencias opacas, cercas y comprobantes
+  recibidos por el protocolo; nunca abre el almacenamiento privado de
+  `agentmicrovm`.
+
+Tampoco comparten rutas ni almacenes de artefactos. Orquesta resuelve su
+espacio de trabajo/CAS y transmite contenido acotado, enmarcado y verificado
+por referencia/resumen criptográfico a través del socket Unix; para cargas
+grandes puede transferir un
+descriptor anónimo sellado por `SCM_RIGHTS`, nunca una ruta. El resultado
+regresa por el mismo contrato de contenido/referencia y Orquesta lo valida y
+persiste en su propio almacén.
+
+La autorización entre proyectos usa una concesión neutral firmada, de un solo
+uso, ligada al resumen criptográfico completo del plan físico, `RunRef`, cerca,
+caducidad y audiencia `agentmicrovm.local.v1`. Orquesta firma después de aplicar su
+autorización; `agentmicrovm` verifica con material público de confianza
+configurado localmente. No atraviesan la frontera `CredentialStore`, secretos
+compartidos, credenciales de proveedor, tipos de atestador, rutas privadas ni
+importaciones entre ambos módulos.
+
+El contrato público neutral de `agentmicrovm` expone referencias, solicitudes,
+eventos y comprobantes versionados; no contiene `Goal`, `WorkItem`,
+`Execution`, SQLite, PostgreSQL, CAS, `CredentialStore`, Codex ni paquetes
+`internal` de Orquesta.
+El conector Orquesta adapta sus puertos `AgentLauncher`, `AgentObserver`,
+`AgentController` y `AgentShutdown` al protocolo local. El controlador de
+cuota y el códec Codex permanecen en Orquesta; el huésped consume un artefacto
+de protocolo neutral versionado, sin importar el códec interno anfitrión.
+
 ## Modelo de componentes
 
 ```text
@@ -277,16 +340,28 @@ controlador de cuota Codex ──┘                        │
                                              despachador único
                                                       │
                                                       v
+                                      conector local agentmicrovm
+                                      socket Unix, protocolo v1
+                                                      │
+                                                      v
+                                  aplicación hermana agentmicrovm
+                                  estado físico privado + Firecracker
+                                                      │
+                                                      v
                                            worker dentro de microVM
-                                           app-server propio
 
-controlador de cuota host ─── codec común ─── enlace huésped B05
-       app-server propio              (solo código; estado separado)
+controlador de cuota anfitrión ─── códec Codex interno
+       `app-server` propio
+
+Orquesta ── referencias/contenido/concesión firmada ──> agentmicrovm
+         <── eventos/comprobantes/contenido ───
 ```
 
-El controlador anfitrión de cuota también usa el codec común, con una instancia
+El controlador anfitrión de cuota usa el códec interno, con una instancia
 propia que solo admite lectura y actualización de cuota; no aparece en la ruta
-de ejecución del worker.
+de ejecución del agente ejecutor. El enlace huésped pertenece al proyecto
+hermano y usa el protocolo neutral sellado; no importa ni comparte estado con el códec
+interno de Orquesta.
 
 ## Presupuesto y compensación
 
@@ -297,38 +372,44 @@ exactamente igual:
 | Tarea | Antes P/V | Ahora P/V | Variación |
 |---|---:|---:|---:|
 | A01 | 0/250 | 0/138 | 0/-112 |
-| A02 | 220/250 | 159/226 | -61/-24 |
-| A03 | 150/250 | 334/561 | +184/+311 |
+| A02 | 220/250 | 170/238 | -50/-12 |
+| A03 | 150/250 | 334/537 | +184/+287 |
 | A04 | 480/450 | 459/447 | -21/-3 |
-| A05 | 300/300 | 608/508 | +308/+208 |
+| A05 | 300/300 | 682/508 | +382/+208 |
+| A07 | 250/400 | 165/695 | -85/+295 |
 | A08 | 100/750 | 0/750 | -100/0 |
 | B01 | 150/200 | 0/50 | -150/-150 |
 | B05 | 650/550 | 490/320 | -160/-230 |
-| **Subtotal** | **2.050/3.000** | **2.050/3.000** | **0/0** |
+| **Subtotal** | **2.300/3.400** | **2.300/3.683** | **0/+283** |
 
 La compensación es real:
 
 - A01 ya materializó sus cuatro cohortes en `P=0,V=138`;
-- A02 atribuye una sola vez `77/120 + 57/65 + 25/41 = 159/226`;
-- A03 conserva `P=139,V=291` ya consumidos por `71f4a827` y reserva
-  `P=195,V=270` para la migración completa de cuota/binding y el contrato CAS
+- A02 atribuye una sola vez `77/120 + 68/77 + 25/41 = 170/238`;
+- A03 conserva `P=139,V=270` ya consumidos por `71f4a827` y reserva
+  `P=195,V=267` para la migración completa de cuota/vínculo y el contrato CAS
   del mismo `StateRepository`;
 - A04 atribuye `P=114,V=53` a la base física, `P=46,V=57` al binding neutral y
   `P=299,V=337` al reclamo y su cierre;
-- A05 mide el codec `app-server` aceptado en `P=278,V=179` y conserva una
-  envolvente conjunta `P=163,V=146` para controlador e inyección;
+- A05 mide el códec `app-server` aceptado en `P=278,V=179` y conserva una
+  envolvente conjunta `P=237,V=146` para traductor, controlador e inyección;
+- A07 atribuye sus `P=99,V=695` ya integrados y conserva `P=66` para retirar
+  los límites transitorios después de A04.2;
 - A08 es una compuerta de aceptación y no recibe presupuesto productivo;
 - B01 queda como gate contractual `P=0,V=50`: la selección vive en A04, las
   fuentes/controlador en A05 y la composición Firecracker real en B10.4;
 - B05 conserva solo el enlace fino del huésped;
 - se elimina el lector de fichero y su configuración;
 - A04 no implementa reserva, débito o liberación de cuatro magnitudes de cuota;
-- no se añaden daemon, store, scheduler, writer, cola ni bucle de dominio,
-  sondeo o planificación; solo el lector técnico acotado por conexión que
-  bootstrap inicia y cierra.
+- no se añaden planificador, escritor, cola ni bucle de dominio, sondeo o
+  planificación; el servicio local `agentmicrovm` posee únicamente su estado y
+  bucles técnicos físicos, y el lector Codex queda acotado a su conexión.
 
-El total V38 permanece `P=7.200, V=9.800` y ninguna cifra se descuenta dos
-veces. Superar cualquiera de estos techos
+El total V38 queda en `P=7.200, V=10.083`: el producto se compensa sin crecer
+y la verificación aumenta `V=283` porque las pruebas A07 ya integradas no
+cabían en el techo anterior. Ninguna cifra se descuenta dos veces. Estos techos
+incluyen ambos repositorios y no contienen contingencia
+oculta. Superar cualquiera de estos techos
 requiere otro ADR, compensación concreta y autorización antes de programar. Un
 exceso no se oculta como generado, prueba existente o trabajo de otra tarea.
 
@@ -351,6 +432,22 @@ exceso no se oculta como generado, prueba existente o trabajo de otra tarea.
   agente trabaja dentro del huésped.
 - **Crear un servicio de cuotas independiente:** añade despliegue, base, bucle y
   autoridad innecesarios. Un adaptador pequeño satisface la frontera.
+- **Incrustar `agentmicrovm/v1` dentro del módulo Orquesta:** permite
+  importaciones,
+  almacenamiento y configuración accidentales entre autoridades y convierte
+  una frontera tecnológica sustituible en detalle interno.
+- **Compartir base de datos, sistema de archivos, rutas o secretos entre ambos
+  proyectos:** rompe
+  propiedad, recuperación y rotación independientes; además impide demostrar
+  el protocolo como única integración.
+- **Ejecutar un binario de una sola ejecución por lanzamiento:** no admite
+  órdenes posteriores, eventos, parada o recuperación sin inventar canales y
+  estado paralelos.
+- **Exponer `agentmicrovm` como servicio remoto:** amplía autenticación, red y
+  operación sin necesidad causal; V38 exige solo socket Unix local versionado.
+- **Enviar una prueba HMAC con secreto compartido:** acopla almacenes de
+  credenciales. La concesión firmada neutral permite verificar con confianza
+  pública sin revelar el firmante ni secretos de Orquesta.
 - **Usar el límite Codex como límite global:** acopla el núcleo a un proveedor
   y gobierna incorrectamente Firecracker y futuros conectores.
 - **Implementar PostgreSQL en V38:** reabre una vertical V31 sin necesidad
@@ -383,9 +480,22 @@ La implementación deberá acreditar, como mínimo:
 - actualizaciones, pérdida/reconexión y rotación manteniendo una sola conexión
   vigente por perfil;
 - shutdown cooperativo y forzado sin proceso, lector, socket o PID huérfanos;
+- contrato cruzado que levanta el binario hermano, negocia
+  `agentmicrovm.local.v1` y prueba incompatibilidad de versión y trama;
+- guardas que prohíben importaciones cruzadas, base de datos, sistema de
+  archivos, ruta, secreto o
+  `CredentialStore` compartidos entre ambos proyectos;
+- reinicio independiente de cada proceso y de cada almacenamiento, con
+  referencias y cercas reconciliadas solo por el protocolo;
+- repetición, audiencia, expiración, resumen criptográfico del plan y uso único
+  de la concesión neutral firmada;
+- artefactos grandes por tramas acotadas o descriptor anónimo sellado, con
+  recorrido de ruta, enlace, truncado y resumen criptográfico incorrecto
+  rechazados;
 - ausencia del lector/configuración de fichero y de cualquier fallback;
 - misma suite contractual con SQLite y, en V31, PostgreSQL, siempre uno activo.
 
-Hasta superar esas pruebas sobre el mismo candidato y recibir evidencia
-independiente, todas las tareas de este ADR permanecen `planned` y no
-acreditantes.
+Hasta superar esas pruebas sobre la misma composición candidata y los
+resúmenes criptográficos exactos de Orquesta y `agentmicrovm`, y recibir
+evidencia independiente, todas las tareas de este ADR permanecen `planned` y
+no acreditantes.

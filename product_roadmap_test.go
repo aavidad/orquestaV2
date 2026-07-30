@@ -329,7 +329,9 @@ func TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites(t
 		"con aislamiento microVM todos los hilos turnos y agentes Codex viven dentro de la microVM; en el anfitrión solo puede persistir un app-server mínimo para identidad y cuota sin hilo turno agente ni autoridad de ejecución",
 		"el núcleo persiste por el puerto StateRepository con una sola fuente transaccional activa elegida por composición; SQLite queda para local desarrollo y pruebas PostgreSQL es el adaptador productivo futuro y se prohíbe dual write",
 		"la demanda completa conserva cohortes lógicas exactas de 1 16 70 y 500 sin techo oculto; las olas físicas obligatorias progresan por 1 5 10 16 y 20 sin atribuir 70 o 500 físicos sin recursos medidos",
-		"el subgate A acredita solo el núcleo elástico neutral sin KVM; B conecta Firecracker opt-in sin fallback y una microVM por agente; C exige ola física del mismo candidato y solo A+B+C permiten acreditar V38",
+		"la compuerta A acredita solo el núcleo elástico neutral sin KVM; B conecta por protocolo local el candidato agentmicrovm de activación explícita sin ruta alternativa y una microVM por agente; C exige olas físicas con los mismos resúmenes criptográficos de Orquesta y agentmicrovm y solo A+B+C permiten acreditar V38",
+		"agentmicrovm es una aplicación hermana independiente en /home/alberto/Trabajo/agentmicrovm con repositorio módulo binario configuración pruebas y documentación propios; Orquesta la consume solo mediante un conector de protocolo local versionado sobre socket Unix",
+		"agentmicrovm conserva en almacenamiento físico privado su registro físico identificadores opacos concesiones temporales CID y recuperación; no comparte con Orquesta base de datos sistema de archivos secretos rutas ni importaciones y recibe únicamente referencias opacas contenido enmarcado y una concesión neutral firmada de un solo uso",
 		"un único despachador global prioriza stop permite progreso de observe con launch saturado y paraleliza únicamente launch_agent sin selector privado solo-launch ni goroutines ociosas",
 		"la continuidad de mensajes la parada exacta y la conservación del entorno son comportamientos estrechos de V38 que no acreditan ORC-15 OPS-16 ni OPS-17",
 		"antes de desmontar se sellan e inventarían los datos y el entorno queda preserved_pending_review sin borrado automático",
@@ -1581,7 +1583,7 @@ func assertRoadmapImplementationDecisions(t *testing.T, decisions []roadmapImple
 	decision := decisions[0]
 	if decision.ID != "agent_microvm_network" || decision.Status != "planned_not_applied" ||
 		decision.Transport != "vsock_only" ||
-		decision.Authentication != "single_use_credential_store_proof_and_attestation" ||
+		decision.Authentication != "single_use_neutral_signed_grant_and_attestation_binding" ||
 		decision.TestAttestorScope != "unchanged_no_network_no_vsock" {
 		t.Fatalf("invalid agent microVM implementation decision: %#v", decision)
 	}
