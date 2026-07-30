@@ -4,6 +4,9 @@
   "title": "Orquesta rebuild traceability ledger",
   "oneOf": [
     {
+      "$ref": "#/$defs/legacySourceRootsV3"
+    },
+    {
       "$ref": "#/$defs/legacyGoLedger"
     },
     {
@@ -68,6 +71,440 @@
     }
   ],
   "$defs": {
+    "legacySourceRootsV3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_kind",
+        "schema_version",
+        "assembled_at",
+        "closed",
+        "closure_reason",
+        "source_universe_statement",
+        "logical_path_policy",
+        "vocabularies",
+        "observation_method",
+        "observation_batches",
+        "unaccredited_historical_reports",
+        "ignored_entries_advisory",
+        "root_ids_sha256",
+        "roots",
+        "git_facts",
+        "file_facts",
+        "collections",
+        "v1_v22_tags",
+        "git_object_reconciliation",
+        "unresolved_source_decision_root_ids",
+        "pending_observation_batch_ids",
+        "blocking_physical_census_root_ids"
+      ],
+      "properties": {
+        "document_kind": {"const": "orquesta_legacy_source_roots"},
+        "schema_version": {"const": 3},
+        "assembled_at": {"type": "string", "format": "date-time"},
+        "closed": {"const": false},
+        "closure_reason": {"type": "string", "minLength": 20},
+        "source_universe_statement": {"type": "string", "minLength": 20},
+        "logical_path_policy": {"$ref": "#/$defs/legacyRootsPathPolicy"},
+        "vocabularies": {"$ref": "#/$defs/legacyRootsVocabularies"},
+        "observation_method": {"$ref": "#/$defs/legacyRootsObservationMethod"},
+        "observation_batches": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/legacyRootsObservationBatch"}
+        },
+        "unaccredited_historical_reports": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsHistoricalReport"}
+        },
+        "ignored_entries_advisory": {"$ref": "#/$defs/legacyRootsIgnoredEntries"},
+        "root_ids_sha256": {"$ref": "#/$defs/sha256Prefixed"},
+        "roots": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/legacyRootsRoot"}
+        },
+        "git_facts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsGitFact"}
+        },
+        "file_facts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsFileFact"}
+        },
+        "collections": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsCollection"}
+        },
+        "v1_v22_tags": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsTag"}
+        },
+        "git_object_reconciliation": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsReconciliation"}
+        },
+        "unresolved_source_decision_root_ids": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "pending_observation_batch_ids": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "blocking_physical_census_root_ids": {"$ref": "#/$defs/nonemptyUniqueStrings"}
+      }
+    },
+    "sha256Prefixed": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "sha256Bare": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitOID": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "nonemptyUniqueStrings": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "nullableNonnegativeInteger": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "legacyRootsPathPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root_refs", "local_mapping_tracked", "profile_ids_published", "rule"],
+      "properties": {
+        "root_refs": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "local_mapping_tracked": {"const": false},
+        "profile_ids_published": {"const": false},
+        "rule": {"type": "string", "minLength": 20}
+      }
+    },
+    "legacyRootsVocabularies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root_classes",
+        "scope_kinds",
+        "natures",
+        "source_decisions",
+        "git_census_statuses",
+        "physical_census_statuses",
+        "git_object_coverages"
+      ],
+      "properties": {
+        "root_classes": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "scope_kinds": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "natures": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "source_decisions": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "git_census_statuses": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "physical_census_statuses": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "git_object_coverages": {"$ref": "#/$defs/nonemptyUniqueStrings"}
+      }
+    },
+    "legacyRootsObservationMethod": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["git_version", "commands", "semantics", "compared_ref_sets"],
+      "properties": {
+        "git_version": {"type": "string", "minLength": 1},
+        "commands": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "semantics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "top_level_candidates",
+            "dirty_entry_count",
+            "ref_count",
+            "commit_count",
+            "worktree_membership",
+            "legacy_principal_worktree_reconciliation",
+            "vec_worktree_membership",
+            "external_metadata",
+            "script_digest",
+            "reconciliation"
+          ],
+          "properties": {
+            "top_level_candidates": {"type": "string", "minLength": 1},
+            "dirty_entry_count": {"type": "string", "minLength": 1},
+            "ref_count": {"type": "string", "minLength": 1},
+            "commit_count": {"type": "string", "minLength": 1},
+            "worktree_membership": {"type": "string", "minLength": 1},
+            "legacy_principal_worktree_reconciliation": {"type": "string", "minLength": 1},
+            "vec_worktree_membership": {"type": "string", "minLength": 1},
+            "external_metadata": {"type": "string", "minLength": 1},
+            "script_digest": {"type": "string", "minLength": 1},
+            "reconciliation": {"type": "string", "minLength": 1}
+          }
+        },
+        "compared_ref_sets": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsComparedRefs"}
+        }
+      }
+    },
+    "legacyRootsComparedRefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["left_root_id", "right_root_id", "namespace"],
+      "properties": {
+        "left_root_id": {"type": "string", "minLength": 1},
+        "right_root_id": {"type": "string", "minLength": 1},
+        "namespace": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyRootsObservationBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "started_at",
+        "finished_at",
+        "time_precision",
+        "status",
+        "raw_census_sha256",
+        "reason",
+        "metrics",
+        "worktree_counts"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "started_at": {"type": ["string", "null"], "format": "date-time"},
+        "finished_at": {"type": ["string", "null"], "format": "date-time"},
+        "time_precision": {"type": "string", "minLength": 1},
+        "status": {"const": "pendiente"},
+        "raw_census_sha256": {"type": "null"},
+        "reason": {"type": "string", "minLength": 1},
+        "metrics": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        },
+        "worktree_counts": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/legacyRootsWorktreeCount"}
+        }
+      }
+    },
+    "legacyRootsWorktreeCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "common_git_dir_ref",
+        "total_count",
+        "includes_main",
+        "additional_member_count",
+        "dirty_total_count",
+        "dirty_additional_member_count"
+      ],
+      "properties": {
+        "common_git_dir_ref": {"type": "string", "minLength": 1},
+        "total_count": {"type": "integer", "minimum": 1},
+        "includes_main": {"const": true},
+        "additional_member_count": {"type": "integer", "minimum": 0},
+        "dirty_total_count": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "dirty_additional_member_count": {"$ref": "#/$defs/nullableNonnegativeInteger"}
+      }
+    },
+    "legacyRootsHistoricalReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "observation_batch_id",
+        "subject_root_id",
+        "reported_total_count",
+        "includes_main",
+        "reported_dirty_total_count",
+        "evidence_status",
+        "reason"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "observation_batch_id": {"type": "string", "minLength": 1},
+        "subject_root_id": {"type": "string", "minLength": 1},
+        "reported_total_count": {"type": "integer", "minimum": 0},
+        "includes_main": {"type": "boolean"},
+        "reported_dirty_total_count": {"type": "integer", "minimum": 0},
+        "evidence_status": {"const": "no_acreditado"},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyRootsIgnoredEntries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_batch_id", "status", "affected_root_count", "ignored_entry_count", "reason"],
+      "properties": {
+        "observation_batch_id": {"type": "string", "minLength": 1},
+        "status": {"const": "pendiente"},
+        "affected_root_count": {"type": "integer", "minimum": 0},
+        "ignored_entry_count": {"type": "integer", "minimum": 0},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyRootsRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "logical_root",
+        "relative_path",
+        "exists_at_observation",
+        "class",
+        "scope_kind",
+        "nature",
+        "source_decision",
+        "source_decision_reason",
+        "observation_batch_id",
+        "git_census_status",
+        "git_census_status_reason",
+        "physical_census_status",
+        "physical_census_status_reason",
+        "physical_census_required",
+        "git_object_coverage",
+        "evidence_refs"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "logical_root": {"enum": ["trabajo", "temporal", "externo"]},
+        "relative_path": {"type": "string", "minLength": 1, "pattern": "^[^/]"},
+        "exists_at_observation": {"type": "boolean"},
+        "class": {"type": "string", "minLength": 1},
+        "scope_kind": {"enum": ["single", "collection"]},
+        "nature": {"type": "string", "minLength": 1},
+        "source_decision": {"enum": ["incluir", "excluir", "pendiente"]},
+        "source_decision_reason": {"type": "string", "minLength": 1},
+        "observation_batch_id": {"type": "string", "minLength": 1},
+        "git_census_status": {"enum": ["observado", "pendiente", "no_aplica"]},
+        "git_census_status_reason": {"type": "string", "minLength": 1},
+        "physical_census_status": {"enum": ["completo", "pendiente"]},
+        "physical_census_status_reason": {"type": "string", "minLength": 1},
+        "physical_census_required": {"type": "boolean"},
+        "git_object_coverage": {"type": "string", "minLength": 1},
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "legacyRootsGitFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root_id",
+        "common_git_dir_ref",
+        "head_oid",
+        "ref_count",
+        "commit_count",
+        "reachable_only_from_root",
+        "dirty_entry_count",
+        "prunable",
+        "observation_batch_id"
+      ],
+      "properties": {
+        "root_id": {"type": "string", "minLength": 1},
+        "common_git_dir_ref": {"type": "string", "minLength": 1},
+        "head_oid": {"$ref": "#/$defs/gitOID"},
+        "ref_count": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "commit_count": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "reachable_only_from_root": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "dirty_entry_count": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "prunable": {"type": "boolean"},
+        "observation_batch_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyRootsFileFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root_id", "sha256", "byte_size", "verification", "observation_batch_id"],
+      "properties": {
+        "root_id": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256Bare"},
+        "byte_size": {"type": "integer", "minimum": 0},
+        "verification": {"type": "string", "minLength": 1},
+        "observation_batch_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyRootsCollection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["root_id", "members_sha256", "members", "observation_batch_id"],
+      "properties": {
+        "root_id": {"type": "string", "minLength": 1},
+        "members_sha256": {"$ref": "#/$defs/sha256Prefixed"},
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/legacyRootsCollectionMember"}
+        },
+        "observation_batch_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyRootsCollectionMember": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path_alias",
+        "exists_at_observation",
+        "nature",
+        "head_oid",
+        "common_git_dir_ref",
+        "dirty_entry_count",
+        "prunable",
+        "sha256",
+        "byte_size"
+      ],
+      "properties": {
+        "path_alias": {"type": "string", "minLength": 1},
+        "exists_at_observation": {"type": "boolean"},
+        "nature": {"type": "string", "minLength": 1},
+        "head_oid": {"oneOf": [{"$ref": "#/$defs/gitOID"}, {"type": "null"}]},
+        "common_git_dir_ref": {"$ref": "#/$defs/nullableString"},
+        "dirty_entry_count": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "prunable": {"type": ["boolean", "null"]},
+        "sha256": {"oneOf": [{"$ref": "#/$defs/sha256Bare"}, {"type": "null"}]},
+        "byte_size": {"$ref": "#/$defs/nullableNonnegativeInteger"}
+      }
+    },
+    "legacyRootsTag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tag_object_oid", "commit_oid", "observed_root_ids", "observation_batch_id"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^v([1-9]|1[0-9]|2[0-2])$"},
+        "tag_object_oid": {"$ref": "#/$defs/gitOID"},
+        "commit_oid": {"$ref": "#/$defs/gitOID"},
+        "observed_root_ids": {"$ref": "#/$defs/nonemptyUniqueStrings"},
+        "observation_batch_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyRootsReconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root_id",
+        "reachable_only_from_root",
+        "contained_in_current_product",
+        "evidence_status",
+        "reason",
+        "observation_batch_id"
+      ],
+      "properties": {
+        "root_id": {"type": "string", "minLength": 1},
+        "reachable_only_from_root": {"type": "integer", "minimum": 0},
+        "contained_in_current_product": {"type": "boolean"},
+        "evidence_status": {"const": "pendiente"},
+        "reason": {"type": "string", "minLength": 1},
+        "observation_batch_id": {"type": "string", "minLength": 1}
+      }
+    },
     "capabilityId": {
       "type": "string",
       "pattern": "^(GOV|WIZ|STG|ORC|EVD|UI|AGT|EXT|OPE|OPS|TLS|CTX|APP)-[0-9]{2}$"

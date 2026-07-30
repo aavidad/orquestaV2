@@ -124,6 +124,38 @@ func TestTraceabilityRebuildSchemaValidatesCanonicalLedgers(t *testing.T) {
 	if err := resolved.Validate(historical); err == nil {
 		t.Fatal("schema allowed capability coverage to claim historical incident closure")
 	}
+
+	rootsContent, err := os.ReadFile("product/traceability/legacy_source_roots_2026-07-30.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mutation := range []struct {
+		name string
+		edit func(map[string]any)
+	}{
+		{name: "campo superior desconocido", edit: func(value map[string]any) {
+			value["autoridad_paralela"] = true
+		}},
+		{name: "cierre sin censo", edit: func(value map[string]any) {
+			value["closed"] = true
+		}},
+		{name: "digest bruto inventado", edit: func(value map[string]any) {
+			batches := value["observation_batches"].([]any)
+			batches[0].(map[string]any)["raw_census_sha256"] = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		}},
+		{name: "raíz sin estado físico", edit: func(value map[string]any) {
+			roots := value["roots"].([]any)
+			delete(roots[0].(map[string]any), "physical_census_status")
+		}},
+	} {
+		t.Run("rechaza_raices_"+strings.ReplaceAll(mutation.name, " ", "_"), func(t *testing.T) {
+			value := traceDecodeSchemaInstance(t, "raíces históricas", rootsContent).(map[string]any)
+			mutation.edit(value)
+			if err := resolved.Validate(value); err == nil {
+				t.Fatalf("el esquema aceptó la mutación adversarial %q", mutation.name)
+			}
+		})
+	}
 }
 
 func traceDecodeSchemaInstance(t *testing.T, source string, content []byte) any {
