@@ -466,6 +466,56 @@ catálogos y formatos. Si el catálogo vigente todavía no contiene la capacidad
 o aceptación necesaria para hacer exigible esta regla, se resuelve primero esa
 decisión; no se introduce como autoridad paralela desde esta guía.
 
+### 12.1 Aplicación automática de la regla
+
+La obligación alcanza tanto la creación de una aplicación como cualquier
+modificación posterior realizada por Orquesta. No depende de una frase del
+encargo ni de que el agente recuerde incluir documentación. La clasificación
+tipada del Wizard y de `AppSpec` identifica la raíz de la aplicación y la
+política de calidad aplicable.
+
+El compilador central del plan incorpora la comprobación `APP-13` a todo trabajo
+escritor que alcance esa raíz. Una replanificación debe conservarla; si un
+director intenta retirarla, el motor la repone o rechaza la propuesta. El
+comprobador se registra como herramienta gobernada, con versión, permisos y
+resumen criptográfico dentro de la política de atestación.
+
+La revisión se ejecuta sobre el árbol candidato exacto y produce un informe
+estructurado. La atestación independiente liga árbol, cambio, proyecto,
+aplicación, Goal, WorkItem, generación de plan, generación de `AppSpec` y
+política. La integración se rechaza si falta esa atestación, si pertenece a
+otro sujeto o si se intenta reutilizar después de modificar el árbol. El
+manifiesto no incluye el resumen del árbol que lo contiene: el comprobante
+externo evita esa autorreferencia.
+
+El inventario del manifiesto cubre módulos y ficheros relevantes anidados. El
+código generado, las dependencias externas, los binarios y los formatos que no
+admiten comentarios requieren una exclusión tipada y metadatos asociados; no
+se alteran para insertar texto que rompa su sintaxis. Una exclusión implícita o
+demasiado amplia invalida el informe.
+
+La aceptación de V33 debe probar, como mínimo, una aplicación Go y otra no Go,
+en creación y modificación, y acreditar el mismo árbol o imagen que supera las
+superficies públicas. Son negativos obligatorios:
+
+- manifiesto ausente, sección ausente, vacía o mal tipada;
+- módulo o fichero relevante omitido;
+- cabecera que solo repite el nombre o no declara responsabilidad, límites y
+  autoridad;
+- cabecera no escrita en el idioma exigido;
+- enlace simbólico, recorrido fuera de raíz o raíz de aplicación falsificada;
+- secreto en claro dentro del manifiesto o una cabecera;
+- comprobante de otro árbol, cambio, proyecto, aplicación o generación;
+- pruebas funcionales verdes sin la atestación documental;
+- cumplimiento de la aplicación Go pero incumplimiento de la no Go.
+
+La decisión es firme, pero la comprobación universal todavía no está
+acreditada. Los atestadores actuales están limitados a la herramienta Go y al
+resumen de su salida. Antes de V33, el contrato de evidencias debe admitir
+herramientas registradas no limitadas a Go y conservar el informe estructurado.
+Hasta entonces, las pruebas de las aplicaciones auxiliares solo acreditan esas
+aplicaciones concretas y nunca el comportamiento universal de Orquesta.
+
 ## 13. Conjuntos de escritura y paralelismo
 
 Dos agentes pueden trabajar en paralelo únicamente cuando sus conjuntos de
