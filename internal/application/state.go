@@ -305,6 +305,7 @@ type ActionClaim struct {
 	RetryBudgetExhaustion RetryBudgetExhaustion
 	BudgetReservationRef  string
 	BudgetReservation     governance.BudgetReservation
+	CapacityReservation   AgentCapacityReservation
 	EffectApproval        EffectApproval
 	LeaseUntil            time.Time
 }
@@ -317,6 +318,7 @@ type ClaimRequest struct {
 	ExcludeLaunch           bool
 	Capabilities            ports.AgentCapabilities
 	BudgetPolicy            BudgetPolicy
+	CapacityObservation     AgentCapacityObservationRecord
 }
 
 type ActionConsumptionOutcome string
