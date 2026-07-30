@@ -1,0 +1,257 @@
+// Este fichero reconstruye referencias, grafo y árboles desde objetos Git.
+// Usa el lector acotado del paquete, pero no decide cómo serializar ni admitir
+// las conductas históricas encontradas.
+package main
+
+import (
+	"bytes"
+	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+)
+
+type refInfo struct {
+	Name   string
+	Object string
+	Commit string
+}
+
+type treeEntry struct {
+	Mode string
+	Type string
+	OID  string
+	Path string
+}
+
+type historyEntry struct {
+	tree    string
+	parents []string
+}
+
+func readHistory(repository string, processStarted func()) (map[string]historyEntry, error) {
+	content, err := gitBytes(
+		repository,
+		processStarted,
+		"rev-list",
+		"--all",
+		"--format=%H%x00%T%x00%P",
+		"--no-commit-header",
+	)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]historyEntry)
+	for _, line := range bytes.Split(bytes.TrimSpace(content), []byte{'\n'}) {
+		fields := bytes.Split(line, []byte{0})
+		if len(fields) != 3 {
+			return nil, errors.New("entrada inválida en el grafo histórico")
+		}
+		commit := string(fields[0])
+		tree := string(fields[1])
+		if commit == "" || tree == "" {
+			return nil, errors.New("confirmación histórica sin identificador o árbol")
+		}
+		var parents []string
+		if len(fields[2]) > 0 {
+			parents = strings.Fields(string(fields[2]))
+		}
+		if previous, found := result[commit]; found &&
+			(previous.tree != tree || !equalStrings(previous.parents, parents)) {
+			return nil, fmt.Errorf("datos contradictorios para la confirmación %s", commit)
+		}
+		result[commit] = historyEntry{tree: tree, parents: parents}
+	}
+	return result, nil
+}
+
+func reachableCommits(root string, history map[string]historyEntry) ([]string, error) {
+	if _, found := history[root]; !found {
+		return nil, fmt.Errorf("la referencia apunta a una confirmación no censada: %s", root)
+	}
+	seen := make(map[string]struct{})
+	pending := []string{root}
+	for len(pending) > 0 {
+		last := len(pending) - 1
+		commit := pending[last]
+		pending = pending[:last]
+		if _, found := seen[commit]; found {
+			continue
+		}
+		entry, found := history[commit]
+		if !found {
+			return nil, fmt.Errorf("falta el ancestro %s de la confirmación %s", commit, root)
+		}
+		seen[commit] = struct{}{}
+		pending = append(pending, entry.parents...)
+	}
+	result := make([]string, 0, len(seen))
+	for commit := range seen {
+		result = append(result, commit)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func readTree(
+	batch *gitBatch,
+	root string,
+	objectBytes int,
+	cache map[string][]treeEntry,
+) ([]treeEntry, error) {
+	var result []treeEntry
+	var walk func(string, string) error
+	walk = func(tree, prefix string) error {
+		entries, found := cache[tree]
+		if !found {
+			object, err := batch.get(tree)
+			if err != nil {
+				return err
+			}
+			if object.kind != "tree" {
+				return fmt.Errorf("objeto %s no es un árbol", tree)
+			}
+			entries, err = parseTree(object.content, objectBytes)
+			if err != nil {
+				return fmt.Errorf("objeto %s: %w", tree, err)
+			}
+			cache[tree] = entries
+		}
+		for _, entry := range entries {
+			withPath := entry
+			if prefix != "" {
+				withPath.Path = prefix + "/" + entry.Path
+			}
+			result = append(result, withPath)
+			if entry.Type == "tree" {
+				if err := walk(entry.OID, withPath.Path); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := walk(root, ""); err != nil {
+		return nil, err
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Path != result[j].Path {
+			return result[i].Path < result[j].Path
+		}
+		return result[i].OID < result[j].OID
+	})
+	return result, nil
+}
+
+func parseTree(content []byte, objectBytes int) ([]treeEntry, error) {
+	var result []treeEntry
+	for len(content) > 0 {
+		modeEnd := bytes.IndexByte(content, ' ')
+		if modeEnd <= 0 {
+			return nil, errors.New("modo ausente en entrada de árbol")
+		}
+		nameEnd := bytes.IndexByte(content[modeEnd+1:], 0)
+		if nameEnd < 0 {
+			return nil, errors.New("nombre sin terminador en entrada de árbol")
+		}
+		nameEnd += modeEnd + 1
+		objectStart := nameEnd + 1
+		objectEnd := objectStart + objectBytes
+		if objectEnd > len(content) {
+			return nil, errors.New("identificador truncado en entrada de árbol")
+		}
+		mode := string(content[:modeEnd])
+		kind := "blob"
+		switch mode {
+		case "40000":
+			mode = "040000"
+			kind = "tree"
+		case "160000":
+			kind = "commit"
+		}
+		result = append(result, treeEntry{
+			Mode: mode,
+			Type: kind,
+			OID:  hex.EncodeToString(content[objectStart:objectEnd]),
+			Path: string(content[modeEnd+1 : nameEnd]),
+		})
+		content = content[objectEnd:]
+	}
+	return result, nil
+}
+
+func objectIDBytes(objectFormat string) (int, error) {
+	switch strings.TrimSpace(objectFormat) {
+	case "sha1":
+		return sha1.Size, nil
+	case "sha256":
+		return sha256.Size, nil
+	default:
+		return 0, fmt.Errorf("formato de objetos Git no admitido: %q", objectFormat)
+	}
+}
+
+func readRefs(repository string, processStarted func()) ([]refInfo, error) {
+	lines, err := gitLines(repository, processStarted, "for-each-ref",
+		"--format=%(refname)%09%(objectname)", "refs/heads", "refs/remotes", "refs/tags")
+	if err != nil {
+		return nil, err
+	}
+	batch, err := newGitBatch(repository, processStarted)
+	if err != nil {
+		return nil, err
+	}
+	defer batch.close()
+	var result []refInfo
+	for _, line := range lines {
+		fields := strings.Split(line, "\t")
+		if len(fields) != 2 || strings.HasSuffix(fields[0], "/HEAD") {
+			continue
+		}
+		commit, err := batch.get(fields[0] + "^{commit}")
+		if err != nil {
+			if errors.Is(err, errGitObjectMissing) {
+				continue
+			}
+			return nil, err
+		}
+		if commit.kind != "commit" {
+			continue
+		}
+		result = append(result, refInfo{
+			Name: fields[0], Object: fields[1], Commit: commit.oid,
+		})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	if err := batch.close(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func equalRefs(left, right []refInfo) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
