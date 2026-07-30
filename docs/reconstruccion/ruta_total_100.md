@@ -334,6 +334,13 @@ La progresión multiusuario se divide para mantener primero un producto útil:
 4. V31: Postgres, objetos compartidos, afinidad de host y recuperación permiten
    varios hosts/workers.
 
+`StateRepository` es el único contrato de estado para esa progresión. SQLite es
+el adaptador local, de desarrollo y de pruebas; PostgreSQL será el adaptador
+productivo futuro de V31. Cada despliegue compone exactamente uno: nunca hay
+escritura doble, réplica de mando, fallback entre bases ni semántica SQL dentro
+del dominio. La suite contractual y de recuperación debe ser la misma para
+ambos adaptadores antes de promover V31.
+
 Git resuelve historial, ramas, diff y merge; no resuelve por sí solo permisos,
 leases, double execution, artifact ownership ni actualización de Goal. Es un
 adaptador VCS detrás de esos contratos.

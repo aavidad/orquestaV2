@@ -54,10 +54,15 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
   `LEEME_AGENTE_ORQUESTAV2.md`, el handoff vigente del 2026-07-30,
   `ruta_total_100.md`, roadmap, datos de prueba y guardas V38, contratos de puertos,
   inventario de herramientas, cortes Firecracker y lecciones legacy.
-  `scripts/consultar_lecciones_legacy.sh` no tiene una entrada exacta para
-  `ORC-28`; las consultas por `ORC-03`, `ORC-10`, `OPS-16`, `EXT-10`,
-  `EVD-13` y `EXT-21` aportaron invariantes de caracterización, no autoridad
-  de cierre.
+  Las consultas específicas del 2026-07-30 por `ORC-28` y `OPS-11` no
+  devolvieron coincidencias; se registran como huecos consultivos, no como
+  permiso para inventar semántica. Las consultas anteriores por `ORC-03`,
+  `ORC-10`, `OPS-16`, `EXT-10`, `EVD-13` y `EXT-21` aportaron invariantes de
+  caracterización, no autoridad de cierre.
+- La decisión de planificación que separa capacidad física reservable, cuota
+  por perfil, colocación y protocolo común de `codex app-server` vive en
+  `adr_v38_capacidad_cuota_colocacion_appserver_2026-07-30.md`. Está aceptada
+  para ejecutar V38, pero no acredita ninguna capability ni conducta.
 
 ## Lo que ya existe y no se vuelve a construir
 
@@ -76,8 +81,12 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
 - El registro de efectos ya separa intent, aprobación, intento y comprobante, y ya
   trata `unknown_applied` como cuarentena. V38 lo extiende a capacidad y
   microVM; no crea un ledger paralelo.
-- Los budgets durables y slots de proceso ya existen. Siguen gobernando
-  presupuesto, pero no se disfrazan de observación de cuota/licencia externa.
+- Los presupuestos durables ya existen. El presupuesto genérico de slots de
+  despliegue seguirá gobernando política global, pero no se disfrazará de
+  capacidad física ni de cuota externa. El actual
+  `runtime.codex.max_concurrent_executions` se retirará de `BudgetPolicy` y del
+  despachador global; quedará únicamente como guardarraíl local del
+  conector/pool Codex.
 - `AgentLauncher`, `AgentObserver`, `AgentController`, `AgentShutdown`,
   `ActionStopAgentRequest` y el pool Codex ya conservan binding e idempotencia.
   El adaptador Firecracker implementará esos puertos; no añadirá ciclo de vida
@@ -103,18 +112,26 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
   despachador concurrente quedó contrarrevisado e integrado en `e4a6a98e`.
   Ninguna de esas piezas acredita por sí sola A07 ni V38: falta enlazar la
   capacidad durable de A04 y superar la compuerta A08.
+- Existen una fuente configurada, una observación Codex basada en un fichero y
+  una reserva única que mezcla slots con segundos, mensajes, tokens y créditos.
+  Son piezas parciales, no acreditadas. V38 conserva la fuente configurada como
+  sustituto contractual; reemplaza y retira el lector de fichero sin fallback;
+  y migra el estado para reservar solo recursos físicos y tratar la cuota por
+  perfil como compuerta durable sin débito ni liberación.
 
 No existe todavía un motor persistente de agentes Firecracker, una fuente
-neutral de capacidad viva, composición canónica de leases CID, rootfs de
+neutral de capacidad física viva, controlador de cuota estructurada,
+colocación opaca fijada dentro del claim, composición canónica de leases CID, rootfs de
 agente, protocolo del huésped, broker/proxy, retorno sellado ni evidencia
 física `1/5/10/16/20`. Tampoco existe aún la frontera pública importable del
 motor físico. Esas son las brechas que siguen.
 
 ## Orden causal y write-sets
 
-`A01 + A02 → A03`; `A02 → [A05.1 → (A05.1b + A05.1c) | A04.0/A02b →
-(A04.1 + A05.2 + A05.3)]`; `[A05.1b + A05.1c + A05.2 + A05.3] → A05.4`;
-`[A03 + A04.1 + A05.4] → A04.2 → A04.3 → A04.4 → A06 → A07 → A08 →`
+`A01 + A02`; `A02 → [A03.1 | A05.1 → (A05.1b + A05.1c + A05.1d)]`;
+`A02 → A04.0/A02b → [A04.1 → A03.2 | A05.2 | A05.3a → A05.3b]`;
+`[A05.1b + A05.1c + A05.1d + A05.2 + A05.3b] → A05.4`;
+`[A03.2 + A05.4] → A04.2 → A04.3 → A04.4 → A06 → A07 → A08 →`
 `B03 → [B02 | (B05 + B06 → B07) | B08 | B09]`;
 `B07 + B09 → B04 → B01`; `B01 + B02 + B04 + B07 + B08 + B09 → B10 → B11 → B12 →`
 `C01 → C02 → C03 → C04 → C05`.
@@ -130,6 +147,14 @@ lanzamientos ni cerrarse antes de A05.4. Tampoco puede conservar el límite
 Codex, inventar una observación, reutilizar una obsoleta o tratar
 ausencia/error/timeout como capacidad disponible.
 
+La selección causal tiene una única interpretación: `application` observa,
+ordena de forma determinista y deduplica candidatos opacos y entrega
+`CapacityCandidates` al claim. Dentro de la misma transacción, el claim
+revalida por CAS y fija/reserva el primer candidato todavía disponible. Devuelve
+la `AgentPlacementRef` exacta; pool, launcher y replay no reseleccionan.
+Bootstrap registra candidatos y conectores, pero nunca selecciona ni decide
+admisión.
+
 Existe además una compuerta causal urgente entre A05.1 y B10. Mientras el motor
 microVM aún no esté compuesto, A05.1b rechaza `runtime.isolation=microvm` en
 bootstrap antes de construir el adaptador Codex de proceso, con código máquina
@@ -144,6 +169,15 @@ demostrado de esa clave es `P=14, V=5`: catorce líneas del mismo objeto de
 duración que `observation_ttl`, más comprobaciones de valor por defecto, valor
 explícito y rechazo de cero. La prueba canónica existente regenera y compara
 getter, schema, referencia, ejemplo y superficie web.
+
+A05.1d retira otra dependencia histórica incorrecta:
+`runtime.codex.max_concurrent_executions` no puede gobernar `BudgetPolicy` ni
+el despachador de proveedores o aislamientos distintos. El registro canónico
+añade `governance.global_process_slots_budget`, con default 70; el despachador
+global deja de tener un techo Codex y solo ejecuta un `launch_agent` que
+`ClaimNextAction` haya devuelto con reserva física durable. La clave Codex se
+mantiene exclusivamente dentro de su conector/pool como defensa local y no es
+alias de la clave global.
 
 Después de C05, y fuera de la acreditación V38: `C05 → D01`, antes del primer
 consumidor externo productivo.
@@ -170,18 +204,18 @@ exactos del run y obliga a replanificar, nunca a rebajar silenciosamente la ola.
 | ID | Capability, invariante y autoridad | Write-set propuesto, dependencias y paralelismo | Contrato reutilizado, función preservada y complejidad retirada/evitada | Verificación, criterio de cierre y presupuesto |
 |---|---|---|---|---|
 | **A01 — cohortes lógicas** | `ORC-28`. El conjunto listo completo pertenece al `Goal`; el límite físico nunca elimina ni recrea `WorkItems`/`Executions`. Autoridad: `Goal` y `application`. | `internal/goal/v38_ready_set_test.go`, `internal/application/v38_schedule_ready_test.go`, dato estructurado en `acceptance/fixtures/`. Sin dependencia; paralela con A02. | Reusa `RunnableWorkItems`, `ReadyWorkItems`, `scheduleReady`. Preserva conflicto/write-set y orden determinista. Evita gestor de cohortes, paginador de DAG y segunda cola. | Pruebas normales y de propiedades para `1/16/70/500`; negativos de dependencia, ciclo/conflicto y presupuesto. La capacidad parcial no crea ni reemplaza una `Execution` o `Attempt` ya admitidos. Cierra cuando las cuatro cohortes se materializan completas sin tope implícito. `P≤0, V≤250`. |
-| **A02 — contrato neutral de capacidad** | `ORC-28`. Capacidad es observación externa durable, no presupuesto ni texto de agente. Autoridad de frescura/política: `application`, usando su reloj. | `internal/application/agent_capacity.go`, `internal/application/agent_capacity_test.go`. Sin dependencia; paralela con A01. | Define necesidad consumidora `AgentCapacityObserver` y valores con presencia explícita: `SourceRef`, `PoolRef`, `ObservedAt`, `ExpiresAt`, `Quality`, `WindowRef`, `ResetAt`, límites/restantes presentes o ausentes, `RetryAt` y ref de artefacto opcional. Dos consumidores reales serán fuente configurada y fuente Codex. Evita almacén, servicio o planificador de cuotas. | Pruebas contractuales: cero presente no se pierde; ausente no equivale a ilimitado; `unknown/stale/unavailable` da cero reservas nuevas; nueva `WindowRef` válida puede reabrir; reloj del proveedor no decide frescura; payload/log no se hace autoridad. Cierra con contrato estable y sustituto contractual. `P≤220, V≤250`. |
-| **A03 — persistencia canónica de capacidad** | `ORC-28`. Observación, reserva, consumo y liberación son hechos del mismo estado; revisión esperada, fencing e idempotencia son atómicos. `application` decide y escribe mediante `StateRepository`; SQLite es el conector local, de desarrollo y de pruebas actual, no autoridad. | `internal/adapters/state/sqlite/migrations/NNN_agent_capacity.sql`, pruebas de schema/migración en `internal/adapters/state/sqlite/agent_capacity_schema_test.go`. Depende A02; migración serial exclusiva. | Reusa el conector SQLite, sus transacciones y cadena de migración. Una composición elige una sola fuente transaccional activa y prohíbe escritura doble. El contrato permanece sustituible; PostgreSQL será el conector productivo futuro de V31/`OPS-11` y no se implementa aquí. Solo añade tablas/índices ligados a refs opacas y revisión; no crea DB, outbox, journal paralelo ni almacén. | Actualización desde revisión anterior, rollback transaccional, FK/unique/fence, aislamiento de proyecto, reapertura y backup/restore. Negativos de dos fuentes activas y escritura doble. Cierra al migrar una sola vez y al no cambiar el ciclo de vida ni duplicar eventos. `P≤150, V≤250`. |
-| **A04 — reserva durable en el claim** | `ORC-28`. Solo el claim global de `launch_agent` reserva capacidad; stop/observe siguen reclamables con capacidad cero. Reserva ligada a proyecto/goal/work/execution/action/generación/fence/idempotency/pool/ventana. Autoridad: `application` mediante `StateRepository`. | Empieza por A02b en `internal/application/agent_capacity.go`; continúa por `internal/application/state.go`, `internal/application/agent_capacity_state.go`, `internal/adapters/state/sqlite/{claim,agent_capacity}.go` y pruebas. A04.2 depende expresamente de A03, A04.1 y A05.4 y no puede cerrarse antes; serial con A06/A07. | A02b añade demanda exacta por las cinco dimensiones y retira `RuntimeCodexMaxConcurrentExecutions`. A04.2 recibe solo `AgentCapacityObservationSubmission`; dentro del mismo `BEGIN` lee la revisión vigente y llama `MaterializeAgentCapacityObservation(submission, expectedRevision)`. Nunca acepta desde el llamador un `AgentCapacityObservationRecord` preversionado. Consume con comprobante aceptado; libera solo al terminal o `definitely_not_applied`; `unknown_applied` retiene/cuarentena. | Además de agotamiento, dimensión limitante, caída, reinicio, carreras y proyectos: primera escritura `0→1`, sucesora `N→N+1` y replay sin incremento. Migra exactamente 52 literales de prueba con helpers locales en cuatro paquetes; el literal productivo pertenece a A05.4. Proveedor/aislamiento no consultan `runtime.codex.*`. Cierra sin sobre-reserva, revisión suministrada por llamador ni reintento ciego. A02b toma `P≤80, V≤120`; A04 permanece en `P≤480, V≤450`. |
-| **A05 — fuentes, configuración e inyección V38** | `ORC-28`. El registro es la única definición. Proveedor (`runtime.provider`) y aislamiento (`runtime.isolation=process\|microvm`) son ejes ortogonales; `process` permanece por defecto. Una fuente específica traduce datos, pero `application` decide política/frescura y construye la presentación durable. | Registro/salidas generadas, adaptadores de capacidad, `internal/bootstrap/{runtime,agent_capacity}.go`, `cmd/orquesta/main.go`, catálogos i18n, `internal/application/{orchestrator,processing}.go`, pruebas compactas reutilizadas, procesamiento y memoria. Depende A02/A02b; A05.1b y A05.1c siguen a A05.1 y preceden A05.4; A05.1b permanece además antes de B10; A05.4 precede A04.2. | A05.1c añade `runtime.capacity.observation_timeout` sin atribuirlo al A05.1 ya consumido. A05.1b rechaza `microvm` antes de construir Codex en proceso mientras B10 no esté compuesto; conserva exactamente `bootstrap.runtime_isolation_not_composed` hasta la CLI y usa su clave i18n, sin degradarlo a `internal` ni hacer fallback. A05.4 observa con timeout y fallo cerrado. Bootstrap solo compone. | Separa frescura y timeout; prueba observer bloqueado y continuidad. Negativo urgente: `microvm` no llama a constructor Codex/proceso, la CLI presenta el error localizado conservando el código y no deja recursos; `process` permanece igual. B10 prueba que retira el rechazo incondicional solo con Firecracker completo y nunca deja fallback. `P≤300, V≤300`. |
+| **A02 — contrato neutral de capacidad** | `ORC-28`. Capacidad y cuota son observaciones externas durables, no presupuesto ni texto de agente. Autoridad de frescura/política: `application`, usando su reloj. | `internal/application/agent_capacity.go`, `internal/application/agent_capacity_test.go`. Sin dependencia; paralela con A01. | La fuente física expresa slots brutos presentes/ausentes por `SourceRef`+`PoolRef`. La compuerta de cuota expresa estado `available/exhausted/unknown`, `WindowRef`, reset, expiración y `RetryAt`; un porcentaje es solo evidencia, no saldo. Ambas conservan revisión/calidad/ref opcional. Evita almacén, servicio o planificador de cuotas. | Pruebas: slot cero no se pierde; ausente no equivale a ilimitado; cuota no inventa restantes; unknown/stale/unavailable cierra launches; nueva ventana observada puede reabrir; reloj del proveedor no decide frescura; payload/log no se hace autoridad. `P≤220,V≤250`. |
+| **A03 — persistencia canónica de capacidad y cuota** | `ORC-28`. Capacidad física y cuota son hechos durables con papeles distintos: solo la primera admite reserva/consumo/liberación; la cuota por perfil es una compuerta versionada sin saldo interno. `application` decide y escribe mediante `StateRepository`. | Conserva intacta `022_agent_capacity.sql`. La migración progresiva `NNN_agent_capacity_placement.sql` depende exactamente de A04.1: `A02b → A04.1 → A03.2 → A04.2`. Migración serial exclusiva. | No añade clase ni lifecycle de observación: `reservation.observation_ref` identifica el hecho físico reservable y `quota_observation_ref` conserva el binding inmutable. La tabla de binding es 1:1 con FK diferida a la reserva. Reutiliza `StateRepository`; SQLite es local/desarrollo/pruebas y PostgreSQL productivo futuro V31, nunca activos a la vez. | La base ya consumió 139/291; el nuevo binding dispone de `P≤61,V≤109`. Prueba migración progresiva desde el estado A04.1, rollback, FK diferida, aislamiento, reapertura, backup/restore, ausencia de reserva de cuota y fuente única. Techo `P≤200,V≤400`. |
+| **A04 — colocación y reserva física durable en el claim** | `ORC-28`. `application` entrega candidatos opacos ordenados/deduplicados; el claim revalida y fija el primero disponible. Solo ese claim crea una `AgentCapacityReservation` física y liga cuota sin debitarla. Stop/observe siguen reclamables. | `internal/application/{agent_capacity,agent_capacity_state,state}.go`, `internal/adapters/state/sqlite/{claim,agent_capacity}.go` y pruebas. Orden único: `A02b → A04.1 → A03.2 → A04.2`; A04.2 depende además de A05.4 y es serial con A06/A07. | Multiperfil Codex: cada perfil es un placement/pool de capacidad 1. Perfil único: cada launch reserva 1 de N configurado. Dentro del `BEGIN`, CAS fija el primero válido y crea una reserva+binding 1:1. Held se resta una vez por `source+pool`. Firecracker host queda bajo presupuesto/preflight y leases CID/VM, sin segunda reserva. | A04.0+A04.1 ya consumieron 191/173; quedan `P≤269,V≤257`. Prueba agotamiento, stale, carreras, replay, doble contabilidad y ausencia de segunda reserva Firecracker; migra 52 literales. Techo `P≤460,V≤430`. |
+| **A05 — fuentes, colocación, configuración e inyección V38** | `ORC-28`. Proveedor y aislamiento son ejes ortogonales. Una fuente física informa recursos reservables; un controlador persistente por perfil informa cuota. `application` decide frescura, orden/deduplicación y admisión; el claim fija colocación. | Registro/salidas, codec, controlador Codex, `internal/bootstrap/`, `cmd/orquesta/`, i18n y application. Depende A02b; A05.3a precede A05.3b y A05.4 precede A04.2. | Por perfil de cuota: un `app-server` persistente y un lector de protocolo acotado. Bootstrap los inicia y exige lectura inicial antes del planificador; la misma conexión sirve actualizaciones y olas 5/10/20. Reconexión, rotación y shutdown tienen identidad/cierre/recolección exactos. El lector de fichero desaparece. | Cero agentes, 5/10/20 sin proceso por launch, fallo de lectura inicial que aborta bootstrap y shutdown sin procesos/lectores huérfanos. Fallo cerrado ante stale/timeout. Guardas impiden imports Firecracker y puertos de agente. `P≤430,V≤400`. |
 | **A06 — contrato neutral de preservación** | `ORC-28`. Antes de desmontar, el entorno entra en `preserved_pending_review` con sello e inventario; no es un nuevo estado del `Goal`. Autoridad de aceptación: `application`. | `internal/ports/agent_environment.go`, `internal/application/agent_environment.go`, migración `NNN_agent_environment_receipts.sql`, implementación SQLite específica y pruebas. Depende A03; migración y `state.go` seriales con A04. | El comprobante liga execution/external identity/fence, base del workspace, change-set/bundle CAS, inventario, configuración/rootfs y tiempos. Reusa CAS, refs, efectos y revisión. No expone operación delete/GC en V38. | Normal, comprobante duplicado, digest alterado, ref de otro proyecto, sello ausente, desmontaje prematuro, fence obsoleto y reinicio. Cierra cuando terminalizar un proveedor que exige preservación falla cerrado sin comprobante válido y el material sigue direccionable. `P≤350, V≤350`. |
-| **A07 — despachador único con `launch_agent` concurrente** | `ORC-28`. Un despachador global; procesamiento serial salvo `launch_agent` ya reclamado. Observación y parada progresan aunque el lanzamiento esté saturado. Autoridad de reclamo, admisión y procesamiento: `application`; bootstrap solo compone, arranca y drena, sin decidir capacidad. | Base integrada en `7ae98026`; despachador y pruebas integrados en `e4a6a98e`. Depende de A04 para cerrar capacidad durable; los archivos compartidos se serializan. | Reclamo global mientras la capacidad neutral permita reservar; al saturarse, reclamo global con `ExcludeLaunch`. Cada lanzamiento admitido usa una gorutina corta ligada solo a su reclamo y lo restante se procesa en serie. Retira el uso de `RuntimeCodexMaxConcurrentExecutions` como techo global; evita selector «solo launch», pool o gorutinas ociosas, cola por proveedor y segundo bucle. | Ya ratchea `1/5/10/16/20`, saturación, observación/parada, reclamo cercado, cierre, carrera y ausencia de giro activo. Añade negativos que cambian proveedor/aislamiento sin consultar `runtime.codex.*`. A07 cierra cuando A04 sustituya el límite estático por reserva durable y A08 emita su comprobante. `P≤250, V≤400`. |
+| **A07 — despachador único con `launch_agent` concurrente** | `ORC-28`. Un despachador global; procesamiento serial salvo `launch_agent` ya reclamado. Observación y parada progresan aunque el lanzamiento esté saturado. Autoridad de reclamo, admisión y procesamiento: `application`; bootstrap solo compone, arranca y drena. | Base integrada en `7ae98026`; despachador y pruebas integrados en `e4a6a98e`. Depende de A04 para cerrar capacidad durable; los archivos compartidos se serializan. | `ClaimNextAction` solo devuelve un lanzamiento con colocación y reserva física durables. El despachador no mantiene `maxConcurrentLaunches` ni lee `RuntimeCodexMaxConcurrentExecutions`; ante saturación reclama con `ExcludeLaunch`. Cada lanzamiento admitido usa una gorutina corta ligada a su claim. Evita pool global, cola por proveedor y segundo bucle. | Ratchets `1/5/10/16/20`, saturación, observación/parada, claim cercado, cierre, carrera y ausencia de giro activo. Negativos cambian proveedor/aislamiento sin leer `runtime.codex.*` y rechazan cualquier launch sin reserva. A07 cierra con A04 y el comprobante A08. `P≤250, V≤400`. |
 | **A08 — compuerta A neutral** | `ORC-28`. Acredita semántica sin KVM: cohortes, capacidad parcial, órdenes/mailbox, observación, parada, preservación y recuperación. Autoridad: contrato de aceptación V38, todavía sin promoción. | `acceptance/v38_agent_runtime_elastic_core_test.go`, datos V38 y sustituto contractual bajo la superficie de prueba existente. Depende A01–A07. | Reusa sustituto Agent, execution sessions/mailbox, CAS, reloj y almacén reales. No introduce sustituto productivo ni interpreta ACK/texto como efecto. | E2E neutral `1/16/70/500`; capacidad menor que conjunto listo; refresco; orden/ACK exactos posteriores al lanzamiento; parada; reinicio en fronteras de intento/efecto/comprobante; `-race`; suite sin `/dev/kvm`, binario Firecracker ni artefacto de huésped. Cierra solo con comprobante de compuerta A ligado a digests. `P≤100, V≤750`. |
-| **B01 — selección explícita y composición Orquesta** | `ORC-28`. Proveedor y aislamiento se seleccionan por ejes distintos. `microvm` solo se activa por valor explícito válido y un error de comprobación previa no cae a `process`, Bubblewrap ni al ejecutor Codex directo del anfitrión: si Codex es el proveedor elegido, permanece dentro de la microVM. `application` valida la selección; bootstrap solo compone. | `internal/bootstrap/agent_provider.go`, `cmd/orquesta/` en preparación de composición y pruebas. Depende A05/A08/B03/B04; se integra en serie antes de B10 por compartir composición y respeta la compuerta A05.1b. | Proyecta únicamente aislamiento y configuración física a `agentmicrovm/v1.Config` y `Dependencies`; el proveedor conserva su contrato neutral. Hasta B10, A05.1b mantiene `microvm` cerrado antes de Codex/proceso. B10 realiza el único cableado y reemplaza esa compuerta sin adaptadores cartesianos. Bootstrap compone, pero no autoriza efectos ni escribe ciclo de vida. | Por defecto `process` no inicia Firecracker; antes de B10, `microvm` devuelve `bootstrap.runtime_isolation_not_composed`; después, `microvm` sin artefactos/KVM falla antes de admitir lanzamiento. En ningún caso ejecuta Codex en el anfitrión. Cierra sin ruta alternativa, doble persistencia ni tipos filtrados al motor. `P≤150, V≤200`. |
+| **B01 — selección explícita y composición Orquesta** | `ORC-28`. Proveedor, aislamiento, fuente física y fuente de cuota se componen por ejes distintos. `application` ordena candidatos y el claim fija la colocación; bootstrap solo registra el mapa y construye conectores. Con `microvm`, Codex trabaja siempre dentro del huésped. | `internal/bootstrap/agent_provider.go`, `cmd/orquesta/` y pruebas. Depende A05/A08/B03/B04; serial antes de B10 por compartir composición. | La fuente física se elige por aislamiento/pool y la cuota por proveedor/perfil, sin adaptadores N×M. El controlador Codex anfitrión solo observa cuota y usa su propio proceso/scope; nunca sustituye al worker huésped. Hasta B10, A05.1b mantiene microVM cerrada; B10 hace el único cableado. | `process` no inicia Firecracker; microVM incompleta falla antes de admitir lanzamiento y jamás cae a proceso. Negativos prueban que bootstrap no elige colocación, que el controlador de cuota no ejecuta trabajo y que cambiar proveedor/aislamiento no activa límites Codex globales. `P≤150,V≤200`. |
 | **B02 — implementación de leases CID** | `ORC-28`. CID sirve para encaminamiento, nunca identidad; lease durable tiene revisión, fence, expiración y recuperación antes del enlace físico. `RuntimeJournal`/`CIDLease` son contratos; SQLite es el conector local, de desarrollo y de pruebas actual, no autoridad. | Migración `NNN_agent_vsock_cid.sql`, `internal/adapters/state/sqlite/vsocklease/` y pruebas. Depende A03/A08/B03; migración serial; paralela con B05/B06/B08/B09. No se aloja SQL bajo el adaptador Firecracker. | Migra el allocator SQL existente al conector de estado y lo hace implementar el puerto cohesivo público. Mapea y retira `internal/ports/agent_microvm_vsock_cid.go` al migrar todos sus consumidores; no deja bridge. `SchemaStatements` se retira o deriva de la única migración de prueba. B10 compone el puerto; PostgreSQL será el conector productivo futuro de V31/`OPS-11`. | Asignación concurrente, wrap/agotamiento, liberación obsoleta, caída/reapertura, lease expirado, CID ocupado, recuperación exacta y carreras. Guardas `go list`/`rg` prohíben `database/sql`, SQLite y el adaptador SQL bajo `agentmicrovm/v1/firecracker/**`. Cierra con una definición de schema, un contrato y una sola fuente activa. `P≤200, V≤250`. |
 | **B03 — API pública versionada del motor** | `ORC-28`. El gestor físico es reutilizable por futuras aplicaciones e importable sin Orquesta. Su autoridad termina en recursos microVM y comprobantes físicos; nunca conoce `Goal`, `WorkItem`, `Execution`, ciclo de vida, permisos o presupuestos. | Nuevo árbol público `agentmicrovm/v1/{contract,config,ports,errors}.go`, suite contractual `agentmicrovm/v1/contracttest/` y pruebas. Depende A08; primera tarea B. | Expone `Engine`, `Config`, refs/handles opacos y puertos cohesivos neutrales: `ArtifactSource`, `ArtifactSink`, `RuntimeJournal`/`CIDLease`, reloj, autorización/confianza y servicios vsock. Ni API ni motor reciben `CredentialStore`, atestador, CAS, SQLite, tipos de producto, permisos o presupuestos. Cada implementación concreta se inyecta por puerto; sin interfaz por función, globals, i18n ni imports `orquesta/internal`. | Guardas `go list` y `rg` sobre API, motor y adaptadores: sin dependencias internas, `database/sql`, SQLite, CAS, credenciales/atestación de Orquesta ni imports adaptador→adaptador. Cierra cuando el consumidor externo usa solo contratos neutrales y la API no exporta conceptos de producto. `P≤250, V≤300`. |
 | **B04 — consumidor externo y prueba de extracción** | `ORC-28`. La importabilidad se demuestra, no se infiere por ubicación. La extracción física a otro módulo/repositorio se difiere hasta estabilizar v1. | `acceptance/agent_microvm_v1_external_consumer_test.go`, consumidor mínimo en `acceptance/fixtures/agent_microvm_external_consumer/` y guarda de API; no se registra otro `go.mod`. Depende B07/B09. | La prueba crea un módulo temporal externo, usa `replace` hacia este árbol, importa `orquesta/agentmicrovm/v1` y `.../firecracker`, instancia el motor con sustitutos contractuales y compila/ejecuta sin `internal`. Evita módulo, repositorio, microservicio o publicación prematuros. | Negativo que detecta import interno/transitivo, variables globales Orquesta y ruptura incompatible de v1; prueba mínima externa y presupuesto de dependencias. Cierra con consumidor verde y un informe de extracción, sin haber extraído ni publicado nada. `P≤50, V≤350`. |
-| **B05 — rootfs y protocolo del huésped reproducibles** | `ORC-28`. Protocolo y supervisor del huésped son neutrales respecto del proveedor y del aislamiento. El rootfs V38 incorpora el traductor Codex real sin convertir Codex ni Firecracker en tipos del contrato compartido. | `agentmicrovm/v1/guestproto/`, `agentmicrovm/v1/guestsupervisor/`, composición/traductor bajo `tools/agentmicrovm-rootfs/`, manifest/SBOM/licencias y pruebas. Depende B03; paralela con B02/B06/B08/B09. Firecracker solo aporta lanzamiento y transporte vsock. | `guestproto` versiona bootstrap, hilo, turno, control y eventos por refs opacas; es importable por supervisor, traductor de rootfs y transportes futuros. `guestsupervisor` gobierna reconexión/deduplicación/contrapresión sin proveedor. El traductor Codex arranca `codex app-server --listen stdio://`, comunica JSONL por `stdio` y exige `initialize`→`initialized` antes de `thread/start`, `thread/resume`, `turn/start`, `turn/steer` o `turn/interrupt`. Sin WebSocket, tmux, scraping ni protocolo improvisado. | Build reproducible, digest, owner/mode, sin red/device inesperado; guardas impiden que los paquetes compartidos importen Firecracker o proveedor. Incluye incompatibilidad, preinicio, reinicio, petición de servidor no autorizada, trama parcial/replay/desorden, duplicación, control, contrapresión y límites. Cierra con kernel/rootfs/init sellados y Codex aplicado una vez detrás del contrato neutral. `P≤650, V≤550`. |
+| **B05 — rootfs y protocolo del huésped reproducibles** | `ORC-28`. Protocolo y supervisor del huésped son neutrales. El enlace Codex del huésped reutiliza el codec de A05, pero ejecuta una instancia distinta dentro de cada microVM; nunca comparte proceso, socket, HOME, hilo ni turno con el anfitrión. | `agentmicrovm/v1/{guestproto,guestsupervisor}/`, enlace fino y composición bajo `tools/agentmicrovm-rootfs/`, manifest/SBOM/licencias y pruebas. Depende B03 y A05.3a; paralela con B02/B06/B08/B09. | `guestproto` versiona bootstrap/control/eventos; `guestsupervisor` aporta reconexión, deduplicación y contrapresión. El enlace huésped importa solo el subpaquete codec Codex; ningún adaptador Firecracker lo importa. Arranca `app-server` dentro del huésped y no usa el controlador anfitrión para trabajar. | Build reproducible, digest, aislamiento de procesos, reinicialización, incompatibilidad, trama parcial/replay/desorden y ausencia de WebSocket/tmux/secretos. Cierra con kernel/rootfs/init sellados y worker Codex real independiente. `P≤490,V≤320`. |
 | **B06 — artefactos y bundle por fuente/sumidero** | `ORC-28`. El motor público mueve contenido por ref/digest mediante `ArtifactSource`/`ArtifactSink` y no interpreta repositorios; Orquesta conserva autoridad sobre workspace, base, snapshot, write-set e integración. | `agentmicrovm/v1/artifacts.go`, `internal/adapters/agent/firecracker/bundleio/`, extensión mínima del productor Workspace/Git y pruebas. Depende A08/B03; paralela con B02/B05/B08/B09. | Los puertos públicos entregan y reciben bytes verificados con media type, sin conocer CAS. El adaptador interno construye `AgentMicroVMBundleDescriptor`, valida traversal/links/devices/expansión y traduce hacia el almacén configurado. El huésped nunca conoce rutas del anfitrión. Bootstrap compone fuente y sumidero; ni motor ni adaptador importan el conector concreto. | Bundle válido/corrupto/truncado, base errónea, traversal, links/device, expansión abusiva, ref entre proyectos, repetición idempotente y change-set fuera de write-set. Guardas de imports concretos. Cierra con anfitrión→artefacto→huésped→artefacto→integración, sin CAS ni tipos Orquesta en la API. `P≤400, V≤350`. |
 | **B07 — motor físico Firecracker público** | `ORC-28`. `firecracker.New(Config, Dependencies)` crea una microVM por `RunRef`, observa y reconcilia recursos físicos; no conoce el proveedor alojado ni cierra o reabre trabajo de la aplicación llamante. | `agentmicrovm/v1/firecracker/{engine,launcher,observer,recovery}.go`, primitivas neutrales justificadas y suite `contracttest`. Depende solo de B03/B05/B06; no depende de B01 ni importa una implementación B02. | Implementa únicamente lanzamiento, vsock, observación y teardown físicos. Consume `RuntimeJournal`, `CIDLease`, `ArtifactSource/Sink` y autorización como puertos; persiste handle físico opaco sin conocer su conector. No importa `internal`, proveedor, protocolo de aplicación, `database/sql`, SQLite, CAS, credenciales ni atestación. Sin NIC/TAP/bridge/NAT ni VM compartida. | Dos lanzamientos→dos VMs, fallo por paso, PID reutilizado, fugas, path/asset inválido, KVM ausente, OOM, observación ambigua, reinicio y carreras; manifiesto físico respetado. Guardas `go list`/`rg` de dependencias y símbolos prohibidos. Cierra con identidad exacta, neutralidad y cero recursos propios huérfanos. `P≤500, V≤450`. |
 | **B08 — broker Orquesta sobre servicio público** | `ORC-28`. El broker interno traduce el servicio vsock neutral a sesión, artefactos, MCP y mailbox exactos; `application` autoriza y conserva la causalidad. Ni broker ni motor obtienen autoridad de ciclo de vida. | Caracteriza `internal/adapters/agent/firecracker/networkauth/`, incluido `verifier.go`, y trabaja en `agentmicrovm/v1/launchauth/`, `internal/adapters/agent/launchauth/`, `internal/adapters/agent/firecracker/broker/` y pruebas. Depende A08/B03; paralela con B02/B05/B06/B09. | Mapea y retira `internal/ports/agent_microvm_launch_auth.go`. El código `agent_firecracker_network_auth` deja de ser un segundo adaptador nominal: desafío/prueba/transacción neutrales pasan a `agentmicrovm/v1/launchauth/`; la traducción Orquesta se mueve a `internal/adapters/agent/launchauth/`, sin dependencia Firecracker, y la ruta anterior se elimina tras migrar consumidores. El broker recibe `LaunchAuthorizer`, `ArtifactSource/Sink` y servicios compuestos; solo bootstrap ensambla. | Replay/concurrencia, atestación rechazada detrás del puerto, alcance cruzado, reconexión, commit/rollback, reinicio que invalida challenge, orden posterior y artefacto por ref. Guardas contra imports adaptador→adaptador, permanencia de `agent_firecracker_network_auth` y símbolos de producto en API. Cierra con un contrato, una implementación nominal y solo la VM exacta accediendo al broker. `P≤550, V≤450`. |
@@ -233,16 +267,25 @@ ni permite afirmar soporte de Claude, Gemini, Ollama o agentes locales. Esos
 proveedores deberán superar posteriormente su propio contrato y pruebas de V25
 sin modificar la API física neutral.
 
-En B05, el traductor Codex fija explícitamente la versión y el schema compatibles
-de `codex app-server`, lo arranca con `--listen stdio://` y comunica JSONL por
-`stdio`. Cada arranque, incluido un reinicio, completa obligatoriamente
-`initialize`→`initialized` antes de cualquier operación. El mapeo mínimo y
-exacto cubre `thread/start`, `thread/resume`, `turn/start`, `turn/steer` y
-`turn/interrupt`, además de eventos. Una operación previa a la inicialización
-falla cerrada; una petición iniciada por el servidor sin manejador o autorización
-explícitos no se confunde con una respuesta y también falla cerrada. Quedan
-prohibidos WebSocket, tmux, lectura heurística de terminal, scraping de logs y
-órdenes iniciales sin canal posterior.
+El codec común Codex de A05 fija explícitamente la versión y el schema
+compatibles de `codex app-server`, las tramas JSONL, los identificadores de
+petición, la correlación de eventos, los límites y
+`initialize`→`initialized`. Lo reutilizan exactamente dos consumidores:
+controlador anfitrión de cuota y enlace del huésped. No migra ni modifica el
+worker de proceso actual. Reutilizar código no permite compartir estado vivo:
+cada consumidor arranca una instancia separada, con proceso, `stdio`, socket,
+`CODEX_HOME`, credenciales, hilo y turno propios. El controlador anfitrión
+tiene allowlist exclusiva de observación de cuota/elegibilidad; no puede usar
+métodos de hilo, turno, steering, parada de agente, workspace, mailbox ni
+artefactos. Si el protocolo real no ofrece cuota estructurada acreditable, A05
+queda bloqueada y cerrada a lanzamientos.
+
+B05 adapta `guestproto` al mismo codec y arranca `codex app-server` dentro del
+huésped. Cada arranque y reinicio completa la inicialización antes de cualquier
+operación. Una petición iniciada por el servidor sin manejador/autorización
+explícitos no se confunde con una respuesta y falla cerrada. Quedan prohibidos
+WebSocket, tmux, lectura heurística de terminal, scraping de logs, fichero de
+cuota y órdenes iniciales sin canal posterior.
 
 ## Microencargos operativos de los padres grandes
 
@@ -253,69 +296,60 @@ seriales; solo los declarados paralelos pueden abrirse a la vez. Cada suma
 coincide exactamente con el techo de su padre y ningún hijo supera
 `P=200, V=200`.
 
-### A04 — `P=480, V=450`
+### A03 — `P=200, V=400`
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| A04.0 / A02b | `internal/application/agent_capacity.go` y su prueba: demanda exacta por dimensión y admisión neutral por candidato; mensajes/créditos sin unidad fallan cerrado y se elimina `RuntimeCodexMaxConcurrentExecutions` de esta decisión. | Primero; depende de A02. | `P=80, V=120` |
-| A04.1 | `internal/application/agent_capacity_state.go` y extensión mínima serial de `state.go`: observación, reserva y transición tipadas. | Después de A04.0; toma en exclusiva `state.go`. | `P=100, V=50` |
-| A04.2 | `internal/adapters/state/sqlite/{claim,agent_capacity}.go`: dentro del `BEGIN`, leer revisión vigente y ejecutar `MaterializeAgentCapacityObservation(submission, expectedRevision)`; nunca recibir un `Record` preversionado. Migra 52 literales de prueba mediante helpers locales no exportados, uno como máximo en cada uno de cuatro paquetes; cubre replay, `0→1` y `N→N+1`. | Después de A03, A04.1 y A05.4; no empieza ni cierra antes de A05.4 y toma en exclusiva claim/SQLite. | `P=130, V=100` |
-| A04.3 | `effect_execution.go`, puntos mínimos de `processing.go`, `sqlite/mutations.go` y validación: consumir, liberar o retener en la mutación causal. | Después de A04.2; serial con A06. | `P=130, V=100` |
-| A04.4 | Lectura, reinicio, lease expirado, recuperación ambigua, negativos de proyecto/carreras y prueba de que proveedor/aislamiento no consultan `runtime.codex.*`; solo lectura/recuperación y pruebas. | Último; no abre A07 hasta quedar verde. | `P=40, V=80` |
+| A03.1 | Base ya integrada en `71f4a827`: observación/reserva física y `022_agent_capacity.sql`, incluida su prueba canónica. Se conserva y se caracteriza; no se vuelve a presupuestar ni se edita la migración aplicada. | Completada parcial, no acreditante. Medición conservadora del diff ya integrado. | `P=139, V=291` consumidos |
+| A03.2 | Siguiente migración progresiva: `AgentPlacementBinding` 1:1 con FK diferida a reserva, `PlacementRef` y `QuotaObservationRef`/revisión inmutables; sin columna de clase, saldo o lifecycle de cuota. Pruebas de migración, reinicio y fuente única. | Exactamente después de A04.1 y antes de A04.2; exclusión sobre la cadena de migraciones. | `P=61, V=109` restantes |
 
-### A05 — `P=300, V=300`
+### A04 — `P=460, V=430`
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| A05.1 | `config/registry.json` y salidas generadas: ejes `provider`/`isolation`, fuente, `runtime.capacity.observation_ttl` y máximo de lectura del informe. Ya integrado en `87db76eb`; sus `P=49, V=49` están consumidos y no incluyen `observation_timeout`. | Primero y serial sobre registro; completado. | `P=49, V=49` |
+| A04.0 / A02b | Base ya integrada en `7e232072`: demanda/admisión multidimensional que ahora se caracteriza y corrige para separar recurso físico de compuerta. | Completada parcial, no acreditante. | `P=77, V=120` consumidos |
+| A04.1 | Base ya integrada en `33802c27`: estado de observación/reserva que ahora se caracteriza y migra al binding 1:1, sin segundo lifecycle. | Después de A02b; habilita A03.2, nunca A04.2 directamente. Completada parcial, no acreditante. | `P=114, V=53` consumidos |
+| A04.2 | `CapacityCandidates` ordenados/deduplicados en `ClaimRequest`; dentro del `BEGIN`, CAS revalida en orden y fija/reserva el primero disponible. Crea una reserva física y su binding 1:1; migra 52 literales de prueba. | Después de A03.2 y A05.4; exclusión sobre claim/SQLite. | `P=130, V=110` restantes |
+| A04.3 | Consume/libera/cuarentena la única reserva física. Multiperfil reserva 1 del pool unitario del placement; perfil único reserva 1 de N configurado. Held se resta una vez por `source+pool` en `reserved/consumed/quarantined`; nunca por `observation_ref` ni sobre capacidad ya neta. Cuota, preflight Firecracker y leases CID/VM no crean otra reserva. | Después de A04.2; serial con A06. | `P=100, V=80` restantes |
+| A04.4 | Reinicio, lease expirado, recuperación ambigua, carrera del último candidato, replay sin reselección, doble contabilidad, proyecto, ausencia de límite Codex global y exactamente una `AgentCapacityReservation` por launch. | Último; no abre A07 hasta quedar verde. | `P=39, V=67` restantes |
+
+### A05 — `P=430, V=400`
+
+| Hijo | Write-set y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| A05.1 | `config/registry.json` y salidas generadas: ejes `provider`/`isolation`, fuente, `runtime.capacity.observation_ttl` y máximo de lectura del informe. Ya integrado en `87db76eb`; sus `P=49, V=49` están consumidos, pero el lector de informe y su clave se retirarán en A05.1d/A05.3b. | Primero y serial sobre registro; completado parcial, no acreditante. | `P=49, V=49` |
 | A05.1b | `internal/bootstrap/runtime.go`, `cmd/orquesta/main.go`, catálogos `es.json`/`en.json`, manifest y pruebas compactas/reutilizadas: antes de construir renderizador, credenciales o Codex/proceso, `microvm` devuelve exactamente `bootstrap.runtime_isolation_not_composed`, presentado con `error.bootstrap.runtime_isolation_not_composed`; la CLI conserva el código y no lo degrada a `internal`. Cero fallback/recursos; `process` sigue verde. | Después de A05.1; antes de A05.4 y permanece serial con B01/B10 hasta que B10 lo sustituya. | `P=30, V=21` |
 | A05.1c | `config/registry.json` y proyecciones generadas: añadir `runtime.capacity.observation_timeout` positivo, separado de `observation_ttl` y de `runtime.codex.*`; comprobar valor por defecto, valor TOML explícito, rechazo de cero y sincronización canónica de todas las proyecciones. | Después de A05.1; serial sobre registro y antes de A05.4. | `P=14, V=5` |
-| A05.2 | `internal/adapters/agent/staticcapacity/`: fuente contractual configurada, ceros y ventanas. | Tras A02b; paralelo con A05.3, write-set disjunto. | `P=45, V=59` |
-| A05.3 | `internal/adapters/agent/codex/capacity_observer.go`: traducción estructurada solo como `AgentCapacityObserver`, mediante DTO JSON nombrado y decodificación estricta. La ref de artefacto es opcional; si existe, la lectura rechaza symlink/entrada no regular, queda acotada a bytes configurados y respeta `ctx` antes, durante y después. Sin tmux/logs, límite global ni relajación ante dato desconocido. | Tras A02b; paralelo con A05.2. | `P=112, V=100` |
-| A05.4 | `internal/application/{orchestrator,processing}.go`, `internal/bootstrap/agent_capacity.go` y pruebas/memoria: inyectar observer+source+pool+timeout; observar fuera del `BEGIN` con contexto cancelable; crear el único literal productivo de `AgentCapacityObservationSubmission` con ref/idempotencia estables y pasarlo en `ClaimRequest`. Error, ausencia o bloqueo hasta timeout continúan inmediatamente con `ExcludeLaunch`, dejando stop/observe; bootstrap solo compone. | Después de A05.1b/A05.1c/A05.2/A05.3; serial en application/composición y prerequisito obligatorio de A04.2. | `P=50, V=66` |
+| A05.1d | Registro/bootstrap/scheduler: añade exactamente `governance.global_process_slots_budget`, default 70, alineado con `ResourceVector.ProcessSlots`; `BudgetPolicy` lo usa. Elimina el límite Codex del despachador global y lo deja solo en su pool. Ambas claves coexisten sin alias. Retira la clave del informe y añade `runtime.codex.app_server_max_frame_bytes`, default 1048576, límites 1024..67108864, también sin alias. | Después de A05.1; serial sobre registro/bootstrap/scheduler. | `P=50, V=45` |
+| A05.2 | Fuente física configurada y candidatos opacos: slots brutos por `source+pool`, ventanas, ceros presentes, frescura y `AgentPlacementRef`; declara si la medida es bruta y rechaza la doble resta. | Tras A02b; paralela con A05.3a/A05.3b. | `P=55, V=55` |
+| A05.3a | `internal/adapters/agent/codex/appserver/`: subpaquete codec puro con framing JSONL acotado, IDs, correlación, inicialización y allowlists. Solo lo consumen controlador host de cuota y enlace huésped B05; no arranca procesos, no contiene política y no migra el worker host actual. Guarda: ningún adaptador Firecracker lo importa. | Tras A02b; precede A05.3b y B05.3. | `P=70, V=70` |
+| A05.3b | Controlador Codex anfitrión solo de cuota: por perfil mantiene un proceso `app-server` persistente y un lector de protocolo acotado a su conexión. Traduce lectura inicial y eventos a `available/exhausted/unknown`, ventana/reset y porcentaje probatorio. Reconecta la identidad exacta y rota credenciales cerrando/recolectando la anterior. Elimina fichero/fallback. | Tras A05.3a; disjunto de la fuente física. | `P=80, V=70` |
+| A05.4 | Application/bootstrap: inicia todos los controladores antes del planificador, espera una lectura inicial válida por perfil y aborta/recoge todo ante fallo. Luego ordena/deduplica `CapacityCandidates`; la conexión persiste para actualizaciones y se reutiliza en 5/10/20 agentes. Shutdown cancela lectores, cierra, espera y recolecta procesos exactos. | Después de A05.1b–A05.3b; prerequisito de A04.2. | `P=82, V=85` |
 
-El techo de A05 permanece exactamente en `P=300, V=300`, sin contingencia
-oculta: A05.1 consumió 49/49; A05.1b mide 30/21 en su diff; A05.1c toma 14/5;
-A05.2 mide 45/59; A05.3 mide 112/100; y A05.4 conserva 50/66. A05.1c cuesta
-catorce líneas porque replica el objeto de duración canónico de
-`observation_ttl`, no su semántica; cinco líneas de prueba específicas cubren
-valor por defecto, valor explícito y cero inválido, mientras la prueba canónica
-existente acredita getter, schema, referencia, ejemplo y superficie web.
-A05.4 distribuye sus 50 LOC de producto en 15 para dependencia, estado y
-validación del orquestador; 21 para observación acotada, presentación estable y
-reclamo con cierre seguro; y 14 para proyección y composición de bootstrap. Sus
-66 LOC de verificación se reparten en 31 de procesamiento ante éxito, ausencia,
-error, bloqueo y cancelación; 19 de presentación/repetición/ref estable en
-memoria; y 16 de proyección y composición. Las dos líneas compactadas
-reutilizan la misma tabla de casos y sus aserciones comunes —una en
-procesamiento y otra en memoria—, sin retirar ningún caso ni la comprobación de
-presentación estable. No añade tipo, almacén, transacción ni bucle: reutiliza
-`AgentCapacityObserver`,
-`AgentCapacityObservationSubmission`, `ClaimRequest` y `context.WithTimeout`.
-A05.1b cubre la comprobación previa, propagación por `cmd/orquesta`, dos entradas
-de catálogo, manifest y negativos reutilizando el arnés de construcción/CLI:
-demuestra que Codex no fue construido y que el código no terminó como
-`internal`.
-A05.3 usa un DTO nombrado —no `map[string]any`—, rechaza campos desconocidos,
-documentos concatenados y trailing data, y conserva el artefacto como evidencia
-opcional, nunca como requisito para representar la observación. La ruta de
-lectura usa `Lstat`/equivalente seguro, niega symlinks y entradas no regulares,
-lee como máximo el límite más un byte para detectar exceso y comprueba
-cancelación del contexto en la lectura. Estas guardas no convierten errores,
-ausencia o cancelación en capacidad disponible. Los otros 52
-literales son pruebas de A04.2 y se migran mediante helpers acotados a sus
-cuatro paquetes, sin helper común cruzado ni API de pruebas, dentro de su
-`V=100`.
+El techo acumulado de A05 es `P=430,V=400`:
+`49+30+14+50+55+70+80+82=430` y
+`49+21+5+45+55+70+70+85=400`. No se compactan pruebas ni se usa
+contingencia. El codec se implementa una sola vez; no añade daemon, almacén,
+planificador, writer ni bucle de dominio, sondeo o planificación. Solo se
+permite el lector técnico acotado a cada conexión de cuota.
 
-### B05 — `P=650, V=550`
+### B01 — `P=150, V=200`
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B05.1 | `agentmicrovm/v1/guestproto/`: schema y tramas neutrales versionadas para hilo, turno, control y eventos, importables por huésped y transportes. | Primero; congela el contrato compartido sin importar Firecracker. | `P=120, V=100` |
-| B05.2 | `agentmicrovm/v1/guestsupervisor/`: supervisor neutral, reconexión, deduplicación y contrapresión; composición del ejecutable en `tools/agentmicrovm-rootfs/`. | Tras B05.1; paralelo con B05.3 sobre ficheros disjuntos. | `P=140, V=110` |
-| B05.3 | Traductor Codex en `tools/agentmicrovm-rootfs/`, importando `guestproto`: `codex app-server --listen stdio://`, JSONL, `initialize`→`initialized`, métodos exactos y eventos. | Tras B05.1; paralelo con B05.2; sin tocar Firecracker ni el motor público. | `P=150, V=120` |
-| B05.4 | Constructor de rootfs, kernel/init, manifiesto, SBOM, licencias, owner/modos y digest reproducible. | Después de B05.2–B05.3; serial sobre imagen. | `P=160, V=120` |
-| B05.5 | Pruebas de versión incompatible, operación anterior a `initialize`→`initialized`, reinicio con nueva inicialización, petición iniciada por servidor sin manejador/autorización, trama parcial/replay/desorden, límites y ausencia de WebSocket/tmux/secretos. | Último; mismo candidato de B05.4. | `P=80, V=100` |
+| B01.1 | Contrato de selección neutral: application ordena/deduplica candidatos opacos y el claim transaccional fija el primero válido; request/receipt hacen eco de la colocación exacta, sin rutas/perfiles de proveedor en dominio. | Tras A05/A08/B03/B04. | `P=40, V=60` |
+| B01.2 | Bootstrap compone por separado proveedor, aislamiento, fuente física y fuente de cuota; registra el mapa opaco sin decidir colocación ni crear clases N×M. | Después de B01.1; serial con B10. | `P=60, V=70` |
+| B01.3 | Negativos de microVM sin fallback, controlador anfitrión limitado a cuota, procesos host/huésped separados y ausencia de límite Codex global. | Último; abre B10 al quedar verde. | `P=50, V=70` |
+
+### B05 — `P=490, V=320`
+
+| Hijo | Write-set y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| B05.1 | `agentmicrovm/v1/guestproto/`: schema y tramas neutrales versionadas para hilo, turno, control y eventos. | Primero; no importa Firecracker ni proveedor. | `P=100, V=70` |
+| B05.2 | `agentmicrovm/v1/guestsupervisor/`: supervisor neutral, reconexión, deduplicación y contrapresión. | Tras B05.1; paralelo con B05.3. | `P=110, V=60` |
+| B05.3 | Enlace fino huésped: adapta `guestproto` al codec A05.3a y arranca su propia instancia dentro de la microVM. Ningún adaptador Firecracker importa el codec. | Tras B05.1 y A05.3a; paralelo con B05.2. | `P=50, V=30` |
+| B05.4 | Constructor de rootfs, kernel/init, manifiesto, SBOM, licencias, owner/modos y digest reproducible. | Después de B05.2–B05.3; serial sobre imagen. | `P=160, V=100` |
+| B05.5 | Incompatibilidad, preinicialización, reinicio, petición no autorizada, replay/desorden, aislamiento host/huésped, límites y ausencia de WebSocket/tmux/secretos. | Último; mismo candidato de B05.4. | `P=70, V=60` |
 
 ### B07 — `P=500, V=450`
 
@@ -451,16 +485,29 @@ abre una nueva versión, no reescribe v1.
 
 ### Capacidad y cuotas
 
-Una observación no reserva por sí misma. `application`, con su reloj inyectado,
-acepta o rechaza su frescura y reserva de forma atómica al reclamar la acción
-global. Los números necesitan presencia explícita: `remaining=0` es agotado;
-`remaining` ausente es desconocido, nunca ilimitado. Una fuente
-`unknown`, `stale` o `unavailable` impide reservas nuevas, pero no bloquea
-`observe_agent`, `stop_agent`, órdenes ya admitidas ni preservación.
-`RuntimeCodexMaxConcurrentExecutions` deja de participar en admisión y
-despacho globales. La cuota Codex solo es una observación traducida por
-`AgentCapacityObserver`; cambiar proveedor o aislamiento no puede activar una
-lectura de `runtime.codex.*`.
+Una observación no reserva por sí misma. Hay dos contratos distintos:
+
+- La capacidad física describe slots o recursos realmente excluyentes de un
+  pool. `application`, con su reloj, acepta su frescura y el claim la reserva de
+  forma atómica. Se consume al acreditarse el lanzamiento, se libera solo al
+  terminal o `definitely_not_applied`, y `unknown_applied` la conserva en
+  cuarentena hasta reconciliar.
+- La cuota por cuenta/perfil describe estado explícito
+  `available/exhausted/unknown`, ventana/reset, revisión, expiración y
+  reintento. El porcentaje oficial, si existe, se conserva solo como evidencia
+  y nunca se convierte en saldo absoluto. Es una compuerta durable: varios
+  claims pueden ligar la misma revisión válida, pero Orquesta no debita,
+  consume, devuelve ni libera segundos, mensajes, tokens o créditos.
+
+En la capacidad física, `slots=0` es agotado y ausente es desconocido, nunca
+ilimitado. En la cuota Codex no se inventa un restante que el protocolo oficial
+no ofrece. Estado `unknown`, observación stale o fuente no disponible impiden
+launches nuevos, pero no bloquean `observe_agent`, `stop_agent`, órdenes
+admitidas ni preservación.
+`RuntimeCodexMaxConcurrentExecutions` no participa en `BudgetPolicy`,
+admisión o despacho globales. `governance.global_process_slots_budget`, con
+default 70, expresa el guardarraíl genérico de presupuesto; la clave Codex
+coexiste sin alias y queda solo dentro de su conector/pool.
 
 `runtime.capacity.observation_timeout` limita cuánto espera la aplicación a
 `ObserveCapacity`; su contexto derivado se cancela siempre y el contrato del
@@ -470,34 +517,74 @@ define la frescura: `runtime.capacity.observation_ttl` solo limita durante
 cuánto tiempo una observación ya emitida puede aceptarse. Ninguna se deriva de
 la otra ni de `runtime.codex.timeout`.
 
-`WindowRef` evita perpetuar el estado agotado al cruzar un reset. Una
-observación válida de una ventana nueva puede reabrir capacidad; no lo hace un
-timer local sin observación. El legacy que ignoraba ceros con comparaciones
+`WindowRef` evita perpetuar una cuota agotada al cruzar un reset. Una
+observación válida de una ventana nueva puede reabrir la compuerta; no lo hace
+un timer local sin observación. El legacy que ignoraba ceros con comparaciones
 `>0`, persistía `exhausted` tras el reset o extraía cuota de awk/logs/tmux queda
-como lección negativa. Solo datos estructurados y artefactos CAS pueden
-caracterizar la traducción específica del proveedor.
+como lección negativa. El lector actual de un fichero de informe se elimina:
+solo el protocolo estructurado real del proveedor puede alimentar la
+compuerta, sin fichero, tmux, logs, scraping, alias o fallback.
 
 La consulta legacy se limita a caracterizar
 `codex_usage_accounting_v0.go`, `codex_usage_accounting_json_v0.go`,
 `codex_usage_accounting_wrapper_v0.go`,
 `agent_usage_runtime_source_v0.go` y `capacity_decision_v0.go` en la copia de
 consulta. Se preservan semánticas útiles —fuente/calidad/observación/reset,
-agotamiento, reintento y restantes de segundos/mensajes/tokens/créditos—, no
-sus parsers, procesos, tablas, planificador ni código.
+agotamiento y reintento—, no sus supuestos restantes absolutos, parsers,
+procesos, tablas, planificador ni código. Un porcentaje queda como evidencia;
+no se convierte en unidades consumibles.
 
-La reserva se consume con el comprobante que acredita lanzamiento aceptado. Se libera
-solo con terminal exacto o `definitely_not_applied`. `unknown_applied`
-conserva la reserva y exige reconciliar por external identity. Un reinicio no
-crea otro intento ni otra reserva para la misma idempotency key.
+Antes del claim, `application` enumera candidatos opacos, los ordena de forma
+determinista y los deduplica. El claim revalida por CAS y fija/reserva el primer
+candidato todavía disponible en la misma transacción. La
+`AgentPlacementRef` sí atraviesa application y el request/receipt de agente;
+nombre, ruta, cuenta y secreto del perfil no lo hacen. Pool y launcher no
+reseleccionan. Un reinicio o replay conserva colocación e idempotency key.
+
+La capacidad física publicada debe ser bruta/exclusiva. Held se resta una sola
+vez por `source+pool` para reservas `reserved`, `consumed` o `quarantined`; no
+por `observation_ref` y nunca sobre una medida que ya haya descontado agentes
+activos. La fuente declara esa semántica y una ambigüedad falla cerrada.
+
+### Codec de `app-server` y aislamiento de procesos
+
+El codec común específico de Codex solo conoce framing, IDs, inicialización,
+correlación, allowlists y límites de protocolo. No conoce Firecracker, Goal,
+workspace, cuota política ni lifecycle. Evita codecs divergentes, pero no crea
+un proceso compartido.
+
+Por cada perfil de cuota configurado, bootstrap arranca exactamente un proceso
+persistente `codex app-server` y un lector técnico de protocolo acotado a esa
+conexión. Completa `initialize`→`initialized`, solicita y persiste la primera
+lectura válida y solo entonces arranca el planificador. El lector procesa
+respuestas/eventos enmarcados; no sondea, planifica, elige colocación ni escribe
+lifecycle. La conexión se reutiliza aunque haya cero agentes o una ola
+`5/10/20`.
+
+Ante pérdida de conexión, el controlador marca la cuota desconocida, cierra y
+recolecta el hijo exacto y reconecta con límites. La rotación hace lo mismo y
+no publica la sustitución hasta obtener su lectura inicial. Shutdown cancela
+el lector, cierra `stdio`, espera el proceso y, si vence el plazo, mata solo su
+PID verificado y lo recolecta antes de devolver. Un fallo durante bootstrap
+recoge todos los perfiles ya iniciados y no arranca el planificador.
+
+Controlador anfitrión y workers huéspedes usan instancias separadas, con HOME,
+credenciales, `stdio`/socket, hilo, turno y permisos acotados. El codec no
+migra el worker de proceso actual. El controlador no implementa
+`AgentLauncher`, `AgentObserver` o `AgentController`, no abre turnos ni accede
+a workspace, mailbox o artefactos. Es un conector técnico del monolito modular,
+no un daemon de dominio, microservicio, planificador, almacén o writer. Ningún
+adaptador Firecracker importa el codec Codex.
 
 ### Despachador y paralelismo
 
 Hay un solo despachador y un solo protocolo de claim. La preferencia serial por
 no-launch sirve para que observe/stop/mailbox avancen; no es una cola nueva.
-Solo se crea una goroutine corta después de reclamar realmente un launch y
-solo mientras ejecuta ese claim. El límite físico regula claims launch
-concurrentes; jamás trunca `ReadyWorkItems`, reprograma el DAG o limita el
-número de Goals visibles.
+Solo se crea una goroutine corta después de reclamar realmente un launch con
+reserva física durable y solo mientras ejecuta ese claim. El despachador no
+mantiene `maxConcurrentLaunches`; el límite físico del claim regula los
+lanzamientos concurrentes y jamás trunca `ReadyWorkItems`, reprograma el DAG o
+limita el número de Goals visibles.
 
 ### Identidad, red y credenciales
 
@@ -555,7 +642,18 @@ efecto autorizado, con scope e idempotencia propios.
   primitivas neutrales pequeñas, extraídas con dos consumidores y pruebas, son
   reutilizables.
 - **Cuota falsa o stale:** fail-closed para launches nuevos y continuidad de
-  control para ejecuciones existentes. Ningún «desconocido = ilimitado».
+  control para ejecuciones existentes. Ningún «desconocido = ilimitado»,
+  lector de fichero ni reserva contable de cuota.
+- **Colocación no repetible:** application ordena/deduplica antes del claim; la
+  transacción fija el primer candidato válido, lo persiste como ref opaca y el
+  replay no cambia de perfil o pool. Bootstrap no toma esa decisión.
+- **Procesos Codex mezclados:** codec común no significa instancia común.
+  Guardas prueban scopes separados y que el controlador anfitrión solo consulta
+  cuota; el trabajo microVM siempre se ejecuta dentro del huésped.
+- **Ciclo de cuota incompleto:** todos los perfiles completan lectura inicial
+  antes del planificador. Las olas 5/10/20 reutilizan conexiones; reconexión,
+  rotación, fallo parcial de bootstrap y shutdown recolectan proceso y lector
+  exactos. Cero agentes también prueba el ciclo completo.
 - **Recursos huérfanos:** todo run inventaría PID, socket, CID, cgroup,
   temporal y CAS propios. Limpia solo targets verificados; ante ambigüedad
   preserva y reporta.
@@ -569,16 +667,22 @@ efecto autorizado, con scope e idempotencia propios.
   fronteras físicas o de seguridad del adaptador, no microservicios internos.
   El árbol público se limita a contrato v1, implementación Firecracker y suite
   contractual; no importa `internal`. No se aceptan paquetes de una constante,
-  almacenes, planificadores, colas o bucles adicionales, ni otro módulo antes
-  de estabilizar la API.
-- **Presupuesto:** la suma base exacta de las 25 tareas V38 es `P=7.200` LOC no
-  generadas y `V=9.800` LOC de verificación/arneses; generado se informa aparte.
+  almacenes, planificadores, colas ni bucles de dominio, sondeo o planificación,
+  ni otro módulo antes de estabilizar la API. Se permite solo un lector técnico
+  acotado por conexión externa que bootstrap posee y cierra.
+- **Presupuesto:** la suma base exacta de las 25 tareas V38 sigue siendo
+  `P=7.200` LOC no generadas y `V=9.800` LOC de verificación/arneses. El
+  subtotal A03+A04+A05+B01+B05 permanece `P=1.730,V=1.750`:
+  `200+460+430+150+490=1.730` y
+  `400+430+400+200+320=1.750`. A03 incorpora el coste ya integrado
+  `139/291`; A04 incorpora `191/173`. El código generado se informa aparte.
   Existe una contingencia separada máxima de `P=300`, no asignada: usarla exige
   ADR y autorización explícita previas que nombren frontera inevitable y
   retirada/compensación concreta. D01 queda fuera y recibirá presupuesto propio
   al activarse. Objetivo adicional: cero nuevos escritores de ciclo de vida,
-  cero almacenes, cero bucles residentes y cero comandos públicos salvo contrato
-  de aceptación.
+  cero almacenes, cero bucles de dominio/sondeo/planificación y cero comandos
+  públicos salvo contrato de aceptación; los lectores técnicos de protocolo
+  quedan acotados a su conexión y lifecycle de bootstrap.
 
 ## Cierre operativo de cada encargo
 
