@@ -6,10 +6,14 @@ import (
 	"orquesta/internal/goal"
 )
 
+type AgentCapacityObservationSubmission struct {
+	Ref, IdempotencyKey string
+	Observation         AgentCapacityObservation
+}
+
 type AgentCapacityObservationRecord struct {
-	Ref, IdempotencyKey        string
+	AgentCapacityObservationSubmission
 	ExpectedRevision, Revision uint64
-	Observation                AgentCapacityObservation
 }
 
 type AgentCapacityReservationState string
@@ -48,12 +52,13 @@ type AgentCapacityTransition struct {
 	RecordedAt                                      time.Time
 }
 
-func ValidateAgentCapacityObservationRecord(record AgentCapacityObservationRecord) error {
-	if !validAgentCapacityRef(record.Ref) || !validAgentCapacityRef(record.IdempotencyKey) ||
-		record.Revision == 0 || record.Revision != record.ExpectedRevision+1 {
-		return ErrAgentCapacityInvalid
+func MaterializeAgentCapacityObservation(submission AgentCapacityObservationSubmission, expected uint64) (AgentCapacityObservationRecord, error) {
+	if expected == ^uint64(0) || !validAgentCapacityRef(submission.Ref) ||
+		!validAgentCapacityRef(submission.IdempotencyKey) ||
+		ValidateAgentCapacityObservation(submission.Observation) != nil {
+		return AgentCapacityObservationRecord{}, ErrAgentCapacityInvalid
 	}
-	return ValidateAgentCapacityObservation(record.Observation)
+	return AgentCapacityObservationRecord{AgentCapacityObservationSubmission: submission, ExpectedRevision: expected, Revision: expected + 1}, nil
 }
 
 func ValidateAgentCapacityReservation(record AgentCapacityReservation) error {
@@ -100,13 +105,9 @@ func validAgentCapacityReservationRefs(record AgentCapacityReservation) bool {
 }
 
 func validAgentCapacityTransition(from AgentCapacityReservationState, next AgentCapacityTransition) bool {
-	allowed := from == AgentCapacityReserved && next.Outcome == AgentCapacityConsumed && next.Cause == AgentCapacityCauseEffectReceipt ||
-		from == AgentCapacityReserved && next.Outcome == AgentCapacityQuarantined && next.Cause == AgentCapacityCauseUnknownApplied ||
+	return from == AgentCapacityReserved && next.Outcome == AgentCapacityConsumed && next.Cause == AgentCapacityCauseEffectReceipt || from == AgentCapacityReserved && next.Outcome == AgentCapacityQuarantined && next.Cause == AgentCapacityCauseUnknownApplied ||
 		from == AgentCapacityReserved && next.Outcome == AgentCapacityReleased && next.Cause == AgentCapacityCauseDefinitelyNotApplied ||
-		from == AgentCapacityQuarantined && next.Outcome == AgentCapacityConsumed &&
-			(next.Cause == AgentCapacityCauseEffectReceipt || next.Cause == AgentCapacityCauseReconciliation) ||
+		from == AgentCapacityQuarantined && next.Outcome == AgentCapacityConsumed && (next.Cause == AgentCapacityCauseEffectReceipt || next.Cause == AgentCapacityCauseReconciliation) ||
 		from == AgentCapacityQuarantined && next.Outcome == AgentCapacityReleased && next.Cause == AgentCapacityCauseReconciliation ||
-		from == AgentCapacityConsumed && next.Outcome == AgentCapacityReleased &&
-			(next.Cause == AgentCapacityCauseExecutionTerminal || next.Cause == AgentCapacityCauseReconciliation)
-	return allowed
+		from == AgentCapacityConsumed && next.Outcome == AgentCapacityReleased && (next.Cause == AgentCapacityCauseExecutionTerminal || next.Cause == AgentCapacityCauseReconciliation)
 }

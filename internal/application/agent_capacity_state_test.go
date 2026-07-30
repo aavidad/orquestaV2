@@ -13,8 +13,16 @@ func TestAgentCapacityStateValidatesBindingsAmountsAndTransitions(t *testing.T) 
 	workRef, _ := goal.NewWorkItemRef("work:capacity")
 	executionRef, _ := goal.NewExecutionRef("execution:capacity")
 	at := time.Date(2026, 7, 30, 23, 0, 0, 0, time.UTC)
-	observation := AgentCapacityObservationRecord{Ref: "capacity-observation:one", Revision: 1, IdempotencyKey: "observation:one", Observation: validAgentCapacityObservation(t)}
-	appTestNoError(t, ValidateAgentCapacityObservationRecord(observation))
+	submission := AgentCapacityObservationSubmission{Ref: "capacity-observation:one", IdempotencyKey: "observation:one", Observation: validAgentCapacityObservation(t)}
+	observation, firstErr := MaterializeAgentCapacityObservation(submission, 0)
+	successor, successorErr := MaterializeAgentCapacityObservation(AgentCapacityObservationSubmission{Ref: "capacity-observation:two", IdempotencyKey: "observation:two", Observation: submission.Observation}, observation.Revision)
+	if firstErr != nil || successorErr != nil || observation.ExpectedRevision != 0 ||
+		observation.Revision != 1 || successor.ExpectedRevision != 1 || successor.Revision != 2 {
+		t.Fatalf("revisiones inicial=%+v/%v sucesiva=%+v/%v", observation, firstErr, successor, successorErr)
+	}
+	if _, err := MaterializeAgentCapacityObservation(submission, ^uint64(0)); err == nil {
+		t.Fatal("se aceptó desbordar la revisión")
+	}
 	reservation := AgentCapacityReservation{Ref: "capacity-reservation:one", ObservationRef: observation.Ref, ObservationRevision: observation.Revision, ActionRef: "action:capacity", EffectIntentRef: "effect-intent:capacity", IdempotencyKey: "reservation:capacity", ProjectRef: project, GoalRef: goalRef, WorkItemRef: workRef, ExecutionRef: executionRef, PlanGeneration: 1, WorkItemGeneration: 1, Revision: 1, Fence: 1, Allocation: AgentCapacityAllocation{Slots: 1}, State: AgentCapacityReserved, ReservedAt: at, UpdatedAt: at}
 	cases := []struct {
 		from, outcome    AgentCapacityReservationState
@@ -24,16 +32,8 @@ func TestAgentCapacityStateValidatesBindingsAmountsAndTransitions(t *testing.T) 
 		slots            int64
 		valid            bool
 	}{
-		{AgentCapacityReserved, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, true},
-		{AgentCapacityReserved, AgentCapacityQuarantined, AgentCapacityCauseUnknownApplied, "", "", time.Time{}, 1, true},
-		{AgentCapacityReserved, AgentCapacityReleased, AgentCapacityCauseDefinitelyNotApplied, "", "", time.Time{}, 1, true},
-		{AgentCapacityQuarantined, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, true},
-		{AgentCapacityQuarantined, AgentCapacityConsumed, AgentCapacityCauseReconciliation, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, true},
-		{AgentCapacityQuarantined, AgentCapacityReleased, AgentCapacityCauseReconciliation, "", "", time.Time{}, 1, true},
-		{AgentCapacityConsumed, AgentCapacityReleased, AgentCapacityCauseExecutionTerminal, "", "", time.Time{}, 1, true}, {AgentCapacityConsumed, AgentCapacityReleased, AgentCapacityCauseReconciliation, "", "", time.Time{}, 1, true},
-		{AgentCapacityReserved, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "", "", time.Time{}, 1, false}, {AgentCapacityConsumed, AgentCapacityQuarantined, AgentCapacityCauseUnknownApplied, "", "", time.Time{}, 1, false}, {AgentCapacityReserved, AgentCapacityQuarantined, AgentCapacityCauseUnknownApplied, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, false},
-		{AgentCapacityReservationState("unknown"), AgentCapacityReleased, AgentCapacityCauseExecutionTerminal, "", "", time.Time{}, 1, false},
-		{AgentCapacityConsumed, AgentCapacityReleased, AgentCapacityCauseExecutionTerminal, "", "", at.Add(3 * time.Second), 1, false}, {AgentCapacityReserved, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "effect-attempt:one", "effect-receipt:one", time.Time{}, 0, false},
+		{AgentCapacityReserved, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, true}, {AgentCapacityReserved, AgentCapacityQuarantined, AgentCapacityCauseUnknownApplied, "", "", time.Time{}, 1, true}, {AgentCapacityReserved, AgentCapacityReleased, AgentCapacityCauseDefinitelyNotApplied, "", "", time.Time{}, 1, true}, {AgentCapacityQuarantined, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, true}, {AgentCapacityQuarantined, AgentCapacityConsumed, AgentCapacityCauseReconciliation, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, true}, {AgentCapacityQuarantined, AgentCapacityReleased, AgentCapacityCauseReconciliation, "", "", time.Time{}, 1, true}, {AgentCapacityConsumed, AgentCapacityReleased, AgentCapacityCauseExecutionTerminal, "", "", time.Time{}, 1, true}, {AgentCapacityConsumed, AgentCapacityReleased, AgentCapacityCauseReconciliation, "", "", time.Time{}, 1, true},
+		{AgentCapacityReserved, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "", "", time.Time{}, 1, false}, {AgentCapacityConsumed, AgentCapacityQuarantined, AgentCapacityCauseUnknownApplied, "", "", time.Time{}, 1, false}, {AgentCapacityReserved, AgentCapacityQuarantined, AgentCapacityCauseUnknownApplied, "effect-attempt:one", "effect-receipt:one", time.Time{}, 1, false}, {AgentCapacityReservationState("unknown"), AgentCapacityReleased, AgentCapacityCauseExecutionTerminal, "", "", time.Time{}, 1, false}, {AgentCapacityConsumed, AgentCapacityReleased, AgentCapacityCauseExecutionTerminal, "", "", at.Add(3 * time.Second), 1, false}, {AgentCapacityReserved, AgentCapacityConsumed, AgentCapacityCauseEffectReceipt, "effect-attempt:one", "effect-receipt:one", time.Time{}, 0, false},
 	}
 	for _, test := range cases {
 		current := reservation
