@@ -47,7 +47,9 @@
     }
   },
   "bounded_example": {
-    "maximum_microvms": 1,
+    "agent_count": 1,
+    "microvm_count": 1,
+    "isolation": "one_microvm_per_agent",
     "selection_scope": "one_execution_attempt",
     "runtime_wiring": "absent",
     "physical_execution": "not_claimed"
@@ -85,11 +87,40 @@
     "test_ref": "internal/e2e/firecrackerattestor/supervisor_test.go",
     "test_name": "TestValidatePhaseRejectsEveryRequiredPhysicalInvariant"
   },
-  "catalog_absences": {
-    "new_vertical": false,
+  "v38_alignment": {
+    "canonical_vertical": "agent_runtime_elastic",
+    "acceptance_contract": "AC-V38-AGENT-RUNTIME-ELASTIC",
+    "contract_status": "planned",
+    "v23_dependency": "independent",
+    "subgates": {
+      "order": [
+        "A",
+        "B",
+        "C"
+      ],
+      "global_accreditation": "only_after_a_b_c_pass_on_same_candidate",
+      "a": {
+        "scope": "neutral_elastic_core",
+        "kvm": "not_required",
+        "firecracker": "not_required",
+        "status_effect": "cannot_accredit_v38"
+      },
+      "b": {
+        "scope": "firecracker_agent_adapter",
+        "selection": "opt_in_explicit_no_fallback",
+        "isolation": "one_microvm_per_agent",
+        "status_effect": "cannot_accredit_v38"
+      },
+      "c": {
+        "scope": "real_physical_wave",
+        "subject": "same_candidate_as_a_and_b",
+        "status_effect": "accredit_v38_only_after_a_b_c"
+      }
+    },
     "new_capability": false,
-    "new_acceptance_contract": false,
     "new_receipt": false,
+    "new_evidence": false,
+    "v38_accreditation_claim": false,
     "guest_agent_claim": false
   },
   "required_test": {
@@ -101,6 +132,8 @@
     "product_roadmap_test.go",
     "acceptance/fixtures/agent_firecracker_single_vm.json",
     "acceptance/agent_firecracker_single_vm_contract_test.go",
+    "acceptance/fixtures/v38_agent_runtime_elastic_plan.json",
+    "acceptance/v38_agent_runtime_elastic_plan_test.go",
     "docs/corte_agente_firecracker_uno_2026-07-29.md",
     "docs/arquitectura_comunicacion_agentes_firecracker_2026-07-25.md",
     "docs/decision_atestacion_bubblewrap_microvm_2026-07-25.md",

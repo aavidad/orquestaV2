@@ -1,8 +1,9 @@
 # Decisión operativa: atestación Bubblewrap y microVM
 
 Fecha: 2026-07-25. Estado: vigente para la frontera técnica; el orden de
-activación fue corregido el 2026-07-26 y la autoridad de red de agentes se
-ratificó el 2026-07-29. Autoridad: `AGENTS.md`,
+activación fue corregido el 2026-07-26, la autoridad de red de agentes se
+ratificó el 2026-07-29 y la V38 canónica se fijó el 2026-07-30. Autoridad:
+`AGENTS.md`,
 `product/roadmap.json`, contrato V17 e
 `inventario_bugs_orquesta_2026-06-30.md`. Esta decisión no acredita por sí sola
 un nuevo adaptador ni cambia el lifecycle. El corte de alcance vigente está en
@@ -49,11 +50,10 @@ adaptadores reales sin que Firecracker o Bubblewrap entren en dominio.
 Bubblewrap es barato en equipos pequeños y sin KVM; Firecracker ofrece una
 frontera de kernel más fuerte cuando KVM y recursos están disponibles. Por eso
 la composición conserva ambos como adaptadores opt-in. Firecracker no
-desbloquea, acredita ni forma parte de V23. Su activación real dentro de
-`TestAttestor` queda como candidata V38, después de cerrar V23 y acreditar
-Orquesta autoprogramable. No autoriza extender Firecracker al runtime general
-de agentes. Bubblewrap queda congelado como deuda técnica hasta ese mismo
-corte.
+desbloquea, acredita ni forma parte de V23. La antigua candidata que pretendía
+dedicar V38 únicamente a `TestAttestor` queda retirada; la V38 canónica es
+`agent_runtime_elastic`. Bubblewrap continúa como adaptador separado y no
+acredita el runtime de agentes.
 
 | Entorno | Selección |
 |---|---|
@@ -93,22 +93,20 @@ no autorizan trabajo derivado. El criterio único para reanudarlo es
 retomar el frente. Entonces se abrirá un write-set y aceptación propios; hasta
 ese momento no se interpreta esta documentación como orden de instalación.
 
-## Firecracker/microVM diferido: frontera y requisitos
+## Fronteras Firecracker/microVM y requisitos
 
 Firecracker 1.16.1 y `jailer` están presentes como binarios `root:root 0755`.
 La tag `v1.16.1` resuelve al commit
 `2038188f145fb81b8d098147a10e9d9f392fd22f` (tag object
 `e527ccfc54495dabac96f1835db61a40afa15115`). La línea de trabajo conserva
-únicamente materiales para la futura activación opt-in V38 de `TestAttestor`;
-presencia de binarios no equivale a acreditar el proveedor ni a habilitar
-Firecracker para agentes.
+materiales caracterizados para `TestAttestor`; presencia de binarios no
+equivale a acreditar el proveedor ni el runtime elástico de agentes V38.
 
 El startup preflight microVM debe fallar cerrado salvo que pruebe KVM RW para la
 identidad runtime no-root; kernel e imagen guest mínimos digeridos/root-owned;
 `jailer` y cgroup delegados con CPU/memoria/pids y cleanup observable. No hay
 imagen guest acreditada aún. Este mínimo servirá para atestar sujetos sellados
-cuando V38 se abra: no define workspaces de agentes, caches de agentes ni un
-runtime general.
+en su contrato propio: no acredita por sí solo workspaces ni runtime de agentes.
 
 Firecracker 1.16.1 no soporta virtio-serial. El diseño provisional, todavía por
 acreditar, no habilita red, TAP, DHCP, consola 8250 ni vsock: usa un drive
@@ -125,8 +123,8 @@ Bubblewrap en el mismo intento. El rollback selecciona un proveedor previamente
 acreditado solo para intentos nuevos o detiene fail-closed.
 
 Estas restricciones describen exclusivamente el adaptador
-`MicroVMTestAttestor`: V38 continúa sin red y sin vsock. La autoridad distinta
-para red de agentes sigue siendo `agent_microvm_network`, con estado
+`MicroVMTestAttestor`. La autoridad distinta para red de agentes sigue siendo
+`agent_microvm_network`, con estado
 `planned_not_applied`; no modifica `TestAttestor` ni reutiliza su receipt.
 
 La fixture neutral de una microVM solo caracteriza esa autoridad existente:
@@ -135,35 +133,43 @@ sin IP, TAP, bridge, NAT, inbound, east-west ni Internet directo; transporte
 uso obtenida mediante `CredentialStore`. No añade wiring, E2E físico, receipt
 ni afirmación sobre el contenido ejecutado dentro del guest.
 
+## Subgates canónicos de V38
+
+V38 separa deliberadamente el núcleo neutral de la infraestructura física:
+
+| Subgate | Contrato | Efecto de estado |
+|---|---|---|
+| A | Núcleo elástico neutral; no requiere KVM ni Firecracker. | No puede acreditar V38. |
+| B | Adaptador de agentes Firecracker activado expresamente, sin sustitución automática y con una microVM por agente. | No puede acreditar V38 por sí solo. |
+| C | Ola física real sobre el mismo candidato que superó A y B. | Solo acredita V38 después de A y B. |
+
+Solo A, B y C superados por el mismo candidato permiten acreditar V38. La
+decisión `agent_microvm_network` continúa `planned_not_applied`: la fixture
+neutral de una microVM no demuestra el subgate B, no ejecuta el C y no crea
+recibo ni evidencia. Tampoco se reutiliza una atestación de `TestAttestor` para
+acreditar ninguno de esos subgates.
+
 ## Orden de trabajo y deuda deliberadamente diferida
 
 El orden vinculante corregido es:
 
 ```text
-cerrar V23 por su contrato Wizard -> Orquesta autoprogramable
--> V38 candidata: activar TestAttestor Firecracker
--> V39 candidata: evaluar agentes, red acotada y RAM/tmpfs
+prerrequisitos V07,V08,V09,V14,V15,V16,V17,V22 acreditados
+-> V38 prioritaria: runtime elástico completo de agentes
+-> V23 y frentes restantes dirigidos por la propia Orquesta
 ```
 
-La autorización `input:operator-authorization-2026-07-29` no altera ese orden
-para V23, V38 o el runtime amplio. Solo permite conservar la caracterización
-neutral anterior bajo `agent_microvm_network`; ningún verde actual cambia
-`planned_not_applied`.
+La autorización `input:operator-authorization-2026-07-29` solo conserva la
+caracterización neutral anterior bajo `agent_microvm_network`; ningún verde
+actual cambia `planned_not_applied`. La prioridad V38 procede de la decisión
+posterior del operador del 2026-07-30.
 
-Mover todos los agentes a Firecracker no forma parte de V23 ni de este
-adaptador. Tampoco se implementan ahora workspaces, rootfs o caches de agentes
-en RAM/tmpfs, ni checkpoints frecuentes para dichos agentes. Son una deuda
-posterior V39 que solo se evalúa después de cerrar V23, acreditar «Orquesta
-autoprogramable» y resolver V38. Hasta entonces está prohibido ampliar este
-write-set/objetivo
-a runtime general, launchers de agentes, persistencia de checkpoints o cambios
-de almacenamiento de agentes.
-
-La futura evaluación decidirá si RAM/tmpfs y checkpoints mejoran el aislamiento,
-coste y recuperación con evidencia de composición; no se presume que una
-microVM de `TestAttestor` sea una plataforma válida para agentes. Si se aprueba,
-será una nueva capability con contratos, presupuesto, persistencia de checkpoints
-y pruebas de restart/recovery propias.
+Mover agentes a Firecracker no forma parte de V23 ni del adaptador
+`TestAttestor`: pertenece al subgate B del contrato canónico V38. V39 no existe.
+Caches en RAM/tmpfs y checkpoints frecuentes no forman parte del contrato V38
+vigente ni se presumen por la caracterización de una microVM. Incorporarlos
+exigiría modificar antes la autoridad de roadmap y añadir presupuesto,
+persistencia y pruebas de restart/recovery propias.
 
 Para esa deuda futura de agentes, son requisitos obligatorios de aceptación:
 filesystem del host nunca montado y LAN del host nunca enrutable desde la
@@ -175,8 +181,10 @@ identidad Goal/tarea/parent-child. Cada VM solo podrá alcanzar ese gateway y el
 proxy. La política debe bloquear loopback host, RFC1918, ULA, link-local,
 endpoints de metadata/SSRF y puertos no autorizados. NAT nunca será abierto:
 solo puede existir subordinado al netns de la microVM y a reglas nftables
-exactas. Esto no aplica al `TestAttestor`; V38 sigue sin red. Tampoco autoriza
-implementar V39 antes de «Orquesta autoprogramable».
+exactas. Esto no aplica al `TestAttestor`, que sigue sin red ni vsock. El
+adaptador de agentes de V38 conserva `vsock_only` y no obtiene una red IP por
+ello. Ninguna de estas restricciones autoriza atribuir a una caracterización
+parcial la acreditación de V38.
 
 ## Amenazas e invariantes
 

@@ -28,20 +28,31 @@ guest, un launcher microVM o la red futura de agentes.
 Por tanto, conservar código Firecracker compilable no lo convierte en
 autoridad ni precondición de V23.
 
-## Orden posterior
+## Corrección prioritaria de 2026-07-30
 
-Las ideas nuevas se colocan al final y no se insertan dentro de V23:
+V23 continúa sin depender de Firecracker, pero ya no precede al runtime de
+agentes. El operador ha incorporado una única V38 canónica:
 
-| Candidato | Alcance | Precondición |
+| Vertical | Alcance | Precondición |
 | --- | --- | --- |
-| V38 | Activación y acreditación real del adaptador Firecracker de `TestAttestor`, sin red | V23 cerrado y Orquesta autoprogramable |
-| V39 | Evaluación del runtime de agentes en microVM, hasta 16 instancias, red aislada, broker/proxy controlado y RAM/tmpfs | V38 acreditado y contrato propio aprobado |
+| V38 `agent_runtime_elastic` | Demanda completa sin techo oculto, arranque paralelo, una microVM por agente, parada individual, sellado, inventario, conservación y recuperación | `config`, `credentials`, `recovery_backup`, `controls`, `budgets_effects`, `workspace_git`, `test_attestor` y `codex_e2e`, ya acreditadas |
 
-V38 y V39 son candidatos posteriores al catálogo V1-V37 vigente. Esta decisión
-no amplía todavía el catálogo de 257 capacidades, no crea receipts y no
-autoriza implementación. Cuando se abran deberán incorporarse mediante
-contratos, dependencias, presupuesto, negativos, restart/recovery y evidencia
-propios.
+V38 amplía el roadmap a 38 verticales sin añadir capability IDs: el catálogo
+permanece en 257. Su contrato está planificado; no crea receipts ni evidencia
+anticipada. El antiguo candidato V38 de activación aislada de `TestAttestor`
+queda sustituido sin número y V39 no se crea.
+
+El gate se divide sin solapamientos:
+
+| Subgate | Contrato | Puede acreditar V38 |
+| --- | --- | --- |
+| A | Núcleo elástico neutral, sin exigir KVM ni Firecracker. | No. |
+| B | Firecracker para agentes, activación expresa sin sustitución automática y una microVM por agente. | No por sí solo. |
+| C | Ola física real del mismo candidato que superó A y B. | Sí, únicamente después de A y B. |
+
+Por tanto, solo A, B y C superados por el mismo candidato acreditan V38.
+Ningún verde aislado, fixture neutral, prueba unitaria o atestación de
+`TestAttestor` sustituye esa composición.
 
 ## Corrección autoritativa de 2026-07-29
 
@@ -54,7 +65,8 @@ guest, TAP, bridge, NAT, inbound, east-west e Internet directo.
 La fixture neutral `acceptance/fixtures/agent_firecracker_single_vm.json`
 caracteriza el subconjunto de una microVM y conserva la prueba de
 `CredentialStore` de un uso. No crea otra decisión, vertical, capability,
-acceptance contract, receipt ni afirmación de ejecución física.
+acceptance contract, receipt, evidencia ni afirmación de ejecución física.
+Tampoco completa el subgate B: no hay cableado productivo ni lanzamiento físico.
 
 Este ratchet no convierte Firecracker en gate de V23, no altera el default
 `test_attestor.provider=disabled` y no modifica `TestAttestor`, que continúa
@@ -70,7 +82,8 @@ sin red ni vsock.
   infraestructura Firecracker;
 - no se extrae ni reescribe ahora el adaptador existente: queda opt-in y fuera
   del camino de V23;
-- la fixture de una microVM no puede promover estado ni reutilizar receipts;
+- la fixture de una microVM no puede promover `planned_not_applied`, acreditar
+  V38 ni crear o reutilizar receipts o evidencias;
 - Bubblewrap tampoco se reabre hasta que Orquesta sea autoprogramable.
 
 ## Qué sigue realmente en V23
