@@ -50,12 +50,14 @@ Existe una sola secuencia para el binding durable:
 ```text
 A02b contrato de candidatos
   → A04.1 estado de observación/reserva
-  → A03.2 migración progresiva del binding 1:1
+  → A03.2 migración progresiva de cuota y binding 1:1
+  → A03.3 lectura y append CAS por StateRepository
   → A04.2 claim transaccional
 ```
 
-A03.2 no puede adelantarse a los tipos caracterizados en A04.1 y A04.2 no
-puede abrirse directamente desde A04.1: exige la migración A03.2 y la
+A03.2 no puede adelantarse a los tipos caracterizados en A04.1; A03.3 depende
+de esa migración, y A04.2 no puede abrirse directamente desde A04.1: exige
+ambas tareas de persistencia y la
 presentación A05.4. Este orden serial prevalece sobre cualquier paralelismo
 general de A03/A04.
 
@@ -196,8 +198,8 @@ Codex. Posee únicamente:
 - IDs de petición y correlación de respuestas/eventos;
 - negociación de versión;
 - secuencia `initialize` → `initialized`;
-- allowlists por consumidor;
-- errores de protocolo estables.
+- sesión anfitriona de cuota con capacidades nulas y métodos exactos;
+- errores de protocolo estables y descarte del contenido remoto sensible.
 
 Tiene exactamente dos consumidores reales: el controlador anfitrión de cuota y
 el enlace huésped B05. No migra ni modifica el worker de proceso actual. Se
@@ -242,11 +244,20 @@ canónica.
 - Se prohíben escritura doble, réplica de mando, fallback de base y tipos SQL
   dentro del dominio.
 
-La migración ya aplicada `022_agent_capacity.sql` no se modifica. V38 usará la
-siguiente migración libre y progresiva para una tabla
-`AgentPlacementBinding` 1:1 con FK diferida a la reserva, `PlacementRef` opaca y
-`QuotaObservationRef`/revisión inmutables. No añade columna de clase, saldo ni
-lifecycle de cuota.
+La migración ya aplicada `022_agent_capacity.sql` no se modifica. Q2 usará la
+siguiente migración libre y progresiva para dos hechos inmutables:
+
+- `AgentQuotaObservationRecord` completo, con colocación, ventana, estado,
+  calidad, tiempos, evidencia opcional, idempotencia y par de revisiones;
+- `AgentPlacementBinding` 1:1 con exactamente
+  `reservation_ref + placement_ref + quota_observation_ref +
+  quota_observation_revision`, FK diferida a la reserva y referencia compuesta
+  a la cuota de esa misma colocación y revisión.
+
+No añade clase, saldo ni lifecycle de cuota. Q3 amplía el mismo
+`StateRepository` con lectura vigente por colocación y append CAS/idempotente de
+observaciones. No existe writer ni store independiente para el binding:
+únicamente `ClaimNextAction` lo inserta atómicamente junto con la reserva.
 
 ## Modelo de componentes
 
@@ -274,29 +285,41 @@ controlador de cuota host ─── codec común ─── enlace huésped B05
 ```
 
 El controlador anfitrión de cuota también usa el codec común, con una instancia
-y allowlist propias; no aparece en la ruta de ejecución del worker.
+propia que solo admite lectura y actualización de cuota; no aparece en la ruta
+de ejecución del worker.
 
 ## Presupuesto y compensación
 
-No se usa la contingencia de V38. El subtotal de las tareas afectadas permanece
+No se usa la contingencia de V38. La redistribución retira duplicación y
+holgura no consumida, y el subtotal de las tareas afectadas permanece
 exactamente igual:
 
 | Tarea | Antes P/V | Ahora P/V | Variación |
 |---|---:|---:|---:|
-| A03 | 150/250 | 200/400 | +50/+150 |
-| A04 | 480/450 | 460/430 | -20/-20 |
-| A05 | 300/300 | 430/400 | +130/+100 |
-| B01 | 150/200 | 150/200 | 0/0 |
+| A01 | 0/250 | 0/138 | 0/-112 |
+| A02 | 220/250 | 159/226 | -61/-24 |
+| A03 | 150/250 | 334/561 | +184/+311 |
+| A04 | 480/450 | 459/447 | -21/-3 |
+| A05 | 300/300 | 608/508 | +308/+208 |
+| A08 | 100/750 | 0/750 | -100/0 |
+| B01 | 150/200 | 0/50 | -150/-150 |
 | B05 | 650/550 | 490/320 | -160/-230 |
-| **Subtotal** | **1.730/1.750** | **1.730/1.750** | **0/0** |
+| **Subtotal** | **2.050/3.000** | **2.050/3.000** | **0/0** |
 
 La compensación es real:
 
-- A03 reconoce `P=139,V=291` ya consumidos por `71f4a827`; la migración y
-  pruebas nuevas solo disponen de `P=61,V=109`;
-- A04 reconoce `P=191,V=173` ya consumidos por A04.0/A04.1 y limita lo restante
-  a `P=269,V=257`;
-- el codec `app-server` se implementa y prueba una vez en A05;
+- A01 ya materializó sus cuatro cohortes en `P=0,V=138`;
+- A02 atribuye una sola vez `77/120 + 57/65 + 25/41 = 159/226`;
+- A03 conserva `P=139,V=291` ya consumidos por `71f4a827` y reserva
+  `P=195,V=270` para la migración completa de cuota/binding y el contrato CAS
+  del mismo `StateRepository`;
+- A04 atribuye `P=114,V=53` a la base física, `P=46,V=57` al binding neutral y
+  `P=299,V=337` al reclamo y su cierre;
+- A05 mide el codec `app-server` aceptado en `P=278,V=179` y conserva una
+  envolvente conjunta `P=163,V=146` para controlador e inyección;
+- A08 es una compuerta de aceptación y no recibe presupuesto productivo;
+- B01 queda como gate contractual `P=0,V=50`: la selección vive en A04, las
+  fuentes/controlador en A05 y la composición Firecracker real en B10.4;
 - B05 conserva solo el enlace fino del huésped;
 - se elimina el lector de fichero y su configuración;
 - A04 no implementa reserva, débito o liberación de cuatro magnitudes de cuota;
@@ -304,7 +327,8 @@ La compensación es real:
   sondeo o planificación; solo el lector técnico acotado por conexión que
   bootstrap inicia y cierra.
 
-El total V38 permanece `P=7.200, V=9.800`. Superar cualquiera de estos techos
+El total V38 permanece `P=7.200, V=9.800` y ninguna cifra se descuenta dos
+veces. Superar cualquiera de estos techos
 requiere otro ADR, compensación concreta y autorización antes de programar. Un
 exceso no se oculta como generado, prueba existente o trabajo de otra tarea.
 
