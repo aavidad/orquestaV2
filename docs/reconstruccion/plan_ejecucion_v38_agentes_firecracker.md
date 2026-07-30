@@ -173,8 +173,11 @@ getter, schema, referencia, ejemplo y superficie web.
 A05.1d retira otra dependencia histórica incorrecta:
 `runtime.codex.max_concurrent_executions` no puede gobernar `BudgetPolicy` ni
 el despachador de proveedores o aislamientos distintos. El registro canónico
-añade `governance.global_process_slots_budget`, con default 70; el despachador
-global deja de tener un techo Codex y solo ejecuta un `launch_agent` que
+añade `governance.global_process_slots_budget`, con default 70. A05.1d
+desacopla el despachador de Codex y migra provisionalmente su techo a esa clave
+neutral, conservando `maxConcurrentLaunches` y `ExcludeLaunch`: A04.2 todavía
+no ha ligado la reserva física al claim. A07 retira ese mecanismo solo después
+de acreditar A04.2; desde entonces ejecuta únicamente un `launch_agent` que
 `ClaimNextAction` haya devuelto con reserva física durable. La clave Codex se
 mantiene exclusivamente dentro de su conector/pool como defensa local y no es
 alias de la clave global.
@@ -320,7 +323,7 @@ coincide exactamente con el techo de su padre y ningún hijo supera
 | A05.1 | `config/registry.json` y salidas generadas: ejes `provider`/`isolation`, fuente, `runtime.capacity.observation_ttl` y máximo de lectura del informe. Ya integrado en `87db76eb`; sus `P=49, V=49` están consumidos, pero el lector de informe y su clave se retirarán en A05.1d/A05.3b. | Primero y serial sobre registro; completado parcial, no acreditante. | `P=49, V=49` |
 | A05.1b | `internal/bootstrap/runtime.go`, `cmd/orquesta/main.go`, catálogos `es.json`/`en.json`, manifest y pruebas compactas/reutilizadas: antes de construir renderizador, credenciales o Codex/proceso, `microvm` devuelve exactamente `bootstrap.runtime_isolation_not_composed`, presentado con `error.bootstrap.runtime_isolation_not_composed`; la CLI conserva el código y no lo degrada a `internal`. Cero fallback/recursos; `process` sigue verde. | Después de A05.1; antes de A05.4 y permanece serial con B01/B10 hasta que B10 lo sustituya. | `P=30, V=21` |
 | A05.1c | `config/registry.json` y proyecciones generadas: añadir `runtime.capacity.observation_timeout` positivo, separado de `observation_ttl` y de `runtime.codex.*`; comprobar valor por defecto, valor TOML explícito, rechazo de cero y sincronización canónica de todas las proyecciones. | Después de A05.1; serial sobre registro y antes de A05.4. | `P=14, V=5` |
-| A05.1d | Registro/bootstrap/scheduler: añade exactamente `governance.global_process_slots_budget`, default 70, alineado con `ResourceVector.ProcessSlots`; `BudgetPolicy` lo usa. Elimina el límite Codex del despachador global y lo deja solo en su pool. Ambas claves coexisten sin alias. Retira la clave del informe y añade `runtime.codex.app_server_max_frame_bytes`, default 1048576, límites 1024..67108864, también sin alias. | Después de A05.1; serial sobre registro/bootstrap/scheduler. | `P=50, V=45` |
+| A05.1d | Registro/bootstrap/scheduler: añade exactamente `governance.global_process_slots_budget`, default 70, alineado con `ResourceVector.ProcessSlots`; `BudgetPolicy` lo usa. Desacopla provisionalmente el techo del despachador de Codex: conserva `maxConcurrentLaunches`/`ExcludeLaunch`, pero los alimenta solo con la clave neutral hasta que A04.2 permita retirarlos en A07. La clave Codex queda solo en su pool; ambas coexisten sin alias. Retira la clave del informe y añade `runtime.codex.app_server_max_frame_bytes`, default 1048576, límites 1024..67108864, también sin alias. | Después de A05.1; serial sobre registro/bootstrap/scheduler. | `P=50, V=45` |
 | A05.2 | Fuente física configurada y candidatos opacos: slots brutos por `source+pool`, ventanas, ceros presentes, frescura y `AgentPlacementRef`; declara si la medida es bruta y rechaza la doble resta. | Tras A02b; paralela con A05.3a/A05.3b. | `P=55, V=55` |
 | A05.3a | `internal/adapters/agent/codex/appserver/`: subpaquete codec puro con framing JSONL acotado, IDs, correlación, inicialización y allowlists. Solo lo consumen controlador host de cuota y enlace huésped B05; no arranca procesos, no contiene política y no migra el worker host actual. Guarda: ningún adaptador Firecracker lo importa. | Tras A02b; precede A05.3b y B05.3. | `P=70, V=70` |
 | A05.3b | Controlador Codex anfitrión solo de cuota: por perfil mantiene un proceso `app-server` persistente y un lector de protocolo acotado a su conexión. Traduce lectura inicial y eventos a `available/exhausted/unknown`, ventana/reset y porcentaje probatorio. Reconecta la identidad exacta y rota credenciales cerrando/recolectando la anterior. Elimina fichero/fallback. | Tras A05.3a; disjunto de la fuente física. | `P=80, V=70` |
@@ -585,6 +588,13 @@ reserva física durable y solo mientras ejecuta ese claim. El despachador no
 mantiene `maxConcurrentLaunches`; el límite físico del claim regula los
 lanzamientos concurrentes y jamás trunca `ReadyWorkItems`, reprograma el DAG o
 limita el número de Goals visibles.
+
+Ese es el estado final de A07. Durante la transición A05.1d conserva
+temporalmente `maxConcurrentLaunches` y `ExcludeLaunch`, alimentados por
+`governance.global_process_slots_budget`, para no dejar ilimitado el modo
+`process` antes de A04.2. La prueba transitoria acredita que un presupuesto
+neutral N nunca supera N y que variar
+`runtime.codex.max_concurrent_executions` no altera el despacho global.
 
 ### Identidad, red y credenciales
 

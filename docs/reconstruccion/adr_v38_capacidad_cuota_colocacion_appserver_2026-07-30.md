@@ -213,12 +213,18 @@ Se añade al registro canónico
 `governance.global_token_budget` y `ResourceVector.ProcessSlots`, para que
 `BudgetPolicy` no dependa de Codex. Su default y migración semántica son 70.
 
-El despachador elimina `maxConcurrentLaunches` y no consulta
-`RuntimeCodexMaxConcurrentExecutions`: ejecuta solo un lanzamiento que
-`ClaimNextAction` haya devuelto con colocación y reserva física durables.
+La transición respeta el orden causal. A05.1d deja de consultar
+`RuntimeCodexMaxConcurrentExecutions`, pero conserva provisionalmente
+`maxConcurrentLaunches` y `ExcludeLaunch` alimentados por
+`governance.global_process_slots_budget`: A04.2 todavía no ha ligado la reserva
+física al claim. A07 elimina ese mecanismo únicamente después de acreditar
+A04.2; desde entonces ejecuta solo un lanzamiento que `ClaimNextAction` haya
+devuelto con colocación y reserva física durables.
 `runtime.codex.max_concurrent_executions` queda únicamente como guardarraíl
 privado del conector/pool Codex. Ambas claves coexisten sin alias: no son
-semánticamente equivalentes.
+semánticamente equivalentes. La prueba transitoria demuestra que un presupuesto
+neutral N nunca supera N y que cambiar solo el límite Codex no modifica el
+despacho global.
 
 Se retira `runtime.codex.capacity_report_max_bytes` y se define
 `runtime.codex.app_server_max_frame_bytes` con default 1048576 y límites
