@@ -156,6 +156,50 @@ func TestTraceabilityRebuildSchemaValidatesCanonicalLedgers(t *testing.T) {
 			}
 		})
 	}
+
+	expandedContent, err := os.ReadFile("product/traceability/legacy_physical_subject_universe_2026-07-30.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mutation := range []struct {
+		name string
+		edit func(map[string]any)
+	}{
+		{name: "campo superior desconocido", edit: func(value map[string]any) {
+			value["present_in_stable_view"] = true
+		}},
+		{name: "presencia actual en sujeto", edit: func(value map[string]any) {
+			subjects := value["subjects"].([]any)
+			subjects[0].(map[string]any)["present_in_stable_view"] = true
+		}},
+		{name: "identidad simple como miembro", edit: func(value map[string]any) {
+			subjects := value["subjects"].([]any)
+			subject := subjects[0].(map[string]any)
+			subject["collection_root_id"] = subject["root_id"]
+		}},
+		{name: "conteo alterado", edit: func(value map[string]any) {
+			value["counts"].(map[string]any)["physical_subjects"] = float64(381)
+		}},
+		{name: "digest alterado", edit: func(value map[string]any) {
+			value["subject_set_sha256"] = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		}},
+		{name: "dominio alterado", edit: func(value map[string]any) {
+			contracts := value["digest_contracts"].(map[string]any)
+			contracts["subjects"].(map[string]any)["domain"] = "orquesta.otro.v1"
+		}},
+		{name: "membresía incompleta", edit: func(value map[string]any) {
+			seals := value["membership_seals"].([]any)
+			value["membership_seals"] = seals[:len(seals)-1]
+		}},
+	} {
+		t.Run("rechaza_expansion_"+strings.ReplaceAll(mutation.name, " ", "_"), func(t *testing.T) {
+			value := traceDecodeSchemaInstance(t, "universo físico expandido", expandedContent).(map[string]any)
+			mutation.edit(value)
+			if err := resolved.Validate(value); err == nil {
+				t.Fatalf("el esquema aceptó la mutación de expansión %q", mutation.name)
+			}
+		})
+	}
 }
 
 func traceDecodeSchemaInstance(t *testing.T, source string, content []byte) any {

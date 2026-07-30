@@ -7,6 +7,9 @@
       "$ref": "#/$defs/legacySourceRootsV3"
     },
     {
+      "$ref": "#/$defs/legacyPhysicalSubjectUniverseV1"
+    },
+    {
       "$ref": "#/$defs/legacyGoLedger"
     },
     {
@@ -147,6 +150,229 @@
         "unresolved_source_decision_root_ids": {"$ref": "#/$defs/nonemptyUniqueStrings"},
         "pending_observation_batch_ids": {"$ref": "#/$defs/nonemptyUniqueStrings"},
         "blocking_physical_census_root_ids": {"$ref": "#/$defs/nonemptyUniqueStrings"}
+      }
+    },
+    "legacyPhysicalSubjectUniverseV1": {
+      "type": "object",
+      "description": "Valida forma y constantes declaradas; la equivalencia semántica exige regeneración con legacy_physical_expansion --verify.",
+      "additionalProperties": false,
+      "required": [
+        "document_kind",
+        "schema_version",
+        "source_v3",
+        "digest_contracts",
+        "logical_reference_set_sha256",
+        "subject_set_sha256",
+        "counts",
+        "decisions",
+        "membership_seals",
+        "subjects"
+      ],
+      "properties": {
+        "document_kind": {"const": "orquesta_legacy_physical_subject_universe"},
+        "schema_version": {"const": 1},
+        "source_v3": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["document_kind", "schema_version", "bytes_sha256"],
+          "properties": {
+            "document_kind": {"const": "orquesta_legacy_source_roots"},
+            "schema_version": {"const": 3},
+            "bytes_sha256": {
+              "const": "sha256:0feffd7e493bb643bd6dbfa393d8480688f73f7ef452dbc73fbd0e23ede02044"
+            }
+          }
+        },
+        "digest_contracts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_v3_bytes",
+            "logical_references",
+            "collection_members",
+            "subjects"
+          ],
+          "properties": {
+            "source_v3_bytes": {
+              "const": {
+                "algorithm": "sha256",
+                "domain": "orquesta.legacy-source-roots.file-bytes.v1",
+                "domain_in_digest": false
+              }
+            },
+            "logical_references": {
+              "const": {
+                "algorithm": "sha256",
+                "domain": "orquesta.legacy-blocking-root-ids.ordered-nul.v1",
+                "domain_in_digest": false
+              }
+            },
+            "collection_members": {
+              "const": {
+                "algorithm": "sha256",
+                "domain": "orquesta.legacy-collection-members.canonical-json-lf.v1",
+                "domain_in_digest": false
+              }
+            },
+            "subjects": {
+              "const": {
+                "algorithm": "sha256",
+                "domain": "orquesta.legacy-physical-subjects.ordered-canonical-json-lf.v1",
+                "domain_in_digest": true
+              }
+            }
+          }
+        },
+        "logical_reference_set_sha256": {
+          "const": "sha256:2d2b81b27bfccad5a0b3a6dfabdec299a516dc3b31400f2cb2ecd6948c1e7834"
+        },
+        "subject_set_sha256": {
+          "const": "sha256:405f5b68f0e886a40bb69751fbb62f60567a15d6879393e9f42c4d1b5a458cc4"
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_roots",
+            "logical_references",
+            "simple_references",
+            "collection_references",
+            "collection_members",
+            "physical_subjects",
+            "historical_present",
+            "historical_absent"
+          ],
+          "properties": {
+            "source_roots": {"const": 122},
+            "logical_references": {"const": 112},
+            "simple_references": {"const": 97},
+            "collection_references": {"const": 15},
+            "collection_members": {"const": 285},
+            "physical_subjects": {"const": 382},
+            "historical_present": {"const": 364},
+            "historical_absent": {"const": 18}
+          }
+        },
+        "decisions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["incluir", "excluir", "pendiente"],
+          "properties": {
+            "incluir": {"const": 36},
+            "excluir": {"const": 49},
+            "pendiente": {"const": 27}
+          }
+        },
+        "membership_seals": {
+          "const": [
+            {
+              "root_id": "goal_workspaces",
+              "member_count": 83,
+              "members_sha256": "sha256:03828dd1e986657f4ad48b08498c5fe3abf3b5888906260039b5543953c17697"
+            },
+            {
+              "root_id": "legacy_rebuild_worktrees",
+              "member_count": 23,
+              "members_sha256": "sha256:ba327b5fecb1c91c01ae1823a318856d70d1a8e4bebfa8c0616626e2e64d5871"
+            },
+            {
+              "root_id": "legacy_worktrees_operativos",
+              "member_count": 11,
+              "members_sha256": "sha256:fe941bf370ff1e7daab609872015695672088302ddc50cbac0830e9b884b6b43"
+            },
+            {
+              "root_id": "v2_agent_worktrees",
+              "member_count": 22,
+              "members_sha256": "sha256:af0322f12800cd674df31d982c0d441283148a974f38bb64e30bb54126b1d014"
+            },
+            {
+              "root_id": "v2_backups",
+              "member_count": 1,
+              "members_sha256": "sha256:30422e0ba8396ffb3234a1a1c73fc33e0829fa7be76cec105678c54a4e3de6db"
+            },
+            {
+              "root_id": "v2_runtime_workspaces",
+              "member_count": 4,
+              "members_sha256": "sha256:7be40372ac5eda0f058fb7fa25118b0928de6de33dc7cead27c6d47e9db26c9a"
+            },
+            {
+              "root_id": "v2_manual_worktrees",
+              "member_count": 12,
+              "members_sha256": "sha256:2d3fa010079b41c8ad0d79ba77ef8beb05b84c7b3eb61b96c8ab86aa991e5e0b"
+            },
+            {
+              "root_id": "consumidor_opes_candidato",
+              "member_count": 3,
+              "members_sha256": "sha256:d08e440c0c9b23f417fdc01ff2ae9719f7f359c3467c413d53d34b25421d080f"
+            },
+            {
+              "root_id": "legacy_principal_worktrees_restantes",
+              "member_count": 7,
+              "members_sha256": "sha256:2293e9b0eb545ecdeb309c3c145dd135f3520bff01927e1da7fed78da4529bb0"
+            },
+            {
+              "root_id": "legacy_autonomia_worktrees",
+              "member_count": 4,
+              "members_sha256": "sha256:89f849c771cd87cbbb89e871e5f4873fa91d4eb5c6085b5cb18d0349ca04d6fb"
+            },
+            {
+              "root_id": "legacy_copia_temprana_worktrees",
+              "member_count": 13,
+              "members_sha256": "sha256:3937deed17ce767bdd8b81b1ec27347a6ea5c60bba25e85249dc2e93d1f0c1a6"
+            },
+            {
+              "root_id": "municipal_worktrees",
+              "member_count": 2,
+              "members_sha256": "sha256:4942a5c1dbaa2f882fd85e68fdde29f77bf71e22e23820855226bc10dd176b97"
+            },
+            {
+              "root_id": "vec_principal_worktrees",
+              "member_count": 89,
+              "members_sha256": "sha256:bed855e42cc2fc26fe9c457a41ae7d6012dbfd7f094f3f23fb301715a16a232b"
+            },
+            {
+              "root_id": "grxgo_respaldos",
+              "member_count": 7,
+              "members_sha256": "sha256:4c990b2aca500f8bae3ab5997515ba75eb6c41ff45c31a407c53f8901e35e2da"
+            },
+            {
+              "root_id": "municipal_scripts_orquestacion",
+              "member_count": 4,
+              "members_sha256": "sha256:034f6fbd32cbe6a904ba15be48c7118d0e086ff46fddc90dc444c1827bd4159d"
+            }
+          ]
+        },
+        "subjects": {
+          "type": "array",
+          "minItems": 382,
+          "maxItems": 382,
+          "uniqueItems": true,
+          "items": {
+            "oneOf": [
+              {"$ref": "#/$defs/legacyPhysicalSimpleSubject"},
+              {"$ref": "#/$defs/legacyPhysicalCollectionMemberSubject"}
+            ]
+          }
+        }
+      }
+    },
+    "legacyPhysicalSimpleSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "root_id"],
+      "properties": {
+        "kind": {"const": "single"},
+        "root_id": {"type": "string", "minLength": 1}
+      }
+    },
+    "legacyPhysicalCollectionMemberSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "collection_root_id", "path_alias"],
+      "properties": {
+        "kind": {"const": "member"},
+        "collection_root_id": {"type": "string", "minLength": 1},
+        "path_alias": {"type": "string", "minLength": 1}
       }
     },
     "sha256Prefixed": {
