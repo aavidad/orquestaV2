@@ -50,6 +50,11 @@ type AgentCapacityResources struct {
 	Credits  AgentCapacityDimension
 }
 
+// AgentCapacityDemand makes zero and missing quantities different facts.
+type AgentCapacityDemand struct {
+	Slots, Seconds, Messages, Tokens, Credits AgentCapacityAmount
+}
+
 type AgentCapacityObservation struct {
 	SourceRef   AgentCapacitySourceRef
 	PoolRef     AgentCapacityPoolRef
@@ -116,6 +121,8 @@ func DecideAgentCapacityAdmission(
 	clock Clock,
 	observation AgentCapacityObservation,
 	sourceErr error,
+	demand AgentCapacityDemand,
+	held AgentCapacityDemand,
 ) (AgentCapacityAdmission, error) {
 	decision := AgentCapacityAdmission{ControlAllowed: true}
 	if clock == nil {
@@ -132,6 +139,12 @@ func DecideAgentCapacityAdmission(
 	if err := ValidateAgentCapacityObservation(observation); err != nil {
 		return decision, err
 	}
+	if err := validateAgentCapacityDemand(demand); err != nil {
+		return decision, err
+	}
+	if err := validateAgentCapacityDemand(held); err != nil {
+		return decision, err
+	}
 	decision.WindowRef = observation.WindowRef
 	if now.Before(observation.ObservedAt) {
 		return decision, ErrAgentCapacityInvalid
@@ -142,15 +155,37 @@ func DecideAgentCapacityAdmission(
 	case !now.Before(observation.ExpiresAt):
 		decision.Reason = AgentCapacityAdmissionStale
 	case observation.Quality == governance.UsageQualityUnknown ||
-		agentCapacityUnknown(observation.Resources):
+		agentCapacityInputsUnknown(observation.Resources, demand, held):
 		decision.Reason = AgentCapacityAdmissionUnknown
-	case agentCapacityExhausted(observation.Resources):
-		decision.Reason = AgentCapacityAdmissionExhausted
 	default:
-		decision.Reason = AgentCapacityAdmissionAvailable
-		decision.NewAdmissions = observation.Resources.Slots.Remaining.Value
+		admissions, err := agentCapacityNewAdmissions(observation.Resources, demand, held)
+		if err != nil {
+			return decision, err
+		}
+		if admissions == 0 {
+			decision.Reason = AgentCapacityAdmissionExhausted
+		} else {
+			decision.Reason = AgentCapacityAdmissionAvailable
+			decision.NewAdmissions = admissions
+		}
 	}
 	return decision, nil
+}
+
+func AgentCapacityDemandFromBudget(demand governance.BudgetDemand) (AgentCapacityDemand, error) {
+	if err := governance.ValidateBudgetDemand(demand); err != nil {
+		return AgentCapacityDemand{}, ErrAgentCapacityInvalid
+	}
+	resources := demand.Resources
+	seconds := resources.ActiveTimeNS / int64(time.Second)
+	if resources.ActiveTimeNS%int64(time.Second) != 0 {
+		seconds++
+	}
+	return AgentCapacityDemand{
+		Slots:   AgentCapacityAmount{Present: true, Value: resources.ProcessSlots},
+		Seconds: AgentCapacityAmount{Present: true, Value: seconds},
+		Tokens:  AgentCapacityAmount{Present: true, Value: resources.Tokens},
+	}, nil
 }
 
 func validateAgentCapacityDimension(dimension AgentCapacityDimension) error {
@@ -175,34 +210,76 @@ func validateAgentCapacityDimension(dimension AgentCapacityDimension) error {
 	return nil
 }
 
-func agentCapacityUnknown(resources AgentCapacityResources) bool {
+func validateAgentCapacityDemand(demand AgentCapacityDemand) error {
+	for _, amount := range demand.amounts() {
+		if !amount.Present && amount.Value != 0 || amount.Value < 0 {
+			return ErrAgentCapacityInvalid
+		}
+	}
+	return nil
+}
+
+func agentCapacityInputsUnknown(
+	resources AgentCapacityResources,
+	demand AgentCapacityDemand,
+	held AgentCapacityDemand,
+) bool {
 	if resources.Slots.Applicability != AgentCapacityApplicabilityApplicable {
 		return true
 	}
-	for _, dimension := range resources.dimensions() {
+	dimensions, demands, retained := resources.dimensions(), demand.amounts(), held.amounts()
+	for index, dimension := range dimensions {
 		if dimension.Applicability == AgentCapacityApplicabilityUnknown ||
 			dimension.Applicability == AgentCapacityApplicabilityApplicable &&
-				!dimension.Remaining.Present {
+				(!dimension.Remaining.Present || !demands[index].Present || !retained[index].Present) {
 			return true
 		}
 	}
 	return false
 }
 
-func agentCapacityExhausted(resources AgentCapacityResources) bool {
-	for _, dimension := range resources.dimensions() {
-		if dimension.Applicability == AgentCapacityApplicabilityApplicable &&
-			dimension.Remaining.Present && dimension.Remaining.Value == 0 {
-			return true
+func agentCapacityNewAdmissions(
+	resources AgentCapacityResources,
+	demand AgentCapacityDemand,
+	held AgentCapacityDemand,
+) (int64, error) {
+	dimensions, demands, retained := resources.dimensions(), demand.amounts(), held.amounts()
+	var admissions int64
+	for index, dimension := range dimensions {
+		if dimension.Applicability != AgentCapacityApplicabilityApplicable {
+			continue
+		}
+		if index == 0 && demands[index].Value == 0 {
+			return 0, ErrAgentCapacityInvalid
+		}
+		if demands[index].Value == 0 {
+			continue
+		}
+		available := dimension.Remaining.Value - retained[index].Value
+		if available <= 0 {
+			return 0, nil
+		}
+		fit := available / demands[index].Value
+		if fit == 0 {
+			return 0, nil
+		}
+		if admissions == 0 || fit < admissions {
+			admissions = fit
 		}
 	}
-	return false
+	return admissions, nil
 }
 
 func (resources AgentCapacityResources) dimensions() [5]AgentCapacityDimension {
 	return [5]AgentCapacityDimension{
 		resources.Slots, resources.Seconds, resources.Messages,
 		resources.Tokens, resources.Credits,
+	}
+}
+
+func (demand AgentCapacityDemand) amounts() [5]AgentCapacityAmount {
+	return [5]AgentCapacityAmount{
+		demand.Slots, demand.Seconds, demand.Messages, demand.Tokens, demand.Credits,
 	}
 }
 
