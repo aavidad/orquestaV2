@@ -6,6 +6,7 @@ import (
 
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
+	"orquesta/internal/ports"
 )
 
 type AgentQuotaWindowRef string
@@ -54,4 +55,49 @@ func validAgentQuotaObservation(record AgentQuotaObservationRecord) bool {
 	return validAgentCapacityRef(record.Ref) && validAgentCapacityRef(string(record.WindowRef)) &&
 		record.Revision > 0 && validStatus && validAgentCapacityQuality(record.Quality) &&
 		!record.ObservedAt.IsZero() && record.ExpiresAt.After(record.ObservedAt) && validTimes
+}
+
+type AgentPlacementObservationPresentation struct {
+	ObservationRef      string
+	ObservationRevision uint64
+}
+type AgentCapacityPlacementCandidate struct {
+	PlacementRef    ports.AgentPlacementRef
+	Physical, Quota AgentPlacementObservationPresentation
+}
+
+func ValidateAgentCapacityPlacementCandidate(candidate AgentCapacityPlacementCandidate) error {
+	if candidate.PlacementRef.String() == "" ||
+		!validAgentCapacityRef(candidate.Physical.ObservationRef) ||
+		!validAgentCapacityRef(candidate.Quota.ObservationRef) ||
+		candidate.Physical.ObservationRef == candidate.Quota.ObservationRef ||
+		candidate.Physical.ObservationRevision == 0 || candidate.Quota.ObservationRevision == 0 {
+		return ErrAgentCapacityInvalid
+	}
+	return nil
+}
+
+type AgentPlacementBinding struct {
+	placementRef                        ports.AgentPlacementRef
+	reservationRef, quotaObservationRef string
+	quotaObservationRevision            uint64
+}
+
+func NewAgentPlacementBinding(candidate AgentCapacityPlacementCandidate, reservation AgentCapacityReservation, quota AgentQuotaObservationRecord) (AgentPlacementBinding, error) {
+	if ValidateAgentCapacityPlacementCandidate(candidate) != nil ||
+		ValidateAgentCapacityReservation(reservation) != nil || !validAgentQuotaObservation(quota) ||
+		candidate.Physical.ObservationRef != reservation.ObservationRef ||
+		candidate.Physical.ObservationRevision != reservation.ObservationRevision ||
+		candidate.Quota.ObservationRef != quota.Ref || candidate.Quota.ObservationRevision != quota.Revision {
+		return AgentPlacementBinding{}, ErrAgentCapacityInvalid
+	}
+	return AgentPlacementBinding{candidate.PlacementRef, reservation.Ref, quota.Ref, quota.Revision}, nil
+}
+
+func (binding AgentPlacementBinding) PlacementRef() ports.AgentPlacementRef {
+	return binding.placementRef
+}
+func (binding AgentPlacementBinding) ReservationRef() string { return binding.reservationRef }
+func (binding AgentPlacementBinding) QuotaObservation() (string, uint64) {
+	return binding.quotaObservationRef, binding.quotaObservationRevision
 }
