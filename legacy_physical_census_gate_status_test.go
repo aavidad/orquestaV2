@@ -24,6 +24,9 @@ const (
 	acceptedExpansionDigest      = "593bcb5069241f937c0d10b64b8e183645fd78c66001a72832e1dac01de3336a"
 	physicalSubjectUniverseHash  = "b81478cef265fbb3970925cd09d450b23cd42196858e271c7b26a229fa106f1e"
 	physicalSubjectSetDigest     = "405f5b68f0e886a40bb69751fbb62f60567a15d6879393e9f42c4d1b5a458cc4"
+	acceptedMappingDigest        = "7e85ac617f396023d76c1751f4122151bf45926d059972b4d67fe2bd00bb2a71"
+	mappingReviewRecordPath      = "docs/reconstruccion/revision_validador_mapeo_historico_2026-07-30.md"
+	mappingReviewRecordDigest    = "128f335bafd0faee4eb6a2a7d962739021b1941c2f741316a33dc951c66f4d39"
 )
 
 func TestLegacyPhysicalCensusGateRemainsClosed(t *testing.T) {
@@ -51,6 +54,14 @@ func TestLegacyPhysicalCensusGateRemainsClosed(t *testing.T) {
 		physicalSubjectUniverseHash,
 		"sha256:" + physicalSubjectSetDigest,
 		"8234e64eb8a48ff6ca9cf86896eabff1fb8fc0e3",
+		"08063318512682b7c6e5212affc1986afa363da3",
+		"sha256:" + acceptedMappingDigest,
+		mappingReviewRecordPath,
+		mappingReviewRecordDigest,
+		"ab318e74946f15001fa1ce429f46dd716b15787b",
+		"El validador solo comprueba forma, ligadura por bytes e integridad interna",
+		"No se ha producido",
+		"ningún candidato físico real.",
 		"`closed: false` permanece",
 		"Ninguna raíz real fue abierta, enumerada o censada",
 		"Es una observación fechada, no una garantía futura.",
@@ -97,6 +108,7 @@ func TestLegacyPhysicalCensusGateRemainsClosed(t *testing.T) {
 	assertFileDigest(t, sealedCensusPlanPath, sealedCensusPlanDigest)
 	assertFileDigest(t, sealedCensusPlanTestPath, sealedCensusPlanTestDigest)
 	assertFileDigest(t, physicalSubjectUniversePath, physicalSubjectUniverseHash)
+	assertFileDigest(t, mappingReviewRecordPath, mappingReviewRecordDigest)
 	assertConsolidatedReviews(t, []string{"004", "005", "008", "009", "010", "011"}, acceptedPhysicalCensorDigest)
 	assertConsolidatedReviews(t, []string{"012", "013", "014", "015"}, acceptedExpansionDigest)
 	if got := physicalCensorTreeDigest(t); got != acceptedPhysicalCensorDigest {

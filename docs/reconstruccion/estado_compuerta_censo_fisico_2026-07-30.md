@@ -99,12 +99,30 @@ conclusiones consolidadas y los cierres de `BUG-REBUILD-20260730-012`,
 `BUG-REBUILD-20260730-013`, `BUG-REBUILD-20260730-014` y
 `BUG-REBUILD-20260730-015`.
 
+### Validador semántico privado aceptado posteriormente
+
+El commit `08063318512682b7c6e5212affc1986afa363da3` incorpora la aplicación
+auxiliar `scripts/legacy_physical_mapping`, con sujeto agregado
+`sha256:7e85ac617f396023d76c1751f4122151bf45926d059972b4d67fe2bd00bb2a71`.
+Dos revisores independientes aceptaron esos mismos bytes con `P0 = 0`,
+`P1 = 0` y `P2 = 0`. El registro durable vive en
+`docs/reconstruccion/revision_validador_mapeo_historico_2026-07-30.md`, tiene
+SHA-256
+`128f335bafd0faee4eb6a2a7d962739021b1941c2f741316a33dc951c66f4d39` y quedó
+comprometido en `ab318e74946f15001fa1ce429f46dd716b15787b`.
+
+El validador solo comprueba forma, ligadura por bytes e integridad interna de
+un candidato privado. No acredita el mapeo físico, la vista estable, la
+reobservación, la presencia o ausencia real ni los recibos. No se ha producido
+ningún candidato físico real. Por tanto,
+`mapeo_1_1_y_1_n_acreditado == true` permanece pendiente.
+
 ## Estado de las compuertas
 
 | Compuerta | Estado factual | Condición para abrirla |
 |---|---|---|
 | Expansión lógica | acreditada | conservar el sujeto sellado y consumirlo sin reinterpretación en el mapeo |
-| Mapeo físico | bloqueado | acreditar 1:1 y 1:N, alias, podas, ausencias, reapertura e identidad |
+| Mapeo físico | bloqueado | producir y acreditar sobre la vista estable el candidato real 1:1 y 1:N que el validador aceptado solo sabe comprobar |
 | Vista estable | bloqueada | mantener fuente de solo lectura y sin fecha de acceso, o exclusión cercada equivalente, desde antes del mapeo |
 | Recibos | bloqueados | acreditar sujeto, intento, lote, confirmación, idempotencia y recuperación |
 | Salida física | bloqueada | disponer de soporte POSIX separado, privado y con reserva demostrable |
@@ -192,14 +210,14 @@ prohibido_sin_orden: detener|desmontar|montar|reformatear|reparticionar|copiar|b
 ## Cierre documental
 
 ```text
-hecho: censador y expansión acreditados; NO-GO de las compuertas restantes documentado
-invariante restaurado: censador aceptado no equivale a censo ni GOV-16 cerrados
+hecho: censador, expansión y validador semántico aceptados; NO-GO de las compuertas restantes documentado
+invariante restaurado: aceptar utilidades no equivale a acreditar mapeo, censo ni GOV-16
 autoridad final: futuros recibos acreditados sobre la misma vista y sujetos
-tests/negativos/mutaciones/E2E: contrato documental focal; E2E real no ejecutado
-recibos y revisión acreditada: dos aceptaciones del censador y dos de la expansión; ningún recibo de censo
-código o decisión retirados: brechas históricas «censador no aceptado» y «expansión no acreditada»
+tests/negativos/mutaciones/E2E: contratos del censador, expansión, validador y estado; E2E real no ejecutado
+recibos y revisión acreditada: aceptaciones bootstrap de tres utilidades; ningún recibo productivo de censo
+código o decisión retirados: brechas «censador no aceptado», «expansión no acreditada» y «validador semántico ausente»
 legacy retirado o bloqueo de retirada: toda retirada sigue bloqueada
 LOC netas y complejidad: documentación y una prueba sin acceso a raíces reales
 riesgos/P0/P1: P0 operativo si se ejecuta sin vista o salida válidas; contenido por NO-GO
-siguiente dependencia causal: acreditar mapeo; preparar vista y disco solo con autorización
+siguiente dependencia causal: decidir la autoridad de vista y producir el mapeo real; preparar infraestructura solo con autorización
 ```
