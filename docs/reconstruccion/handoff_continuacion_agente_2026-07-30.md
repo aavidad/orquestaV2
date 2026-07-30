@@ -1,4 +1,55 @@
-# Handoff de continuación de Orquesta — 2026-07-30
+# Documento de continuidad de Orquesta — 2026-07-30
+
+## Corte operativo más reciente
+
+Este apartado prevalece sobre cualquier estado histórico posterior del mismo
+documento.
+
+- El operador ha ordenado detener la sesión al cerrar las tareas abiertas.
+- No se ha usado Orquesta porque no dispone de cuota. La coordinación directa
+  de Codex se mantiene como excepción temporal de arranque.
+- No se ha hecho `push`.
+- `agentmicrovm` todavía no existe. La decisión vigente exige crearlo como
+  aplicación hermana independiente en `/home/alberto/Trabajo/agentmicrovm`,
+  con repositorio, módulo, binario, configuración, pruebas, documentación y
+  estado físico propios.
+- Orquesta solo lo consumirá mediante `agentmicrovm.local.v1` sobre socket Unix.
+  No compartirán base de datos, sistema de archivos, rutas, secretos ni
+  importaciones.
+- El presupuesto V38 auditado es `P=7.200,V=10.083`. A02 queda
+  `170/238`, A03 `334/537`, A05 `682/508` y A07 `165/695`.
+- La compuerta completa de agentes autónomos, microVM y Firecracker sigue
+  incompleta y no acreditada.
+
+Commits locales cerrados durante este corte:
+
+```text
+10f014ff fija PostgreSQL como adaptador productivo
+69be0174 reordena el presupuesto causal de V38
+4122dcf1 acota el protocolo de cuota de Codex
+8578b503 añade la migración de cuota y colocación
+4efd182d acredita las invariantes de cuota y colocación
+b09a4695 traduce la cuota oficial de Codex
+7b32df2e valida la recuperación de cuota y colocación
+6165b65e persiste la cuota vigente por colocación
+8108ec27 separa la aplicación de gestión de microVM
+```
+
+Pruebas repetidas al cerrar:
+
+```text
+go test -mod=vendor -count=1 ./internal/application
+go test -mod=vendor -count=1 ./internal/adapters/state/sqlite \
+  -run '^TestAgentQuotaAppendCurrentIsolationAndRestart$'
+GOFLAGS=-mod=vendor go vet ./internal/application ./internal/adapters/state/sqlite
+go test -mod=vendor -count=1 . \
+  -run '^TestProductRoadmapIsExhaustiveAndCausal$'
+go test -mod=vendor -count=1 ./acceptance \
+  -run '^TestV38AgentRuntimeElasticPlan'
+```
+
+La suite SQLite completa también quedó verde antes del último cambio de textos:
+`go test -mod=vendor -count=1 ./internal/adapters/state/sqlite`, 169,495 s.
 
 ## Objetivo invariable
 
@@ -9,9 +60,9 @@ indivisible. La prioridad vinculante corregida por el operador es:
    sin depender del cierre de V23 y con `ORC-28` como su única capacidad;
 2. pasar la compuerta A del núcleo elástico neutral, sin exigir KVM ni
    Firecracker y sin acreditar todavía V38;
-3. pasar la compuerta B del adaptador Firecracker mediante activación
-   explícita, sin sustitución automática, con una microVM por agente y sin
-   acreditar todavía V38;
+3. pasar la compuerta B mediante la aplicación hermana `agentmicrovm` y su
+   conector local de activación explícita, sin sustitución automática, con una
+   microVM por agente y sin acreditar todavía V38;
 4. pasar la compuerta C mediante una ola física real sobre el mismo candidato
    de A y B; solo A+B+C acreditan V38;
 5. demostrar por separado cohortes lógicas de 1, 16, 70 y 500 y escalones
@@ -23,9 +74,9 @@ indivisible. La prioridad vinculante corregida por el operador es:
 `ORC-15` permanece en V27 y `OPS-16`/`OPS-17` permanecen en V32. La
 continuidad de mensajes, la parada exacta y la conservación del entorno son
 conductas estrechas exigidas por V38, no capacidades que V38 reabra o acredite.
-`EVD-13` y `TestAttestor` siguen siendo prerrequisitos ya acreditados; el
-adaptador Firecracker de agentes de la compuerta B no los sustituye. El runtime
-general no se difiere a V39: V39 no existe.
+`EVD-13` y `TestAttestor` siguen siendo prerrequisitos ya acreditados; la
+gestión de agentes Firecracker de la compuerta B no los sustituye. El entorno
+general de ejecución no se difiere a V39: V39 no existe.
 
 No se debe declarar terminado un corte por porcentaje, documentación o pruebas
 locales: hacen falta change-set, atestación, revisiones, gobernanza aplicable,
@@ -33,26 +84,38 @@ integración y evidencia durable.
 
 ## Primera acción del siguiente agente
 
-La primera acción operativa es abrir una microtarea de la compuerta A de V38
-sobre `ORC-28`, con write-set estrecho y sin KVM, Firecracker ni cambios de
-roadmap. Antes de diseñarla o editar:
+Antes de actuar:
 
 ```bash
 cd /home/alberto/Trabajo/orquestaV2
 git status --short --branch
-git log -5 --oneline --decorate
-
-go test -mod=vendor -count=1 . \
-  -run '^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites)$'
-
-go test -mod=vendor -count=1 ./acceptance \
-  -run '^(TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap|TestV38AgentRuntimeElasticPlanRejectsSemanticDrift|TestV38AgentRuntimeElasticPlanRejectsInvalidJSON|TestV38AgentRuntimeElasticPlanRequiresExactRunPassEvidence)$'
+git log -10 --oneline --decorate
 ```
 
-Estas pruebas ratifican únicamente el contrato planificado: no implementan ni
-acreditan V38. La primera microtarea de A debe partir de la fixture y demostrar
-una conducta neutral del núcleo elástico detrás de los puertos existentes, sin
-añadir otra autoridad de scheduling o lifecycle.
+No relanzar tareas ni usar Orquesta mientras siga sin cuota. Preservar los
+archivos ajenos sin seguimiento.
+
+La siguiente dependencia causal es A05.3b:
+
+1. comprobar de nuevo que
+   `internal/adapters/agent/codex/capacity_observer.go` y su prueba no tienen
+   consumidores productivos;
+2. retirar en un commit pequeño ese lector de cuota por fichero, ya sustituido
+   por el protocolo oficial;
+3. implementar el controlador persistente de cuota Codex: exactamente un
+   `codex app-server` por perfil, lectura inicial, actualizaciones, reconexión,
+   rotación y cierre exacto;
+4. usar el traductor de `b09a4695` y el único `StateRepository` ampliado en
+   `6165b65e`; no crear otro almacén, escritor o ciclo de vida;
+5. continuar con A05.4, después A04.2 y la compuerta A.
+
+Antes de cada edición se debe consultar `ORC-28` mediante
+`scripts/consultar_lecciones_legacy.sh`. La consulta de las tareas cerradas en
+este corte no encontró patrones; se conservó como hueco consultivo.
+
+No crear todavía `/home/alberto/Trabajo/agentmicrovm`: el orden causal vigente
+lo abre en B03 después de acreditar la compuerta A. Cuando llegue B03, debe
+crearse como proyecto hermano real, nunca bajo un subdirectorio de Orquesta.
 
 V23 queda preservada como frente posterior e independiente. No se relanza ni se
 mezcla con el write-set de V38. Solo cuando se retome V23 se consulta su estado
@@ -88,10 +151,8 @@ existe.
 
 - Producto: `/home/alberto/Trabajo/orquestaV2`.
 - Rama: `integracion/v23-intake-durable`.
-- Al escribir este handoff, HEAD es `cad35928` y la rama está dos commits por
-  delante del remoto:
-  - `2f3e9f4a docs: congela el alcance acotado de V23`
-  - `cad35928 i18n: completa la ayuda del asistente V23`
+- El último commit de producto antes de actualizar este documento es
+  `8108ec27`. Comprobar el `HEAD` real al reanudar.
 - No hacer `push` sin una orden nueva del propietario.
 - Semilla Git de Orquesta:
   `/home/alberto/Trabajo/.orquesta-runtime-v2-v23/Codex12/repositories/orquestaV2-v23-microtasks`.
@@ -256,9 +317,10 @@ Las tres compuertas canónicas son:
 1. **A, núcleo neutral**: observación, reserva y liberación de capacidad,
    despacho global, prioridad de parada, progreso de observación, reinicio y
    recuperación sin KVM ni Firecracker. Esta compuerta no acredita V38.
-2. **B, adaptador Firecracker**: activación explícita sin sustitución
-   automática, una microVM por agente, `rootfs` inmutable con Codex, lease/CID
-   durable, broker y proxy controlados por `vsock`, transporte aislado,
+2. **B, aplicación hermana y Firecracker**: `agentmicrovm` se activa de forma
+   explícita por su protocolo local, crea una microVM por agente y usa un
+   sistema de archivos raíz inmutable con Codex. Conserva concesión CID
+   durable, intermediario y proxy controlados por `vsock`, transporte aislado,
    credenciales efímeras, parada y sellado. Esta compuerta tampoco acredita
    V38.
 3. **C, ola física**: ejecutar sobre el mismo candidato de A y B los escalones
@@ -268,11 +330,12 @@ Las cohortes lógicas 1, 16, 70 y 500 prueban cálculo completo de demanda, no
 prometen esas cantidades físicas. Si la capacidad no basta, la misma
 `Execution` espera sin consumir intento.
 
-No usar NAT, TAP, bridge, NIC guest, Internet directo ni Git del host. El guest
-recibe un bundle/snapshot, trabaja en filesystem aislado y devuelve un
-change-set al broker. El proxy host por vsock aplica allowlist y bloquea redes
-locales, metadata, SSRF y comunicación lateral entre agentes. No reutilizar el
-guest del TestAttestor como rootfs Codex.
+No usar NAT, TAP, puente, interfaz de red del huésped, Internet directo ni Git
+del anfitrión. El huésped recibe un paquete sellado, trabaja en un sistema de
+archivos aislado y devuelve un conjunto de cambios al intermediario. El proxy
+del anfitrión por `vsock` aplica una lista permitida y bloquea redes locales,
+metadatos, SSRF y comunicación lateral entre agentes. No reutilizar el huésped
+del `TestAttestor` como sistema de archivos raíz de Codex.
 
 ## Regla de cierre
 
