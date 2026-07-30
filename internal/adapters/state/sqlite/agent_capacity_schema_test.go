@@ -12,7 +12,7 @@ import (
 
 func TestAgentCapacityMigrationRunsOnceAndRollsBackAsAUnit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "capacity-v21.db")
-	database := agentCapacityV21Database(t, path)
+	database := agentCapacityDatabase(t, path, recoverySchemaV23)
 	sqliteTestNoError(t, database.Close())
 	sqliteTestNoError(t, os.Chmod(path, 0o600))
 
@@ -26,7 +26,7 @@ func TestAgentCapacityMigrationRunsOnceAndRollsBackAsAUnit(t *testing.T) {
 	sqliteTestNoError(t, repository.db.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, repository.db.QueryRow(
 		`SELECT COUNT(*) FROM schema_migrations WHERE version=?`,
-		recoverySchemaV38Capacity,
+		recoverySchemaV38Physical,
 	).Scan(&receipts))
 	if version != recoverySchemaV38Capacity || receipts != 1 {
 		t.Fatalf("migración inicial version=%d recibos=%d", version, receipts)
@@ -34,7 +34,7 @@ func TestAgentCapacityMigrationRunsOnceAndRollsBackAsAUnit(t *testing.T) {
 	sqliteTestNoError(t, repository.Close())
 
 	rollbackPath := filepath.Join(t.TempDir(), "capacity-rollback.db")
-	database = agentCapacityV21Database(t, rollbackPath)
+	database = agentCapacityDatabase(t, rollbackPath, recoverySchemaV23)
 	_, err = database.Exec(`CREATE TABLE agent_capacity_reservations(sentinel INTEGER)`)
 	sqliteTestNoError(t, err)
 	sqliteTestNoError(t, database.Close())
@@ -52,7 +52,7 @@ func TestAgentCapacityMigrationRunsOnceAndRollsBackAsAUnit(t *testing.T) {
 WHERE type='table' AND name='agent_capacity_observations'`).Scan(&observations))
 	sqliteTestNoError(t, database.QueryRow(
 		`SELECT COUNT(*) FROM schema_migrations WHERE version=?`,
-		recoverySchemaV38Capacity,
+		recoverySchemaV38Physical,
 	).Scan(&receipts))
 	if version != recoverySchemaV23 || observations != 0 || receipts != 0 {
 		t.Fatalf("rollback version=%d observaciones=%d recibos=%d", version, observations, receipts)
@@ -255,13 +255,13 @@ WHERE ref='capacity-reservation:one'`).Scan(&state, &revision))
 	}
 }
 
-func agentCapacityV21Database(t *testing.T, path string) *sql.DB {
+func agentCapacityDatabase(t *testing.T, path string, version int) *sql.DB {
 	t.Helper()
 	sqliteTestNoError(t, os.Chmod(filepath.Dir(path), 0o700))
 	database := openFastV18MigrationFixture(t, path)
 	migrations, err := loadMigrations()
 	sqliteTestNoError(t, err)
-	prefix, err := recoveryMigrationPrefix(migrations, recoverySchemaV23)
+	prefix, err := recoveryMigrationPrefix(migrations, version)
 	sqliteTestNoError(t, err)
 	sqliteTestNoError(t, applyRecoveryMigrationPrefix(context.Background(), database, prefix))
 	return database
