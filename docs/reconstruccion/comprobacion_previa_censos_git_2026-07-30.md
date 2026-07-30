@@ -27,8 +27,11 @@ La consulta local de lecciones para `GOV-16`, esta ruta y la operación
 `documentar_preflight_censo_git` no devolvió patrones. Se conserva como hueco de
 conocimiento, no como permiso para omitir pruebas.
 
-No se ejecutó ningún censo grande, no se modificó una fuente histórica y no se
-arrancó Orquesta. Las rutas físicas de salida propuestas aún no se han creado.
+No se ejecutó ningún censo grande y no se arrancó Orquesta. Las rutas físicas
+de salida propuestas aún no se han creado. La comprobación usó órdenes Git con
+bloqueos opcionales desactivados; aun así, una lectura ordinaria puede cambiar
+la fecha de acceso en el sistema de ficheros. Por tanto, no se atribuye a esta
+comprobación una garantía de inmutabilidad de metadatos físicos.
 
 ## Observaciones del corte
 
@@ -85,16 +88,28 @@ los 153 anteriores. El manifiesto estructurado fija esta partición mediante
 prueba. Un miembro registrado no se omite por estar limpio ni se borra por
 estar marcado como retirable.
 
-## Orden de ejecución autorizado por este preflight
+## Orden de ejecución autorizada por esta comprobación
 
 1. Terminar y contrarrevisar el manifiesto de las seis raíces y de todos sus
    espacios de trabajo.
-2. Ejecutar superficies y funciones V4 de la copia Berserk.
-3. Ejecutar superficies y funciones V4 del legado principal.
-4. Esperar a que V2 quede sin escrituras antes de censarlo.
-5. Deduplicar el contenido de autonomía, copia de consulta y municipal mediante
+2. Crear una instantánea privada de las fuentes estables mediante descriptores
+   confinados y lecturas que no actualicen la fecha de acceso.
+3. Ejecutar superficies y funciones V4 de la copia Berserk sobre esa
+   instantánea.
+4. Ejecutar superficies y funciones V4 del legado principal sobre su
+   instantánea.
+5. Esperar a que V2 quede sin escrituras antes de crear su instantánea.
+6. Deduplicar el contenido de autonomía, copia de consulta y municipal mediante
    sus manifiestos de referencias, sin perder procedencia.
-6. Censar por separado los estados físicos no confirmados.
+7. Censar por separado los estados físicos no confirmados.
+
+Las herramientas Git no se ejecutan directamente sobre las raíces históricas.
+Aunque no escriban contenido, Git y un recorrido ordinario de directorios
+pueden actualizar fechas de acceso. El censador físico corregido será la única
+enumeración de raíces reales. Un copiador separado y pequeño deberá producir
+una instantánea Git desechable con procedencia, límites, resumen y prueba de que
+la lectura original usó `O_NOATIME`. Hasta que esa pieza supere auditoría, los
+censos Git grandes permanecen bloqueados.
 
 El destino de cada tanda se creará con `mktemp`, modo `0700`, fuera de todas las
 fuentes y con un subdirectorio por raíz. Los artefactos serán privados `0600`.
@@ -123,15 +138,17 @@ aproximaciones, no promesas de duración.
 - referencias y cabecera repetidas y estables;
 - conectividad verde y cero objetos ausentes;
 - ningún censador anterior vivo;
+- instantánea privada acreditada y distinta de la fuente real;
 - destino privado, fuera de fuentes y con espacio presupuestado;
 - salida, resumen y manifiesto coherentes;
 - mismo estado Git antes y después;
 - todos los recuentos explicados, incluidas exclusiones y errores;
 - cero procesos residuales propios.
 
-El único bloqueo inmediato para los censos Git es que V2 sigue cambiando. No
-impide censar primero las raíces legacy estables. Los censos físicos requieren
-además terminar y auditar el censador específico; no se autorizan por este
+Los bloqueos inmediatos son la mutabilidad de V2 y la ausencia del copiador de
+instantáneas sin fecha de acceso. Las raíces históricas estables están
+identificadas, pero no se censan directamente. Los censos físicos requieren
+además terminar y auditar su aplicación específica; no se autorizan por este
 documento.
 
 ## Cierre de esta tarea documental
