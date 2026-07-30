@@ -93,6 +93,14 @@ func newMemoryRepository() *memoryRepository {
 	}
 }
 
+func (*memoryRepository) CurrentAgentQuotaObservation(context.Context, ports.AgentPlacementRef) (AgentQuotaObservationRecord, bool, error) {
+	return AgentQuotaObservationRecord{}, false, &StateError{Code: StateInvalid, Cause: errors.New("application.test_agent_quota_unavailable")}
+}
+
+func (*memoryRepository) AppendAgentQuotaObservation(context.Context, AgentQuotaObservationRecord) (AgentQuotaObservationRecord, bool, error) {
+	return AgentQuotaObservationRecord{}, false, &StateError{Code: StateInvalid, Cause: errors.New("application.test_agent_quota_unavailable")}
+}
+
 func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGoalState) (GoalRecord, bool, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
