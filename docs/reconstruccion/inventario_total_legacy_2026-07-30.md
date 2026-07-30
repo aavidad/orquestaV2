@@ -488,6 +488,46 @@ Falta inventariar y acreditar:
 - una alternativa explícita y segura cuando el proveedor solo admita
   ejecuciones de una única orden.
 
+### 10.5 Manifiesto y cabeceras de cada aplicación
+
+El operador ha fijado como requisito universal que toda aplicación creada o
+modificada por Orquesta explique desde su nacimiento qué hace y cómo se opera.
+La guía maestra ya define los campos mínimos y las aplicaciones auxiliares del
+inventario incorporan esa regla.
+
+`APP-13` promete documentación de usuario, operación, desarrollo y
+arquitectura, pero su aceptación planificada todavía no enumera ni comprueba de
+forma explícita el manifiesto principal y las cabeceras cercanas al código.
+Por tanto, la regla está decidida y documentada, pero su aceptación automática
+para aplicaciones generadas aún no está acreditada.
+
+El manifiesto mínimo debe declarar:
+
+- propósito, usuarios, alcance y exclusiones;
+- entradas, salidas, arquitectura y módulos;
+- autoridades escritoras;
+- datos, permisos, secretos y efectos;
+- arranque, diagnóstico, recuperación y parada;
+- contratos y pruebas que acreditan la aplicación.
+
+Los módulos, herramientas, adaptadores y ficheros relevantes llevan además una
+cabecera breve en castellano que explique responsabilidad, límites y autoridad
+sin repetir mecánicamente el nombre. El texto humano de la aplicación continúa
+sometido a `APP-04` y a sus catálogos.
+
+Falta:
+
+- hacer explícita esta obligación en la aceptación canónica de `APP-13`;
+- incorporarla a las plantillas de creación y modificación;
+- comprobar ausencia, campos vacíos y desactualización respecto al árbol real;
+- probar al menos una aplicación Go y otra no Go;
+- bloquear el cierre cuando falte información exigible;
+- acreditar el mismo árbol, pruebas y manifiesto.
+
+La modificación de `product/roadmap.json` se serializa porque ese fichero tiene
+otro conjunto de cambios pendiente. No se mezcla ni se pierde esta decisión:
+queda como dependencia causal antes de implementar el comprobador universal.
+
 ## 11. Criterio de honestidad
 
 Este documento autoriza el procedimiento, no su resultado.
