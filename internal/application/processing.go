@@ -25,19 +25,33 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 	if strings.TrimSpace(workerRef) == "" {
 		return ProcessResult{}, errors.New("application.worker_ref_required")
 	}
-	token, err := orchestrator.ids.NewID(ctx, "claim")
-	if err != nil {
+	claim, found, err := orchestrator.claimNextAction(ctx, workerRef)
+	if err != nil || !found {
 		return ProcessResult{}, err
 	}
-	claim, found, err := orchestrator.state.ClaimNextAction(ctx, ClaimRequest{
+	return orchestrator.processClaim(ctx, claim)
+}
+
+func (orchestrator *Orchestrator) claimNextAction(
+	ctx context.Context,
+	workerRef string,
+) (ActionClaim, bool, error) {
+	token, err := orchestrator.ids.NewID(ctx, "claim")
+	if err != nil {
+		return ActionClaim{}, false, err
+	}
+	return orchestrator.state.ClaimNextAction(ctx, ClaimRequest{
 		WorkerRef: workerRef, Token: token, LeaseDuration: orchestrator.claimLease,
 		AttestTestLeaseDuration: orchestrator.attestTestClaimLease,
 		Capabilities:            orchestrator.agentCapabilities,
 		BudgetPolicy:            orchestrator.budgetPolicy,
 	})
-	if err != nil || !found {
-		return ProcessResult{}, err
-	}
+}
+
+func (orchestrator *Orchestrator) processClaim(
+	ctx context.Context,
+	claim ActionClaim,
+) (ProcessResult, error) {
 	result := ProcessResult{Processed: true, GoalRef: claim.Action.GoalRef, Action: claim.Action.Kind}
 	if claim.Disposition == ActionClaimDispositionRetryBudgetIrreversible {
 		return result, orchestrator.processIrreversibleRetryBudget(ctx, claim)
@@ -45,6 +59,7 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 	if claim.Disposition != ActionClaimDispositionNormal {
 		return result, &StateError{Code: StateConflict}
 	}
+	var err error
 	switch claim.Action.Kind {
 	case ActionPrepareWorkspace:
 		err = orchestrator.processPrepareWorkspace(ctx, claim)
