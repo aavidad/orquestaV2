@@ -221,15 +221,16 @@ física al claim. A07 elimina ese mecanismo únicamente después de acreditar
 A04.2; desde entonces ejecuta solo un lanzamiento que `ClaimNextAction` haya
 devuelto con colocación y reserva física durables.
 `runtime.codex.max_concurrent_executions` queda únicamente como guardarraíl
-privado del conector/pool Codex. Ambas claves coexisten sin alias: no son
-semánticamente equivalentes. La prueba transitoria demuestra que un presupuesto
-neutral N nunca supera N y que cambiar solo el límite Codex no modifica el
-despacho global.
+privado del conector/pool Codex. No existe alias semántico entre ambas: no son
+equivalentes. Cada una conserva su entrada de entorno canónica. La prueba
+transitoria demuestra que un presupuesto neutral N nunca supera N y que
+cambiar solo el límite Codex no modifica el despacho global.
 
 Se retira `runtime.codex.capacity_report_max_bytes` y se define
 `runtime.codex.app_server_max_frame_bytes` con default 1048576 y límites
-1024..67108864. No hay alias ni fallback hacia la clave retirada porque sus
-semánticas son distintas.
+1024..67108864. No hay alias ni fallback desde la clave retirada porque sus
+semánticas son distintas; la clave nueva sí conserva su entrada de entorno
+canónica.
 
 ### 7. Persistencia sustituible
 
