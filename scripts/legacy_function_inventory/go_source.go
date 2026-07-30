@@ -16,10 +16,13 @@ import (
 )
 
 type blobResult struct {
-	size    int
-	sha     string
-	records []record
-	failure *record
+	size             int
+	sha              string
+	packageName      string
+	buildConstraints []string
+	generated        bool
+	records          []record
+	failure          *record
 }
 
 func parseBlob(content []byte, diagnosticPath string) (blobResult, error) {
@@ -40,8 +43,8 @@ func parseBlob(content []byte, diagnosticPath string) (blobResult, error) {
 	}
 	constraints, generated := sourceMetadata(content)
 	result := blobResult{
-		size: len(content),
-		sha:  digest("orquesta.legacy-go-blob.v1", content),
+		size: len(content), sha: digest("orquesta.legacy-go-blob.v1", content),
+		packageName: file.Name.Name, buildConstraints: constraints, generated: generated,
 	}
 	for _, declaration := range file.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
@@ -94,8 +97,6 @@ func parseBlob(content []byte, diagnosticPath string) (blobResult, error) {
 		}
 		astSHA := digestStrings("orquesta.legacy-go-function-ast.v1", canonical)
 		result.records = append(result.records, record{
-			Package: file.Name.Name, BuildConstraints: constraints,
-			TestFile: strings.HasSuffix(diagnosticPath, "_test.go"), Generated: generated,
 			SymbolKind: kind, Name: function.Name.Name, Exported: ast.IsExported(function.Name.Name),
 			Receiver: receiver, Signature: signature,
 			StartOffset: start.Offset, EndOffset: end.Offset,

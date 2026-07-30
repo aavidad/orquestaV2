@@ -52,7 +52,10 @@ func gitText(repository string, processStarted func(), arguments ...string) (str
 }
 
 func gitBytes(repository string, processStarted func(), arguments ...string) ([]byte, error) {
-	command := exec.Command("git", append([]string{"-C", repository}, arguments...)...)
+	command, err := newGitCommand(repository, arguments...)
+	if err != nil {
+		return nil, err
+	}
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	content, err := command.Output()
@@ -66,7 +69,10 @@ func gitBytes(repository string, processStarted func(), arguments ...string) ([]
 }
 
 func newGitBatch(repository string, processStarted func()) (*gitBatch, error) {
-	command := exec.Command("git", "-C", repository, "cat-file", "--batch")
+	command, err := newGitCommand(repository, "cat-file", "--batch")
+	if err != nil {
+		return nil, err
+	}
 	input, err := command.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -86,6 +92,30 @@ func newGitBatch(repository string, processStarted func()) (*gitBatch, error) {
 		processStarted()
 	}
 	return batch, nil
+}
+
+func newGitCommand(repository string, arguments ...string) (*exec.Cmd, error) {
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return nil, err
+	}
+	baseArguments := []string{
+		"--no-pager",
+		"-c", "core.hooksPath=/dev/null",
+		"-c", "safe.directory=*",
+		"-C", repository,
+	}
+	command := exec.Command(gitPath, append(baseArguments, arguments...)...)
+	command.Env = []string{
+		"LANG=C",
+		"LC_ALL=C",
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_OPTIONAL_LOCKS=0",
+		"GIT_NO_REPLACE_OBJECTS=1",
+	}
+	return command, nil
 }
 
 func (batch *gitBatch) get(expression string) (gitObject, error) {

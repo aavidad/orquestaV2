@@ -24,7 +24,7 @@ type treeEntry struct {
 	Mode string
 	Type string
 	OID  string
-	Path string
+	Path []byte
 }
 
 type historyEntry struct {
@@ -96,50 +96,21 @@ func reachableCommits(root string, history map[string]historyEntry) ([]string, e
 	return result, nil
 }
 
-func readTree(
-	batch *gitBatch,
-	root string,
-	objectBytes int,
-	cache map[string][]treeEntry,
-) ([]treeEntry, error) {
-	var result []treeEntry
-	var walk func(string, string) error
-	walk = func(tree, prefix string) error {
-		entries, found := cache[tree]
-		if !found {
-			object, err := batch.get(tree)
-			if err != nil {
-				return err
-			}
-			if object.kind != "tree" {
-				return fmt.Errorf("objeto %s no es un árbol", tree)
-			}
-			entries, err = parseTree(object.content, objectBytes)
-			if err != nil {
-				return fmt.Errorf("objeto %s: %w", tree, err)
-			}
-			cache[tree] = entries
-		}
-		for _, entry := range entries {
-			withPath := entry
-			if prefix != "" {
-				withPath.Path = prefix + "/" + entry.Path
-			}
-			result = append(result, withPath)
-			if entry.Type == "tree" {
-				if err := walk(entry.OID, withPath.Path); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+func readTreeObject(batch *gitBatch, treeID string, objectBytes int) ([]treeEntry, error) {
+	object, err := batch.get(treeID)
+	if err != nil {
+		return nil, err
 	}
-	if err := walk(root, ""); err != nil {
+	if object.kind != "tree" {
+		return nil, fmt.Errorf("objeto %s no es un árbol", treeID)
+	}
+	result, err := parseTree(object.content, objectBytes)
+	if err != nil {
 		return nil, err
 	}
 	sort.Slice(result, func(i, j int) bool {
-		if result[i].Path != result[j].Path {
-			return result[i].Path < result[j].Path
+		if comparison := bytes.Compare(result[i].Path, result[j].Path); comparison != 0 {
+			return comparison < 0
 		}
 		return result[i].OID < result[j].OID
 	})
@@ -176,7 +147,7 @@ func parseTree(content []byte, objectBytes int) ([]treeEntry, error) {
 			Mode: mode,
 			Type: kind,
 			OID:  hex.EncodeToString(content[objectStart:objectEnd]),
-			Path: string(content[modeEnd+1 : nameEnd]),
+			Path: bytes.Clone(content[modeEnd+1 : nameEnd]),
 		})
 		content = content[objectEnd:]
 	}

@@ -1,11 +1,11 @@
-// Estas pruebas acreditan el contrato observable del censo completo:
-// determinismo, cobertura, rechazo de entradas vacías y límite de procesos Git.
+// Estas pruebas acreditan publicación V2, determinismo, cobertura y límites.
 package main
 
 import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -53,7 +53,7 @@ func TestInventoryIsDeterministicAndCoversHistoricalVariantsAndFailures(t *testi
 	stableVariants := map[string]struct{}{}
 	for _, item := range records {
 		counts[item.RecordKind]++
-		if item.RecordKind == "function_occurrence" && item.SymbolKind == "method" && item.Name == "Method" {
+		if item.RecordKind == "go_declaration" && item.SymbolKind == "method" && item.Name == "Method" {
 			methodSeen = true
 		}
 		if item.RecordKind == "parse_failure" && item.ErrorCode == "go_parse_failed" {
@@ -63,11 +63,16 @@ func TestInventoryIsDeterministicAndCoversHistoricalVariantsAndFailures(t *testi
 			stableVariants[item.VariantRef] = struct{}{}
 		}
 	}
+	if len(records) == 0 || records[0].RecordKind != "inventory_header" ||
+		records[0].SchemaVersion != schemaVersion || records[0].Algorithm != inventoryAlgorithm {
+		t.Fatalf("cabecera V2 ausente: %#v", records)
+	}
 	if !methodSeen || !failureSeen || len(stableVariants) != 2 {
 		t.Fatalf("cobertura incompleta: método=%v fallo=%v variantes Stable=%d", methodSeen, failureSeen, len(stableVariants))
 	}
-	if counts["ref"] < 3 || counts["commit_ref_reachability"] == 0 ||
-		counts["commit"] != 3 || counts["tree"] == 0 || counts["go_blob"] < 3 {
+	if counts["inventory_header"] != 1 || counts["reference"] < 3 ||
+		counts["commit"] != 3 || counts["tree_object"] == 0 || counts["tree_entry"] == 0 ||
+		counts["go_blob"] < 3 || counts["function_occurrence"] != 0 {
 		t.Fatalf("conteos inesperados: %#v", counts)
 	}
 
@@ -79,9 +84,35 @@ func TestInventoryIsDeterministicAndCoversHistoricalVariantsAndFailures(t *testi
 	if err := json.Unmarshal(content, &manifestValue); err != nil {
 		t.Fatal(err)
 	}
-	if manifestValue.InventorySHA256 == "" || manifestValue.RefSnapshotSHA256 == "" ||
+	inventoryContent, err := os.ReadFile(firstJSONL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifestValue.SchemaVersion != schemaVersion ||
+		manifestValue.Algorithm != inventoryAlgorithm ||
+		manifestValue.InventoryHashDomain != inventoryHashDomain ||
+		manifestValue.RecordSchemaSHA256 != recordSchemaDigest() ||
+		manifestValue.InventorySHA256 != inventoryDigest(inventoryContent) ||
+		manifestValue.InventoryBytes != int64(len(inventoryContent)) ||
+		manifestValue.RefSnapshotSHA256 == "" ||
 		manifestValue.Counts["function_variant"] < 3 {
 		t.Fatalf("manifiesto incompleto: %#v", manifestValue)
+	}
+	if !reflect.DeepEqual(counts, manifestValue.Counts) {
+		t.Fatalf("conteos distintos: JSONL=%#v manifiesto=%#v", counts, manifestValue.Counts)
+	}
+	oldDigest := digest("orquesta.legacy-function-inventory.jsonl.v1", inventoryContent)
+	if oldDigest == manifestValue.InventorySHA256 {
+		t.Fatal("el dominio V1 podría validar indebidamente un inventario V2")
+	}
+	for _, path := range []string{firstJSONL, firstManifest} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("modo inseguro para %s: %o", path, info.Mode().Perm())
+		}
 	}
 }
 

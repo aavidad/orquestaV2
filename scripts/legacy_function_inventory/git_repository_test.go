@@ -40,13 +40,12 @@ func TestBatchHistoryAndTreesMatchIndividualGitQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer batch.close()
-	cache := map[string][]treeEntry{}
 	for _, commit := range commits {
 		expectedHeader := individualCommitHeader(t, repository, commit)
 		if actual := history[commit]; !reflect.DeepEqual(actual, expectedHeader) {
 			t.Fatalf("cabecera distinta para %s: obtenida=%#v esperada=%#v", commit, actual, expectedHeader)
 		}
-		actualTree, err := readTree(batch, expectedHeader.tree, sha1.Size, cache)
+		actualTree, err := readTreeObject(batch, expectedHeader.tree, sha1.Size)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,7 +91,7 @@ func individualCommitHeader(t *testing.T, repository, commit string) historyEntr
 
 func individualTree(t *testing.T, repository, tree string) []treeEntry {
 	t.Helper()
-	content := []byte(gitTest(t, repository, "ls-tree", "-r", "-t", "-z", tree))
+	content := []byte(gitTest(t, repository, "ls-tree", "-z", tree))
 	var result []treeEntry
 	for _, raw := range bytes.Split(content, []byte{0}) {
 		if len(raw) == 0 {
@@ -107,12 +106,12 @@ func individualTree(t *testing.T, repository, tree string) []treeEntry {
 			Mode: fields[0],
 			Type: fields[1],
 			OID:  fields[2],
-			Path: string(path),
+			Path: bytes.Clone(path),
 		})
 	}
 	sort.Slice(result, func(i, j int) bool {
-		if result[i].Path != result[j].Path {
-			return result[i].Path < result[j].Path
+		if comparison := bytes.Compare(result[i].Path, result[j].Path); comparison != 0 {
+			return comparison < 0
 		}
 		return result[i].OID < result[j].OID
 	})

@@ -1,22 +1,16 @@
-// Este fichero coordina un censo completo e inmutable desde referencias Git.
-// No interpreta la utilidad del legado: produce registros deterministas para
-// que el inventario semántico y sus revisiones trabajen sobre hechos.
+// Este fichero coordina el censo desde referencias Git estables hacia el
+// escritor progresivo. No acumula registros ni el JSONL completo en memoria.
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
-	"strconv"
-	"strings"
 )
-
-const schemaVersion = 1
 
 type options struct {
 	repository string
@@ -26,16 +20,29 @@ type options struct {
 	gitProcessStarted func()
 }
 
-func run(options options) error {
+func run(options options) (runErr error) {
 	repository, err := filepath.Abs(options.repository)
 	if err != nil {
 		return err
 	}
+	repository = filepath.Clean(repository)
+	jsonlPath, err := normalizedOutput(repository, options.jsonl)
+	if err != nil {
+		return err
+	}
+	manifestPath, err := normalizedOutput(repository, options.manifest)
+	if err != nil {
+		return err
+	}
+	if jsonlPath == manifestPath {
+		return errors.New("inventario y manifiesto necesitan rutas distintas")
+	}
+
 	refsBefore, err := readRefs(repository, options.gitProcessStarted)
 	if err != nil {
 		return err
 	}
-	refDigest := digestJSON("orquesta.legacy-function-inventory.refs.v1", refsBefore)
+	refDigest := digestJSON(referenceHashDomain, refsBefore)
 	history, err := readHistory(repository, options.gitProcessStarted)
 	if err != nil {
 		return err
@@ -43,29 +50,7 @@ func run(options options) error {
 	if len(history) == 0 {
 		return errors.New("el repositorio no tiene confirmaciones alcanzables")
 	}
-	commits := make([]string, 0, len(history))
-	for commit := range history {
-		commits = append(commits, commit)
-	}
-	sort.Strings(commits)
-
-	records := make([]record, 0, len(commits)*8)
-	counts := map[string]int{}
-	for _, ref := range refsBefore {
-		records = append(records, record{
-			RecordKind: "ref", RefName: ref.Name, ObjectID: ref.Object, CommitID: ref.Commit,
-		})
-		reachable, err := reachableCommits(ref.Commit, history)
-		if err != nil {
-			return err
-		}
-		for _, commit := range reachable {
-			records = append(records, record{
-				RecordKind: "commit_ref_reachability", RefName: ref.Name, CommitID: commit,
-			})
-		}
-	}
-
+	commits := sortedCommits(history)
 	objectFormat, err := gitText(
 		repository,
 		options.gitProcessStarted,
@@ -79,126 +64,46 @@ func run(options options) error {
 	if err != nil {
 		return err
 	}
+
+	stream, err := newInventoryStream(jsonlPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if runErr != nil {
+			stream.abort()
+		}
+	}()
+	if err := stream.emit(record{
+		RecordKind: "inventory_header", SchemaVersion: schemaVersion, Algorithm: inventoryAlgorithm,
+	}); err != nil {
+		return err
+	}
+	for _, ref := range refsBefore {
+		if err := stream.emit(record{
+			RecordKind: "reference", RefName: ref.Name,
+			ObjectID: ref.Object, CommitID: ref.Commit,
+		}); err != nil {
+			return err
+		}
+	}
+	for _, commit := range commits {
+		header := history[commit]
+		if err := stream.emit(record{
+			RecordKind: "commit", CommitID: commit,
+			TreeID: header.tree, Parents: header.parents,
+		}); err != nil {
+			return err
+		}
+	}
+
 	batch, err := newGitBatch(repository, options.gitProcessStarted)
 	if err != nil {
 		return err
 	}
-	defer batch.close()
-
-	seenTrees := map[string]struct{}{}
-	treeCache := map[string][]treeEntry{}
-	seenBlobs := map[string]blobResult{}
-	variants := map[string]record{}
-	for _, commit := range commits {
-		header := history[commit]
-		records = append(records, record{
-			RecordKind: "commit", CommitID: commit, TreeID: header.tree, Parents: header.parents,
-		})
-		if _, found := seenTrees[header.tree]; !found {
-			seenTrees[header.tree] = struct{}{}
-			records = append(records, record{RecordKind: "tree", TreeID: header.tree})
-		}
-		entries, err := readTree(batch, header.tree, objectBytes, treeCache)
-		if err != nil {
-			return fmt.Errorf("árbol %s: %w", header.tree, err)
-		}
-		for _, entry := range entries {
-			if entry.Type == "tree" {
-				if _, found := seenTrees[entry.OID]; !found {
-					seenTrees[entry.OID] = struct{}{}
-					records = append(records, record{RecordKind: "tree", TreeID: entry.OID})
-				}
-				continue
-			}
-			if entry.Type != "blob" || !strings.HasSuffix(entry.Path, ".go") {
-				continue
-			}
-			result, found := seenBlobs[entry.OID]
-			if !found {
-				object, err := batch.get(entry.OID)
-				if err != nil {
-					return err
-				}
-				if object.kind != "blob" {
-					return fmt.Errorf("objeto %s de %s no es un blob", entry.OID, entry.Path)
-				}
-				result, err = parseBlob(object.content, entry.Path)
-				if err != nil {
-					return err
-				}
-				seenBlobs[entry.OID] = result
-				blobRecord := record{
-					RecordKind: "go_blob", BlobID: entry.OID, BlobSize: result.size,
-					BlobSHA: result.sha,
-				}
-				records = append(records, blobRecord)
-				if result.failure != nil {
-					failure := *result.failure
-					failure.BlobID = entry.OID
-					records = append(records, failure)
-				}
-				for _, symbol := range result.records {
-					if previous, exists := variants[symbol.VariantRef]; exists &&
-						previous.CanonicalSource != symbol.CanonicalSource {
-						return fmt.Errorf("colisión de variante %s", symbol.VariantRef)
-					}
-					if _, exists := variants[symbol.VariantRef]; !exists {
-						variant := symbol
-						variant.RecordKind = "function_variant"
-						variant.Path = ""
-						variant.TestFile = false
-						variant.StartOffset, variant.EndOffset = 0, 0
-						variant.StartLine, variant.EndLine = 0, 0
-						variants[symbol.VariantRef] = variant
-					}
-				}
-			}
-			if result.failure != nil {
-				records = append(records, record{
-					RecordKind: "parse_failure_occurrence", CommitID: commit, TreeID: header.tree,
-					Path: entry.Path, FileMode: entry.Mode, BlobID: entry.OID,
-					ErrorCode: result.failure.ErrorCode,
-				})
-				continue
-			}
-			for _, symbol := range result.records {
-				occurrence := symbol
-				occurrence.RecordKind = "function_occurrence"
-				occurrence.CommitID = commit
-				occurrence.TreeID = header.tree
-				occurrence.Path = entry.Path
-				occurrence.TestFile = strings.HasSuffix(entry.Path, "_test.go")
-				occurrence.FileMode = entry.Mode
-				occurrence.BlobID = entry.OID
-				occurrence.BlobSize = result.size
-				occurrence.BlobSHA = result.sha
-				occurrence.OccurrenceRef = digestStrings(
-					"orquesta.legacy-go-function-occurrence.v1",
-					commit, entry.Path, strconv.Itoa(symbol.StartOffset), symbol.VariantRef,
-				)
-				occurrence.CanonicalSource = ""
-				records = append(records, occurrence)
-			}
-		}
-	}
-	var variantKeys []string
-	for key := range variants {
-		variantKeys = append(variantKeys, key)
-	}
-	sort.Strings(variantKeys)
-	for _, key := range variantKeys {
-		records = append(records, variants[key])
-	}
-	sortRecords(records)
-
-	var output bytes.Buffer
-	encoder := json.NewEncoder(&output)
-	encoder.SetEscapeHTML(false)
-	for _, item := range records {
-		if err := encoder.Encode(item); err != nil {
-			return err
-		}
-		counts[item.RecordKind]++
+	if err := emitObjectGraph(batch, commits, history, objectBytes, stream); err != nil {
+		_ = batch.close()
+		return err
 	}
 	if err := batch.close(); err != nil {
 		return err
@@ -210,60 +115,64 @@ func run(options options) error {
 	if !equalRefs(refsBefore, refsAfter) {
 		return errors.New("las referencias Git cambiaron durante el censo")
 	}
-	inventorySHA := digest("orquesta.legacy-function-inventory.jsonl.v1", output.Bytes())
+	inventorySHA, inventoryBytes, counts, err := stream.finish()
+	if err != nil {
+		return err
+	}
+
 	manifestBytes, err := json.MarshalIndent(manifest{
-		SchemaVersion:     schemaVersion,
-		Algorithm:         "git-objects-go-ast-function-declarations.v1",
-		Repository:        repository,
-		GitObjectFormat:   objectFormat,
-		GoVersion:         strings.TrimSpace(mustCommand("go", "version")),
-		InventorySHA256:   inventorySHA,
-		Counts:            counts,
-		RefSnapshotSHA256: refDigest,
+		SchemaVersion:       schemaVersion,
+		Algorithm:           inventoryAlgorithm,
+		InventoryHashDomain: inventoryHashDomain,
+		RecordSchemaSHA256:  recordSchemaDigest(),
+		Repository:          repository,
+		GitObjectFormat:     objectFormat,
+		GoVersion:           runtime.Version(),
+		InventorySHA256:     inventorySHA,
+		InventoryBytes:      inventoryBytes,
+		Counts:              counts,
+		RefSnapshotSHA256:   refDigest,
 	}, "", "  ")
 	if err != nil {
 		return err
 	}
 	manifestBytes = append(manifestBytes, '\n')
-	if err := writeAtomic(options.jsonl, output.Bytes()); err != nil {
-		return err
-	}
-	return writeAtomic(options.manifest, manifestBytes)
-}
-
-func writeAtomic(path string, content []byte) error {
-	directory := filepath.Dir(path)
-	if err := os.MkdirAll(directory, 0o755); err != nil {
-		return err
-	}
-	temporary, err := os.CreateTemp(directory, ".legacy-function-inventory-*")
+	manifestTemporary, err := writeTemporary(manifestPath, manifestBytes)
 	if err != nil {
 		return err
 	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
+	defer os.Remove(manifestTemporary)
+	if err := publishPair(stream.temporaryPath, jsonlPath, manifestTemporary, manifestPath); err != nil {
 		return err
 	}
-	if _, err := temporary.Write(content); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temporaryPath, path)
+	stream.published = true
+	return nil
 }
 
-func mustCommand(name string, arguments ...string) string {
-	content, err := exec.Command(name, arguments...).Output()
-	if err != nil {
-		panic(err)
+func sortedCommits(history map[string]historyEntry) []string {
+	commits := make([]string, 0, len(history))
+	for commit := range history {
+		commits = append(commits, commit)
 	}
-	return string(content)
+	sort.Strings(commits)
+	return commits
+}
+
+func normalizedOutput(repository, output string) (string, error) {
+	absolute, err := filepath.Abs(output)
+	if err != nil {
+		return "", err
+	}
+	absolute = filepath.Clean(absolute)
+	relative, err := filepath.Rel(repository, absolute)
+	if err == nil && relative != ".." &&
+		(relative == "." || !startsOutside(relative)) {
+		return "", fmt.Errorf("la salida no puede escribirse dentro del repositorio histórico: %s", absolute)
+	}
+	return absolute, nil
+}
+
+func startsOutside(relative string) bool {
+	return len(relative) > 3 &&
+		relative[:3] == ".."+string(filepath.Separator)
 }
