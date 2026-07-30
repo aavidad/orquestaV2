@@ -67,7 +67,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV23 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV38Capacity {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -88,7 +88,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"action_consumption_receipts", "app_specs", "artifact_occurrences", "artifacts", "attestation_test_outcomes", "attestations", "authorization_receipts",
+		"action_consumption_receipts", "agent_capacity_observations", "agent_capacity_reservations", "agent_capacity_transitions", "app_specs", "artifact_occurrences", "artifacts", "attestation_test_outcomes", "attestations", "authorization_receipts",
 		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets",
 		"command_invocations", "command_outcomes", "controls",
 		"council_decisions", "council_facts", "council_rounds", "council_skips",

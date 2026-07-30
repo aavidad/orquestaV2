@@ -379,7 +379,7 @@ func assertSQLiteV18MigrationHealthy(t *testing.T, repository *Repository) {
 		violations++
 	}
 	sqliteTestNoError(t, rows.Close())
-	if version != recoverySchemaV23 || receipt != 1 || violations != 0 {
+	if version != recoverySchemaV38Capacity || receipt != 1 || violations != 0 {
 		t.Fatalf("V18 migration version=%d receipt=%d foreign-keys=%d", version, receipt, violations)
 	}
 }

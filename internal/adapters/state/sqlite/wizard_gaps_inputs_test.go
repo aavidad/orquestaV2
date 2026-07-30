@@ -659,13 +659,14 @@ WHERE ref=?`,
 	)
 	mustV10Exec(
 		t, system.repository.db,
-		`DROP TABLE wizard_gaps_input_receipts`,
+		`DROP TABLE agent_capacity_transitions; DROP TABLE agent_capacity_reservations;
+DROP TABLE agent_capacity_observations; DROP TABLE wizard_gaps_input_receipts`,
 	)
 	mustV10Exec(
 		t,
 		system.repository.db,
-		`DELETE FROM schema_migrations WHERE version=?`,
-		recoverySchemaV23,
+		`DELETE FROM schema_migrations WHERE version IN (?,?)`,
+		recoverySchemaV23, recoverySchemaV38Capacity,
 	)
 	mustV10Exec(
 		t,
