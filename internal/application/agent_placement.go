@@ -18,21 +18,39 @@ const (
 	AgentQuotaUnknown   AgentQuotaObservationStatus = "unknown"
 )
 
-type AgentQuotaObservationRecord struct {
-	Ref                                     string
+type AgentQuotaObservation struct {
+	PlacementRef                            ports.AgentPlacementRef
 	WindowRef                               AgentQuotaWindowRef
-	Revision                                uint64
 	Status                                  AgentQuotaObservationStatus
 	Quality                                 governance.UsageQuality
 	ObservedAt, ExpiresAt, ResetAt, RetryAt time.Time
 	EvidenceRef                             goal.ArtifactRef
 }
 
+type AgentQuotaObservationSubmission struct {
+	AgentQuotaObservation
+	Ref, IdempotencyKey string
+}
+
+type AgentQuotaObservationRecord struct {
+	AgentQuotaObservationSubmission
+	ExpectedRevision, Revision uint64
+}
+
+func MaterializeAgentQuotaObservation(submission AgentQuotaObservationSubmission, expected uint64) (AgentQuotaObservationRecord, error) {
+	if expected == ^uint64(0) || !validAgentCapacityRef(submission.Ref) ||
+		!validAgentCapacityRef(submission.IdempotencyKey) ||
+		!validAgentQuotaObservation(submission.AgentQuotaObservation) {
+		return AgentQuotaObservationRecord{}, ErrAgentCapacityInvalid
+	}
+	return AgentQuotaObservationRecord{submission, expected, expected + 1}, nil
+}
+
 func DecideAgentQuotaGate(now time.Time, record *AgentQuotaObservationRecord) (AgentCapacityAdmissionReason, error) {
 	if record == nil {
 		return AgentCapacityAdmissionUnknown, nil
 	}
-	if now.IsZero() || !validAgentQuotaObservation(*record) || now.Before(record.ObservedAt) {
+	if now.IsZero() || !validAgentQuotaObservationRecord(*record) || now.Before(record.ObservedAt) {
 		return "", ErrAgentCapacityInvalid
 	}
 	if !now.Before(record.ExpiresAt) {
@@ -47,14 +65,20 @@ func DecideAgentQuotaGate(now time.Time, record *AgentQuotaObservationRecord) (A
 	return AgentCapacityAdmissionAvailable, nil
 }
 
-func validAgentQuotaObservation(record AgentQuotaObservationRecord) bool {
-	validStatus := record.Status == AgentQuotaAvailable ||
-		record.Status == AgentQuotaExhausted || record.Status == AgentQuotaUnknown
-	validTimes := (record.ResetAt.IsZero() || record.ResetAt.After(record.ObservedAt)) &&
-		(record.RetryAt.IsZero() || record.RetryAt.After(record.ObservedAt))
-	return validAgentCapacityRef(record.Ref) && validAgentCapacityRef(string(record.WindowRef)) &&
-		record.Revision > 0 && validStatus && validAgentCapacityQuality(record.Quality) &&
-		!record.ObservedAt.IsZero() && record.ExpiresAt.After(record.ObservedAt) && validTimes
+func validAgentQuotaObservationRecord(record AgentQuotaObservationRecord) bool {
+	return record.ExpectedRevision != ^uint64(0) && record.Revision == record.ExpectedRevision+1 &&
+		validAgentCapacityRef(record.Ref) && validAgentCapacityRef(record.IdempotencyKey) &&
+		validAgentQuotaObservation(record.AgentQuotaObservation)
+}
+
+func validAgentQuotaObservation(observation AgentQuotaObservation) bool {
+	validStatus := observation.Status == AgentQuotaAvailable ||
+		observation.Status == AgentQuotaExhausted || observation.Status == AgentQuotaUnknown
+	validTimes := (observation.ResetAt.IsZero() || observation.ResetAt.After(observation.ObservedAt)) &&
+		(observation.RetryAt.IsZero() || observation.RetryAt.After(observation.ObservedAt))
+	return observation.PlacementRef.String() != "" && validAgentCapacityRef(string(observation.WindowRef)) &&
+		validStatus && validAgentCapacityQuality(observation.Quality) &&
+		!observation.ObservedAt.IsZero() && observation.ExpiresAt.After(observation.ObservedAt) && validTimes
 }
 
 type AgentPlacementObservationPresentation struct {
@@ -85,10 +109,11 @@ type AgentPlacementBinding struct {
 
 func NewAgentPlacementBinding(candidate AgentCapacityPlacementCandidate, reservation AgentCapacityReservation, quota AgentQuotaObservationRecord) (AgentPlacementBinding, error) {
 	if ValidateAgentCapacityPlacementCandidate(candidate) != nil ||
-		ValidateAgentCapacityReservation(reservation) != nil || !validAgentQuotaObservation(quota) ||
+		ValidateAgentCapacityReservation(reservation) != nil || !validAgentQuotaObservationRecord(quota) ||
 		candidate.Physical.ObservationRef != reservation.ObservationRef ||
 		candidate.Physical.ObservationRevision != reservation.ObservationRevision ||
-		candidate.Quota.ObservationRef != quota.Ref || candidate.Quota.ObservationRevision != quota.Revision {
+		candidate.Quota.ObservationRef != quota.Ref || candidate.Quota.ObservationRevision != quota.Revision ||
+		candidate.PlacementRef != quota.PlacementRef {
 		return AgentPlacementBinding{}, ErrAgentCapacityInvalid
 	}
 	return AgentPlacementBinding{candidate.PlacementRef, reservation.Ref, quota.Ref, quota.Revision}, nil

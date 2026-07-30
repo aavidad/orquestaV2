@@ -42,6 +42,7 @@ func TestAgentQuotaGateIsSeparateAndFailsClosed(t *testing.T) {
 	for _, mutate := range []func(*AgentQuotaObservationRecord){
 		func(value *AgentQuotaObservationRecord) { value.WindowRef = " window:one" },
 		func(value *AgentQuotaObservationRecord) { value.Revision = 0 },
+		func(value *AgentQuotaObservationRecord) { value.ExpectedRevision = value.Revision },
 		func(value *AgentQuotaObservationRecord) { value.Status = "unavailable" },
 		func(value *AgentQuotaObservationRecord) { value.Status = "stale" },
 		func(value *AgentQuotaObservationRecord) { value.Quality = "invented" },
@@ -62,9 +63,43 @@ func TestAgentQuotaGateIsSeparateAndFailsClosed(t *testing.T) {
 }
 
 func placementQuotaRecord(now time.Time) AgentQuotaObservationRecord {
-	return AgentQuotaObservationRecord{Ref: "quota:one", WindowRef: "window:one", Revision: 7,
-		Status: AgentQuotaAvailable, Quality: "exact",
-		ObservedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}
+	record, err := MaterializeAgentQuotaObservation(placementQuotaSubmission(now), 6)
+	if err != nil {
+		panic(err)
+	}
+	return record
+}
+
+func placementQuotaSubmission(now time.Time) AgentQuotaObservationSubmission {
+	placementRef, _ := ports.NewAgentPlacementRef("placement:one")
+	return AgentQuotaObservationSubmission{Ref: "quota:one", IdempotencyKey: "quota-observation:one",
+		AgentQuotaObservation: AgentQuotaObservation{PlacementRef: placementRef, WindowRef: "window:one",
+			Status: AgentQuotaAvailable, Quality: "exact",
+			ObservedAt: now.Add(-time.Minute), ExpiresAt: now.Add(time.Minute)}}
+}
+
+func TestAgentQuotaObservationMaterializationIsCASDeterministic(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	first, err := MaterializeAgentQuotaObservation(placementQuotaSubmission(now), 0)
+	if err != nil || first.ExpectedRevision != 0 || first.Revision != 1 {
+		t.Fatalf("primera revisión = %d/%d, %v", first.ExpectedRevision, first.Revision, err)
+	}
+	next := placementQuotaSubmission(now)
+	next.Ref, next.IdempotencyKey = "quota:two", "quota-observation:two"
+	second, err := MaterializeAgentQuotaObservation(next, first.Revision)
+	if err != nil || second.ExpectedRevision != 1 || second.Revision != 2 {
+		t.Fatalf("segunda revisión = %d/%d, %v", second.ExpectedRevision, second.Revision, err)
+	}
+	badRef, badKey, badPlacement := placementQuotaSubmission(now), placementQuotaSubmission(now), placementQuotaSubmission(now)
+	badRef.Ref, badKey.IdempotencyKey, badPlacement.PlacementRef = " quota:one", " idempotency", ports.AgentPlacementRef{}
+	for _, invalid := range []AgentQuotaObservationSubmission{badRef, badKey, badPlacement} {
+		if _, err := MaterializeAgentQuotaObservation(invalid, 0); !errors.Is(err, ErrAgentCapacityInvalid) {
+			t.Fatalf("submission inválida aceptada: %+v", invalid)
+		}
+	}
+	if _, err := MaterializeAgentQuotaObservation(placementQuotaSubmission(now), ^uint64(0)); !errors.Is(err, ErrAgentCapacityInvalid) {
+		t.Fatalf("revisión máxima aceptada: %v", err)
+	}
 }
 
 func TestAgentPlacementBindingUsesExactReservationAndQuota(t *testing.T) {
@@ -118,5 +153,11 @@ func TestAgentPlacementBindingUsesExactReservationAndQuota(t *testing.T) {
 	}
 	if _, err := NewAgentPlacementBinding(candidate, reservation, invalidQuota); !errors.Is(err, ErrAgentCapacityInvalid) {
 		t.Fatalf("cuota inválida aceptada: %v", err)
+	}
+	crossPlacement, _ := ports.NewAgentPlacementRef("placement:other")
+	invalidQuota = placementQuotaRecord(now)
+	invalidQuota.PlacementRef = crossPlacement
+	if _, err := NewAgentPlacementBinding(candidate, reservation, invalidQuota); !errors.Is(err, ErrAgentCapacityInvalid) {
+		t.Fatalf("binding aceptó cuota de otro placement: %v", err)
 	}
 }
