@@ -1,9 +1,12 @@
 # Léeme antes de trabajar en Orquesta V2
 
-Fecha: 2026-07-26.
+Fecha: 2026-07-30.
 
-Handoff vigente:
-`HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
+Handoff operativo vigente:
+`docs/reconstruccion/handoff_continuacion_agente_2026-07-30.md`.
+
+Fotografía histórica de parada, no orden operativa vigente:
+`docs/reconstruccion/HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
 
 ## Regla de un minuto
 
@@ -39,13 +42,27 @@ Goal; no son Directores ni ciclos de vida alternativos.
 
 ## Estado real
 
-- el roadmap contiene 37 verticales nuevas;
+- el roadmap contiene 38 verticales nuevas y mantiene 257 capacidades;
 - V1-V22 tienen contrato ejecutable y están acreditadas;
-- V23-V37 son 15 contratos planificados; V23 sigue abierto y solo cubre
+- V23-V38 son 16 contratos planificados; V23 sigue abierto y solo cubre
   Wizard, intake, dossier, confirmación y
   generación/flujos declarados por `AC-V23-WIZARD`;
-- Firecracker no es gate de V23. Permanece opt-in y diferido según
-  `corte_alcance_v23_firecracker_diferido_2026-07-26.md`;
+- V38 `agent_runtime_elastic` es la prioridad inmediata del operador y no
+  depende de V23. Solo le pertenece `ORC-28`: `ORC-15` sigue en V27 y
+  `OPS-16`/`OPS-17` siguen en V32; V38 exige continuidad, parada exacta y
+  conservación como conductas acotadas, sin volver a acreditar esas tres
+  capacidades;
+- V38 separa cohortes lógicas de 1, 16, 70 y 500 de los escalones físicos
+  obligatorios de 1, 5, 10, 16 y 20;
+- sus tres compuertas son inseparables para la acreditación: A prueba el núcleo
+  elástico neutral sin KVM ni Firecracker; B conecta Firecracker solo mediante
+  activación explícita, sin sustitución automática y con una microVM por
+  agente; C ejecuta la ola física sobre el mismo candidato de A y B. Solo
+  A+B+C pueden acreditar V38; ninguna compuerta lo hace por separado;
+- V23 no depende de Firecracker. Firecracker y V38 tampoco quedan subordinados
+  a terminar V23: el corte
+  `corte_alcance_v23_firecracker_diferido_2026-07-26.md` impide convertirlos en
+  gate del Wizard, no aplaza la prioridad V38;
 - no declares el repositorio verde por una compilación parcial, un documento o
   un smoke sin receipt.
 
@@ -54,7 +71,7 @@ Goal; no son Directores ni ciclos de vida alternativos.
 El producto nuevo no importa, arranca, adapta ni comparte estado con
 `modulos/**` o `cmd/orquesta-server/**`.
 
-Eso no significa que las 37 verticales sean independientes entre sí ni que
+Eso no significa que las 38 verticales sean independientes entre sí ni que
 Orquesta no use infraestructura externa:
 
 - las verticales tienen dependencias causales explícitas en el roadmap;
@@ -66,8 +83,8 @@ Orquesta no use infraestructura externa:
   adapter y su E2E real pasan. No contamina el dominio ni autoriza un fallback
   al legacy.
 
-La afirmación correcta es: **V1-V37 pertenecen al diseño nuevo y no dependen
-del runtime legacy; V1-V22 están acreditadas y V23-V37 todavía no**.
+La afirmación correcta es: **V1-V38 pertenecen al diseño nuevo y no dependen
+del runtime legacy; V1-V22 están acreditadas y V23-V38 todavía no**.
 
 ## Legado y recuperación
 

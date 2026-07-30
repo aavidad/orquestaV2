@@ -44,7 +44,8 @@
     "declarative_a2ui": "rejected_until_real_need",
     "time_travel": "rejected_use_causal_generations_and_backup",
     "opes_games": "rejected_outside_core_production",
-    "advanced_retrieval": "conditional_on_versioned_benchmark"
+    "advanced_retrieval": "conditional_on_versioned_benchmark",
+    "priority_vertical": "agent_runtime_elastic"
   },
   "implementation_decisions": [
     {
@@ -577,6 +578,24 @@
       ],
       "acceptance_contracts": [
         "AC-V37-GAME-RELEASE-PROMOTION"
+      ]
+    },
+    {
+      "id": "agent_runtime_elastic",
+      "title": "Runtime elástico de agentes",
+      "sequence": 38,
+      "depends_on": [
+        "config",
+        "credentials",
+        "recovery_backup",
+        "controls",
+        "budgets_effects",
+        "workspace_git",
+        "test_attestor",
+        "codex_e2e"
+      ],
+      "acceptance_contracts": [
+        "AC-V38-AGENT-RUNTIME-ELASTIC"
       ]
     }
   ],
@@ -1248,6 +1267,26 @@
         "a release manifest binds source plugin toolchain ROM QA reviews and target scope to immutable digests",
         "publication is impossible without an authorized approved effect and exact candidate generation",
         "apply replay rollback and demotion are idempotent auditable and leave a reproducible terminal receipt"
+      ]
+    },
+    {
+      "id": "AC-V38-AGENT-RUNTIME-ELASTIC",
+      "vertical": "agent_runtime_elastic",
+      "status": "planned",
+      "test_ref": "planned:acceptance/v38_agent_runtime_elastic_plan_test.go",
+      "command": "planned:go test -mod=vendor -count=1 . -run '^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites)$' && v38_events=$(go test -mod=vendor -json -count=1 ./acceptance -run '^(TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap|TestV38AgentRuntimeElasticPlanRejectsSemanticDrift|TestV38AgentRuntimeElasticPlanRejectsInvalidJSON|TestV38AgentRuntimeElasticPlanRequiresExactRunPassEvidence)$' 2>&1); v38_status=$?; printf '%s\\n' \"$v38_events\"; [ \"$v38_status\" -eq 0 ] && for v38_test in TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap TestV38AgentRuntimeElasticPlanRejectsSemanticDrift TestV38AgentRuntimeElasticPlanRejectsInvalidJSON TestV38AgentRuntimeElasticPlanRequiresExactRunPassEvidence; do printf '%s\\n' \"$v38_events\" | grep -F '\"Action\":\"run\"' | grep -F \"\\\"Test\\\":\\\"$v38_test\\\"\" >/dev/null && printf '%s\\n' \"$v38_events\" | grep -F '\"Action\":\"pass\"' | grep -F \"\\\"Test\\\":\\\"$v38_test\\\"\" >/dev/null || exit 1; done",
+      "fixture": "planned:fixtures/v38_agent_runtime_elastic_plan.json",
+      "assertions": [
+        "ORC-28 observa capacidad con fuente tiempo caducidad y calidad; cuota desconocida falla cerrado y reserva consumo liberación agotamiento y restart conservan lease fence e idempotencia",
+        "la demanda completa conserva cohortes lógicas exactas de 1 16 70 y 500 sin techo oculto; las olas físicas obligatorias progresan por 1 5 10 16 y 20 sin atribuir 70 o 500 físicos sin recursos medidos",
+        "el subgate A acredita solo el núcleo elástico neutral sin KVM; B conecta Firecracker opt-in sin fallback y una microVM por agente; C exige ola física del mismo candidato y solo A+B+C permiten acreditar V38",
+        "un único despachador global prioriza stop permite progreso de observe con launch saturado y paraleliza únicamente launch_agent sin selector privado solo-launch ni goroutines ociosas",
+        "la continuidad de mensajes la parada exacta y la conservación del entorno son comportamientos estrechos de V38 que no acreditan ORC-15 OPS-16 ni OPS-17",
+        "antes de desmontar se sellan e inventarían los datos y el entorno queda preserved_pending_review sin borrado automático",
+        "la retirada de datos es una decisión posterior, separada y autorizada",
+        "restart y recovery cubren antes del intento intento antes del efecto efecto sin recibo recibo antes de observación y stop con recibo perdido; unknown_applied queda en cuarentena y solo definitely_not_applied se reintenta",
+        "las latencias de solicitud, aprovisionamiento, arranque, disponibilidad, parada y sellado son medibles",
+        "el gate exige eventos JSON run y pass de cada prueba exacta y rechaza paquetes verdes sin tests; este contrato planificado no crea receipt ni evidence"
       ]
     }
   ],
@@ -3513,18 +3552,19 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "provider_adapters",
+      "owner_context": "agent_runtime_elastic",
       "dependencies": [
-        "director_lease",
-        "mailbox",
+        "config",
+        "credentials",
+        "recovery_backup",
         "controls",
+        "budgets_effects",
+        "workspace_git",
         "test_attestor",
-        "command_registry",
-        "i18n",
         "codex_e2e"
       ],
       "acceptance_contracts": [
-        "AC-V25-PROVIDER-ADAPTERS"
+        "AC-V38-AGENT-RUNTIME-ELASTIC"
       ],
       "status": "declared",
       "evidence_refs": [],

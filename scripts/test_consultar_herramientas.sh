@@ -50,6 +50,19 @@ jq -n -e \
     all($catalog[0].entries[].capability_ids[]; . as $id | ($known | index($id)) != null)
   ' >/dev/null || fail roadmap_capabilities
 
+jq -e '
+  [.entries[] | select(.key == "firecracker_microvm")] as $firecracker |
+  ($firecracker | length) == 1 and
+  $firecracker[0].status == "candidate" and
+  $firecracker[0].owner_vertical == "agent_runtime_elastic" and
+  $firecracker[0].capability_ids == ["EVD-04", "EVD-13", "EXT-21", "ORC-28"] and
+  $firecracker[0].technical_decision == {
+    "id": "agent_microvm_network",
+    "status": "planned_not_applied"
+  } and
+  $firecracker[0].next_gate == "A+B+C sobre el mismo candidato: A núcleo elástico neutral sin KVM ni Firecracker; B adaptador Firecracker opt-in sin fallback y una microVM por agente; C ola física 1/5/10/16/20; solo A+B+C permiten acreditar V38."
+' "${catalog}" >/dev/null || fail firecracker_contract
+
 all_count="$("${query}" --all | wc -l)"
 catalog_count="$(jq '.entries | length' "${catalog}")"
 [[ "${all_count}" == "${catalog_count}" ]] || fail all_query

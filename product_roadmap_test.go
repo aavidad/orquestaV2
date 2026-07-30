@@ -104,8 +104,8 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 	assertRoadmapImplementationDecisions(t, roadmap.ImplementationDecisions)
 
 	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	if len(roadmap.Verticals) != 37 {
-		t.Fatalf("vertical count = %d, want 37", len(roadmap.Verticals))
+	if len(roadmap.Verticals) != 38 {
+		t.Fatalf("vertical count = %d, want 38", len(roadmap.Verticals))
 	}
 	for index, vertical := range roadmap.Verticals {
 		if vertical.ID == "" || strings.TrimSpace(vertical.Title) == "" || vertical.Sequence != index+1 ||
@@ -133,8 +133,8 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 	})
 
 	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
-	if len(roadmap.AcceptanceContracts) != 37 {
-		t.Fatalf("acceptance contract count = %d, want 37", len(roadmap.AcceptanceContracts))
+	if len(roadmap.AcceptanceContracts) != 38 {
+		t.Fatalf("acceptance contract count = %d, want 38", len(roadmap.AcceptanceContracts))
 	}
 	for _, contract := range roadmap.AcceptanceContracts {
 		if contract.ID == "" || contract.Vertical == "" || contract.Command == "" || contract.Fixture == "" ||
@@ -283,6 +283,141 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 	assertRoadmapProgressCausality(t, roadmap.Verticals, verticals, contracts, entries)
 
 	assertDeferredMappings(t, roadmap.DeferredMappings, entries)
+}
+
+func TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	var vertical roadmapVertical
+	var contract roadmapAcceptanceContract
+	for _, candidate := range roadmap.Verticals {
+		if candidate.ID == "agent_runtime_elastic" {
+			vertical = candidate
+		}
+		if candidate.ID == "V39" {
+			t.Fatal("V39 no debe existir")
+		}
+	}
+	for _, candidate := range roadmap.AcceptanceContracts {
+		if candidate.ID == "AC-V38-AGENT-RUNTIME-ELASTIC" {
+			contract = candidate
+		}
+		if strings.HasPrefix(candidate.ID, "AC-V39") {
+			t.Fatal("no debe existir un contrato V39")
+		}
+	}
+	wantDependencies := []string{
+		"config", "credentials", "recovery_backup", "controls",
+		"budgets_effects", "workspace_git", "test_attestor", "codex_e2e",
+	}
+	if vertical.Sequence != 38 || vertical.Title != "Runtime elástico de agentes" ||
+		!reflect.DeepEqual(vertical.DependsOn, wantDependencies) ||
+		!reflect.DeepEqual(vertical.AcceptanceContracts, []string{"AC-V38-AGENT-RUNTIME-ELASTIC"}) {
+		t.Fatalf("V38 no conserva la autoridad prioritaria: %#v", vertical)
+	}
+	if contract.Vertical != vertical.ID || contract.Status != "planned" ||
+		contract.Receipt != "" ||
+		contract.TestRef != "planned:acceptance/v38_agent_runtime_elastic_plan_test.go" ||
+		contract.Fixture != "planned:fixtures/v38_agent_runtime_elastic_plan.json" {
+		t.Fatalf("el contrato V38 anticipa ejecución o evidencia: %#v", contract)
+	}
+	wantAssertions := []string{
+		"ORC-28 observa capacidad con fuente tiempo caducidad y calidad; cuota desconocida falla cerrado y reserva consumo liberación agotamiento y restart conservan lease fence e idempotencia",
+		"la demanda completa conserva cohortes lógicas exactas de 1 16 70 y 500 sin techo oculto; las olas físicas obligatorias progresan por 1 5 10 16 y 20 sin atribuir 70 o 500 físicos sin recursos medidos",
+		"el subgate A acredita solo el núcleo elástico neutral sin KVM; B conecta Firecracker opt-in sin fallback y una microVM por agente; C exige ola física del mismo candidato y solo A+B+C permiten acreditar V38",
+		"un único despachador global prioriza stop permite progreso de observe con launch saturado y paraleliza únicamente launch_agent sin selector privado solo-launch ni goroutines ociosas",
+		"la continuidad de mensajes la parada exacta y la conservación del entorno son comportamientos estrechos de V38 que no acreditan ORC-15 OPS-16 ni OPS-17",
+		"antes de desmontar se sellan e inventarían los datos y el entorno queda preserved_pending_review sin borrado automático",
+		"la retirada de datos es una decisión posterior, separada y autorizada",
+		"restart y recovery cubren antes del intento intento antes del efecto efecto sin recibo recibo antes de observación y stop con recibo perdido; unknown_applied queda en cuarentena y solo definitely_not_applied se reintenta",
+		"las latencias de solicitud, aprovisionamiento, arranque, disponibilidad, parada y sellado son medibles",
+		"el gate exige eventos JSON run y pass de cada prueba exacta y rechaza paquetes verdes sin tests; este contrato planificado no crea receipt ni evidence",
+	}
+	if !reflect.DeepEqual(contract.Assertions, wantAssertions) {
+		t.Fatalf("las afirmaciones V38 derivaron: %#v", contract.Assertions)
+	}
+	for _, marker := range []string{
+		"TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap",
+		"TestV38AgentRuntimeElasticPlanRejectsSemanticDrift",
+		"TestV38AgentRuntimeElasticPlanRejectsInvalidJSON",
+		"TestV38AgentRuntimeElasticPlanRequiresExactRunPassEvidence",
+		`"Action":"run"`, `"Action":"pass"`, "for v38_test in",
+	} {
+		if !strings.Contains(contract.Command, marker) {
+			t.Fatalf("el comando V38 no prueba ejecución focal exacta %q: %q", marker, contract.Command)
+		}
+	}
+
+	owners := map[string]bool{"ORC-28": false}
+	for _, entry := range roadmap.CapabilityEntries {
+		_, selected := owners[entry.ID]
+		if !selected {
+			continue
+		}
+		if entry.OwnerContext != vertical.ID ||
+			!reflect.DeepEqual(entry.Dependencies, wantDependencies) ||
+			!reflect.DeepEqual(entry.AcceptanceContracts, vertical.AcceptanceContracts) ||
+			entry.Status != "declared" || len(entry.EvidenceRefs) != 0 {
+			t.Fatalf("%s no pertenece únicamente a V38: %#v", entry.ID, entry)
+		}
+		owners[entry.ID] = true
+	}
+	for id, found := range owners {
+		if !found {
+			t.Fatalf("falta la capacidad V38 %s", id)
+		}
+	}
+
+	restored := map[string]roadmapEntry{
+		"ORC-15": {
+			ID: "ORC-15", Title: "Mensajes y handoff entre agentes/sesiones", SourceProposal: "MANTENER",
+			Decision: "accept", Kind: "orchestration", ReleaseTarget: "total_v1", CutoverRequired: true,
+			OwnerContext: "context_rag_evals", Dependencies: []string{"test_attestor", "provider_adapters", "tools_skills_sdk"},
+			AcceptanceContracts: []string{"AC-V27-CONTEXT-RAG-EVALS"}, Status: "declared", EvidenceRefs: []string{}, Supersedes: []string{},
+		},
+		"OPS-16": {
+			ID: "OPS-16", Title: "Shutdown cooperativo y cero procesos propios residuales", SourceProposal: "MANTENER, V1",
+			Decision: "accept", Kind: "operations", ReleaseTarget: "total_v1", CutoverRequired: true,
+			OwnerContext:        "operations_telemetry",
+			Dependencies:        []string{"config", "credentials", "recovery_backup", "identity_projects_rbac", "oidc_ad", "codex_e2e", "command_registry", "deploy_notifications", "postgres_s3_multihost"},
+			AcceptanceContracts: []string{"AC-V32-OPERATIONS-TELEMETRY"}, Status: "declared", EvidenceRefs: []string{}, Supersedes: []string{},
+		},
+		"OPS-17": {
+			ID: "OPS-17", Title: "Retención de logs, runtimes, caches y worktrees", SourceProposal: "MANTENER",
+			Decision: "accept", Kind: "operations", ReleaseTarget: "total_v1", CutoverRequired: true,
+			OwnerContext:        "operations_telemetry",
+			Dependencies:        []string{"config", "credentials", "recovery_backup", "identity_projects_rbac", "oidc_ad", "codex_e2e", "command_registry", "deploy_notifications", "postgres_s3_multihost"},
+			AcceptanceContracts: []string{"AC-V32-OPERATIONS-TELEMETRY"}, Status: "declared", EvidenceRefs: []string{}, Supersedes: []string{},
+		},
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		want, selected := restored[entry.ID]
+		if !selected {
+			continue
+		}
+		if !reflect.DeepEqual(entry, want) {
+			t.Fatalf("%s no fue restaurada exactamente a HEAD: %#v", entry.ID, entry)
+		}
+		delete(restored, entry.ID)
+	}
+	if len(restored) != 0 {
+		t.Fatalf("faltan capacidades globales restauradas: %#v", restored)
+	}
+
+	prerequisites := roadmapSetOf("AGT-01", "AGT-03", "GOV-21", "ORC-10", "EVD-13")
+	for _, entry := range roadmap.CapabilityEntries {
+		if _, required := prerequisites[entry.ID]; !required {
+			continue
+		}
+		if entry.Status != "accredited" || len(entry.EvidenceRefs) == 0 {
+			t.Fatalf("el prerrequisito %s se reabrió: %#v", entry.ID, entry)
+		}
+		delete(prerequisites, entry.ID)
+	}
+	if len(prerequisites) != 0 {
+		t.Fatalf("faltan prerrequisitos acreditados: %#v", prerequisites)
+	}
 }
 
 func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
@@ -1403,8 +1538,8 @@ func assertRoadmapProgressCausality(
 
 func assertRoadmapOperatorDecisions(t *testing.T, decisions map[string]json.RawMessage) {
 	t.Helper()
-	if len(decisions) != 13 {
-		t.Fatalf("operator decision count = %d, want 13", len(decisions))
+	if len(decisions) != 14 {
+		t.Fatalf("operator decision count = %d, want 14", len(decisions))
 	}
 	wantStrings := map[string]string{
 		"architecture":        "modular_monolith_hexagonal",
@@ -1418,6 +1553,7 @@ func assertRoadmapOperatorDecisions(t *testing.T, decisions map[string]json.RawM
 		"time_travel":         "rejected_use_causal_generations_and_backup",
 		"opes_games":          "rejected_outside_core_production",
 		"advanced_retrieval":  "conditional_on_versioned_benchmark",
+		"priority_vertical":   "agent_runtime_elastic",
 	}
 	for key, want := range wantStrings {
 		var got string

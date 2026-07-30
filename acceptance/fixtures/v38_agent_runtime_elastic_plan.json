@@ -1,0 +1,152 @@
+{
+  "schema_version": 1,
+  "fixture_id": "v38_agent_runtime_elastic_plan",
+  "contract_id": "AC-V38-AGENT-RUNTIME-ELASTIC",
+  "status": "planned",
+  "priority": "operator_priority_immediate",
+  "capability_ownership": [
+    "ORC-28"
+  ],
+  "non_owned_requirements": {
+    "capabilities": [
+      "ORC-15",
+      "OPS-16",
+      "OPS-17"
+    ],
+    "messages_continuity": "required_behavior_without_accrediting_orc_15",
+    "exact_agent_stop": "required_behavior_without_accrediting_ops_16",
+    "agent_environment_preservation": "required_behavior_without_accrediting_ops_17"
+  },
+  "accredited_prerequisites": [
+    "AGT-01",
+    "AGT-03",
+    "GOV-21",
+    "ORC-10",
+    "EVD-13"
+  ],
+  "causal_dependencies": [
+    "config",
+    "credentials",
+    "recovery_backup",
+    "controls",
+    "budgets_effects",
+    "workspace_git",
+    "test_attestor",
+    "codex_e2e"
+  ],
+  "subgates": {
+    "order": [
+      "A",
+      "B",
+      "C"
+    ],
+    "global_accreditation": "only_after_a_b_c_pass_on_same_candidate",
+    "a": {
+      "scope": "neutral_elastic_core",
+      "kvm": "not_required",
+      "firecracker": "not_required",
+      "status_effect": "cannot_accredit_v38"
+    },
+    "b": {
+      "scope": "firecracker_agent_adapter",
+      "selection": "opt_in_explicit_no_fallback",
+      "isolation": "one_microvm_per_agent",
+      "status_effect": "cannot_accredit_v38"
+    },
+    "c": {
+      "scope": "real_physical_wave",
+      "subject": "same_candidate_as_a_and_b",
+      "status_effect": "accredit_v38_only_after_a_b_c"
+    }
+  },
+  "capacity": {
+    "observation": "source_timestamp_expiry_and_quality_required",
+    "known_quota": "reported_limit_enforced",
+    "unknown_quota": "fail_closed_for_new_reservations",
+    "reservation": "atomic_with_lease_and_fence",
+    "consumption": "idempotent_after_accepted_launch_receipt",
+    "release": "idempotent_only_after_terminal_or_definitely_not_applied",
+    "exhaustion": "same_execution_waits_without_consuming_attempt",
+    "restart": "reconstructs_observations_reservations_leases_and_fences"
+  },
+  "demand": {
+    "logical_cohorts": [
+      1,
+      16,
+      70,
+      500
+    ],
+    "physical_steps": [
+      1,
+      5,
+      10,
+      16,
+      20
+    ],
+    "complete_ready_set": true,
+    "hidden_global_ceiling": "forbidden",
+    "partial_capacity": "same_execution_waits_without_consuming_attempt",
+    "large_physical_claim": "only_with_explicit_measured_resources"
+  },
+  "scheduling": {
+    "dispatcher": "single_global_application_dispatcher",
+    "claim_selection": "global_any_or_without_launch_never_private_launch_only",
+    "stop_priority": "before_new_launches",
+    "observe_progress": "required_when_launch_capacity_is_saturated",
+    "concurrent_action_kind": "launch_agent_only",
+    "non_launch_actions": "serialized_by_global_dispatcher",
+    "private_launch_only_selector": "forbidden",
+    "idle_worker_goroutines": "forbidden"
+  },
+  "shutdown": {
+    "scope": "one_exact_agent_without_stopping_the_cohort",
+    "cooperative": "required_first",
+    "forced": "allowed_after_bounded_cooperative_failure",
+    "hung_agent": "isolated_and_stopped_individually"
+  },
+  "preservation": {
+    "seal_before_unmount": true,
+    "inventory_before_unmount": true,
+    "terminal_environment_state": "preserved_pending_review",
+    "automatic_deletion": false,
+    "removal": "separate_authorized_decision_after_review"
+  },
+  "recovery": {
+    "before_attempt": "no_external_effect",
+    "attempt_before_effect": "same_execution_reclaimed_with_higher_fence",
+    "effect_without_receipt": "quarantine_and_reconcile_by_external_identity",
+    "unknown_applied": "quarantine_and_never_blind_retry",
+    "receipt_before_observe": "resume_observation_without_relaunch",
+    "stop_receipt_lost": "reconcile_exact_stop_without_broad_kill",
+    "retry": "only_definitely_not_applied",
+    "duplicate_launch": "forbidden",
+    "stale_fence_write": "rejected"
+  },
+  "measured_latencies": [
+    "ready_to_capacity_request",
+    "capacity_provision",
+    "agent_launch",
+    "agent_available",
+    "cooperative_stop",
+    "forced_stop",
+    "seal_and_inventory"
+  ],
+  "required_tests": {
+    "names": [
+      "TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap",
+      "TestV38AgentRuntimeElasticPlanRejectsSemanticDrift",
+      "TestV38AgentRuntimeElasticPlanRejectsInvalidJSON",
+      "TestV38AgentRuntimeElasticPlanRequiresExactRunPassEvidence"
+    ],
+    "event_evidence": "exact_run_and_pass_required_for_each_test",
+    "reject_no_tests_to_run": true
+  },
+  "catalog_guards": {
+    "catalog_size": 257,
+    "vertical_count": 38,
+    "acceptance_contract_count": 38,
+    "v39_forbidden": true,
+    "receipt_absent_while_planned": true,
+    "evidence_absent_while_planned": true
+  }
+}

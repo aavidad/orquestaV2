@@ -3,13 +3,29 @@
 ## Objetivo invariable
 
 Terminar Orquesta al 100 %, sin volver a convertir V23 en un bloque
-indivisible. El orden acordado es:
+indivisible. La prioridad vinculante corregida por el operador es:
 
-1. cerrar y sellar V23 mediante microtareas;
-2. integrar el contrato nuclear de microtareas;
-3. implementar el runtime de agentes Firecracker;
-4. usar la propia Orquesta para completar los frentes restantes;
-5. ejecutar gates globales, revisar y cerrar el producto.
+1. abrir V38 `agent_runtime_elastic` sobre sus prerrequisitos ya acreditados,
+   sin depender del cierre de V23 y con `ORC-28` como su única capacidad;
+2. pasar la compuerta A del núcleo elástico neutral, sin exigir KVM ni
+   Firecracker y sin acreditar todavía V38;
+3. pasar la compuerta B del adaptador Firecracker mediante activación
+   explícita, sin sustitución automática, con una microVM por agente y sin
+   acreditar todavía V38;
+4. pasar la compuerta C mediante una ola física real sobre el mismo candidato
+   de A y B; solo A+B+C acreditan V38;
+5. demostrar por separado cohortes lógicas de 1, 16, 70 y 500 y escalones
+   físicos de 1, 5, 10, 16 y 20, sin afirmar 70 o 500 agentes físicos cuando
+   no existan recursos medidos;
+6. usar la propia Orquesta elástica para completar V23 y los demás frentes;
+7. ejecutar gates globales, revisar y cerrar el producto.
+
+`ORC-15` permanece en V27 y `OPS-16`/`OPS-17` permanecen en V32. La
+continuidad de mensajes, la parada exacta y la conservación del entorno son
+conductas estrechas exigidas por V38, no capacidades que V38 reabra o acredite.
+`EVD-13` y `TestAttestor` siguen siendo prerrequisitos ya acreditados; el
+adaptador Firecracker de agentes de la compuerta B no los sustituye. El runtime
+general no se difiere a V39: V39 no existe.
 
 No se debe declarar terminado un corte por porcentaje, documentación o pruebas
 locales: hacen falta change-set, atestación, revisiones, gobernanza aplicable,
@@ -17,13 +33,32 @@ integración y evidencia durable.
 
 ## Primera acción del siguiente agente
 
-Antes de editar:
+La primera acción operativa es abrir una microtarea de la compuerta A de V38
+sobre `ORC-28`, con write-set estrecho y sin KVM, Firecracker ni cambios de
+roadmap. Antes de diseñarla o editar:
 
 ```bash
 cd /home/alberto/Trabajo/orquestaV2
 git status --short --branch
 git log -5 --oneline --decorate
 
+go test -mod=vendor -count=1 . \
+  -run '^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites)$'
+
+go test -mod=vendor -count=1 ./acceptance \
+  -run '^(TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap|TestV38AgentRuntimeElasticPlanRejectsSemanticDrift|TestV38AgentRuntimeElasticPlanRejectsInvalidJSON|TestV38AgentRuntimeElasticPlanRequiresExactRunPassEvidence)$'
+```
+
+Estas pruebas ratifican únicamente el contrato planificado: no implementan ni
+acreditan V38. La primera microtarea de A debe partir de la fixture y demostrar
+una conducta neutral del núcleo elástico detrás de los puertos existentes, sin
+añadir otra autoridad de scheduling o lifecycle.
+
+V23 queda preservada como frente posterior e independiente. No se relanza ni se
+mezcla con el write-set de V38. Solo cuando se retome V23 se consulta su estado
+vivo antes de editar:
+
+```bash
 STATE=/home/alberto/Trabajo/.orquesta-runtime-v2-v23/Codex12/state/orquesta-v23-microtasks-r3.sqlite
 sqlite3 -header -column "$STATE" "
 SELECT g.ref AS goal_ref,g.state,g.revision,w.state AS work_state,
@@ -207,25 +242,31 @@ TOKEN_FILE=/ruta/privada/al/token
 
 El `intent_ref` y digest deben obtenerse del outbox vivo, no de este documento.
 
-## Firecracker después de sellar V23
+## Firecracker y V38 sin esperar al cierre de V23
 
 El TestAttestor Firecracker está activo y sirve para atestar pruebas. Todavía no
 es runtime de agentes.
 
-El runtime nuevo usa una microVM por agente, nunca dieciséis agentes dentro de
-una VM. Orden A–K:
+V23 no depende de Firecracker, KVM ni microVM. A la inversa, V38 y su adaptador
+Firecracker tampoco esperan a que V23 termine: avanzan mediante dependencias y
+conjuntos de escritura separados.
 
-1. contrato neutral de runtime;
-2. rootfs inmutable con Codex;
-3. lease/CID durable;
-4. broker vsock;
-5. launcher físico de una VM;
-6. transporte de bundle/workspace;
-7. HOME/CODEX_HOME y credencial efímeros;
-8. cleanup/recovery;
-9. E2E de un Codex real;
-10. proxy controlado por vsock;
-11. ola de 16 microVM.
+Las tres compuertas canónicas son:
+
+1. **A, núcleo neutral**: observación, reserva y liberación de capacidad,
+   despacho global, prioridad de parada, progreso de observación, reinicio y
+   recuperación sin KVM ni Firecracker. Esta compuerta no acredita V38.
+2. **B, adaptador Firecracker**: activación explícita sin sustitución
+   automática, una microVM por agente, `rootfs` inmutable con Codex, lease/CID
+   durable, broker y proxy controlados por `vsock`, transporte aislado,
+   credenciales efímeras, parada y sellado. Esta compuerta tampoco acredita
+   V38.
+3. **C, ola física**: ejecutar sobre el mismo candidato de A y B los escalones
+   1, 5, 10, 16 y 20. Solo después de A+B+C puede acreditarse V38.
+
+Las cohortes lógicas 1, 16, 70 y 500 prueban cálculo completo de demanda, no
+prometen esas cantidades físicas. Si la capacidad no basta, la misma
+`Execution` espera sin consumir intento.
 
 No usar NAT, TAP, bridge, NIC guest, Internet directo ni Git del host. El guest
 recibe un bundle/snapshot, trabaja en filesystem aislado y devuelve un

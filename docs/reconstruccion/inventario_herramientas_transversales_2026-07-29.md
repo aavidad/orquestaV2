@@ -34,8 +34,10 @@ distinguiera acreditado, parcial, candidato, condicional y deuda.
 | Deuda | Necesidad aceptada aún no acreditada. | skill creator, doctor, evals, watchdog, retención y conectores de dominio. |
 
 No debe decirse que Firecracker, skill creator o una base vectorial “ya
-funcionan” por tener diseño o código parcial. Tampoco debe interpretarse
-`declared` como descarte.
+funcionan” por tener diseño o código parcial. Firecracker sigue como candidato
+no acreditado: el read-model lo asigna a V38 `agent_runtime_elastic` mediante
+`ORC-28`, mientras la decisión técnica `agent_microvm_network` permanece
+`planned_not_applied`. Tampoco debe interpretarse `declared` como descarte.
 
 ## Decisiones
 
@@ -44,8 +46,11 @@ funcionan” por tener diseño o código parcial. Tampoco debe interpretarse
 3. V27 es dueño de contexto, caveman, broker, RAG y evaluaciones.
 4. La opción de búsqueda inicial es `rg`/metadata y FTS5/BM25. Embeddings,
    reranking o vector DB exigen benchmark positivo.
-5. Firecracker sigue como adaptador opt-in de aislamiento fuerte. Bubblewrap
-   continúa acreditado para TestAttestor; no se confunden ambos alcances.
+5. Firecracker sigue como candidato a adaptador opt-in de aislamiento fuerte;
+   no se afirma que funcione ni que esté acreditado. Su siguiente gate exige
+   A+B+C sobre el mismo candidato: núcleo neutral, adaptador Firecracker y ola
+   física 1/5/10/16/20. Bubblewrap continúa acreditado para TestAttestor; no se
+   confunden ambos alcances.
 6. Multi-HOME pertenece al adaptador Codex/composición, nunca al core.
 7. Observabilidad, watchdog, shutdown y retención pertenecen a operación y no
    deciden contenido de agentes.

@@ -1,6 +1,6 @@
 # Ruta canónica hasta Orquesta total
 
-Fecha: 2026-07-23
+Fecha: 2026-07-30.
 
 Estado: autoridad de ejecución del rebuild. Esta ruta define el trabajo; no
 afirma que el producto total esté terminado.
@@ -32,7 +32,8 @@ retirarlas de la nueva release. Se consultan para extraer semántica,
 caracterizar bugs y demostrar retirada; no se importan, cablean, ejecutan ni
 amplían.
 
-La orden del operador del 2026-07-22 extiende el cierre hasta V37. V35–V37 no
+La orden del operador del 2026-07-30 extiende el cierre hasta V38 y establece
+el runtime elástico de agentes como prioridad inmediata. V35–V37 no
 agrandan el catálogo ni el núcleo: califican una fábrica de videojuegos externa
 como consumidor real de los puertos públicos ya acreditados. El proyecto
 `/home/alberto/Trabajo/juegos` conserva lifecycle, spec, toolchain y datos
@@ -161,7 +162,7 @@ Decisiones de producto ya resueltas para evitar ramas abiertas:
   debe convertir cada una en `accept` o `reject`; una decisión condicional
   abierta impide el cierre total.
 
-## 5. Las 37 verticales causales
+## 5. Las 38 verticales causales
 
 El estado de cada vertical se obtiene del ledger, no de esta tabla. El orden es
 causal; dentro de cada corte se ejecuta la ola máxima con write-sets disjuntos.
@@ -192,48 +193,56 @@ causal; dentro de cada corte se ejecuta la ola máxima con write-sets disjuntos.
 | V22 Codex real completo | V04–V10,V12–V21 | Primer vertical de agente, sin depender de OIDC/AD: plan, DAG, mailbox, launch/observe/stop, workspace, tests, reviews, cierre, backup/restart y shutdown por bindings generados desde el registro. Gate `AC-V22-CODEX-E2E`: cuatro Goals A/B/C/D concurrentes, stop B preserva A/C/D, restart y cierre por MCP real, cero contradicción terminal y cero proceso propio. |
 | V23 Wizard, dossier y fábrica | V04–V05,V20–V21 | Intake único para chat/formulario, preguntas por huecos, ayudas, máximo configurable de rondas, recomendaciones/elección, preview, dossier y templates `research`, `build_app`, `change_app`, `domain_production`, `deploy`, `self_change`. Gate: confirmación causal crea plan; no aparece otro motor. La superficie web `UI-05` y marca/temas `WIZ-13` pertenecen a V24; V23 conserva `work_existing` y refs opacas, no el conector Analizador concreto `WIZ-10`, que pertenece a V28. |
 | V24 Web administrativa | V10,V20–V23 | Web responsive/PWA, incluida la superficie Wizard `UI-05` y su marca/temas `WIZ-13`, para proyectos, Goals, fases, trabajo, agentes, ramas, artifacts, decisions, cuotas, reviews, effects y config; materializa `OPS-07` mediante los bindings API/MCP/web/CLI del registro único sobre el motor neutral V07, con expected revision, confirmación, audit receipt y `pending_restart`; streaming y rescate sin autoridad paralela. Gate: paridad multicanal, RBAC, WCAG 2.2 AA automatizado, matriz de teclado, estados comparados con queries canónicas e i18n en E2E browser. Desktop nativo queda rechazado; PWA es la única UI instalada. |
-| V25 Hermes y proveedores restantes | V12–V14,V17–V22 | Hermes como Director estándar; Claude, Gemini, Ollama y runtime local mediante la familia neutral; catálogo de modelos, capabilities, cuota, uso, routing y fallback explícito. Gate: suite por adapter, smokes reales disponibles y aislamiento de ausencia/fallo; nunca paridad de calidad inventada. |
+| V25 Hermes y proveedores restantes | V12–V14,V17–V22 | Hermes como Director estándar; Claude, Gemini, Ollama y runtime local mediante la familia neutral; catálogo de modelos, capabilities, cuota, uso, routing y fallback explícito. Gate: suite por adapter, smokes reales disponibles y aislamiento de ausencia/fallo; nunca paridad de calidad inventada. Los pools, licencias y plazas como capacidad externa (`ORC-28`) pertenecen a V38. |
 | V26 Tools, resources, skills y rulepacks | V08,V10,V15,V21 | Registro/SDK único, namespaces lazy, resources paginados, skills progresivas, scopes, trust, hashes, tests, install/upgrade/revoke/rollback y bootstrap/doctor. Gate: tool no autorizada no corre, resultado grande va a artifact y cero skill/rulepack observado sin disposición. |
-| V27 Contexto, RAG, routing y evals | V17,V25–V26 | ContextBundle mínimo, refs, FTS5/BM25, memoria por proyecto, handoffs, caching/compaction y routing barato medido. Gate: dataset versionado mide calidad/coste/latencia; embeddings/reranker/vector DB solo tras mejora demostrada. |
+| V27 Contexto, RAG, routing y evals | V17,V25–V26 | ContextBundle mínimo, refs, FTS5/BM25, memoria por proyecto, caching/compaction y routing barato medido. Gate: dataset versionado mide calidad/coste/latencia; embeddings/reranker/vector DB solo tras mejora demostrada. Los mensajes y relevos entre agentes o sesiones (`ORC-15`) permanecen en V27; V38 solo exige su continuidad como conducta acotada y no vuelve a acreditarlos. |
 | V28 Plugins y Forge remotos | V16–V17,V21,V26–V27 | Protocolo `DomainPlugin`; el Analizador concreto de repositorios `WIZ-10`, `change_app`, investigación, web/browser, documentos/PDF, datos, DB externas, presentaciones, OCR, imagen/audio, shell y computer-use son conectores gobernados. Un único puerto neutral `Forge` recibe adapters GitHub/GitLab/Gitea; push, pull request y merge remoto son efectos explícitos con credential ref, egress, permiso, CAS e idempotencia. Gate: refs opacas, permisos, contrato/E2E por adapter y cero acceso a estado/filesystem interno. |
 | V29 Deploy y notificaciones | V08,V10,V15,V21,V28 | Hooks, webhooks, email, Telegram y efectos dry-run/local/contenedor/systemd; remotos como plugins ratificados. Gate: aprobación, scope, receipt, rollback e idempotencia; ningún sink decide lifecycle. |
 | V30 OPES temporal completo | V18–V22,V25–V29 | Plugin externo para inventario/reutilización, investigación, temas, visuales, tests, supuestos, reviews, ensamblado, audio, tutor/RAG, HTML, manual y paquete. Gate `AC-V30-OPES`: fixture OPES temporal con DB/FS separados, seis launches acreditados cuando se exijan, lista exacta de artefactos/QA y producción imposible sin confirmación/scope. |
 | V31 PostgreSQL, S3 y multihost | V06,V09–V10,V13–V17,V22 | Adapters Postgres y S3-compatible; worker/host affinity, claims con fencing, recuperación de host y workspaces clonables. Gate: misma suite que SQLite/FS, carga/concurrencia, aislamiento y colaboración multiusuario/multihost sin cambiar dominio. |
-| V32 Operación completa | V07–V11,V20–V22,V29,V31 | Install, doctor, update, rollback, migraciones, retención, cleanup, idle wakeup/backoff, watchdog cooperativo, métricas/trazas, health/readiness y smokes/nightly. Gate: upgrade/rollback/restore reales, spoof rechazado, perfil idle y shutdown API con cero residuos. |
+| V32 Operación completa | V07–V11,V20–V22,V29,V31 | Install, doctor, update, rollback, migraciones operativas, idle wakeup/backoff, watchdog cooperativo, métricas/trazas, health/readiness y smokes/nightly. Gate: upgrade/rollback/restore reales, spoof rechazado y perfil idle. La parada de agentes y la retención de sus entornos (`OPS-16` y `OPS-17`) permanecen en V32; V38 exige parada exacta y conservación como conductas acotadas, sin volver a acreditarlas. |
 | V33 Apps externas Go y no-Go | V23–V29,V31–V32 | Dos apps completas creadas por superficies públicas y atestadas contra `APP-01..16`: hexagonal, i18n, accesibilidad, config/secretos, auth, pruebas, docs y deploy proporcional. Gate: misma tree/image y E2E real; ficheros generados sin wiring no cuentan. |
 | V34 Migración, cutover y retirada | V01–V33 | Censo final, cierre de ingreso antiguo, drain/sello, snapshot/import único, configuración migrada sin doble lectura, E2E final y retirada de módulos/cmd/scripts superseded. Gate global de la sección 9; legacy queda evidencia read-only, no runtime. |
 | V35 Videojuegos: composición y build externo | V34 | `DomainPlugin`/tool externo para inventario, spec, toolchain y build con refs opacas. Gate: un Goal público produce ROM, manifest, diagnósticos y receipts reproducibles desde fixture aislado; no importa ni monta estado/filesystem interno de Orquesta. |
 | V36 Videojuegos: QA reproducible | V35 | Emulador y verificador externos ejecutan el build exacto con entradas guionizadas y publican capturas, audio, telemetría y reviews como artefactos. Gate: drift de ROM/assets/toolchain/policy invalida la QA y promoción sigue explícita. |
 | V37 Videojuegos: promoción gobernada | V36 | Manifiesto liga fuente, plugin, toolchain, ROM, QA, reviews y target; publicar es un efecto aprobado. Gate: sin autoridad no publica; apply/replay/rollback/demote son idempotentes, auditables y terminan con receipt reproducible. |
+| V38 Runtime elástico de agentes | V07–V09,V14–V17,V22 | Prioridad inmediata e independiente de V23; solo le pertenece `ORC-28`. Calcula el conjunto completo de trabajo listo sin techo global oculto y separa las cohortes lógicas exactas de 1, 16, 70 y 500 de los escalones físicos obligatorios de 1, 5, 10, 16 y 20. Compuerta A: núcleo elástico neutral sin KVM ni Firecracker. Compuerta B: adaptador Firecracker por activación explícita, sin sustitución automática y con una microVM por agente. Compuerta C: ola física real sobre el mismo candidato de A y B. Solo A+B+C acreditan V38. Ante capacidad parcial mantiene la misma `Execution` en espera sin consumir intento; prioriza la parada, permite observar progreso con capacidad de lanzamiento saturada y solo paraleliza lanzamientos. Detiene un agente exacto sin parar la cohorte; sella e inventaría antes de desmontar y conserva `preserved_pending_review` sin borrado automático. Reinicio y recuperación no duplican lanzamientos ni aceptan escrituras con cerca obsoleta. `AGT-01`, `AGT-03`, `GOV-21`, `ORC-10` y `EVD-13` son prerrequisitos acreditados, no capacidades reabiertas; `ORC-15`, `OPS-16` y `OPS-17` conservan sus propietarios V27 y V32. |
 
 Nota de evidencia V13: un E2E Codex real que recorra composición, MCP, SQLite
 y CAS pero no active `HandoffRequired` sirve como gate de no regresión. No
 sustituye `AC-V13-MAILBOX` ni acredita mailbox o bindings públicos.
 
-Corte verificable 2026-07-22: V01–V16 están acreditados por receipts V3
-válidos. `AC-V16-WORKSPACE-GIT` pasó desde S en checkout `detached_clean`; sus
-OID y digests autoritativos viven únicamente en
-`product/evidence/v16_workspace_git.json`.
+Fotografía histórica verificable del 2026-07-22: V01–V16 estaban acreditados
+por receipts V3 válidos. `AC-V16-WORKSPACE-GIT` pasó desde S en checkout
+`detached_clean`; sus OID y digests autoritativos viven únicamente en
+`product/evidence/v16_workspace_git.json`. Los denominadores de 37 verticales
+se conservan a continuación como dato histórico y no describen el roadmap
+actual de 38 verticales.
 
 ```text
 corte histórico antes de V16: 56/257 = 21,79 %; 15/37 = 40,54 %; 15/15 receipts
 corte histórico V16: 59/257 = 22,96 %; 16/37 = 43,24 %; 16/16 receipts
 corte histórico V17: 63/257 = 24,51 %; 17/37 = 45,95 %; 17/17 receipts
-corte vigente V18: 68/257 = 26,46 %; 18/37 = 48,65 %; 18/18 receipts
+corte histórico V18: 68/257 = 26,46 %; 18/37 = 48,65 %; 18/18 receipts
 ```
 
 El receipt V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`,
 `ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`. Presupuestos jerárquicos, fairness,
 riesgo/esfuerzo y ledger `intent -> approval -> attempt -> receipt` amplían el
-mismo writer, scheduler, outbox y repositorio; no crean otro motor. Launch y
-stop quedan gobernados también en composición Codex. HTTP/MCP/CLI públicos
-siguen esperando V20 y la paridad i18n total espera V21.
+mismo writer, scheduler, outbox y repositorio; no crean otro motor. En aquella
+fotografía, launch y stop quedaban gobernados también en composición Codex,
+HTTP/MCP/CLI públicos esperaban V20 y la paridad i18n total esperaba V21.
 
-El análisis, implementación y sellado V16 están completos. V16 acredita solo
-`STG-02`, `STG-10` y `EXT-10`; Forge remoto no se abre hasta V28. V17 también
-está acreditada y añade exactamente `EVD-01`, `EVD-04`, `EVD-05` y `EVD-13`.
-V18 `independent_reviews` está acreditada; V19 Consejo es la siguiente
-dependencia causal.
+En esa fotografía, el análisis, implementación y sellado V16 estaban
+completos. V16 acreditaba solo `STG-02`, `STG-10` y `EXT-10`; Forge remoto no
+se abría hasta V28. V17 también estaba acreditada y añadía exactamente
+`EVD-01`, `EVD-04`, `EVD-05` y `EVD-13`. V18 `independent_reviews` estaba
+acreditada y V19 Consejo era la siguiente dependencia causal.
+
+El corte estructurado vigente del 2026-07-30 conserva 257 capacidades y 38
+verticales: V1–V22 están acreditadas y sus 22 contratos son ejecutables;
+V23–V38 mantienen 16 contratos planificados. V38 es prioridad inmediata, sigue
+planificada y no tiene evidencia ni receipt de acreditación.
 
 ## 6. Olas y transición a auto-orquestación
 
@@ -242,10 +251,12 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- V16–V18 ya tienen receipts estrictos; V19 puede continuar tras el handoff y
-  la liberación registrada de los locks compartidos.
-- V19, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
-  separadas, pero solo integran con sus dependencias acreditadas.
+- en la fotografía histórica anterior a V19, V16–V18 ya tenían receipts
+  estrictos y V19 podía continuar tras el handoff y la liberación registrada
+  de los locks compartidos.
+- en esa misma fotografía, V19, adapters iniciales de V21 y catálogos i18n
+  podían desarrollarse en ramas separadas, pero solo integrar con sus
+  dependencias acreditadas.
 - tras congelar contrato en V20, los adapters de V25 se portan en paralelo.
 - plugins de V28 se paralelizan por proceso/namespace; OPES espera únicamente
   las capabilities que declara su E2E.
@@ -264,8 +275,10 @@ integración/rework
 restart/stop/shutdown
 ```
 
-Cuando ese gate pase, nueva Orquesta dirige V23–V37 por defecto. Codex directo
-queda para observación, integración o desbloqueo acotado documentado. Si el
+V38 es prioritaria y puede ejecutarse sobre sus dependencias acreditadas sin
+esperar a V23. Cuando su gate pase, nueva Orquesta dirige V23–V37 por defecto.
+Codex directo queda para observación, integración o desbloqueo acotado
+documentado. Si el
 producto se auto-modifica, usa la misma plantilla `self_change`, permisos y
 receipts; no obtiene privilegios ocultos.
 

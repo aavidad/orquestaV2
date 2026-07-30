@@ -269,16 +269,20 @@
     {
       "key": "firecracker_microvm",
       "name": "Firecracker/microVM para aislamiento fuerte",
-      "capability_ids": ["EVD-04", "EVD-13", "EXT-21"],
+      "capability_ids": ["EVD-04", "EVD-13", "EXT-21", "ORC-28"],
       "status": "candidate",
       "v2_evidence": [
         "docs/arquitectura_comunicacion_agentes_firecracker_2026-07-25.md",
         "docs/reconstruccion/corte_alcance_v23_firecracker_diferido_2026-07-26.md"
       ],
       "legacy_evidence": [],
-      "owner_vertical": "agent_microvm_network",
+      "owner_vertical": "agent_runtime_elastic",
+      "technical_decision": {
+        "id": "agent_microvm_network",
+        "status": "planned_not_applied"
+      },
       "decision": "adoptar_como_adaptador_opt_in",
-      "next_gate": "E2E físico: guest sin host local/red directa, broker autenticado, egress limitado y cleanup."
+      "next_gate": "A+B+C sobre el mismo candidato: A núcleo elástico neutral sin KVM ni Firecracker; B adaptador Firecracker opt-in sin fallback y una microVM por agente; C ola física 1/5/10/16/20; solo A+B+C permiten acreditar V38."
     },
     {
       "key": "runtime_observability",

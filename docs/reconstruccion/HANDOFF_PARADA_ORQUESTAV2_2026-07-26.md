@@ -1,3 +1,11 @@
+> **ADVERTENCIA OPERATIVA — FOTOGRAFÍA HISTÓRICA.**
+> Este handoff de parada está superado por
+> `docs/reconstruccion/handoff_continuacion_agente_2026-07-30.md`, que es la
+> orden operativa vigente. V38 `agent_runtime_elastic` es ahora prioritaria e
+> independiente de V23. Queda prohibido ejecutar las órdenes antiguas de este
+> documento que trataban V38/V39 como candidatos no canónicos o impedían abrir
+> V38 mientras V23 siguiera abierta; V39 no existe en el roadmap vigente.
+
 # Handoff de parada de Orquesta V2
 
 Fecha: 2026-07-26.
