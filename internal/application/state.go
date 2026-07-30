@@ -314,6 +314,7 @@ type ClaimRequest struct {
 	Token                   string
 	LeaseDuration           time.Duration
 	AttestTestLeaseDuration time.Duration
+	ExcludeLaunch           bool
 	Capabilities            ports.AgentCapabilities
 	BudgetPolicy            BudgetPolicy
 }

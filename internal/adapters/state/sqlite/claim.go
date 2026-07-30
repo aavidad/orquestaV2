@@ -89,7 +89,9 @@ func (repository *Repository) ClaimNextAction(
 	var found bool
 	var after *claimCandidateOrder
 	for {
-		candidates, err := readClaimCandidateWindow(ctx, transaction, now, workspaceColumns, after)
+		candidates, err := readClaimCandidateWindow(
+			ctx, transaction, now, workspaceColumns, request.ExcludeLaunch, after,
+		)
 		if err != nil {
 			return application.ActionClaim{}, false, err
 		}
@@ -517,6 +519,7 @@ WHERE o.completed_at IS NULL
         AND stop.governance_version = 1
         AND stop.retired_at IS NULL AND stop.quarantined_at IS NULL
   ))
+  AND (? = 0 OR o.kind <> 'launch_agent')
   AND (? = 0 OR (
       CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
       CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
@@ -538,6 +541,7 @@ func readClaimCandidateWindow(
 	transaction *sql.Tx,
 	now time.Time,
 	workspaceColumns bool,
+	excludeLaunch bool,
 	after *claimCandidateOrder,
 ) ([]claimCandidate, error) {
 	changeProjection := "'' AS change_ref, '' AS expected_target_oid, '' AS review_gate_digest, '', NULL, NULL, NULL, NULL"
@@ -558,7 +562,7 @@ o.council_decision_ref,o.council_decision_digest,o.council_skip_ref,o.council_sk
 	}
 	observeClaimQuery(ctx, claimQueryObservation{kind: "candidate_window", itemCount: claimCandidateWindowSize})
 	rows, err := transaction.QueryContext(ctx, fmt.Sprintf(claimCandidatesQuery, changeProjection),
-		requiredTime(now), requiredTime(now), requiredTime(now), enabled,
+		requiredTime(now), requiredTime(now), requiredTime(now), storedBool(excludeLaunch), enabled,
 		continuation.kind, continuation.project, continuation.goal, continuation.availableAt, continuation.ref,
 		claimCandidateWindowSize)
 	if err != nil {

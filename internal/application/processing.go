@@ -18,24 +18,29 @@ type ProcessResult struct {
 	Action    ActionKind
 }
 
+type ActionClaimSelection struct {
+	ExcludeLaunch bool
+}
+
 func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef string) (ProcessResult, error) {
-	if orchestrator == nil {
-		return ProcessResult{}, errors.New("application.unavailable")
-	}
-	if strings.TrimSpace(workerRef) == "" {
-		return ProcessResult{}, errors.New("application.worker_ref_required")
-	}
-	claim, found, err := orchestrator.claimNextAction(ctx, workerRef)
+	claim, found, err := orchestrator.ClaimNextAction(ctx, workerRef, ActionClaimSelection{})
 	if err != nil || !found {
 		return ProcessResult{}, err
 	}
-	return orchestrator.processClaim(ctx, claim)
+	return orchestrator.ProcessClaim(ctx, claim)
 }
 
-func (orchestrator *Orchestrator) claimNextAction(
+func (orchestrator *Orchestrator) ClaimNextAction(
 	ctx context.Context,
 	workerRef string,
+	selection ActionClaimSelection,
 ) (ActionClaim, bool, error) {
+	if orchestrator == nil {
+		return ActionClaim{}, false, errors.New("application.unavailable")
+	}
+	if strings.TrimSpace(workerRef) == "" {
+		return ActionClaim{}, false, errors.New("application.worker_ref_required")
+	}
 	token, err := orchestrator.ids.NewID(ctx, "claim")
 	if err != nil {
 		return ActionClaim{}, false, err
@@ -45,7 +50,18 @@ func (orchestrator *Orchestrator) claimNextAction(
 		AttestTestLeaseDuration: orchestrator.attestTestClaimLease,
 		Capabilities:            orchestrator.agentCapabilities,
 		BudgetPolicy:            orchestrator.budgetPolicy,
+		ExcludeLaunch:           selection.ExcludeLaunch,
 	})
+}
+
+func (orchestrator *Orchestrator) ProcessClaim(
+	ctx context.Context,
+	claim ActionClaim,
+) (ProcessResult, error) {
+	if orchestrator == nil {
+		return ProcessResult{}, errors.New("application.unavailable")
+	}
+	return orchestrator.processClaim(ctx, claim)
 }
 
 func (orchestrator *Orchestrator) processClaim(
