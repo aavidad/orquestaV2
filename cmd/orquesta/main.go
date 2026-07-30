@@ -71,15 +71,27 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		ReportError: reportWorkerError,
 	})
 	if err != nil {
-		text, textErr := catalog.Text(i18n.DefaultLocale, "error.internal")
+		code, messageKey := serveErrorPresentation(err)
+		text, textErr := catalog.Text(i18n.DefaultLocale, messageKey)
 		if textErr != nil {
 			_, _ = fmt.Fprintln(stderr, "code=i18n_catalog_unavailable")
 			return 1
 		}
-		_, _ = fmt.Fprintf(stderr, "%s code=internal\n", text)
+		_, _ = fmt.Fprintf(stderr, "%s code=%s\n", text, code)
 		return 1
 	}
 	return 0
+}
+
+var serveErrorMessageKeys = map[string]string{"bootstrap.runtime_isolation_not_composed": "error.bootstrap.runtime_isolation_not_composed"}
+
+func serveErrorPresentation(err error) (string, string) {
+	if err != nil {
+		if key, ok := serveErrorMessageKeys[err.Error()]; ok {
+			return err.Error(), key
+		}
+	}
+	return "internal", "error.internal"
 }
 
 type workerCauseCodeError interface {

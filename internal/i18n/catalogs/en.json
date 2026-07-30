@@ -37,6 +37,7 @@
   "command.projects.memberships.grant.description": "Grant a project role to a principal.",
   "command.projects.memberships.revoke.description": "Revoke a project membership.",
   "command.system.status.description": "Inspect server health, version, and pending work.",
+  "error.bootstrap.runtime_isolation_not_composed": "The microVM isolation connector is not composed yet.",
   "error.conflict": "State changed while the request was being processed.",
   "error.cli.command_arguments_invalid": "The command arguments are invalid.",
   "error.cli.command_runner_unavailable": "The command runner is unavailable.",

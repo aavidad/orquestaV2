@@ -65,6 +65,9 @@ func TestVersionAndInvalidCommandDoNotStartRuntime(t *testing.T) {
 	if code := run([]string{"unknown"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "solicitud") {
 		t.Fatalf("invalid: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
+	if code, key := serveErrorPresentation(errors.New("bootstrap.runtime_isolation_not_composed")); code != "bootstrap.runtime_isolation_not_composed" || key != "error.bootstrap.runtime_isolation_not_composed" {
+		t.Fatalf("microvm presentation: code=%q key=%q", code, key)
+	}
 }
 
 func TestPrivateCodexSupervisorDispatchFailsClosedWithoutDescriptors(t *testing.T) {

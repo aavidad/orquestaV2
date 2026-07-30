@@ -23,7 +23,7 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	if got := catalog.Locales(); !reflect.DeepEqual(got, []string{"es", "en"}) {
 		t.Fatalf("Locales() = %v", got)
 	}
-	if got := len(catalog.Keys()); got != 917 {
+	if got := len(catalog.Keys()); got != 918 {
 		t.Fatalf("Keys() count = %d", got)
 	}
 	for _, key := range []string{
@@ -79,12 +79,12 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 		}
 	}
 
-	english, err := catalog.Text("en", "command.goals.create.description")
-	if err != nil || english != "Create a durable Goal for the selected project." {
+	english, err := catalog.Text("en", "error.bootstrap.runtime_isolation_not_composed")
+	if err != nil || english != "The microVM isolation connector is not composed yet." {
 		t.Fatalf("english text = %q, %v", english, err)
 	}
-	fallback, err := catalog.Text("zh-Hans", "error.not_found")
-	if err != nil || fallback != "No se encontró el recurso solicitado." {
+	fallback, err := catalog.Text("zh-Hans", "error.bootstrap.runtime_isolation_not_composed")
+	if err != nil || fallback != "El conector de aislamiento mediante microVM aún no está compuesto." {
 		t.Fatalf("fallback text = %q, %v", fallback, err)
 	}
 	if _, err := catalog.Text("es", "missing.key"); !errors.Is(err, ErrKeyMissing) {

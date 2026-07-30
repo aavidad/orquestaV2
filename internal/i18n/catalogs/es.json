@@ -37,6 +37,7 @@
   "command.projects.memberships.grant.description": "Concede un rol de proyecto a un principal.",
   "command.projects.memberships.revoke.description": "Revoca una membresía de proyecto.",
   "command.system.status.description": "Consulta salud, versión y trabajo pendiente del servidor.",
+  "error.bootstrap.runtime_isolation_not_composed": "El conector de aislamiento mediante microVM aún no está compuesto.",
   "error.conflict": "El estado cambió mientras se procesaba la solicitud.",
   "error.cli.command_arguments_invalid": "Los argumentos del comando no son válidos.",
   "error.cli.command_runner_unavailable": "El ejecutor de comandos no está disponible.",

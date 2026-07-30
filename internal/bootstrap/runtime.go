@@ -98,6 +98,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	if options.AgentFactory == nil {
+		if err := validateProductionAgentSelection(setup.snapshot); err != nil {
+			return nil, err
+		}
+	}
 	var cleanup buildCleanup
 	defer cleanup.run()
 	listener, err := openBuildListener(setup.snapshot, options.Listener)
@@ -961,8 +966,8 @@ func Run(ctx context.Context, options Options) error {
 func productionAgentFactory(
 	snapshot config.Snapshot, clock application.Clock, renderers ...codex.PromptRenderer,
 ) (AgentAdapter, error) {
-	if snapshot.RuntimeProvider() != "codex" {
-		return nil, errors.New("bootstrap.runtime_provider_unsupported")
+	if err := validateProductionAgentSelection(snapshot); err != nil {
+		return nil, err
 	}
 	var promptRenderer codex.PromptRenderer
 	if len(renderers) == 1 {
@@ -1063,8 +1068,8 @@ func productionCodexAdapterConfigWithGoToolchainTrust(
 	credentialStore credentials.Store,
 	ownerTrusted codexGoToolchainTrust,
 ) (codex.Config, error) {
-	if snapshot.RuntimeProvider() != "codex" {
-		return codex.Config{}, errors.New("bootstrap.runtime_provider_unsupported")
+	if err := validateProductionAgentSelection(snapshot); err != nil {
+		return codex.Config{}, err
 	}
 	environment, err := config.ResolveChildEnvironment(snapshot.RuntimeCodexEnvAllowlist())
 	if err != nil {
@@ -1113,6 +1118,16 @@ func productionCodexAdapterConfigWithGoToolchainTrust(
 		adapterConfig.CredentialRef = credentials.CredentialRef(credentialRef)
 	}
 	return adapterConfig, nil
+}
+
+func validateProductionAgentSelection(snapshot config.Snapshot) error {
+	if snapshot.RuntimeProvider() != "codex" {
+		return errors.New("bootstrap.runtime_provider_unsupported")
+	}
+	if snapshot.RuntimeIsolation() != "process" {
+		return errors.New("bootstrap.runtime_isolation_not_composed")
+	}
+	return nil
 }
 
 type credentialAgent struct {

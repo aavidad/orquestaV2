@@ -24,6 +24,7 @@
         "catalog:cli.command.usage",
         "catalog:cli.root.usage",
         "catalog:cli.serve.usage",
+        "catalog:error.bootstrap.runtime_isolation_not_composed",
         "catalog:error.cli.command_arguments_invalid",
         "catalog:error.cli.command_runner_unavailable",
         "catalog:error.cli.command_unknown",
