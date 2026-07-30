@@ -1186,6 +1186,8 @@
       "fixture": "planned:fixtures/v31_postgres_s3_multihost",
       "assertions": [
         "SQLite and PostgreSQL pass one repository contract",
+        "PostgreSQL es el único adaptador de estado productivo y SQLite queda limitado a instalaciones locales desarrollo y pruebas con exactamente una fuente activa sin escritura doble réplica de mando ni ruta de respaldo",
+        "el contrato común de StateRepository incluye las observaciones de cuota la colocación y su vínculo atómico con la reserva sin semántica SQL en el núcleo",
         "filesystem and S3 pass one artifact contract",
         "host affinity fencing recovery isolation and shared collaboration pass"
       ]
@@ -5943,7 +5945,7 @@
     },
     {
       "id": "OPS-11",
-      "title": "PostgreSQL como adaptador para multiusuario/multihost",
+      "title": "PostgreSQL como adaptador productivo para multiusuario/multihost",
       "source_proposal": "OPCIONAL",
       "decision": "accept",
       "kind": "operations",
