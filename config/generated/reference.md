@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-30.0`
+Registry revision: `2026-07-30.1`
 
-Registry hash: `sha256:f819a09950c0aa47159218aa29f5b746855005919b56a79d89e86783a60930c2`
+Registry hash: `sha256:17c36ea75c1c61193f9a7949f6ce43c5b73f6488ca06da11a4aa9271fa4f6ff5`
 
 Precedence: `default < file < env`
 
@@ -29,6 +29,7 @@ Source limit: `1048576` bytes
 | `runtime.isolation` | `string` | `"process"` | `ORQUESTA_RUNTIME_ISOLATION` | `true` | `allowed_values` |
 | `runtime.max_output_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES` | `true` | `integer_bounds` |
 | `runtime.capacity.observation_ttl` | `duration` | `"30s"` | `ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TTL` | `true` | `positive_duration` |
+| `runtime.capacity.observation_timeout` | `duration` | `"1s"` | `ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TIMEOUT` | `true` | `positive_duration` |
 | `runtime.codex.command` | `string` | `"codex"` | `ORQUESTA_RUNTIME_CODEX_COMMAND` | `true` | `trimmed_non_empty_string` |
 | `runtime.codex.model` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_MODEL` | `true` | `trimmed_optional_string` |
 | `runtime.codex.reasoning` | `string` | `"medium"` | `ORQUESTA_RUNTIME_CODEX_REASONING` | `true` | `allowed_values` |

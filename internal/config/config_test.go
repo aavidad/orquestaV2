@@ -39,6 +39,7 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 	}
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "process" ||
 		snapshot.RuntimeCapacityObservationTTL() != 30*time.Second ||
+		snapshot.RuntimeCapacityObservationTimeout() != time.Second ||
 		snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
 		snapshot.RuntimeCodexCapacityReportMaxBytes() != 65536 ||
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond ||
@@ -97,12 +98,14 @@ isolation = "microvm"
 
 [runtime.capacity]
 observation_ttl = "45s"
+observation_timeout = "750ms"
 
 [runtime.codex]
 capacity_report_max_bytes = 131072
 `, nil)
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" ||
 		snapshot.RuntimeCapacityObservationTTL() != 45*time.Second ||
+		snapshot.RuntimeCapacityObservationTimeout() != 750*time.Millisecond ||
 		snapshot.RuntimeCodexCapacityReportMaxBytes() != 131072 {
 		t.Fatal("provider, isolation or capacity configuration drifted")
 	}
@@ -110,6 +113,8 @@ capacity_report_max_bytes = 131072
 	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeProvider)
 	_, err = Resolve(ResolveOptions{TOML: []byte("[runtime]\nisolation = \"codex\"\n")})
 	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeIsolation)
+	_, err = Resolve(ResolveOptions{TOML: []byte("[runtime.capacity]\nobservation_timeout = \"0s\"\n")})
+	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCapacityObservationTimeout)
 }
 
 func TestRuntimeIsolationAndCapacityReportBoundsAreExact(t *testing.T) {

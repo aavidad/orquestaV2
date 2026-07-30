@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-30.0",
+  "$id": "urn:orquesta:config:2026-07-30.1",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -547,6 +547,19 @@
         "capacity": {
           "additionalProperties": false,
           "properties": {
+            "observation_timeout": {
+              "default": "1s",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TIMEOUT",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.capacity.observation_timeout",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            },
             "observation_ttl": {
               "default": "30s",
               "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
@@ -1365,8 +1378,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-30.0",
-  "x-registry-hash": "sha256:f819a09950c0aa47159218aa29f5b746855005919b56a79d89e86783a60930c2",
+  "x-registry-revision": "2026-07-30.1",
+  "x-registry-hash": "sha256:17c36ea75c1c61193f9a7949f6ce43c5b73f6488ca06da11a4aa9271fa4f6ff5",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [

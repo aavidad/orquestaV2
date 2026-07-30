@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-30.0",
-  "registry_hash": "sha256:f819a09950c0aa47159218aa29f5b746855005919b56a79d89e86783a60930c2",
+  "registry_revision": "2026-07-30.1",
+  "registry_hash": "sha256:17c36ea75c1c61193f9a7949f6ce43c5b73f6488ca06da11a4aa9271fa4f6ff5",
   "aliases": [],
   "cross_validators": [
     {
@@ -312,6 +312,18 @@
       "key": "runtime.capacity.observation_ttl",
       "semantic_ref": "orquesta.config.runtime.capacity.observation_ttl",
       "label_key": "config.field.runtime.capacity.observation_ttl",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "runtime.capacity.observation_timeout",
+      "semantic_ref": "orquesta.config.runtime.capacity.observation_timeout",
+      "label_key": "config.field.runtime.capacity.observation_timeout",
       "type": "duration",
       "sensitive": false,
       "scope": "runtime",

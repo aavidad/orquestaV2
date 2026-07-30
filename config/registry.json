@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-30.0",
+  "revision": "2026-07-30.1",
   "precedence": [
     "default",
     "file",
@@ -357,6 +357,20 @@
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TTL",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "runtime.capacity.observation_timeout",
+      "go_name": "RuntimeCapacityObservationTimeout",
+      "semantic_ref": "orquesta.config.runtime.capacity.observation_timeout",
+      "type": "duration",
+      "default": "1s",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TIMEOUT",
       "validator_ids": [
         "positive_duration"
       ]
