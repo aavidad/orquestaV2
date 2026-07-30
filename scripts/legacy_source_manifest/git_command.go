@@ -29,10 +29,12 @@ func gitInspectionError(path, kind string, err error) sourceRecord {
 	if errors.As(err, &failure) && failure.timeout {
 		return sealSource(sourceRecord{
 			Path: path, Kind: kind, Status: "error", ErrorCode: "git_inspection_timeout",
+			RequiresPhysicalInventory: true,
 		})
 	}
 	return sealSource(sourceRecord{
 		Path: path, Kind: kind, Status: "error", ErrorCode: "git_inspection_failed",
+		RequiresPhysicalInventory: true,
 	})
 }
 
@@ -58,6 +60,7 @@ func runGit(timeout time.Duration, directory string, arguments ...string) ([]byt
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_TERMINAL_PROMPT=0",
+		"GIT_NO_LAZY_FETCH=1",
 		"GIT_OPTIONAL_LOCKS=0",
 		"GIT_NO_REPLACE_OBJECTS=1",
 	}

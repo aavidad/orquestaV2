@@ -22,6 +22,7 @@ func inspectRepository(path string, bareCandidate bool, timeout time.Duration) s
 	if code := repositoryAccessError(path, bareCandidate); code != "" {
 		return sealSource(sourceRecord{
 			Path: path, Kind: kind, Status: "error", ErrorCode: code,
+			RequiresPhysicalInventory: true,
 		})
 	}
 
@@ -29,6 +30,7 @@ func inspectRepository(path string, bareCandidate bool, timeout time.Duration) s
 	if err != nil {
 		return sealSource(sourceRecord{
 			Path: path, Kind: kind, Status: "excluded", Reason: "invalid_git_repository",
+			RequiresPhysicalInventory: true,
 		})
 	}
 	isBare, err := gitText(timeout, path, "rev-parse", "--is-bare-repository")
@@ -70,6 +72,7 @@ func inspectRepository(path string, bareCandidate bool, timeout time.Duration) s
 	if err != nil || commitCount < 0 {
 		return sealSource(sourceRecord{
 			Path: path, Kind: kind, Status: "error", ErrorCode: "git_invalid_commit_count",
+			RequiresPhysicalInventory: true,
 		})
 	}
 	refsAfter, err := repositoryReferences(timeout, path)
@@ -81,13 +84,16 @@ func inspectRepository(path string, bareCandidate bool, timeout time.Duration) s
 		headReference != finalHeadReference || headObject != finalHeadObject {
 		return sealSource(sourceRecord{
 			Path: path, Kind: kind, Status: "error",
-			ErrorCode: "git_references_changed_during_scan",
+			ErrorCode:                 "git_references_changed_during_scan",
+			RequiresPhysicalInventory: true,
 		})
 	}
 	worktreeState := ""
 	worktreeStatusSHA := ""
 	worktreeChangeCount := 0
-	requiresPhysicalInventory := false
+	// Ni las refs ni un estado Git limpio cubren hooks, configuración, reflogs,
+	// ficheros ignorados y demás hechos físicos del repositorio.
+	requiresPhysicalInventory := true
 	if kind != "git_bare_repository" {
 		statusAfter, statusErr := repositoryWorktreeStatus(timeout, path)
 		if statusErr != nil {
@@ -101,7 +107,6 @@ func inspectRepository(path string, bareCandidate bool, timeout time.Duration) s
 		worktreeState = "clean"
 		if worktreeChangeCount > 0 {
 			worktreeState = "dirty"
-			requiresPhysicalInventory = true
 		}
 	}
 	return sealSource(sourceRecord{

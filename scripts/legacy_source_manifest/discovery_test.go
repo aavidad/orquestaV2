@@ -49,6 +49,10 @@ func TestManifestDiscoversRepositoriesWorktreesAndBundlesDeterministically(t *te
 	if bundleSource.ContentSHA256 == "" || bundleSource.SizeBytes == 0 || len(bundleSource.References) == 0 {
 		t.Fatalf("paquete Git sin sello suficiente: %#v", bundleSource)
 	}
+	bareSource := assertSource(t, result.Sources, bare, "git_bare_repository", "included")
+	if !bareSource.RequiresPhysicalInventory {
+		t.Fatal("el repositorio desnudo ocultó hooks, configuración o reflogs físicos")
+	}
 	repositorySource := sourceAt(t, result.Sources, repository)
 	if repositorySource.HeadObject == "" || repositorySource.ReferenceSHA256 == "" ||
 		repositorySource.ReachableCommitCount == nil || *repositorySource.ReachableCommitCount != 1 ||
@@ -79,7 +83,7 @@ func TestManifestKeepsDirtyWorktreeDistinctFromCleanWorktreeAtSameRevision(t *te
 	if clean.HeadObject != dirty.HeadObject {
 		t.Fatalf("la prueba exige la misma revisión: limpia=%s sucia=%s", clean.HeadObject, dirty.HeadObject)
 	}
-	if clean.WorktreeState != "clean" || clean.RequiresPhysicalInventory {
+	if clean.WorktreeState != "clean" || !clean.RequiresPhysicalInventory {
 		t.Fatalf("árbol limpio mal clasificado: %#v", clean)
 	}
 	if dirty.WorktreeState != "dirty" || dirty.WorktreeChangeCount != 1 ||
@@ -89,7 +93,34 @@ func TestManifestKeepsDirtyWorktreeDistinctFromCleanWorktreeAtSameRevision(t *te
 	if clean.SourceSHA256 == dirty.SourceSHA256 {
 		t.Fatal("dos árboles físicos distintos quedaron deduplicados por la revisión")
 	}
-	if result.Summary.DirtyWorktrees != 1 || result.Summary.PhysicalInventoriesDue != 1 {
+	if result.Summary.DirtyWorktrees != 1 || result.Summary.PhysicalInventoriesDue != 2 {
 		t.Fatalf("resumen físico inesperado: %#v", result.Summary)
+	}
+}
+
+func TestManifestRequiresPhysicalInventoryForEveryExistingWorktree(t *testing.T) {
+	base := t.TempDir()
+	repository := filepath.Join(base, "repositorio")
+	mustMkdirAll(t, repository)
+	gitTest(t, repository, "init", "-q")
+	configureGitTestIdentity(t, repository)
+	writeTestFile(t, repository, "seguido.go", "package ejemplo\n")
+	writeTestFile(t, repository, ".gitignore", "ignorado.txt\n")
+	writeTestFile(t, repository, "ignorado.txt", "hecho físico no visible en status\n")
+	gitTest(t, repository, "add", "seguido.go", ".gitignore")
+	gitTest(t, repository, "commit", "-qm", "corte limpio")
+
+	output := filepath.Join(base, "manifest.json")
+	runManifestTest(t, []string{repository}, nil, output)
+	source := assertSource(
+		t,
+		readManifest(t, output).Sources,
+		repository,
+		"git_repository",
+		"included",
+	)
+	if source.WorktreeState != "clean" || source.WorktreeChangeCount != 0 ||
+		!source.RequiresPhysicalInventory {
+		t.Fatalf("Git limpio ocultó la obligación de censo físico: %#v", source)
 	}
 }

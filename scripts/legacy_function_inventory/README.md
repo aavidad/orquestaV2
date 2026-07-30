@@ -71,8 +71,9 @@ fallo; un objeto ausente nunca se interpreta como ausencia de conducta.
 
 La parada es la terminación de la orden. Ante interrupción o pareja incoherente,
 se conservan los artefactos para diagnóstico y se repite el censo desde un
-corte estable en un destino controlado. No se borra ningún resultado anterior
-hasta estudiarlo.
+corte estable en un destino controlado. Para preservar una tanda ya publicada
+hasta estudiarla, el operador elige un destino nuevo; sustituir el mismo par no
+crea un historial permanente.
 
 ## Contratos y pruebas
 

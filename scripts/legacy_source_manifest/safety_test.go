@@ -60,8 +60,37 @@ func TestManifestRecordsUnreadableRepositoryAsError(t *testing.T) {
 	if source.ErrorCode != "permission_denied" {
 		t.Fatalf("código de error inestable: %#v", source)
 	}
-	if result.Summary.SourcesWithErrors != 1 {
+	if !source.RequiresPhysicalInventory || result.Summary.SourcesWithErrors != 1 ||
+		result.Summary.PhysicalInventoriesDue != 1 {
 		t.Fatalf("el resumen no registra el error: %#v", result.Summary)
+	}
+}
+
+func TestGitInspectionFailureNeverRemovesPhysicalInventoryObligation(t *testing.T) {
+	for _, failure := range []error{
+		gitFailure{exitCode: 7},
+		gitFailure{exitCode: -1, timeout: true},
+	} {
+		source := gitInspectionError("/snapshot/repositorio", "git_repository", failure)
+		if source.Status != "error" || !source.RequiresPhysicalInventory {
+			t.Fatalf("fallo Git ocultó obligación física: %#v", source)
+		}
+	}
+}
+
+func TestManifestDocumentationForbidsLiveSourceRoots(t *testing.T) {
+	content, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(strings.Fields(string(content)), " ")
+	for _, requirement := range []string{
+		"No está autorizada sobre una fuente viva.",
+		"El censador físico es la única enumeración autorizada de raíces reales.",
+	} {
+		if !strings.Contains(text, requirement) {
+			t.Fatalf("la documentación perdió el bloqueo operativo %q", requirement)
+		}
 	}
 }
 
