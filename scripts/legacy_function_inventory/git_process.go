@@ -52,11 +52,21 @@ func gitText(repository string, processStarted func(), arguments ...string) (str
 }
 
 func gitBytes(repository string, processStarted func(), arguments ...string) ([]byte, error) {
+	return gitBytesInput(repository, processStarted, nil, arguments...)
+}
+
+func gitBytesInput(
+	repository string,
+	processStarted func(),
+	input []byte,
+	arguments ...string,
+) ([]byte, error) {
 	command, err := newGitCommand(repository, arguments...)
 	if err != nil {
 		return nil, err
 	}
 	var stderr bytes.Buffer
+	command.Stdin = bytes.NewReader(input)
 	command.Stderr = &stderr
 	content, err := command.Output()
 	if err != nil {
@@ -113,6 +123,7 @@ func newGitCommand(repository string, arguments ...string) (*exec.Cmd, error) {
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_OPTIONAL_LOCKS=0",
+		"GIT_NO_LAZY_FETCH=1",
 		"GIT_NO_REPLACE_OBJECTS=1",
 	}
 	return command, nil

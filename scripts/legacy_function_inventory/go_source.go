@@ -26,89 +26,126 @@ type blobResult struct {
 }
 
 func parseBlob(content []byte, diagnosticPath string) (blobResult, error) {
+	constraints, generated := sourceMetadata(content)
+	result := blobResult{
+		size: len(content), sha: digest(goBlobDigestDomain, content),
+		buildConstraints: constraints, generated: generated,
+	}
 	fset := token.NewFileSet()
 	file, parseErr := parser.ParseFile(
 		fset, diagnosticPath, content,
 		parser.AllErrors|parser.ParseComments|parser.SkipObjectResolution,
 	)
 	if parseErr != nil {
-		return blobResult{
-			size: len(content),
-			sha:  digest("orquesta.legacy-go-blob.v1", content),
-			failure: &record{
-				RecordKind: "parse_failure", ErrorCode: "go_parse_failed",
-				ErrorDetail: parseErr.Error(),
-			},
-		}, nil
+		result.failure = &record{
+			RecordKind: "parse_failure", ErrorCode: "go_parse_failed",
+			ErrorDetail: parseErr.Error(),
+		}
 	}
-	constraints, generated := sourceMetadata(content)
-	result := blobResult{
-		size: len(content), sha: digest("orquesta.legacy-go-blob.v1", content),
-		packageName: file.Name.Name, buildConstraints: constraints, generated: generated,
+	if file == nil {
+		return result, nil
+	}
+	if file.Name != nil {
+		result.packageName = file.Name.Name
 	}
 	for _, declaration := range file.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
 		if !ok {
 			continue
 		}
-		start := fset.PositionFor(function.Pos(), false)
-		end := fset.PositionFor(function.End(), false)
-		if start.Offset < 0 || end.Offset < start.Offset || end.Offset > len(content) {
-			return blobResult{}, fmt.Errorf("rango AST inválido en %s", diagnosticPath)
-		}
-		canonicalFunction := *function
-		canonicalFunction.Doc = nil
-		canonical, err := formatNode(fset, &canonicalFunction)
+		parsed, valid, err := parseFunctionRecord(fset, content, diagnosticPath, function)
 		if err != nil {
+			if parseErr != nil {
+				continue
+			}
 			return blobResult{}, err
 		}
-		signatureFunction := *function
-		signatureFunction.Doc = nil
-		signatureFunction.Body = nil
-		signature, err := formatNode(fset, &signatureFunction)
-		if err != nil {
-			return blobResult{}, err
+		if valid {
+			result.records = append(result.records, parsed)
 		}
-		receiver := ""
-		kind := "func"
-		if function.Recv != nil && len(function.Recv.List) > 0 {
-			kind = "method"
-			receiver, err = formatNode(fset, function.Recv.List[0].Type)
-			if err != nil {
-				return blobResult{}, err
-			}
-		}
-		body := ""
-		bodySHA := ""
-		if function.Body != nil {
-			body, err = formatNode(fset, function.Body)
-			if err != nil {
-				return blobResult{}, err
-			}
-			bodySHA = digestStrings("orquesta.legacy-go-function-body.v1", body)
-		}
-		docSHA := ""
-		if function.Doc != nil {
-			docStart := fset.PositionFor(function.Doc.Pos(), false).Offset
-			docEnd := fset.PositionFor(function.Doc.End(), false).Offset
-			if docStart >= 0 && docEnd >= docStart && docEnd <= len(content) {
-				docSHA = digest("orquesta.legacy-go-function-doc.v1", content[docStart:docEnd])
-			}
-		}
-		astSHA := digestStrings("orquesta.legacy-go-function-ast.v1", canonical)
-		result.records = append(result.records, record{
-			SymbolKind: kind, Name: function.Name.Name, Exported: ast.IsExported(function.Name.Name),
-			Receiver: receiver, Signature: signature,
-			StartOffset: start.Offset, EndOffset: end.Offset,
-			StartLine: start.Line, EndLine: end.Line,
-			SourceSHA: digest("orquesta.legacy-go-function-source.v1", content[start.Offset:end.Offset]),
-			DocSHA:    docSHA, ASTCanonical: "gofmt-funcdecl.v1",
-			ASTSHA: astSHA, BodySHA: bodySHA,
-			VariantRef:      "go-function-variant:" + astSHA,
-			CanonicalSource: canonical,
-		})
 	}
 	return result, nil
+}
+
+func parseFunctionRecord(
+	fset *token.FileSet,
+	content []byte,
+	diagnosticPath string,
+	function *ast.FuncDecl,
+) (record, bool, error) {
+	if function == nil || function.Name == nil || containsBadSyntax(function) {
+		return record{}, false, nil
+	}
+	start := fset.PositionFor(function.Pos(), false)
+	end := fset.PositionFor(function.End(), false)
+	if start.Offset < 0 || end.Offset < start.Offset || end.Offset > len(content) {
+		return record{}, false, fmt.Errorf("rango AST inválido en %s", diagnosticPath)
+	}
+	canonicalFunction := *function
+	canonicalFunction.Doc = nil
+	canonical, err := formatNode(fset, &canonicalFunction)
+	if err != nil {
+		return record{}, false, err
+	}
+	signatureFunction := *function
+	signatureFunction.Doc = nil
+	signatureFunction.Body = nil
+	signature, err := formatNode(fset, &signatureFunction)
+	if err != nil {
+		return record{}, false, err
+	}
+	receiver := ""
+	kind := "func"
+	if function.Recv != nil && len(function.Recv.List) > 0 {
+		kind = "method"
+		receiver, err = formatNode(fset, function.Recv.List[0].Type)
+		if err != nil {
+			return record{}, false, err
+		}
+	}
+	body := ""
+	bodySHA := ""
+	if function.Body != nil {
+		body, err = formatNode(fset, function.Body)
+		if err != nil {
+			return record{}, false, err
+		}
+		bodySHA = digestStrings("orquesta.legacy-go-function-body.v1", body)
+	}
+	docSHA := ""
+	if function.Doc != nil {
+		docStart := fset.PositionFor(function.Doc.Pos(), false).Offset
+		docEnd := fset.PositionFor(function.Doc.End(), false).Offset
+		if docStart >= 0 && docEnd >= docStart && docEnd <= len(content) {
+			docSHA = digest("orquesta.legacy-go-function-doc.v1", content[docStart:docEnd])
+		}
+	}
+	astSHA := digestStrings("orquesta.legacy-go-function-ast.v1", canonical)
+	return record{
+		SymbolKind: kind, Name: function.Name.Name, Exported: ast.IsExported(function.Name.Name),
+		Receiver: receiver, Signature: signature,
+		StartOffset: start.Offset, EndOffset: end.Offset,
+		StartLine: start.Line, EndLine: end.Line,
+		SourceSHA: digest("orquesta.legacy-go-function-source.v1", content[start.Offset:end.Offset]),
+		DocSHA:    docSHA, ASTCanonical: "gofmt-funcdecl.v1",
+		ASTSHA: astSHA, BodySHA: bodySHA,
+		VariantRef:      "go-function-variant:" + astSHA,
+		CanonicalSource: canonical,
+	}, true, nil
+}
+
+func containsBadSyntax(node ast.Node) bool {
+	bad := false
+	ast.Inspect(node, func(candidate ast.Node) bool {
+		switch candidate.(type) {
+		case *ast.BadDecl, *ast.BadExpr, *ast.BadStmt:
+			bad = true
+			return false
+		default:
+			return !bad
+		}
+	})
+	return bad
 }
 
 func sourceMetadata(content []byte) ([]string, bool) {

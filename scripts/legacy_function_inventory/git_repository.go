@@ -14,12 +14,6 @@ import (
 	"strings"
 )
 
-type refInfo struct {
-	Name   string
-	Object string
-	Commit string
-}
-
 type treeEntry struct {
 	Mode string
 	Type string
@@ -32,20 +26,47 @@ type historyEntry struct {
 	parents []string
 }
 
-func readHistory(repository string, processStarted func()) (map[string]historyEntry, error) {
-	content, err := gitBytes(
+func readHistory(
+	repository string,
+	refs []refInfo,
+	processStarted func(),
+) (map[string]historyEntry, error) {
+	roots := make([]string, 0, len(refs))
+	seen := make(map[string]struct{})
+	for _, ref := range refs {
+		if ref.Commit == "" {
+			continue
+		}
+		if _, found := seen[ref.Commit]; found {
+			continue
+		}
+		seen[ref.Commit] = struct{}{}
+		roots = append(roots, ref.Commit)
+	}
+	sort.Strings(roots)
+	var input bytes.Buffer
+	for _, root := range roots {
+		input.WriteString(root)
+		input.WriteByte('\n')
+	}
+	content, err := gitBytesInput(
 		repository,
 		processStarted,
+		input.Bytes(),
 		"rev-list",
-		"--all",
 		"--format=%H%x00%T%x00%P",
 		"--no-commit-header",
+		"--stdin",
 	)
 	if err != nil {
 		return nil, err
 	}
 	result := make(map[string]historyEntry)
-	for _, line := range bytes.Split(bytes.TrimSpace(content), []byte{'\n'}) {
+	trimmed := bytes.TrimSpace(content)
+	if len(trimmed) == 0 {
+		return result, nil
+	}
+	for _, line := range bytes.Split(trimmed, []byte{'\n'}) {
 		fields := bytes.Split(line, []byte{0})
 		if len(fields) != 3 {
 			return nil, errors.New("entrada inválida en el grafo histórico")
@@ -163,56 +184,6 @@ func objectIDBytes(objectFormat string) (int, error) {
 	default:
 		return 0, fmt.Errorf("formato de objetos Git no admitido: %q", objectFormat)
 	}
-}
-
-func readRefs(repository string, processStarted func()) ([]refInfo, error) {
-	lines, err := gitLines(repository, processStarted, "for-each-ref",
-		"--format=%(refname)%09%(objectname)", "refs/heads", "refs/remotes", "refs/tags")
-	if err != nil {
-		return nil, err
-	}
-	batch, err := newGitBatch(repository, processStarted)
-	if err != nil {
-		return nil, err
-	}
-	defer batch.close()
-	var result []refInfo
-	for _, line := range lines {
-		fields := strings.Split(line, "\t")
-		if len(fields) != 2 || strings.HasSuffix(fields[0], "/HEAD") {
-			continue
-		}
-		commit, err := batch.get(fields[0] + "^{commit}")
-		if err != nil {
-			if errors.Is(err, errGitObjectMissing) {
-				continue
-			}
-			return nil, err
-		}
-		if commit.kind != "commit" {
-			continue
-		}
-		result = append(result, refInfo{
-			Name: fields[0], Object: fields[1], Commit: commit.oid,
-		})
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
-	if err := batch.close(); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func equalRefs(left, right []refInfo) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }
 
 func equalStrings(left, right []string) bool {

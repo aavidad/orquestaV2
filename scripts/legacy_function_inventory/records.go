@@ -1,4 +1,4 @@
-// Este fichero define el grafo JSONL V2 y sus identidades criptográficas.
+// Este fichero define el grafo JSONL V4 y sus identidades criptográficas.
 // No recorre Git ni escribe ficheros.
 package main
 
@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	schemaVersion       = 2
-	inventoryAlgorithm  = "git-object-graph-go-declarations.v2"
-	inventoryHashDomain = "orquesta.legacy-function-inventory.jsonl.v2"
-	referenceHashDomain = "orquesta.legacy-function-inventory.refs.v2"
-	recordSchemaDomain  = "orquesta.legacy-function-inventory.record-schema.v2"
+	schemaVersion       = 4
+	inventoryAlgorithm  = "git-object-graph-go-declarations.v4"
+	inventoryHashDomain = "orquesta.legacy-function-inventory.jsonl.v4"
+	referenceHashDomain = "orquesta.legacy-function-inventory.refs.v4"
+	recordSchemaDomain  = "orquesta.legacy-function-inventory.record-schema.v4"
+	goBlobDigestDomain  = "orquesta.legacy-go-blob.v1"
 )
 
 var recordKinds = []string{
@@ -38,11 +39,17 @@ type record struct {
 	SchemaVersion int    `json:"schema_version,omitempty"`
 	Algorithm     string `json:"algorithm,omitempty"`
 
-	RefName  string   `json:"ref_name,omitempty"`
-	ObjectID string   `json:"object_id,omitempty"`
-	CommitID string   `json:"commit_id,omitempty"`
-	Parents  []string `json:"parents,omitempty"`
-	TreeID   string   `json:"tree_id,omitempty"`
+	RefNameEncoding   string   `json:"ref_name_encoding,omitempty"`
+	RefName           string   `json:"ref_name,omitempty"`
+	RefNameBase64     string   `json:"ref_name_base64,omitempty"`
+	RefMode           string   `json:"ref_mode,omitempty"`
+	RefTargetEncoding string   `json:"ref_target_encoding,omitempty"`
+	RefTarget         string   `json:"ref_target,omitempty"`
+	RefTargetBase64   string   `json:"ref_target_base64,omitempty"`
+	ObjectID          string   `json:"object_id,omitempty"`
+	CommitID          string   `json:"commit_id,omitempty"`
+	Parents           []string `json:"parents,omitempty"`
+	TreeID            string   `json:"tree_id,omitempty"`
 
 	PathEncoding      string `json:"path_encoding,omitempty"`
 	PathSegment       string `json:"path_segment,omitempty"`
@@ -51,9 +58,9 @@ type record struct {
 	ChildType         string `json:"child_type,omitempty"`
 	ChildObjectID     string `json:"child_object_id,omitempty"`
 
-	BlobID   string `json:"blob_id,omitempty"`
-	BlobSize int    `json:"blob_size,omitempty"`
-	BlobSHA  string `json:"blob_sha256,omitempty"`
+	BlobID     string `json:"blob_id,omitempty"`
+	BlobSize   int    `json:"blob_size,omitempty"`
+	BlobDigest string `json:"blob_digest,omitempty"`
 
 	Package          string   `json:"package,omitempty"`
 	BuildConstraints []string `json:"build_constraints,omitempty"`
@@ -85,6 +92,7 @@ type manifest struct {
 	SchemaVersion       int            `json:"schema_version"`
 	Algorithm           string         `json:"algorithm"`
 	InventoryHashDomain string         `json:"inventory_hash_domain"`
+	BlobDigestDomain    string         `json:"blob_digest_domain"`
 	RecordSchemaSHA256  string         `json:"record_schema_sha256"`
 	Repository          string         `json:"repository"`
 	GitObjectFormat     string         `json:"git_object_format"`

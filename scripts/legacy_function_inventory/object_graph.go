@@ -51,7 +51,9 @@ func emitObjectGraph(
 				}
 				continue
 			}
-			if entry.Type != "blob" || !bytes.HasSuffix(entry.Path, []byte(".go")) {
+			if entry.Type != "blob" ||
+				(entry.Mode != "100644" && entry.Mode != "100755") ||
+				!bytes.HasSuffix(entry.Path, []byte(".go")) {
 				continue
 			}
 			if _, exists := seenGoBlobs[entry.OID]; exists {
@@ -84,16 +86,11 @@ func emitGoBlob(
 		return err
 	}
 	if err := stream.emit(record{
-		RecordKind: "go_blob", BlobID: blobID, BlobSize: result.size, BlobSHA: result.sha,
+		RecordKind: "go_blob", BlobID: blobID, BlobSize: result.size, BlobDigest: result.sha,
 		Package: result.packageName, BuildConstraints: result.buildConstraints,
 		Generated: result.generated,
 	}); err != nil {
 		return err
-	}
-	if result.failure != nil {
-		failure := *result.failure
-		failure.BlobID = blobID
-		return stream.emit(failure)
 	}
 	for _, parsed := range result.records {
 		declaration := parsed
@@ -122,6 +119,11 @@ func emitGoBlob(
 		if err := stream.emit(variant); err != nil {
 			return err
 		}
+	}
+	if result.failure != nil {
+		failure := *result.failure
+		failure.BlobID = blobID
+		return stream.emit(failure)
 	}
 	return nil
 }

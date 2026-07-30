@@ -27,7 +27,11 @@ func TestBatchHistoryAndTreesMatchIndividualGitQueries(t *testing.T) {
 	gitTest(t, repository, "commit", "-qm", "segunda")
 	gitTest(t, repository, "branch", "copia")
 
-	history, err := readHistory(repository, nil)
+	refs, err := readRefs(repository, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	history, err := readHistory(repository, refs, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +58,10 @@ func TestBatchHistoryAndTreesMatchIndividualGitQueries(t *testing.T) {
 			t.Fatalf("árbol distinto para %s:\nobtenido=%#v\nesperado=%#v", commit, actualTree, expectedTree)
 		}
 	}
-	refs, err := readRefs(repository, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, ref := range refs {
+		if ref.Commit == "" {
+			continue
+		}
 		actual, err := reachableCommits(ref.Commit, history)
 		if err != nil {
 			t.Fatal(err)

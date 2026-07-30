@@ -1,4 +1,4 @@
-// Estas pruebas acreditan publicación V2, determinismo, cobertura y límites.
+// Estas pruebas acreditan publicación V4, determinismo, cobertura y límites.
 package main
 
 import (
@@ -50,6 +50,7 @@ func TestInventoryIsDeterministicAndCoversHistoricalVariantsAndFailures(t *testi
 	records := readTestRecords(t, firstJSONL)
 	counts := map[string]int{}
 	var methodSeen, failureSeen bool
+	var blobDigestSeen bool
 	stableVariants := map[string]struct{}{}
 	for _, item := range records {
 		counts[item.RecordKind]++
@@ -59,16 +60,20 @@ func TestInventoryIsDeterministicAndCoversHistoricalVariantsAndFailures(t *testi
 		if item.RecordKind == "parse_failure" && item.ErrorCode == "go_parse_failed" {
 			failureSeen = true
 		}
+		if item.RecordKind == "go_blob" && item.BlobDigest != "" {
+			blobDigestSeen = true
+		}
 		if item.RecordKind == "function_variant" && item.Name == "Stable" {
 			stableVariants[item.VariantRef] = struct{}{}
 		}
 	}
 	if len(records) == 0 || records[0].RecordKind != "inventory_header" ||
 		records[0].SchemaVersion != schemaVersion || records[0].Algorithm != inventoryAlgorithm {
-		t.Fatalf("cabecera V2 ausente: %#v", records)
+		t.Fatalf("cabecera V4 ausente: %#v", records)
 	}
-	if !methodSeen || !failureSeen || len(stableVariants) != 2 {
-		t.Fatalf("cobertura incompleta: método=%v fallo=%v variantes Stable=%d", methodSeen, failureSeen, len(stableVariants))
+	if !methodSeen || !failureSeen || !blobDigestSeen || len(stableVariants) != 2 {
+		t.Fatalf("cobertura incompleta: método=%v fallo=%v digest=%v variantes Stable=%d",
+			methodSeen, failureSeen, blobDigestSeen, len(stableVariants))
 	}
 	if counts["inventory_header"] != 1 || counts["reference"] < 3 ||
 		counts["commit"] != 3 || counts["tree_object"] == 0 || counts["tree_entry"] == 0 ||
@@ -88,9 +93,13 @@ func TestInventoryIsDeterministicAndCoversHistoricalVariantsAndFailures(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
+	if strings.Contains(string(inventoryContent), `"blob_sha256"`) {
+		t.Fatal("el inventario V4 conserva el nombre ambiguo blob_sha256")
+	}
 	if manifestValue.SchemaVersion != schemaVersion ||
 		manifestValue.Algorithm != inventoryAlgorithm ||
 		manifestValue.InventoryHashDomain != inventoryHashDomain ||
+		manifestValue.BlobDigestDomain != goBlobDigestDomain ||
 		manifestValue.RecordSchemaSHA256 != recordSchemaDigest() ||
 		manifestValue.InventorySHA256 != inventoryDigest(inventoryContent) ||
 		manifestValue.InventoryBytes != int64(len(inventoryContent)) ||
@@ -101,9 +110,9 @@ func TestInventoryIsDeterministicAndCoversHistoricalVariantsAndFailures(t *testi
 	if !reflect.DeepEqual(counts, manifestValue.Counts) {
 		t.Fatalf("conteos distintos: JSONL=%#v manifiesto=%#v", counts, manifestValue.Counts)
 	}
-	oldDigest := digest("orquesta.legacy-function-inventory.jsonl.v1", inventoryContent)
+	oldDigest := digest("orquesta.legacy-function-inventory.jsonl.v3", inventoryContent)
 	if oldDigest == manifestValue.InventorySHA256 {
-		t.Fatal("el dominio V1 podría validar indebidamente un inventario V2")
+		t.Fatal("el dominio V3 podría validar indebidamente un inventario V4")
 	}
 	for _, path := range []string{firstJSONL, firstManifest} {
 		info, err := os.Stat(path)
@@ -155,7 +164,7 @@ func TestInventoryUsesBoundedGitProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if processes > 7 {
-		t.Fatalf("el censo abrió %d procesos Git; se esperaban como máximo 7", processes)
+	if processes > 9 {
+		t.Fatalf("el censo abrió %d procesos Git; se esperaban como máximo 9", processes)
 	}
 }

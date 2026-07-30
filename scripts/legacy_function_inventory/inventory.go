@@ -25,7 +25,10 @@ func run(options options) (runErr error) {
 	if err != nil {
 		return err
 	}
-	repository = filepath.Clean(repository)
+	repository, err = filepath.EvalSymlinks(filepath.Clean(repository))
+	if err != nil {
+		return fmt.Errorf("resolver físicamente el repositorio histórico: %w", err)
+	}
 	jsonlPath, err := normalizedOutput(repository, options.jsonl)
 	if err != nil {
 		return err
@@ -43,7 +46,7 @@ func run(options options) (runErr error) {
 		return err
 	}
 	refDigest := digestJSON(referenceHashDomain, refsBefore)
-	history, err := readHistory(repository, options.gitProcessStarted)
+	history, err := readHistory(repository, refsBefore, options.gitProcessStarted)
 	if err != nil {
 		return err
 	}
@@ -80,10 +83,7 @@ func run(options options) (runErr error) {
 		return err
 	}
 	for _, ref := range refsBefore {
-		if err := stream.emit(record{
-			RecordKind: "reference", RefName: ref.Name,
-			ObjectID: ref.Object, CommitID: ref.Commit,
-		}); err != nil {
+		if err := stream.emit(referenceRecord(ref)); err != nil {
 			return err
 		}
 	}
@@ -124,6 +124,7 @@ func run(options options) (runErr error) {
 		SchemaVersion:       schemaVersion,
 		Algorithm:           inventoryAlgorithm,
 		InventoryHashDomain: inventoryHashDomain,
+		BlobDigestDomain:    goBlobDigestDomain,
 		RecordSchemaSHA256:  recordSchemaDigest(),
 		Repository:          repository,
 		GitObjectFormat:     objectFormat,
@@ -149,6 +150,24 @@ func run(options options) (runErr error) {
 	return nil
 }
 
+func referenceRecord(ref refInfo) record {
+	nameEncoding, nameText, nameBase64 := encodePathSegment(ref.Name)
+	result := record{
+		RecordKind:      "reference",
+		RefNameEncoding: nameEncoding,
+		RefName:         nameText,
+		RefNameBase64:   nameBase64,
+		RefMode:         ref.Mode,
+		ObjectID:        ref.Object,
+		CommitID:        ref.Commit,
+	}
+	if len(ref.Target) > 0 {
+		result.RefTargetEncoding, result.RefTarget, result.RefTargetBase64 =
+			encodePathSegment(ref.Target)
+	}
+	return result
+}
+
 func sortedCommits(history map[string]historyEntry) []string {
 	commits := make([]string, 0, len(history))
 	for commit := range history {
@@ -164,12 +183,49 @@ func normalizedOutput(repository, output string) (string, error) {
 		return "", err
 	}
 	absolute = filepath.Clean(absolute)
-	relative, err := filepath.Rel(repository, absolute)
+	if info, lstatErr := os.Lstat(absolute); lstatErr == nil &&
+		info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("la salida no puede reemplazar un enlace simbólico")
+	} else if lstatErr != nil && !errors.Is(lstatErr, os.ErrNotExist) {
+		return "", lstatErr
+	}
+	physical, err := resolvePhysicalDestination(absolute)
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(repository, physical)
 	if err == nil && relative != ".." &&
 		(relative == "." || !startsOutside(relative)) {
-		return "", fmt.Errorf("la salida no puede escribirse dentro del repositorio histórico: %s", absolute)
+		return "", fmt.Errorf("la salida no puede escribirse dentro del repositorio histórico: %s", physical)
 	}
-	return absolute, nil
+	return physical, nil
+}
+
+func resolvePhysicalDestination(path string) (string, error) {
+	existing := path
+	for {
+		_, err := os.Lstat(existing)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return "", fmt.Errorf("no existe ningún padre resoluble para %s", path)
+		}
+		existing = parent
+	}
+	resolved, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return "", err
+	}
+	suffix, err := filepath.Rel(existing, path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(filepath.Join(resolved, suffix)), nil
 }
 
 func startsOutside(relative string) bool {
