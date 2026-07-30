@@ -795,9 +795,9 @@ func (runtime *Runtime) Start(parent context.Context) error {
 		defer close(runtime.schedulerDone)
 		scheduler{
 			orchestrator: runtime.orchestrator, workerRef: runtime.workerRef,
-			pollInterval:        runtime.config.SchedulerPollInterval(),
-			maxLaunchesPerCycle: runtime.config.RuntimeCodexMaxConcurrentExecutions(),
-			report:              runtime.reportError,
+			pollInterval:          runtime.config.SchedulerPollInterval(),
+			maxConcurrentLaunches: runtime.config.RuntimeCodexMaxConcurrentExecutions(),
+			report:                runtime.reportError,
 		}.run(schedulerCtx)
 	}()
 	go func() {
