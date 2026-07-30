@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-30.1",
+  "revision": "2026-07-30.2",
   "precedence": [
     "default",
     "file",
@@ -483,20 +483,20 @@
       "maximum": 67108864
     },
     {
-      "key": "runtime.codex.capacity_report_max_bytes",
-      "go_name": "RuntimeCodexCapacityReportMaxBytes",
-      "semantic_ref": "orquesta.config.runtime.codex.capacity_report_max_bytes",
+      "key": "runtime.codex.app_server_max_frame_bytes",
+      "go_name": "RuntimeCodexAppServerMaxFrameBytes",
+      "semantic_ref": "orquesta.config.runtime.codex.app_server_max_frame_bytes",
       "type": "integer",
-      "default": 65536,
+      "default": 1048576,
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_CAPACITY_REPORT_MAX_BYTES",
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_APP_SERVER_MAX_FRAME_BYTES",
       "validator_ids": [
         "integer_bounds"
       ],
       "minimum": 1024,
-      "maximum": 1048576
+      "maximum": 67108864
     },
     {
       "key": "runtime.codex.max_concurrent_executions",
@@ -1149,6 +1149,22 @@
       ],
       "minimum": 1,
       "maximum": 1000000000000000
+    },
+    {
+      "key": "governance.global_process_slots_budget",
+      "go_name": "GovernanceGlobalProcessSlotsBudget",
+      "semantic_ref": "orquesta.config.governance.global_process_slots_budget",
+      "type": "integer",
+      "default": 70,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_GLOBAL_PROCESS_SLOTS_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 4096
     },
     {
       "key": "governance.global_money_micros_budget",

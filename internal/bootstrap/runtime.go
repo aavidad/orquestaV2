@@ -801,7 +801,7 @@ func (runtime *Runtime) Start(parent context.Context) error {
 		scheduler{
 			orchestrator: runtime.orchestrator, workerRef: runtime.workerRef,
 			pollInterval:          runtime.config.SchedulerPollInterval(),
-			maxConcurrentLaunches: runtime.config.RuntimeCodexMaxConcurrentExecutions(),
+			maxConcurrentLaunches: dispatcherProcessSlotLimit(runtime.config),
 			report:                runtime.reportError,
 		}.run(schedulerCtx)
 	}()
@@ -826,6 +826,10 @@ func (runtime *Runtime) Start(parent context.Context) error {
 		}
 	}()
 	return nil
+}
+
+func dispatcherProcessSlotLimit(snapshot config.Snapshot) int64 {
+	return snapshot.GovernanceGlobalProcessSlotsBudget()
 }
 
 func (runtime *Runtime) Wait() error {

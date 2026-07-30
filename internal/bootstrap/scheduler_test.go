@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"sync"
@@ -10,13 +11,32 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/config"
 )
 
 func TestSchedulerBoundsLaunchAdmissionsWithoutExpandingLogicalDemand(t *testing.T) {
 	const demand = 500
-	for _, limit := range []int{1, 5, 10, 16, 20} {
-		limit := limit
-		t.Run("limite_"+strconv.Itoa(limit), func(t *testing.T) {
+	for _, limits := range []struct {
+		processSlots int
+		codex        int
+	}{
+		{processSlots: 1, codex: 70},
+		{processSlots: 5, codex: 1},
+		{processSlots: 5, codex: 4096},
+		{processSlots: 10, codex: 70},
+		{processSlots: 16, codex: 70},
+		{processSlots: 20, codex: 70},
+	} {
+		limits := limits
+		t.Run("limite_"+strconv.Itoa(limits.processSlots)+"_codex_"+strconv.Itoa(limits.codex), func(t *testing.T) {
+			snapshot, err := config.Resolve(config.ResolveOptions{TOML: []byte(fmt.Sprintf(
+				"[governance]\nglobal_process_slots_budget = %d\n[runtime.codex]\nmax_concurrent_executions = %d\n",
+				limits.processSlots, limits.codex,
+			))})
+			if err != nil {
+				t.Fatal(err)
+			}
+			limit := int(dispatcherProcessSlotLimit(snapshot))
 			actions := make([]application.ActionKind, demand)
 			for index := range actions {
 				actions[index] = application.ActionLaunchAgent

@@ -41,13 +41,14 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 		snapshot.RuntimeCapacityObservationTTL() != 30*time.Second ||
 		snapshot.RuntimeCapacityObservationTimeout() != time.Second ||
 		snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
-		snapshot.RuntimeCodexCapacityReportMaxBytes() != 65536 ||
+		snapshot.RuntimeCodexAppServerMaxFrameBytes() != 1048576 ||
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond ||
 		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "ORQUESTA_MCP_BEARER_TOKEN" ||
 		len(snapshot.RuntimeCodexAccountProfiles()) != 0 {
 		t.Fatal("runtime defaults missing")
 	}
 	if snapshot.GovernanceBudgetCurrency() != "USD" || snapshot.GovernanceGlobalTokenBudget() != 14000000 ||
+		snapshot.GovernanceGlobalProcessSlotsBudget() != 70 ||
 		snapshot.GovernanceGlobalMoneyMicrosBudget() != 70000000 ||
 		snapshot.GovernanceDefaultExecutionTokenBudget() != 200000 ||
 		snapshot.GovernanceDefaultExecutionMoneyMicrosBudget() != 1000000 ||
@@ -101,12 +102,12 @@ observation_ttl = "45s"
 observation_timeout = "750ms"
 
 [runtime.codex]
-capacity_report_max_bytes = 131072
+app_server_max_frame_bytes = 131072
 `, nil)
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" ||
 		snapshot.RuntimeCapacityObservationTTL() != 45*time.Second ||
 		snapshot.RuntimeCapacityObservationTimeout() != 750*time.Millisecond ||
-		snapshot.RuntimeCodexCapacityReportMaxBytes() != 131072 {
+		snapshot.RuntimeCodexAppServerMaxFrameBytes() != 131072 {
 		t.Fatal("provider, isolation or capacity configuration drifted")
 	}
 	_, err := Resolve(ResolveOptions{TOML: []byte("[runtime]\nprovider = \"microvm\"\n")})
@@ -117,32 +118,32 @@ capacity_report_max_bytes = 131072
 	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCapacityObservationTimeout)
 }
 
-func TestRuntimeIsolationAndCapacityReportBoundsAreExact(t *testing.T) {
+func TestRuntimeIsolationAndAppServerFrameBoundsAreExact(t *testing.T) {
 	isolation, found := Definition(KeyRuntimeIsolation)
 	if !found || !reflect.DeepEqual(isolation.AllowedValues, []string{"process", "microvm"}) {
 		t.Fatalf("runtime isolation values = %#v/%v", isolation.AllowedValues, found)
 	}
-	report, found := Definition(KeyRuntimeCodexCapacityReportMaxBytes)
+	report, found := Definition(KeyRuntimeCodexAppServerMaxFrameBytes)
 	if !found || report.Minimum == nil || *report.Minimum != 1024 ||
-		report.Maximum == nil || *report.Maximum != 1048576 {
-		t.Fatalf("capacity report bounds = %+v/%v", report, found)
+		report.Maximum == nil || *report.Maximum != 67108864 {
+		t.Fatalf("app-server frame bounds = %+v/%v", report, found)
 	}
-	for _, value := range []int64{1024, 1048576} {
-		toml := "[runtime.codex]\ncapacity_report_max_bytes = " + strconv.FormatInt(value, 10)
-		if got := resolveTOML(t, toml, nil).RuntimeCodexCapacityReportMaxBytes(); got != value {
-			t.Fatalf("capacity report boundary = %d, want %d", got, value)
+	for _, value := range []int64{1024, 67108864} {
+		toml := "[runtime.codex]\napp_server_max_frame_bytes = " + strconv.FormatInt(value, 10)
+		if got := resolveTOML(t, toml, nil).RuntimeCodexAppServerMaxFrameBytes(); got != value {
+			t.Fatalf("app-server frame boundary = %d, want %d", got, value)
 		}
 	}
-	for _, value := range []int64{1023, 1048577} {
-		toml := "[runtime.codex]\ncapacity_report_max_bytes = " + strconv.FormatInt(value, 10)
+	for _, value := range []int64{1023, 67108865} {
+		toml := "[runtime.codex]\napp_server_max_frame_bytes = " + strconv.FormatInt(value, 10)
 		_, err := Resolve(ResolveOptions{TOML: []byte(toml)})
-		assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexCapacityReportMaxBytes)
+		assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexAppServerMaxFrameBytes)
 	}
 }
 
 func TestParseExplicitRejectsUnknownDuplicateAndOversizeTOML(t *testing.T) {
-	_, err := ParseExplicit([]byte("[server]\nunknown = true\n"))
-	assertConfigError(t, err, ErrorUnknownKey, Key("server.unknown"))
+	_, err := ParseExplicit([]byte("[runtime.codex]\ncapacity_report_max_bytes = 1048576\n"))
+	assertConfigError(t, err, ErrorUnknownKey, Key("runtime.codex.capacity_report_max_bytes"))
 	_, err = ParseExplicit([]byte("[runtime.unknown]\n"))
 	assertConfigError(t, err, ErrorUnknownKey, Key("runtime.unknown"))
 	_, err = ParseExplicit([]byte("server.listen = \"first\"\nserver.listen = \"second\"\n"))
@@ -161,14 +162,17 @@ read_timeout = "21s"
 model = "file-model"
 env_allowlist = ["FILE_ONLY"]
 mcp_bearer_token_env_var = "FILE_MCP_TOKEN"
+app_server_max_frame_bytes = 131072
 `, map[string]string{
-		"ORQUESTA_SERVER_LISTEN":                          "127.0.0.1:9191",
-		"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST":            "PATH, CODEX_HOME, EXTRA_ALLOWED",
-		"ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR": "PRIVATE_MCP_TOKEN",
+		"ORQUESTA_SERVER_LISTEN":                            "127.0.0.1:9191",
+		"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST":              "PATH, CODEX_HOME, EXTRA_ALLOWED",
+		"ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR":   "PRIVATE_MCP_TOKEN",
+		"ORQUESTA_RUNTIME_CODEX_APP_SERVER_MAX_FRAME_BYTES": "262144",
 	})
 	if snapshot.ServerListen() != "127.0.0.1:9191" || snapshot.ServerReadTimeout() != 21*time.Second ||
 		snapshot.RuntimeCodexModel() != "file-model" || snapshot.ProjectDefault() != "project:default" ||
-		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "PRIVATE_MCP_TOKEN" {
+		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "PRIVATE_MCP_TOKEN" ||
+		snapshot.RuntimeCodexAppServerMaxFrameBytes() != 262144 {
 		t.Fatal("default < file < env precedence failed")
 	}
 	want := []string{"PATH", "CODEX_HOME", "EXTRA_ALLOWED"}
@@ -178,6 +182,7 @@ mcp_bearer_token_env_var = "FILE_MCP_TOKEN"
 	assertSource(t, snapshot, KeyServerListen, SourceEnv)
 	assertSource(t, snapshot, KeyServerReadTimeout, SourceFile)
 	assertSource(t, snapshot, KeyProjectDefault, SourceDefault)
+	assertSource(t, snapshot, KeyRuntimeCodexAppServerMaxFrameBytes, SourceEnv)
 	_, err := Resolve(ResolveOptions{Environment: map[string]string{"UNDECLARED": "value"}})
 	assertConfigError(t, err, ErrorUnknownKey, Key("UNDECLARED"))
 }

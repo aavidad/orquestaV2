@@ -23,7 +23,7 @@ func buildBudgetPolicy(snapshot config.Snapshot, now time.Time) (application.Bud
 	if err != nil {
 		return application.BudgetPolicy{}, errors.New("bootstrap.budget_currency_invalid")
 	}
-	maxConcurrent := snapshot.RuntimeCodexMaxConcurrentExecutions()
+	maxConcurrent := snapshot.GovernanceGlobalProcessSlotsBudget()
 	executionTimeout := snapshot.SchedulerExecutionTimeout()
 	maxOutputBytes := snapshot.RuntimeMaxOutputBytes()
 	if maxConcurrent <= 0 || executionTimeout <= 0 || maxOutputBytes <= 0 {
@@ -93,7 +93,7 @@ func budgetPolicyHash(snapshot config.Snapshot, retryDelay time.Duration, curren
 		strconv.FormatInt(snapshot.GovernanceGlobalMoneyMicrosBudget(), 10),
 		strconv.FormatInt(snapshot.GovernanceDefaultExecutionTokenBudget(), 10),
 		strconv.FormatInt(snapshot.GovernanceDefaultExecutionMoneyMicrosBudget(), 10),
-		strconv.FormatInt(snapshot.RuntimeCodexMaxConcurrentExecutions(), 10),
+		strconv.FormatInt(snapshot.GovernanceGlobalProcessSlotsBudget(), 10),
 		strconv.FormatInt(snapshot.SchedulerExecutionTimeout().Nanoseconds(), 10),
 		strconv.FormatInt(snapshot.RuntimeMaxOutputBytes(), 10),
 		strconv.FormatInt(retryDelay.Nanoseconds(), 10),

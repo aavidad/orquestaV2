@@ -51,7 +51,8 @@ func v16FixtureWrites(values []v16FixtureFile) v16Write {
 func v16WriteConfig(t *testing.T, root, seed, workspaceRoot, targetRef string) string {
 	t.Helper()
 	path := filepath.Join(root, "orquesta.toml")
-	content := fmt.Sprintf(`[server]
+	content := fmt.Sprintf(`governance.global_process_slots_budget = 4
+[server]
 listen = "127.0.0.1:0"
 shutdown_timeout = "2s"
 

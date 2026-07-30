@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-30.1",
-  "registry_hash": "sha256:17c36ea75c1c61193f9a7949f6ce43c5b73f6488ca06da11a4aa9271fa4f6ff5",
+  "registry_revision": "2026-07-30.2",
+  "registry_hash": "sha256:c2d6489e4eb1c942778ae8f19d43b682fb8d01747528dc5c2f129a78403b3b2f",
   "aliases": [],
   "cross_validators": [
     {
@@ -426,9 +426,9 @@
       "maximum": 67108864
     },
     {
-      "key": "runtime.codex.capacity_report_max_bytes",
-      "semantic_ref": "orquesta.config.runtime.codex.capacity_report_max_bytes",
-      "label_key": "config.field.runtime.codex.capacity_report_max_bytes",
+      "key": "runtime.codex.app_server_max_frame_bytes",
+      "semantic_ref": "orquesta.config.runtime.codex.app_server_max_frame_bytes",
+      "label_key": "config.field.runtime.codex.app_server_max_frame_bytes",
       "type": "integer",
       "sensitive": false,
       "scope": "runtime",
@@ -437,7 +437,7 @@
         "integer_bounds"
       ],
       "minimum": 1024,
-      "maximum": 1048576
+      "maximum": 67108864
     },
     {
       "key": "runtime.codex.max_concurrent_executions",
@@ -998,6 +998,20 @@
       ],
       "minimum": 1,
       "maximum": 1000000000000000
+    },
+    {
+      "key": "governance.global_process_slots_budget",
+      "semantic_ref": "orquesta.config.governance.global_process_slots_budget",
+      "label_key": "config.field.governance.global_process_slots_budget",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 4096
     },
     {
       "key": "governance.global_money_micros_budget",

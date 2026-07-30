@@ -11,7 +11,9 @@ import (
 )
 
 func TestBudgetPolicyUsesCanonicalGovernanceAndDerivedResourceLimits(t *testing.T) {
-	snapshot, err := config.Resolve(config.ResolveOptions{})
+	snapshot, err := config.Resolve(config.ResolveOptions{TOML: []byte(
+		"[governance]\nglobal_process_slots_budget = 11\n[runtime.codex]\nmax_concurrent_executions = 3\n",
+	)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,8 +34,8 @@ func TestBudgetPolicyUsesCanonicalGovernanceAndDerivedResourceLimits(t *testing.
 	}
 	wantLimit := governance.ResourceVector{
 		Tokens: 14000000, MoneyMicros: 70000000, Currency: "USD",
-		ActiveTimeNS: (45 * time.Minute).Nanoseconds() * 70, ProcessSlots: 70,
-		DiskBytes: 1048576 * 70,
+		ActiveTimeNS: (45 * time.Minute).Nanoseconds() * 11, ProcessSlots: 11,
+		DiskBytes: 1048576 * 11,
 	}
 	for _, envelope := range []governance.BudgetEnvelope{
 		policy.DeploymentEnvelope, policy.ProjectEnvelopeTemplate, policy.GoalEnvelopeTemplate,
@@ -88,6 +90,14 @@ func TestBudgetPolicyHashSeparatesFanoutAndApprovalPolicy(t *testing.T) {
 	changedHash := budgetPolicyHash(changedBudget, changedBudget.SchedulerPollInterval(), currency)
 	if changedHash == baseHash {
 		t.Fatal("changed budget retained policy identity")
+	}
+	changedCodex, _ := config.Resolve(config.ResolveOptions{TOML: []byte("[runtime.codex]\nmax_concurrent_executions = 69\n")})
+	if baseHash != budgetPolicyHash(changedCodex, changedCodex.SchedulerPollInterval(), currency) {
+		t.Fatal("Codex guardrail leaked into governance policy identity")
+	}
+	changedSlots, _ := config.Resolve(config.ResolveOptions{TOML: []byte("[governance]\nglobal_process_slots_budget = 69\n")})
+	if baseHash == budgetPolicyHash(changedSlots, changedSlots.SchedulerPollInterval(), currency) {
+		t.Fatal("global process slots retained governance policy identity")
 	}
 	baseRevision, baseErr := budgetPolicyRevision(baseHash)
 	changedRevision, changedErr := budgetPolicyRevision(changedHash)

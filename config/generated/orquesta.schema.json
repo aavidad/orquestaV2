@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-30.1",
+  "$id": "urn:orquesta:config:2026-07-30.2",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -265,6 +265,20 @@
           "x-restart-required": true,
           "x-scope": "governance",
           "x-semantic-ref": "orquesta.config.governance.global_money_micros_budget",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "global_process_slots_budget": {
+          "default": 70,
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_GOVERNANCE_GLOBAL_PROCESS_SLOTS_BUDGET",
+          "x-restart-required": true,
+          "x-scope": "governance",
+          "x-semantic-ref": "orquesta.config.governance.global_process_slots_budget",
           "x-sensitive": false,
           "x-validator-ids": [
             "integer_bounds"
@@ -634,6 +648,20 @@
                 "unique_non_empty_string_list"
               ]
             },
+            "app_server_max_frame_bytes": {
+              "default": 1048576,
+              "maximum": 67108864,
+              "minimum": 1024,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_APP_SERVER_MAX_FRAME_BYTES",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.app_server_max_frame_bytes",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
             "cache_root": {
               "default": "./var/cache/codex-go",
               "minLength": 1,
@@ -645,20 +673,6 @@
               "x-sensitive": false,
               "x-validator-ids": [
                 "non_empty_path"
-              ]
-            },
-            "capacity_report_max_bytes": {
-              "default": 65536,
-              "maximum": 1048576,
-              "minimum": 1024,
-              "type": "integer",
-              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_CAPACITY_REPORT_MAX_BYTES",
-              "x-restart-required": true,
-              "x-scope": "runtime",
-              "x-semantic-ref": "orquesta.config.runtime.codex.capacity_report_max_bytes",
-              "x-sensitive": false,
-              "x-validator-ids": [
-                "integer_bounds"
               ]
             },
             "cgroup_root": {
@@ -1378,8 +1392,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-30.1",
-  "x-registry-hash": "sha256:17c36ea75c1c61193f9a7949f6ce43c5b73f6488ca06da11a4aa9271fa4f6ff5",
+  "x-registry-revision": "2026-07-30.2",
+  "x-registry-hash": "sha256:c2d6489e4eb1c942778ae8f19d43b682fb8d01747528dc5c2f129a78403b3b2f",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [

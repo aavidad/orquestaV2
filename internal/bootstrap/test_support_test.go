@@ -52,7 +52,8 @@ func writeTestConfig(t *testing.T, root string) string {
 		t.Fatalf("make config directory private: %v", err)
 	}
 	configPath := root + "/orquesta.toml"
-	content := fmt.Sprintf(`[server]
+	content := fmt.Sprintf(`governance.global_process_slots_budget = 4
+[server]
 listen = "127.0.0.1:0"
 shutdown_timeout = "2s"
 

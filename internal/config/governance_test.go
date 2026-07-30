@@ -11,6 +11,7 @@ func TestV15GovernanceValuesUseCanonicalInputsAndEffectiveProjection(t *testing.
 [governance]
 budget_currency = "EUR"
 global_token_budget = 15000000
+global_process_slots_budget = 80
 global_money_micros_budget = 71000000
 default_execution_token_budget = 210000
 default_execution_money_micros_budget = 1100000
@@ -19,9 +20,11 @@ effect_approval_ttl = "12h"
 [scheduler]
 max_children_per_parent = 5
 `, map[string]string{
-		"ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET": "16000000",
+		"ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET":         "16000000",
+		"ORQUESTA_GOVERNANCE_GLOBAL_PROCESS_SLOTS_BUDGET": "81",
 	})
 	if snapshot.GovernanceBudgetCurrency() != "EUR" || snapshot.GovernanceGlobalTokenBudget() != 16000000 ||
+		snapshot.GovernanceGlobalProcessSlotsBudget() != 81 ||
 		snapshot.GovernanceGlobalMoneyMicrosBudget() != 71000000 ||
 		snapshot.GovernanceDefaultExecutionTokenBudget() != 210000 ||
 		snapshot.GovernanceDefaultExecutionMoneyMicrosBudget() != 1100000 ||
@@ -30,6 +33,7 @@ max_children_per_parent = 5
 	}
 	assertSource(t, snapshot, KeyGovernanceBudgetCurrency, SourceFile)
 	assertSource(t, snapshot, KeyGovernanceGlobalTokenBudget, SourceEnv)
+	assertSource(t, snapshot, KeyGovernanceGlobalProcessSlotsBudget, SourceEnv)
 	assertSource(t, snapshot, KeySchedulerMaxChildrenPerParent, SourceFile)
 
 	content, err := snapshot.EffectiveJSON()
@@ -48,6 +52,7 @@ max_children_per_parent = 5
 	want := map[Key]any{
 		KeyGovernanceBudgetCurrency:                    "EUR",
 		KeyGovernanceGlobalTokenBudget:                 float64(16000000),
+		KeyGovernanceGlobalProcessSlotsBudget:          float64(81),
 		KeyGovernanceGlobalMoneyMicrosBudget:           float64(71000000),
 		KeyGovernanceDefaultExecutionTokenBudget:       float64(210000),
 		KeyGovernanceDefaultExecutionMoneyMicrosBudget: float64(1100000),
@@ -74,6 +79,8 @@ func TestV15GovernanceBoundsRejectZeroWithoutAddingDerivedResourceKeys(t *testin
 		key  Key
 	}{
 		{"global tokens", "[governance]\nglobal_token_budget = 0\n", KeyGovernanceGlobalTokenBudget},
+		{"global process slots", "[governance]\nglobal_process_slots_budget = 0\n", KeyGovernanceGlobalProcessSlotsBudget},
+		{"global process slots max", "[governance]\nglobal_process_slots_budget = 4097\n", KeyGovernanceGlobalProcessSlotsBudget},
 		{"global money", "[governance]\nglobal_money_micros_budget = 0\n", KeyGovernanceGlobalMoneyMicrosBudget},
 		{"execution tokens", "[governance]\ndefault_execution_token_budget = 0\n", KeyGovernanceDefaultExecutionTokenBudget},
 		{"execution money", "[governance]\ndefault_execution_money_micros_budget = 0\n", KeyGovernanceDefaultExecutionMoneyMicrosBudget},

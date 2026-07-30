@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-30.1`
+Registry revision: `2026-07-30.2`
 
-Registry hash: `sha256:17c36ea75c1c61193f9a7949f6ce43c5b73f6488ca06da11a4aa9271fa4f6ff5`
+Registry hash: `sha256:c2d6489e4eb1c942778ae8f19d43b682fb8d01747528dc5c2f129a78403b3b2f`
 
 Precedence: `default < file < env`
 
@@ -37,7 +37,7 @@ Source limit: `1048576` bytes
 | `runtime.codex.process_pipe_drain_delay` | `duration` | `"250ms"` | `ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY` | `true` | `positive_duration` |
 | `runtime.codex.supervisor_start_timeout` | `duration` | `"1s"` | `ORQUESTA_RUNTIME_CODEX_SUPERVISOR_START_TIMEOUT` | `true` | `positive_duration` |
 | `runtime.codex.max_diagnostic_bytes` | `integer` | `65536` | `ORQUESTA_RUNTIME_CODEX_MAX_DIAGNOSTIC_BYTES` | `true` | `integer_bounds` |
-| `runtime.codex.capacity_report_max_bytes` | `integer` | `65536` | `ORQUESTA_RUNTIME_CODEX_CAPACITY_REPORT_MAX_BYTES` | `true` | `integer_bounds` |
+| `runtime.codex.app_server_max_frame_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_CODEX_APP_SERVER_MAX_FRAME_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.max_concurrent_executions` | `integer` | `70` | `ORQUESTA_RUNTIME_CODEX_MAX_CONCURRENT_EXECUTIONS` | `true` | `integer_bounds` |
 | `runtime.codex.work_root` | `path` | `"./var/work"` | `ORQUESTA_RUNTIME_CODEX_WORK_ROOT` | `true` | `non_empty_path` |
 | `runtime.codex.cache_root` | `path` | `"./var/cache/codex-go"` | `ORQUESTA_RUNTIME_CODEX_CACHE_ROOT` | `true` | `non_empty_path` |
@@ -86,6 +86,7 @@ Source limit: `1048576` bytes
 | `project.default` | `string` | `"project:default"` | `ORQUESTA_PROJECT_DEFAULT` | `true` | `opaque_ref` |
 | `governance.budget_currency` | `string` | `"USD"` | `ORQUESTA_GOVERNANCE_BUDGET_CURRENCY` | `true` | `trimmed_non_empty_string` |
 | `governance.global_token_budget` | `integer` | `14000000` | `ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET` | `true` | `integer_bounds` |
+| `governance.global_process_slots_budget` | `integer` | `70` | `ORQUESTA_GOVERNANCE_GLOBAL_PROCESS_SLOTS_BUDGET` | `true` | `integer_bounds` |
 | `governance.global_money_micros_budget` | `integer` | `70000000` | `ORQUESTA_GOVERNANCE_GLOBAL_MONEY_MICROS_BUDGET` | `true` | `integer_bounds` |
 | `governance.default_execution_token_budget` | `integer` | `200000` | `ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_TOKEN_BUDGET` | `true` | `integer_bounds` |
 | `governance.default_execution_money_micros_budget` | `integer` | `1000000` | `ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET` | `true` | `integer_bounds` |
