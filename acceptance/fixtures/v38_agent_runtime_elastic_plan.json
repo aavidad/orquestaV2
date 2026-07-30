@@ -73,8 +73,8 @@
     "restart": "reconstructs_observations_reservations_leases_and_fences"
   },
   "placement": {
-    "selection": "opaque_account_and_placement_selected_before_claim",
-    "claim": "atomically_binds_account_placement_capacity_quota_lease_and_fence",
+    "selection": "ordered_deduplicated_opaque_account_and_placement_candidates_supplied_to_claim",
+    "claim": "atomically_selects_and_binds_exactly_one_account_placement_capacity_quota_lease_and_fence_before_claim_return",
     "launcher": "must_obey_claimed_account_and_placement",
     "reselection": "forbidden_after_claim"
   },

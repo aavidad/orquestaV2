@@ -61,7 +61,8 @@ func TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap(t *testing.T) {
 			assertions := strings.Join(contract.Assertions, "\n")
 			for _, marker := range []string{
 				"capacidad física reservable y la cuota del proveedor como hechos separados",
-				"cuenta y la colocación opacas se eligen antes de la reclamación atómica",
+				"candidatos opacos de cuenta y colocación ordenados y sin duplicados",
+				"ClaimNextAction selecciona y liga exactamente uno dentro de la transacción atómica",
 				"runtime.codex.max_concurrent_executions es solo un guardarraíl local del conector Codex",
 				"todos los hilos turnos y agentes Codex viven dentro de la microVM",
 				"puerto StateRepository con una sola fuente transaccional activa",
@@ -95,7 +96,9 @@ func TestV38AgentRuntimeElasticPlanRejectsSemanticDrift(t *testing.T) {
 		{"cuota_agotada_libera_hueco", func(f *v38ElasticFixture) { f.Capacity.ExhaustedQuota = "release_physical_slot" }},
 		{"cuota_convertida_en_capacidad", func(f *v38ElasticFixture) { f.Capacity.ProviderQuota = "physical_slot_count" }},
 		{"reserva_sin_cerca", func(f *v38ElasticFixture) { f.Capacity.Reservation = "atomic_without_fence" }},
-		{"colocacion_despues_de_reclamar", func(f *v38ElasticFixture) { f.Placement.Selection = "selected_after_claim" }},
+		{"candidatos_desordenados", func(f *v38ElasticFixture) { f.Placement.Selection = "unordered_candidates" }},
+		{"candidatos_duplicados", func(f *v38ElasticFixture) { f.Placement.Selection = "ordered_candidates_with_duplicates" }},
+		{"seleccion_fuera_de_transaccion", func(f *v38ElasticFixture) { f.Placement.Claim = "selected_before_transaction" }},
 		{"reclamacion_no_fija_colocacion", func(f *v38ElasticFixture) { f.Placement.Claim = "placement_not_bound" }},
 		{"lanzador_reselecciona", func(f *v38ElasticFixture) { f.Placement.Launcher = "may_reselect_account" }},
 		{"kvm_en_nucleo", func(f *v38ElasticFixture) { f.Subgates.A.KVM = "required" }},
@@ -204,7 +207,7 @@ func v38SemanticsValid(f v38ElasticFixture) bool {
 	}, "|") ==
 		"source_timestamp_expiry_and_quality_required|absolute_reservable_resource_fact|separate_admission_fact_never_physical_slot_count|reported_limit_enforced_without_deriving_physical_slots|fail_closed_and_never_converted_into_available_physical_slot|fail_closed_and_never_converted_into_available_physical_slot|atomic_with_lease_and_fence|idempotent_after_accepted_launch_receipt|idempotent_only_after_terminal_or_definitely_not_applied|same_execution_waits_without_consuming_attempt|reconstructs_observations_reservations_leases_and_fences"
 	placement := strings.Join([]string{f.Placement.Selection, f.Placement.Claim, f.Placement.Launcher, f.Placement.Reselection}, "|") ==
-		"opaque_account_and_placement_selected_before_claim|atomically_binds_account_placement_capacity_quota_lease_and_fence|must_obey_claimed_account_and_placement|forbidden_after_claim"
+		"ordered_deduplicated_opaque_account_and_placement_candidates_supplied_to_claim|atomically_selects_and_binds_exactly_one_account_placement_capacity_quota_lease_and_fence_before_claim_return|must_obey_claimed_account_and_placement|forbidden_after_claim"
 	demand := reflect.DeepEqual(f.Demand.LogicalCohorts, []int{1, 16, 70, 500}) && reflect.DeepEqual(f.Demand.PhysicalSteps, []int{1, 5, 10, 16, 20}) &&
 		f.Demand.CompleteReadySet && f.Demand.HiddenGlobalCeiling == "forbidden" && f.Demand.PartialCapacity == "same_execution_waits_without_consuming_attempt" && f.Demand.LargePhysicalClaim == "only_with_explicit_measured_resources"
 	scheduling := strings.Join([]string{

@@ -324,7 +324,7 @@ func TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites(t
 	}
 	wantAssertions := []string{
 		"ORC-28 trata la capacidad física reservable y la cuota del proveedor como hechos separados; una cuota desconocida o agotada cierra la admisión de nuevas reclamaciones y nunca se convierte en un hueco físico liberado",
-		"la cuenta y la colocación opacas se eligen antes de la reclamación atómica; la reserva fija cuenta colocación capacidad cuota lease y fence y el lanzador debe obedecerla sin reselección",
+		"application suministra candidatos opacos de cuenta y colocación ordenados y sin duplicados; ClaimNextAction selecciona y liga exactamente uno dentro de la transacción atómica antes de devolver el claim y el lanzador debe obedecerlo sin reselección",
 		"runtime.codex.max_concurrent_executions es solo un guardarraíl local del conector Codex y no gobierna el presupuesto ni el despacho global; el techo global es neutral al proveedor y la admisión es atómica",
 		"con aislamiento microVM todos los hilos turnos y agentes Codex viven dentro de la microVM; en el anfitrión solo puede persistir un app-server mínimo para identidad y cuota sin hilo turno agente ni autoridad de ejecución",
 		"el núcleo persiste por el puerto StateRepository con una sola fuente transaccional activa elegida por composición; SQLite queda para local desarrollo y pruebas PostgreSQL es el adaptador productivo futuro y se prohíbe dual write",
