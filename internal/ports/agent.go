@@ -27,6 +27,17 @@ const (
 	AgentFailureDispositionTerminalSecurity AgentFailureDisposition = "terminal_security"
 )
 
+// AgentPlacementRef identifica cuenta y colocación sin exponer perfiles, rutas ni credenciales.
+type AgentPlacementRef struct{ value string }
+
+func NewAgentPlacementRef(value string) (AgentPlacementRef, error) {
+	if !validAgentIdentityRef(value) || strings.ContainsRune(value, '\x00') {
+		return AgentPlacementRef{}, &AgentContractError{Code: "agent.placement_ref_invalid"}
+	}
+	return AgentPlacementRef{value: value}, nil
+}
+func (ref AgentPlacementRef) String() string { return ref.value }
+
 type AgentCapabilities struct {
 	ProviderRef    string
 	ModelRef       string

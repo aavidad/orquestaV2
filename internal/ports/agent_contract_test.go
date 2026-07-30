@@ -69,6 +69,18 @@ func validAgentLaunchReceipt(request AgentLaunchRequest) AgentLaunchReceipt {
 	}
 }
 
+func TestAgentPlacementRefIsOpaqueAndCanonical(t *testing.T) {
+	ref, err := NewAgentPlacementRef("placement:codex:account-1")
+	if err != nil || ref.String() != "placement:codex:account-1" {
+		t.Fatalf("NewAgentPlacementRef() = %q, %v", ref.String(), err)
+	}
+	for _, invalid := range []string{"", " placement:one", "placement:one ", "placement:\x00"} {
+		if _, err := NewAgentPlacementRef(invalid); AgentContractErrorCode(err) != "agent.placement_ref_invalid" {
+			t.Fatalf("NewAgentPlacementRef(%q) no cerró el contrato: %v", invalid, err)
+		}
+	}
+}
+
 func TestAgentCapabilitiesValidateAndMatchNeutralRequirements(t *testing.T) {
 	requirements := AgentRequirements{
 		RoleKey:        "role:worker",
