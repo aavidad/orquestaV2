@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-29.0`
+Registry revision: `2026-07-30.0`
 
-Registry hash: `sha256:7ad0b79b399b5424ec78498e56bcb7582ba149b63e6d2bd86c3b452236dab2b5`
+Registry hash: `sha256:f819a09950c0aa47159218aa29f5b746855005919b56a79d89e86783a60930c2`
 
 Precedence: `default < file < env`
 
@@ -26,7 +26,9 @@ Source limit: `1048576` bytes
 | `credentials.local.path` | `path` | `"./var/secrets/credentials.json"` | `ORQUESTA_CREDENTIALS_LOCAL_PATH` | `true` | `non_empty_path` |
 | `credentials.local.max_document_bytes` | `integer` | `1048576` | `ORQUESTA_CREDENTIALS_LOCAL_MAX_DOCUMENT_BYTES` | `true` | `integer_bounds` |
 | `runtime.provider` | `string` | `"codex"` | `ORQUESTA_RUNTIME_PROVIDER` | `true` | `allowed_values` |
+| `runtime.isolation` | `string` | `"process"` | `ORQUESTA_RUNTIME_ISOLATION` | `true` | `allowed_values` |
 | `runtime.max_output_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES` | `true` | `integer_bounds` |
+| `runtime.capacity.observation_ttl` | `duration` | `"30s"` | `ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TTL` | `true` | `positive_duration` |
 | `runtime.codex.command` | `string` | `"codex"` | `ORQUESTA_RUNTIME_CODEX_COMMAND` | `true` | `trimmed_non_empty_string` |
 | `runtime.codex.model` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_MODEL` | `true` | `trimmed_optional_string` |
 | `runtime.codex.reasoning` | `string` | `"medium"` | `ORQUESTA_RUNTIME_CODEX_REASONING` | `true` | `allowed_values` |
@@ -34,6 +36,7 @@ Source limit: `1048576` bytes
 | `runtime.codex.process_pipe_drain_delay` | `duration` | `"250ms"` | `ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY` | `true` | `positive_duration` |
 | `runtime.codex.supervisor_start_timeout` | `duration` | `"1s"` | `ORQUESTA_RUNTIME_CODEX_SUPERVISOR_START_TIMEOUT` | `true` | `positive_duration` |
 | `runtime.codex.max_diagnostic_bytes` | `integer` | `65536` | `ORQUESTA_RUNTIME_CODEX_MAX_DIAGNOSTIC_BYTES` | `true` | `integer_bounds` |
+| `runtime.codex.capacity_report_max_bytes` | `integer` | `65536` | `ORQUESTA_RUNTIME_CODEX_CAPACITY_REPORT_MAX_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.max_concurrent_executions` | `integer` | `70` | `ORQUESTA_RUNTIME_CODEX_MAX_CONCURRENT_EXECUTIONS` | `true` | `integer_bounds` |
 | `runtime.codex.work_root` | `path` | `"./var/work"` | `ORQUESTA_RUNTIME_CODEX_WORK_ROOT` | `true` | `non_empty_path` |
 | `runtime.codex.cache_root` | `path` | `"./var/cache/codex-go"` | `ORQUESTA_RUNTIME_CODEX_CACHE_ROOT` | `true` | `non_empty_path` |

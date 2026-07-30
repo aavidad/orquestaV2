@@ -21,7 +21,11 @@ max_document_bytes = 1048576
 
 [runtime]
 provider = "codex"
+isolation = "process"
 max_output_bytes = 1048576
+
+[runtime.capacity]
+observation_ttl = "30s"
 
 [runtime.codex]
 command = "codex"
@@ -31,6 +35,7 @@ timeout = "30m"
 process_pipe_drain_delay = "250ms"
 supervisor_start_timeout = "1s"
 max_diagnostic_bytes = 65536
+capacity_report_max_bytes = 65536
 max_concurrent_executions = 70
 work_root = "./var/work"
 cache_root = "./var/cache/codex-go"

@@ -37,7 +37,10 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 		snapshot.CredentialsLocalMaxDocumentBytes() != 1048576 {
 		t.Fatal("credential-store defaults missing")
 	}
-	if snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
+	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "process" ||
+		snapshot.RuntimeCapacityObservationTTL() != 30*time.Second ||
+		snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
+		snapshot.RuntimeCodexCapacityReportMaxBytes() != 65536 ||
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond ||
 		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "ORQUESTA_MCP_BEARER_TOKEN" ||
 		len(snapshot.RuntimeCodexAccountProfiles()) != 0 {
@@ -83,6 +86,52 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 		if !found || metadata.Source != SourceDefault {
 			t.Fatalf("metadata for %q = %+v/%v", key, metadata, found)
 		}
+	}
+}
+
+func TestRuntimeProviderAndIsolationRemainIndependent(t *testing.T) {
+	snapshot := resolveTOML(t, `
+[runtime]
+provider = "codex"
+isolation = "microvm"
+
+[runtime.capacity]
+observation_ttl = "45s"
+
+[runtime.codex]
+capacity_report_max_bytes = 131072
+`, nil)
+	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" ||
+		snapshot.RuntimeCapacityObservationTTL() != 45*time.Second ||
+		snapshot.RuntimeCodexCapacityReportMaxBytes() != 131072 {
+		t.Fatal("provider, isolation or capacity configuration drifted")
+	}
+	_, err := Resolve(ResolveOptions{TOML: []byte("[runtime]\nprovider = \"microvm\"\n")})
+	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeProvider)
+	_, err = Resolve(ResolveOptions{TOML: []byte("[runtime]\nisolation = \"codex\"\n")})
+	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeIsolation)
+}
+
+func TestRuntimeIsolationAndCapacityReportBoundsAreExact(t *testing.T) {
+	isolation, found := Definition(KeyRuntimeIsolation)
+	if !found || !reflect.DeepEqual(isolation.AllowedValues, []string{"process", "microvm"}) {
+		t.Fatalf("runtime isolation values = %#v/%v", isolation.AllowedValues, found)
+	}
+	report, found := Definition(KeyRuntimeCodexCapacityReportMaxBytes)
+	if !found || report.Minimum == nil || *report.Minimum != 1024 ||
+		report.Maximum == nil || *report.Maximum != 1048576 {
+		t.Fatalf("capacity report bounds = %+v/%v", report, found)
+	}
+	for _, value := range []int64{1024, 1048576} {
+		toml := "[runtime.codex]\ncapacity_report_max_bytes = " + strconv.FormatInt(value, 10)
+		if got := resolveTOML(t, toml, nil).RuntimeCodexCapacityReportMaxBytes(); got != value {
+			t.Fatalf("capacity report boundary = %d, want %d", got, value)
+		}
+	}
+	for _, value := range []int64{1023, 1048577} {
+		toml := "[runtime.codex]\ncapacity_report_max_bytes = " + strconv.FormatInt(value, 10)
+		_, err := Resolve(ResolveOptions{TOML: []byte(toml)})
+		assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexCapacityReportMaxBytes)
 	}
 }
 

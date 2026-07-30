@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-29.0",
+  "$id": "urn:orquesta:config:2026-07-30.0",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -544,6 +544,25 @@
     "runtime": {
       "additionalProperties": false,
       "properties": {
+        "capacity": {
+          "additionalProperties": false,
+          "properties": {
+            "observation_ttl": {
+              "default": "30s",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TTL",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.capacity.observation_ttl",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "codex": {
           "additionalProperties": false,
           "properties": {
@@ -613,6 +632,20 @@
               "x-sensitive": false,
               "x-validator-ids": [
                 "non_empty_path"
+              ]
+            },
+            "capacity_report_max_bytes": {
+              "default": 65536,
+              "maximum": 1048576,
+              "minimum": 1024,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_CAPACITY_REPORT_MAX_BYTES",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.capacity_report_max_bytes",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
               ]
             },
             "cgroup_root": {
@@ -810,6 +843,22 @@
             }
           },
           "type": "object"
+        },
+        "isolation": {
+          "default": "process",
+          "enum": [
+            "process",
+            "microvm"
+          ],
+          "type": "string",
+          "x-env-alias": "ORQUESTA_RUNTIME_ISOLATION",
+          "x-restart-required": true,
+          "x-scope": "runtime",
+          "x-semantic-ref": "orquesta.config.runtime.isolation",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "allowed_values"
+          ]
         },
         "max_output_bytes": {
           "default": 1048576,
@@ -1316,8 +1365,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-29.0",
-  "x-registry-hash": "sha256:7ad0b79b399b5424ec78498e56bcb7582ba149b63e6d2bd86c3b452236dab2b5",
+  "x-registry-revision": "2026-07-30.0",
+  "x-registry-hash": "sha256:f819a09950c0aa47159218aa29f5b746855005919b56a79d89e86783a60930c2",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [

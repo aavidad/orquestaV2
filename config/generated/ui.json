@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-29.0",
-  "registry_hash": "sha256:7ad0b79b399b5424ec78498e56bcb7582ba149b63e6d2bd86c3b452236dab2b5",
+  "registry_revision": "2026-07-30.0",
+  "registry_hash": "sha256:f819a09950c0aa47159218aa29f5b746855005919b56a79d89e86783a60930c2",
   "aliases": [],
   "cross_validators": [
     {
@@ -279,6 +279,22 @@
       ]
     },
     {
+      "key": "runtime.isolation",
+      "semantic_ref": "orquesta.config.runtime.isolation",
+      "label_key": "config.field.runtime.isolation",
+      "type": "string",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "allowed_values"
+      ],
+      "allowed_values": [
+        "process",
+        "microvm"
+      ]
+    },
+    {
       "key": "runtime.max_output_bytes",
       "semantic_ref": "orquesta.config.runtime.max_output_bytes",
       "label_key": "config.field.runtime.max_output_bytes",
@@ -291,6 +307,18 @@
       ],
       "minimum": 1,
       "maximum": 1073741824
+    },
+    {
+      "key": "runtime.capacity.observation_ttl",
+      "semantic_ref": "orquesta.config.runtime.capacity.observation_ttl",
+      "label_key": "config.field.runtime.capacity.observation_ttl",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "runtime.codex.command",
@@ -384,6 +412,20 @@
       ],
       "minimum": 1,
       "maximum": 67108864
+    },
+    {
+      "key": "runtime.codex.capacity_report_max_bytes",
+      "semantic_ref": "orquesta.config.runtime.codex.capacity_report_max_bytes",
+      "label_key": "config.field.runtime.codex.capacity_report_max_bytes",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 1048576
     },
     {
       "key": "runtime.codex.max_concurrent_executions",

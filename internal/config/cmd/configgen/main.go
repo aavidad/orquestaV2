@@ -144,13 +144,14 @@ func mustRenderGo(registry registryFile, source []byte, semanticHash string) []b
 	output.WriteString("\tvalue, _ := snapshot.value(key)\n\ttyped, _ := value.(T)\n\treturn typed\n}\n\n")
 	for _, definition := range registry.Keys {
 		if definition.Type == "string_list" {
-			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return append([]string(nil), get[%s](s, Key%s)...) }\n\n",
+			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return append([]string(nil), get[%s](s, Key%s)...) }\n",
 				definition.GoName, goType(definition.Type), goType(definition.Type), definition.GoName)
 		} else {
-			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return get[%s](s, Key%s) }\n\n",
+			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return get[%s](s, Key%s) }\n",
 				definition.GoName, goType(definition.Type), goType(definition.Type), definition.GoName)
 		}
 	}
+	output.WriteByte('\n')
 	fmt.Fprintf(&output, "const generatedRegistryJSON = %q\n", compactSource.String())
 	formatted, err := format.Source(output.Bytes())
 	if err != nil {

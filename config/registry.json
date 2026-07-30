@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-29.0",
+  "revision": "2026-07-30.0",
   "precedence": [
     "default",
     "file",
@@ -314,6 +314,24 @@
       ]
     },
     {
+      "key": "runtime.isolation",
+      "go_name": "RuntimeIsolation",
+      "semantic_ref": "orquesta.config.runtime.isolation",
+      "type": "string",
+      "default": "process",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_ISOLATION",
+      "validator_ids": [
+        "allowed_values"
+      ],
+      "allowed_values": [
+        "process",
+        "microvm"
+      ]
+    },
+    {
       "key": "runtime.max_output_bytes",
       "go_name": "RuntimeMaxOutputBytes",
       "semantic_ref": "orquesta.config.runtime.max_output_bytes",
@@ -328,6 +346,20 @@
       ],
       "minimum": 1,
       "maximum": 1073741824
+    },
+    {
+      "key": "runtime.capacity.observation_ttl",
+      "go_name": "RuntimeCapacityObservationTTL",
+      "semantic_ref": "orquesta.config.runtime.capacity.observation_ttl",
+      "type": "duration",
+      "default": "30s",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TTL",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "runtime.codex.command",
@@ -435,6 +467,22 @@
       ],
       "minimum": 1,
       "maximum": 67108864
+    },
+    {
+      "key": "runtime.codex.capacity_report_max_bytes",
+      "go_name": "RuntimeCodexCapacityReportMaxBytes",
+      "semantic_ref": "orquesta.config.runtime.codex.capacity_report_max_bytes",
+      "type": "integer",
+      "default": 65536,
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_CAPACITY_REPORT_MAX_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 1048576
     },
     {
       "key": "runtime.codex.max_concurrent_executions",
