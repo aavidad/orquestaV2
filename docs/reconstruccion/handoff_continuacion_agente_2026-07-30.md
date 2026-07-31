@@ -9,8 +9,8 @@ posteriores a procesos activos.
   Orquesta real, no se recuperaron Goals y no se hizo `push`.
 - Se detuvo, con autorización expresa, la única unidad Firecracker activa:
   `orquesta-firecracker-attestor-57ede79dee780873a0012f3518eeea668de2135a78a3ca4478d7c3c555a7bb09.service`.
-  Quedó `inactive`; el censo final no encontró `firecracker`, `jailer`,
-  `microvm` ni launchers activos.
+  Quedó `inactive` y `disabled`; el censo final no encontró `firecracker`,
+  `jailer`, `microvm` ni launchers activos.
 - `agentmicrovm` sigue sin existir. Se mantiene el orden causal: terminar la
   compuerta A antes de crear el repositorio hermano en B03.
 - Se retiró el lector histórico de cuota por fichero y se implementó el
