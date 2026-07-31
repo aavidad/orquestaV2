@@ -25,6 +25,13 @@ posteriores a procesos activos.
   resolver su envolvente conjunta `P≤237,V≤146`: el código actual la supera.
   También debe decidirse de forma canónica la demora de reconexión actualmente
   fijada a un segundo y ejecutar las suites completas, carreras y vet.
+- La suite completa `./internal/... ./cmd/orquesta` y `go vet` están verdes.
+  La suite raíz solo mantiene rojos
+  `TestRealCodexReceiptMatchesCurrentProductSource` y
+  `TestV17RealCodexReceiptMatchesCurrentProductSource`: el receipt físico del
+  25 de julio referencia un árbol anterior. No se renovó porque exige el E2E
+  Codex real y el operador ordenó no arrancar Orquesta antes de completar la
+  aplicación hermana.
 
 Commits locales nuevos:
 
@@ -50,6 +57,8 @@ go test -mod=vendor -count=1 ./internal/adapters/agent/codex \
   -run '^(TestControladorCuotaLeeReconectaRotaYCierraExactamente|TestControladorCuotaRechazaConfiguracionInvalida)$'
 go test -mod=vendor -count=1 ./internal/bootstrap \
   -run '^(TestAbrirControladoresCuotaRecogeTodosAnteFalloInicial|TestCodexProductionProcessReceivesPinnedGoEnvironment)$'
+go test -mod=vendor -count=1 ./internal/... ./cmd/orquesta
+GOFLAGS=-mod=vendor go vet ./internal/... ./cmd/orquesta
 git diff --check
 ```
 
