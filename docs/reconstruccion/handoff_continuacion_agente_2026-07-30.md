@@ -1,5 +1,57 @@
 # Documento de continuidad de Orquesta — 2026-07-30
 
+## Parada operativa del 2026-07-31
+
+Este corte prevalece sobre el corte del 30 de julio y sobre las menciones
+posteriores a procesos activos.
+
+- El operador pidió cerrar porque va a apagar el equipo. No se arrancó la
+  Orquesta real, no se recuperaron Goals y no se hizo `push`.
+- Se detuvo, con autorización expresa, la única unidad Firecracker activa:
+  `orquesta-firecracker-attestor-57ede79dee780873a0012f3518eeea668de2135a78a3ca4478d7c3c555a7bb09.service`.
+  Quedó `inactive`; el censo final no encontró `firecracker`, `jailer`,
+  `microvm` ni launchers activos.
+- `agentmicrovm` sigue sin existir. Se mantiene el orden causal: terminar la
+  compuerta A antes de crear el repositorio hermano en B03.
+- Se retiró el lector histórico de cuota por fichero y se implementó el
+  controlador persistente `codex app-server` por perfil, el escritor neutral
+  de observaciones, la ordenación/deduplicación y su composición antes del
+  planificador.
+- El E2E físico del entorno Go fallaba porque heredaba un
+  `scheduler.claim_lease=1s`, menor que la composición con cgroups. La fixture
+  usa ahora `10s`, pasa en 3,88 s y la incidencia
+  `BUG-REBUILD-20260731-001` conserva causa e invariante.
+- A05.3b/A05.4 sigue parcial y no acreditada. Antes de cerrarla hay que medir y
+  resolver su envolvente conjunta `P≤237,V≤146`: el código actual la supera.
+  También debe decidirse de forma canónica la demora de reconexión actualmente
+  fijada a un segundo y ejecutar las suites completas, carreras y vet.
+
+Commits locales nuevos:
+
+```text
+25b4eb4a retira el lector de cuota por fichero
+56254b17 controla la cuota Codex por perfil
+1a1b5f92 pruebas: calibra el lease del entorno Codex
+531d5044 aplicación: persiste y ordena la cuota observada
+a93ab6b7 arranque: compone los controladores de cuota
+```
+
+Pruebas verdes del último corte:
+
+```text
+go test -mod=vendor -count=1 ./internal/application \
+  -run '^(TestRegistrarObservacionCuotaPersisteEvidenciaYRepiteExactamente|TestOrdenarCandidatosColocacionDeduplicaYRechazaConflictos|TestAgentQuotaGateIsSeparateAndFailsClosed)$'
+go test -mod=vendor -count=1 ./internal/adapters/agent/codex \
+  -run '^(TestControladorCuotaLeeReconectaRotaYCierraExactamente|TestControladorCuotaRechazaConfiguracionInvalida)$'
+go test -mod=vendor -count=1 ./internal/bootstrap \
+  -run '^(TestAbrirControladoresCuotaRecogeTodosAnteFalloInicial|TestCodexProductionProcessReceivesPinnedGoEnvironment)$'
+git diff --check
+```
+
+La siguiente acción causal es auditar/corregir A05.3b+A05.4 sin atribuirle
+cierre, completar sus gates y continuar después con A04.2. No arrancar Orquesta
+ni Firecracker antes de consultar de nuevo el estado vivo.
+
 ## Corte operativo más reciente
 
 Este apartado prevalece sobre cualquier estado histórico posterior del mismo
@@ -305,8 +357,9 @@ El `intent_ref` y digest deben obtenerse del outbox vivo, no de este documento.
 
 ## Firecracker y V38 sin esperar al cierre de V23
 
-El TestAttestor Firecracker está activo y sirve para atestar pruebas. Todavía no
-es runtime de agentes.
+El TestAttestor Firecracker está instalado y sirve para atestar pruebas, pero
+quedó detenido por orden del operador el 31 de julio. Todavía no es runtime de
+agentes.
 
 V23 no depende de Firecracker, KVM ni microVM. A la inversa, V38 y su adaptador
 Firecracker tampoco esperan a que V23 termine: avanzan mediante dependencias y
