@@ -25,6 +25,7 @@ func TestCodexProductionProcessReceivesPinnedGoEnvironment(t *testing.T) {
 		t, filepath.Join(root, "toolchain"), filepath.Join(root, "go-was-executed"),
 	)
 	configPath := writeTestConfig(t, root)
+	replaceTestConfigValue(t, configPath, "claim_lease = \"1s\"", "claim_lease = \"10s\"")
 	replaceTestConfigValue(t, configPath, "[runtime.codex]\ntimeout = \"1s\"",
 		"[runtime.codex]\n"+
 			"command = "+strconv.Quote(helperPath)+"\n"+
