@@ -64,21 +64,22 @@ type identityRuntimeComposition struct {
 }
 
 type Runtime struct {
-	config          config.Snapshot
-	orchestrator    *application.Orchestrator
-	dispatcher      *commandcore.Dispatcher
-	repository      *statesqlite.Repository
-	artifacts       *filesystem.Store
-	testAttestor    interface{ Close() error }
-	workspace       *gitlocal.Adapter
-	credentialStore interface{ Close() error }
-	agent           AgentAdapter
-	listener        net.Listener
-	httpServer      *http.Server
-	workerRef       string
-	reportError     func(error)
-	lifecycleCtx    context.Context
-	cancelLifecycle context.CancelFunc
+	config             config.Snapshot
+	orchestrator       *application.Orchestrator
+	dispatcher         *commandcore.Dispatcher
+	repository         *statesqlite.Repository
+	artifacts          *filesystem.Store
+	testAttestor       interface{ Close() error }
+	workspace          *gitlocal.Adapter
+	credentialStore    interface{ Close() error }
+	agent              AgentAdapter
+	controladoresCuota []application.ControladorCuotaAgente
+	listener           net.Listener
+	httpServer         *http.Server
+	workerRef          string
+	reportError        func(error)
+	lifecycleCtx       context.Context
+	cancelLifecycle    context.CancelFunc
 
 	mu              sync.Mutex
 	started         bool
@@ -224,6 +225,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = artifacts.Close() })
+	controladoresCuota, err := abrirControladoresCuota(ctx, setup, agent, repository, artifacts)
+	if err != nil {
+		return nil, err
+	}
+	cleanup.add(func() {
+		_ = cerrarControladoresCuota(controladoresCuota, setup.snapshot.ServerShutdownTimeout())
+	})
 	orchestrator, err := newBuildOrchestrator(
 		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
 		executionRuntimeComposition{sessions: executionBroker, postArtifactMailbox: postArtifactMailbox},
@@ -233,7 +241,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	}
 	runtime, err := newBuildRuntime(
 		setup, options, listener, agent, repository, artifacts, orchestrator, authenticator,
-		testAttestor.closer, workspace, credentialStore,
+		testAttestor.closer, workspace, credentialStore, controladoresCuota,
 	)
 	if err != nil {
 		return nil, err
@@ -590,6 +598,45 @@ func openBuildRepository(
 	return repository, nil
 }
 
+func abrirControladoresCuota(
+	ctx context.Context, setup buildSetup, agente AgentAdapter,
+	estado application.StateRepository, artefactos application.ArtifactStore,
+) ([]application.ControladorCuotaAgente, error) {
+	iniciador, disponible := agente.(application.IniciadorControladoresCuotaAgente)
+	if !disponible {
+		return nil, nil
+	}
+	controladores, err := iniciador.IniciarControladoresCuota(context.Background(), application.ConfiguracionControladoresCuotaAgente{
+		VigenciaObservacion: setup.snapshot.RuntimeCapacityObservationTTL(),
+		DemoraReconexion:    time.Second, Ahora: setup.clock.Now,
+		Sumidero: func(ctx context.Context, observacion application.AgentQuotaObservation, evidencia []byte) error {
+			return application.RegistrarObservacionCuota(ctx, estado, artefactos, observacion, evidencia)
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	espera, cancelar := context.WithTimeout(ctx, setup.snapshot.RuntimeCapacityObservationTimeout())
+	defer cancelar()
+	for _, controlador := range controladores {
+		if err := controlador.EsperarInicial(espera); err != nil {
+			_ = cerrarControladoresCuota(controladores, setup.snapshot.ServerShutdownTimeout())
+			return nil, err
+		}
+	}
+	return controladores, nil
+}
+
+func cerrarControladoresCuota(controladores []application.ControladorCuotaAgente, limite time.Duration) error {
+	ctx, cancelar := context.WithTimeout(context.Background(), limite)
+	defer cancelar()
+	var fallos []error
+	for _, controlador := range controladores {
+		fallos = append(fallos, controlador.Cerrar(ctx))
+	}
+	return errors.Join(fallos...)
+}
+
 func newBuildOrchestrator(
 	setup buildSetup, repository *statesqlite.Repository, artifacts *filesystem.Store,
 	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities, workspace *gitlocal.Adapter,
@@ -643,6 +690,7 @@ func newBuildRuntime(
 	testAttestor interface{ Close() error },
 	workspace *gitlocal.Adapter,
 	credentialStore interface{ Close() error },
+	controladoresCuota []application.ControladorCuotaAgente,
 ) (*Runtime, error) {
 	version := strings.TrimSpace(options.Version)
 	if version == "" {
@@ -670,7 +718,7 @@ func newBuildRuntime(
 	return &Runtime{
 		config: setup.snapshot, orchestrator: orchestrator, dispatcher: surfaces.dispatcher, repository: repository,
 		artifacts: artifacts, testAttestor: testAttestor, workspace: workspace, credentialStore: credentialStore,
-		agent: agent, listener: listener, httpServer: httpServer,
+		agent: agent, controladoresCuota: controladoresCuota, listener: listener, httpServer: httpServer,
 		workerRef: setup.workerRef, reportError: options.ReportError,
 		lifecycleCtx: lifecycleCtx, cancelLifecycle: cancelLifecycle,
 		shutdownDone: make(chan struct{}),
@@ -895,6 +943,11 @@ func (runtime *Runtime) performShutdown() {
 			failures = append(failures, closeErr)
 		}
 	}
+	for _, controlador := range runtime.controladoresCuota {
+		if err := controlador.Cerrar(shutdownCtx); err != nil {
+			failures = append(failures, err)
+		}
+	}
 	if err := runtime.agent.Shutdown(shutdownCtx); err != nil {
 		failures = append(failures, err)
 	}
@@ -1105,6 +1158,7 @@ func productionCodexAdapterConfigWithGoToolchainTrust(
 		ProcessPipeDrainDelay:       snapshot.RuntimeCodexProcessPipeDrainDelay(),
 		SupervisorStartTimeout:      snapshot.RuntimeCodexSupervisorStartTimeout(),
 		MaxDiagnosticBytes:          snapshot.RuntimeCodexMaxDiagnosticBytes(),
+		AppServerMaxFrameBytes:      int(snapshot.RuntimeCodexAppServerMaxFrameBytes()),
 		MaxConcurrentExecutions:     int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
 		MCPBearerTokenEnvVar:        snapshot.RuntimeCodexMCPBearerTokenEnvVar(),
 		AccountHomeRoot:             accountHomeRoot,

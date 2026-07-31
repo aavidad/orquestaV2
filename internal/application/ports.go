@@ -86,6 +86,21 @@ type Clock interface {
 	Now() time.Time
 }
 
+type ConfiguracionControladoresCuotaAgente struct {
+	VigenciaObservacion, DemoraReconexion time.Duration
+	Ahora                                 func() time.Time
+	Sumidero                              func(context.Context, AgentQuotaObservation, []byte) error
+}
+
+type ControladorCuotaAgente interface {
+	EsperarInicial(context.Context) error
+	Cerrar(context.Context) error
+}
+
+type IniciadorControladoresCuotaAgente interface {
+	IniciarControladoresCuota(context.Context, ConfiguracionControladoresCuotaAgente) ([]ControladorCuotaAgente, error)
+}
+
 type IDGenerator interface {
 	// NewID returns an opaque unique value. Namespaces carrying authority or
 	// secrets (for example *-token) require cryptographically unpredictable

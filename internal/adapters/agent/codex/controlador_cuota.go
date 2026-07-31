@@ -2,7 +2,6 @@ package codex
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"os/exec"
@@ -15,18 +14,17 @@ import (
 	"orquesta/internal/ports"
 )
 
-type SumideroObservacionCuota func(context.Context, application.AgentQuotaObservation, json.RawMessage) error
+type SumideroObservacionCuota func(context.Context, application.AgentQuotaObservation, []byte) error
 
 type ConfiguracionControladorCuota struct {
-	Comando, DirectorioCuenta string
-	Entorno                   map[string]string
-	ReferenciaColocacion      ports.AgentPlacementRef
-	MaximoBytesTrama          int
-	VigenciaObservacion       time.Duration
-	DemoraReconexion          time.Duration
-	Ahora                     func() time.Time
-	Sumidero                  SumideroObservacionCuota
-	argumentosParaPruebas     []string
+	Comando, DirectorioCuenta             string
+	Entorno                               map[string]string
+	ReferenciaColocacion                  ports.AgentPlacementRef
+	MaximoBytesTrama                      int
+	VigenciaObservacion, DemoraReconexion time.Duration
+	Ahora                                 func() time.Time
+	Sumidero                              SumideroObservacionCuota
+	argumentosParaPruebas                 []string
 }
 
 type ControladorCuota struct {
@@ -36,11 +34,53 @@ type ControladorCuota struct {
 	ciclo         context.Context
 	cancelar      context.CancelFunc
 	terminado     chan struct{}
-	inicialLista  chan struct{}
+	inicial       chan error
 	inicialUnaVez sync.Once
-	errorInicial  error
 	cierreUnaVez  sync.Once
 	ultima        *application.AgentQuotaObservation
+}
+
+func (adaptador *Adapter) IniciarControladoresCuota(
+	ctx context.Context, parametros application.ConfiguracionControladoresCuotaAgente,
+) ([]application.ControladorCuotaAgente, error) {
+	if adaptador == nil || adaptador.accountHomePath == "" {
+		return nil, nil
+	}
+	colocacion, err := ports.NewAgentPlacementRef("placement:" + adaptador.accountProfileBindingRef)
+	if err != nil {
+		return nil, err
+	}
+	controlador, err := IniciarControladorCuota(ctx, ConfiguracionControladorCuota{
+		Comando: adaptador.command, DirectorioCuenta: adaptador.accountHomePath,
+		Entorno: adaptador.config.Environment, ReferenciaColocacion: colocacion,
+		MaximoBytesTrama:    adaptador.config.AppServerMaxFrameBytes,
+		VigenciaObservacion: parametros.VigenciaObservacion, DemoraReconexion: parametros.DemoraReconexion,
+		Ahora: parametros.Ahora, Sumidero: parametros.Sumidero,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return []application.ControladorCuotaAgente{controlador}, nil
+}
+
+func (pool *Pool) IniciarControladoresCuota(
+	ctx context.Context, parametros application.ConfiguracionControladoresCuotaAgente,
+) ([]application.ControladorCuotaAgente, error) {
+	if pool == nil {
+		return nil, &Error{Code: CodeStateInvalid}
+	}
+	var controladores []application.ControladorCuotaAgente
+	for _, perfil := range pool.profiles {
+		nuevos, err := perfil.adapter.IniciarControladoresCuota(ctx, parametros)
+		if err != nil {
+			for _, controlador := range controladores {
+				_ = controlador.Cerrar(ctx)
+			}
+			return nil, err
+		}
+		controladores = append(controladores, nuevos...)
+	}
+	return controladores, nil
 }
 
 func IniciarControladorCuota(padre context.Context, configuracion ConfiguracionControladorCuota) (*ControladorCuota, error) {
@@ -52,7 +92,7 @@ func IniciarControladorCuota(padre context.Context, configuracion ConfiguracionC
 	}
 	entorno := cloneEnvironment(configuracion.Entorno)
 	entorno["HOME"], entorno["CODEX_HOME"] = configuracion.DirectorioCuenta, configuracion.DirectorioCuenta
-	entornoExacto, err := exactEnvironment(entorno)
+	exacto, err := exactEnvironment(entorno)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +102,8 @@ func IniciarControladorCuota(padre context.Context, configuracion ConfiguracionC
 	}
 	ciclo, cancelar := context.WithCancel(padre)
 	controlador := &ControladorCuota{
-		configuracion: configuracion, comando: comando, entorno: entornoExacto, ciclo: ciclo, cancelar: cancelar,
-		terminado: make(chan struct{}), inicialLista: make(chan struct{}),
+		configuracion: configuracion, comando: comando, entorno: exacto, ciclo: ciclo, cancelar: cancelar,
+		terminado: make(chan struct{}), inicial: make(chan error, 1),
 	}
 	go controlador.ejecutar()
 	return controlador, nil
@@ -76,8 +116,8 @@ func (controlador *ControladorCuota) EsperarInicial(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
-	case <-controlador.inicialLista:
-		return controlador.errorInicial
+	case err := <-controlador.inicial:
+		return err
 	}
 }
 
@@ -98,16 +138,16 @@ func (controlador *ControladorCuota) ejecutar() {
 	defer close(controlador.terminado)
 	for {
 		err := controlador.intercambiar()
-		controlador.señalarInicial(err)
+		controlador.marcarInicial(err)
 		if controlador.ciclo.Err() != nil {
 			return
 		}
 		if controlador.ultima != nil {
 			desconocida := *controlador.ultima
-			desconocida.Status = application.AgentQuotaUnknown
+			desconocida.Status, desconocida.ResetAt, desconocida.RetryAt =
+				application.AgentQuotaUnknown, time.Time{}, time.Time{}
 			desconocida.ObservedAt = controlador.configuracion.Ahora().Round(0).UTC()
 			desconocida.ExpiresAt = desconocida.ObservedAt.Add(controlador.configuracion.VigenciaObservacion)
-			desconocida.ResetAt, desconocida.RetryAt = time.Time{}, time.Time{}
 			_ = controlador.configuracion.Sumidero(controlador.ciclo, desconocida, nil)
 			controlador.ultima = nil
 		}
@@ -123,15 +163,19 @@ func (controlador *ControladorCuota) ejecutar() {
 	}
 }
 
+func (controlador *ControladorCuota) marcarInicial(err error) {
+	controlador.inicialUnaVez.Do(func() { controlador.inicial <- err })
+}
+
 func (controlador *ControladorCuota) intercambiar() error {
-	contextoEjecucion, cancelar := context.WithCancelCause(controlador.ciclo)
+	ctx, cancelar := context.WithCancelCause(controlador.ciclo)
 	argumentos := controlador.configuracion.argumentosParaPruebas
 	if argumentos == nil {
 		argumentos = []string{"app-server"}
 	}
-	comando := exec.CommandContext(contextoEjecucion, controlador.comando, argumentos...)
+	comando := exec.CommandContext(ctx, controlador.comando, argumentos...)
 	comando.Env, comando.Stderr = append([]string(nil), controlador.entorno...), io.Discard
-	configureProcessGroup(comando, func() error { return context.Cause(contextoEjecucion) })
+	configureProcessGroup(comando, func() error { return context.Cause(ctx) })
 	entrada, err := comando.StdinPipe()
 	if err != nil {
 		cancelar(err)
@@ -152,22 +196,29 @@ func (controlador *ControladorCuota) intercambiar() error {
 		_ = comando.Wait()
 		_ = cleanupProcessGroup(comando)
 	}()
+	escribir := func(trama []byte) error {
+		escritos, err := entrada.Write(trama)
+		if err != nil || escritos != len(trama) {
+			return io.ErrShortWrite
+		}
+		return nil
+	}
 	decodificador, _ := appserver.NewDecoder(salida, controlador.configuracion.MaximoBytesTrama)
 	sesion := appserver.NewQuotaSession()
 	trama, err := sesion.Initialize("init", appserver.ClientInfo{Name: "orquesta", Version: "1", Title: "quota"})
-	if err != nil || escribirTramaCuota(entrada, trama) != nil {
+	if err != nil || escribir(trama) != nil {
 		return &Error{Code: CodeUnavailable}
 	}
 	mensaje, err := decodificador.Next()
 	if err != nil {
 		return &Error{Code: CodeUnavailable}
 	}
-	if metodo, errorAceptacion := sesion.Accept(mensaje); errorAceptacion != nil || metodo != "initialize" {
+	if metodo, aceptacion := sesion.Accept(mensaje); aceptacion != nil || metodo != "initialize" {
 		return &Error{Code: CodeOutputInvalid}
 	}
 	inicializada, _ := sesion.Initialized()
 	lectura, _ := sesion.ReadQuota(int64(1))
-	if escribirTramaCuota(entrada, inicializada) != nil || escribirTramaCuota(entrada, lectura) != nil {
+	if escribir(inicializada) != nil || escribir(lectura) != nil {
 		return &Error{Code: CodeUnavailable}
 	}
 	for {
@@ -175,37 +226,19 @@ func (controlador *ControladorCuota) intercambiar() error {
 		if err != nil {
 			return &Error{Code: CodeUnavailable}
 		}
-		metodo, errorAceptacion := sesion.Accept(mensaje)
-		if errorAceptacion != nil {
+		metodo, aceptacion := sesion.Accept(mensaje)
+		if aceptacion != nil {
 			return &Error{Code: CodeOutputInvalid}
 		}
 		if metodo != "account/rateLimits/read" && metodo != "account/rateLimits/updated" {
 			continue
 		}
-		traducida, errorTraduccion := traducirLecturaCuotaCodex(
-			mensaje.Payload, controlador.configuracion.ReferenciaColocacion,
-			controlador.configuracion.VigenciaObservacion, controlador.configuracion.Ahora,
-		)
-		if errorTraduccion != nil ||
-			controlador.configuracion.Sumidero(contextoEjecucion, traducida.Observacion, traducida.Evidencia) != nil {
+		traducida, err := traducirLecturaCuotaCodex(mensaje.Payload, controlador.configuracion.ReferenciaColocacion,
+			controlador.configuracion.VigenciaObservacion, controlador.configuracion.Ahora)
+		if err != nil || controlador.configuracion.Sumidero(ctx, traducida.Observacion, traducida.Evidencia) != nil {
 			return &Error{Code: CodeOutputInvalid}
 		}
 		controlador.ultima = &traducida.Observacion
-		controlador.señalarInicial(nil)
+		controlador.marcarInicial(nil)
 	}
-}
-
-func (controlador *ControladorCuota) señalarInicial(err error) {
-	controlador.inicialUnaVez.Do(func() {
-		controlador.errorInicial = err
-		close(controlador.inicialLista)
-	})
-}
-
-func escribirTramaCuota(escritor io.Writer, trama []byte) error {
-	escritos, err := escritor.Write(trama)
-	if err != nil || escritos != len(trama) {
-		return io.ErrShortWrite
-	}
-	return nil
 }

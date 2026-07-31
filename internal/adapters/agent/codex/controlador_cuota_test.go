@@ -3,7 +3,6 @@ package codex
 import (
 	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -29,7 +28,7 @@ func TestControladorCuotaLeeReconectaRotaYCierraExactamente(t *testing.T) {
 		Entorno:              map[string]string{"ORQUESTA_QUOTA_HELPER": "1", "ORQUESTA_QUOTA_COUNTER": contador},
 		ReferenciaColocacion: colocacion, MaximoBytesTrama: 4096, VigenciaObservacion: time.Minute,
 		DemoraReconexion: time.Millisecond, Ahora: func() time.Time { return time.Unix(1_000, 0).UTC() },
-		Sumidero: func(_ context.Context, observacion application.AgentQuotaObservation, evidencia json.RawMessage) error {
+		Sumidero: func(_ context.Context, observacion application.AgentQuotaObservation, evidencia []byte) error {
 			if strings.Contains(string(evidencia), "secret") {
 				return fmt.Errorf("la evidencia conservó datos sensibles")
 			}

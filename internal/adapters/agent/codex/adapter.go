@@ -119,6 +119,7 @@ type Config struct {
 	ProcessPipeDrainDelay   time.Duration
 	SupervisorStartTimeout  time.Duration
 	MaxDiagnosticBytes      int64
+	AppServerMaxFrameBytes  int
 	MaxConcurrentExecutions int
 	MCPBearerTokenEnvVar    string
 	Environment             map[string]string
