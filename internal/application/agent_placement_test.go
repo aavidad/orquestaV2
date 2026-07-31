@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -8,6 +9,53 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+type estadoCuotaPrueba struct {
+	StateRepository
+	vigente   AgentQuotaObservationRecord
+	guardados int
+}
+
+func (estado *estadoCuotaPrueba) CurrentAgentQuotaObservation(context.Context, ports.AgentPlacementRef) (AgentQuotaObservationRecord, bool, error) {
+	return estado.vigente, estado.guardados > 0, nil
+}
+
+func (estado *estadoCuotaPrueba) AppendAgentQuotaObservation(_ context.Context, registro AgentQuotaObservationRecord) (AgentQuotaObservationRecord, bool, error) {
+	estado.vigente, estado.guardados = registro, estado.guardados+1
+	return registro, true, nil
+}
+
+func TestRegistrarObservacionCuotaPersisteEvidenciaYRepiteExactamente(t *testing.T) {
+	estado, artefactos := &estadoCuotaPrueba{}, newMemoryArtifactStore()
+	observacion := placementQuotaSubmission(time.Unix(100, 0).UTC()).AgentQuotaObservation
+	for range 2 {
+		if err := RegistrarObservacionCuota(context.Background(), estado, artefactos, observacion, []byte(`{"usedPercent":25}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if estado.guardados != 1 || estado.vigente.Revision != 1 || estado.vigente.EvidenceRef.String() == "" {
+		t.Fatalf("estado de cuota no idempotente: %+v guardados=%d", estado.vigente, estado.guardados)
+	}
+}
+
+func TestOrdenarCandidatosColocacionDeduplicaYRechazaConflictos(t *testing.T) {
+	candidato := func(ref string, revision uint64) AgentCapacityPlacementCandidate {
+		colocacion, _ := ports.NewAgentPlacementRef(ref)
+		return AgentCapacityPlacementCandidate{PlacementRef: colocacion,
+			Physical: AgentPlacementObservationPresentation{"fisica:" + ref, revision},
+			Quota:    AgentPlacementObservationPresentation{"cuota:" + ref, revision}}
+	}
+	primero, segundo := candidato("placement:b", 1), candidato("placement:a", 2)
+	ordenados, err := OrdenarCandidatosColocacion([]AgentCapacityPlacementCandidate{primero, segundo, primero})
+	if err != nil || len(ordenados) != 2 || ordenados[0] != segundo || ordenados[1] != primero {
+		t.Fatalf("candidatos=%+v error=%v", ordenados, err)
+	}
+	conflicto := primero
+	conflicto.Quota.ObservationRevision++
+	if _, err := OrdenarCandidatosColocacion([]AgentCapacityPlacementCandidate{primero, conflicto}); !errors.Is(err, ErrAgentCapacityInvalid) {
+		t.Fatalf("duplicado conflictivo aceptado: %v", err)
+	}
+}
 
 func TestAgentQuotaGateIsSeparateAndFailsClosed(t *testing.T) {
 	now := time.Unix(100, 0).UTC()
