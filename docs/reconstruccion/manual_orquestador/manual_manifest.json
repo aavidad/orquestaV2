@@ -1,0 +1,315 @@
+{
+  "schema_version": 1,
+  "autoridad": {
+    "naturaleza": "explicativa",
+    "es_autoridad_de_producto": false,
+    "acredita_capacidades": false,
+    "descripcion": "Explica cómo construir, continuar y auditar un orquestador sin sustituir las autoridades vigentes.",
+    "fuentes_vigentes": [
+      {
+        "prioridad": 1,
+        "ruta": "AGENTS.md",
+        "autoridad": "instrucciones y fronteras de trabajo"
+      },
+      {
+        "prioridad": 2,
+        "ruta": "HEAD:product/roadmap.json",
+        "autoridad": "base versionada del catálogo, decisiones, dependencias y aceptación"
+      },
+      {
+        "prioridad": 3,
+        "ruta": "product/capabilities.json",
+        "autoridad": "estado funcional acreditado por revisión"
+      },
+      {
+        "prioridad": 4,
+        "ruta": "product/evidence/",
+        "autoridad": "evidencia de candidatos concretos"
+      },
+      {
+        "prioridad": 5,
+        "ruta": "docs/reconstruccion/ruta_total_100.md",
+        "autoridad": "orden causal y compuertas globales"
+      }
+    ]
+  },
+  "proposito": "Conservar un método completo y reproducible para crear una aplicación de orquestación profesional a partir de lo aprendido en Orquesta.",
+  "publicos": [
+    {
+      "id": "desde_cero",
+      "descripcion": "Programadores y agentes que necesitan construir un orquestador nuevo desde sus contratos y autoridades."
+    },
+    {
+      "id": "continuacion",
+      "descripcion": "Programadores y agentes que deben reanudar una implementación existente sin inventar estado ni repetir trabajo."
+    },
+    {
+      "id": "auditoria",
+      "descripcion": "Revisores que deben refutar una supuesta finalización y localizar capacidades o pruebas ausentes."
+    }
+  ],
+  "lenguaje": {
+    "etiqueta": "es",
+    "registro": "castellano claro para programadores",
+    "politica": "Los identificadores técnicos literales se conservan y se explican; el vocabulario sustituible se escribe en castellano."
+  },
+  "prohibiciones": [
+    "copiar el catálogo de capacidades como una autoridad paralela",
+    "atribuir acreditación por la presencia del manual, un capítulo, una prueba o un fichero",
+    "introducir huellas autorreferenciales en el manual o en este manifiesto",
+    "abrir o convertir el legado en una dependencia del manual"
+  ],
+  "estados_honestos": {
+    "orden": [
+      "declarada",
+      "implementada",
+      "conectada",
+      "ejercitada",
+      "acreditada"
+    ],
+    "estado_que_cuenta_como_terminado": "acreditada",
+    "regla": "El estado se consulta en las autoridades del producto y solo la evidencia del mismo candidato permite atribuir acreditación."
+  },
+  "cortes_de_estado": {
+    "base_versionada": {
+      "marcador": "base_versionada_257_38_38",
+      "fuente": "HEAD:product/roadmap.json",
+      "es_autoridad": true,
+      "catalogo": 257,
+      "verticales": 38,
+      "contratos": 38,
+      "contratos_ejecutables": 22,
+      "contratos_planificados": 16
+    },
+    "v38": {
+      "vertical": "agent_runtime_elastic",
+      "secuencia": 38,
+      "contrato": "AC-V38-AGENT-RUNTIME-ELASTIC",
+      "estado_contrato": "planned",
+      "capacidad_propia": "ORC-28",
+      "capacidades_no_propias": [
+        {
+          "id": "ORC-15",
+          "vertical": 27
+        },
+        {
+          "id": "OPS-16",
+          "vertical": 32
+        },
+        {
+          "id": "OPS-17",
+          "vertical": 32
+        }
+      ],
+      "acreditada": false
+    },
+    "regla": "HEAD:product/roadmap.json es la base versionada autoritativa. La copia de trabajo product/roadmap.json puede proponer cambios, pero nunca sustituye HEAD ni atribuye acreditación; V38 es canónica y planificada, no acreditada."
+  },
+  "marcadores_semanticos": [
+    {
+      "id": "equidad_contrapresion_histeresis",
+      "capitulo": "04_gestion_elastica_de_agentes.md",
+      "condicion": "siempre"
+    },
+    {
+      "id": "sin_atestacion_remota_de_hardware",
+      "capitulo": "05_aislamiento_firecracker_y_microvm.md",
+      "condicion": "siempre"
+    },
+    {
+      "id": "v31_multianfitrion_con_fencing",
+      "capitulo": "03_estado_transacciones_y_recuperacion.md",
+      "condicion": "siempre"
+    },
+    {
+      "id": "consultas_sin_escritura_de_producto",
+      "capitulo": "08_superficies_i18n_y_contratos_de_aplicacion.md",
+      "condicion": "siempre"
+    },
+    {
+      "id": "intento_durable_antes_del_efecto",
+      "capitulo": "09_proceso_de_construccion_pruebas_y_acreditacion.md",
+      "condicion": "siempre"
+    },
+    {
+      "id": "apagado_estado_al_final",
+      "capitulo": "10_operacion_observabilidad_y_continuidad.md",
+      "condicion": "siempre"
+    },
+    {
+      "id": "base_versionada_257_38_38",
+      "capitulo": "12_auditoria_y_mapa_de_completitud.md",
+      "condicion": "siempre"
+    }
+  ],
+  "capitulos": [
+    {
+      "numero": 1,
+      "archivo": "01_mision_limites_y_vocabulario.md",
+      "responsabilidad": "Definir la misión, los límites, las entidades, las autoridades y el vocabulario común.",
+      "temas_obligatorios": [
+        "aplicación de orquestación",
+        "glosario técnico común",
+        "Goal",
+        "WorkItem",
+        "autoridades",
+        "invariantes",
+        "criterio de finalización"
+      ]
+    },
+    {
+      "numero": 2,
+      "archivo": "02_nucleo_lifecycle_y_dag.md",
+      "responsabilidad": "Construir el núcleo autoritativo, el grafo de trabajo y sus únicos escritor y planificador.",
+      "temas_obligatorios": [
+        "Goal",
+        "WorkItem",
+        "DAG",
+        "escritor único",
+        "planificador único",
+        "Director"
+      ]
+    },
+    {
+      "numero": 3,
+      "archivo": "03_estado_transacciones_y_recuperacion.md",
+      "responsabilidad": "Persistir y recuperar el estado sin perder causalidad ni duplicar decisiones o efectos.",
+      "temas_obligatorios": [
+        "transacciones",
+        "revisión esperada",
+        "idempotencia",
+        "bandeja transaccional",
+        "arrendamientos",
+        "recuperación",
+        "v31_multianfitrion_con_fencing",
+        "referencia de nodo (`NodeRef`)",
+        "batería contractual"
+      ]
+    },
+    {
+      "numero": 4,
+      "archivo": "04_gestion_elastica_de_agentes.md",
+      "responsabilidad": "Gestionar demanda y capacidad elásticas, agentes individuales y su conservación segura.",
+      "temas_obligatorios": [
+        "demanda",
+        "capacidad",
+        "reconciliador",
+        "cuota",
+        "parada",
+        "conservación"
+      ]
+    },
+    {
+      "numero": 5,
+      "archivo": "05_aislamiento_firecracker_y_microvm.md",
+      "responsabilidad": "Aislar cada agente mediante una micromáquina virtual gobernada y recuperable.",
+      "temas_obligatorios": [
+        "Firecracker",
+        "microVM",
+        "vsock",
+        "credenciales",
+        "espacio de trabajo",
+        "conservación"
+      ]
+    },
+    {
+      "numero": 6,
+      "archivo": "06_seguridad_configuracion_identidad_y_efectos.md",
+      "responsabilidad": "Gobernar configuración, secretos, identidad, aislamiento y efectos externos.",
+      "temas_obligatorios": [
+        "configuración",
+        "credenciales",
+        "identidad",
+        "aislamiento de proyecto",
+        "efectos",
+        "recibo"
+      ]
+    },
+    {
+      "numero": 7,
+      "archivo": "07_colaboracion_consejo_revision_y_contexto.md",
+      "responsabilidad": "Coordinar Director, subagentes, entregas causales, revisiones, Consejo y contexto.",
+      "temas_obligatorios": [
+        "Director",
+        "subagentes",
+        "buzón causal",
+        "revisión primaria",
+        "revisión adversarial",
+        "Consejo",
+        "contexto",
+        "paquete de contexto (`ContextPackage`)",
+        "recursos acotados"
+      ]
+    },
+    {
+      "numero": 8,
+      "archivo": "08_superficies_i18n_y_contratos_de_aplicacion.md",
+      "responsabilidad": "Exponer casos de uso comunes y gobernar internacionalización, accesibilidad y documentación de aplicaciones.",
+      "temas_obligatorios": [
+        "registro único de órdenes",
+        "HTTP",
+        "MCP",
+        "internacionalización",
+        "BCP-47",
+        "accesibilidad",
+        "APP-13",
+        "consultas_sin_escritura_de_producto",
+        "envolvente de orden (`CommandEnvelope`)",
+        "informe de documentación (`AppDocumentationReport`)"
+      ]
+    },
+    {
+      "numero": 9,
+      "archivo": "09_proceso_de_construccion_pruebas_y_acreditacion.md",
+      "responsabilidad": "Construir por cortes pequeños y acreditar el candidato exacto con pruebas y revisiones suficientes.",
+      "temas_obligatorios": [
+        "catálogo",
+        "cortes verticales",
+        "microtareas",
+        "pruebas de mutación",
+        "revisión independiente",
+        "acreditación"
+      ]
+    },
+    {
+      "numero": 10,
+      "archivo": "10_operacion_observabilidad_y_continuidad.md",
+      "responsabilidad": "Operar, observar, diagnosticar, detener y recuperar el orquestador de forma segura.",
+      "temas_obligatorios": [
+        "arranque",
+        "observabilidad",
+        "diagnóstico",
+        "parada ordenada",
+        "copias verificables",
+        "restauración",
+        "incidencias"
+      ]
+    },
+    {
+      "numero": 11,
+      "archivo": "11_lecciones_antipatrones_y_diagnostico.md",
+      "responsabilidad": "Conservar lecciones históricas, impedir antipatrones repetidos y orientar el diagnóstico causal.",
+      "temas_obligatorios": [
+        "fallos históricos",
+        "antipatrones",
+        "diagnóstico",
+        "ciclos",
+        "perfiles estáticos",
+        "legado"
+      ]
+    },
+    {
+      "numero": 12,
+      "archivo": "12_auditoria_y_mapa_de_completitud.md",
+      "responsabilidad": "Auditar la completitud total y convertir cada ausencia demostrada en trabajo pequeño y verificable.",
+      "temas_obligatorios": [
+        "auditoría",
+        "inventario",
+        "completitud",
+        "capacidades",
+        "huecos",
+        "tareas"
+      ]
+    }
+  ]
+}
