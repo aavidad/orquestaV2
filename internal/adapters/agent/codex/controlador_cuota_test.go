@@ -16,8 +16,8 @@ import (
 )
 
 func TestControladorCuotaLeeReconectaRotaYCierraExactamente(t *testing.T) {
-	if os.Getenv("ORQUESTA_QUOTA_HELPER") == "1" {
-		ejecutarAyudanteCuota()
+	if contador, ayudante := argumentosAyudanteCuota(os.Args); ayudante {
+		ejecutarAyudanteCuota(contador)
 		return
 	}
 	contador := t.TempDir() + "/starts"
@@ -25,7 +25,7 @@ func TestControladorCuotaLeeReconectaRotaYCierraExactamente(t *testing.T) {
 	observaciones := make(chan application.AgentQuotaObservation, 5)
 	controlador, err := IniciarControladorCuota(context.Background(), ConfiguracionControladorCuota{
 		Comando: os.Args[0], DirectorioCuenta: t.TempDir(),
-		Entorno:              map[string]string{"ORQUESTA_QUOTA_HELPER": "1", "ORQUESTA_QUOTA_COUNTER": contador},
+		Entorno:              map[string]string{},
 		ReferenciaColocacion: colocacion, MaximoBytesTrama: 4096, VigenciaObservacion: time.Minute,
 		DemoraReconexion: time.Millisecond, Ahora: func() time.Time { return time.Unix(1_000, 0).UTC() },
 		Sumidero: func(_ context.Context, observacion application.AgentQuotaObservation, evidencia []byte) error {
@@ -35,7 +35,7 @@ func TestControladorCuotaLeeReconectaRotaYCierraExactamente(t *testing.T) {
 			observaciones <- observacion
 			return nil
 		},
-		argumentosParaPruebas: []string{"-test.run=^TestControladorCuotaLeeReconectaRotaYCierraExactamente$"},
+		argumentosParaPruebas: []string{"-test.run=^TestControladorCuotaLeeReconectaRotaYCierraExactamente$", "--", "ayudante-cuota", contador},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -82,8 +82,16 @@ func TestControladorCuotaRechazaConfiguracionInvalida(t *testing.T) {
 	}
 }
 
-func ejecutarAyudanteCuota() {
-	contador := os.Getenv("ORQUESTA_QUOTA_COUNTER")
+func argumentosAyudanteCuota(argumentos []string) (string, bool) {
+	for indice, argumento := range argumentos {
+		if argumento == "--" && len(argumentos) == indice+3 && argumentos[indice+1] == "ayudante-cuota" {
+			return argumentos[indice+2], true
+		}
+	}
+	return "", false
+}
+
+func ejecutarAyudanteCuota(contador string) {
 	archivo, _ := os.OpenFile(contador, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	informacion, _ := archivo.Stat()
 	intento := informacion.Size()/8 + 1

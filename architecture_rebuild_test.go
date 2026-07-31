@@ -219,6 +219,18 @@ func TestRebuildArchitecture(t *testing.T) {
 				t.Errorf("adapter accepted undeclared Wizard package %q", mutant)
 			}
 		}
+		if reason := rebuildArchitectureAdapterImportReason(
+			"internal/adapters/agent/codex/controlador.go",
+			"orquesta/internal/adapters/agent/codex/appserver",
+		); reason != "" {
+			t.Errorf("adapter rejected its private subpackage: %s", reason)
+		}
+		if reason := rebuildArchitectureAdapterImportReason(
+			"internal/adapters/agent/codex/controlador.go",
+			"orquesta/internal/adapters/agent/claude",
+		); reason == "" {
+			t.Error("adapter accepted a sibling adapter")
+		}
 	})
 
 	t.Run("credentials_contract_depends_only_inward", func(t *testing.T) {
@@ -817,6 +829,10 @@ func rebuildArchitectureOnlyInternalPackages(importPath string, allowed ...strin
 
 func rebuildArchitectureAdapterImportReason(filePath, importPath string) string {
 	if rebuildArchitectureIsSharedAdapterProtocol(importPath) {
+		return ""
+	}
+	directorio := "orquesta/" + filepath.ToSlash(filepath.Dir(filePath))
+	if strings.HasPrefix(importPath, directorio+"/") {
 		return ""
 	}
 	if importPath == "orquesta/internal/wizard/catalog" ||
