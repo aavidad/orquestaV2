@@ -34,6 +34,11 @@ Commits locales nuevos:
 1a1b5f92 pruebas: calibra el lease del entorno Codex
 531d5044 aplicación: persiste y ordena la cuota observada
 a93ab6b7 arranque: compone los controladores de cuota
+395c7a6e documentación: fija la parada segura de V38
+09f00f63 documentación: registra Firecracker deshabilitado
+a3955213 trazabilidad: conserva el lote cinco de conductas
+cc3ad964 trazabilidad: conserva el lote seis de conductas
+2c6acbac documentación: añade el manual del orquestador
 ```
 
 Pruebas verdes del último corte:
@@ -51,6 +56,29 @@ git diff --check
 La siguiente acción causal es auditar/corregir A05.3b+A05.4 sin atribuirle
 cierre, completar sus gates y continuar después con A04.2. No arrancar Orquesta
 ni Firecracker antes de consultar de nuevo el estado vivo.
+
+### Reanudación desde otro equipo
+
+La rama de continuidad es `integracion/v23-intake-durable` en
+`git@github.com:aavidad/orquestaV2.git`. En un equipo nuevo:
+
+```bash
+git clone git@github.com:aavidad/orquestaV2.git
+cd orquestaV2
+git switch integracion/v23-intake-durable
+git pull --ff-only
+sed -n '1,220p' AGENTS.md
+sed -n '1,220p' docs/reconstruccion/LEEME_AGENTE_ORQUESTAV2.md
+sed -n '1,180p' docs/reconstruccion/handoff_continuacion_agente_2026-07-30.md
+git status --short --branch
+git log -12 --oneline --decorate
+```
+
+Después se consulta el estado vivo antes de actuar. Orquesta y Firecracker
+quedaron detenidos y Firecracker sin autoarranque. No se recuperan ni relanzan
+tareas existentes por intuición. El manual complementario, que no sustituye
+al roadmap ni a este handoff, comienza en
+`docs/reconstruccion/manual_orquestador/README.md`.
 
 ## Corte operativo más reciente
 
