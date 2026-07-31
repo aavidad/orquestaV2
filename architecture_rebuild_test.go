@@ -856,6 +856,16 @@ func rebuildArchitectureAdapterImportReason(filePath, importPath string) string 
 	return rebuildArchitectureOnlyInternalPackages(importPath, allowed...)
 }
 
+func TestRebuildArchitecturePrivateAdapterSubpackagesStayLocal(t *testing.T) {
+	archivo := "internal/adapters/agent/codex/controlador.go"
+	if razon := rebuildArchitectureAdapterImportReason(archivo, "orquesta/internal/adapters/agent/codex/appserver"); razon != "" {
+		t.Fatalf("se rechazó el subpaquete privado: %s", razon)
+	}
+	if razon := rebuildArchitectureAdapterImportReason(archivo, "orquesta/internal/adapters/agent/claude"); razon == "" {
+		t.Fatal("se aceptó un adaptador hermano")
+	}
+}
+
 func rebuildArchitectureIsStandardLibraryImport(importPath string) bool {
 	if importPath == "" || strings.HasPrefix(importPath, "orquesta/") {
 		return false

@@ -230,6 +230,32 @@ func TestTraceabilityRebuildLegacyMarkdownSourceRoles(t *testing.T) {
 	t.Logf("markdown_source_roles: legacy_files=%d rebuild_authority_live=%d filesystem_total=%d ledger_sha256=%s classifications=%v roles=%v", len(entries), len(rebuildAuthorityPaths), len(paths), traceFileSHA256(t, traceMarkdownSourceRolesPath), classificationCounts, roleCounts)
 }
 
+func TestTraceabilityBubblewrapDecisionSourceDigestIsCurrent(t *testing.T) {
+	requireMarkdownSourceDigest(t, "docs/decision_atestacion_bubblewrap_microvm_2026-07-25.md")
+}
+
+func TestTraceabilityBugInventorySourceDigestIsCurrent(t *testing.T) {
+	requireMarkdownSourceDigest(t, "docs/inventario_bugs_orquesta_2026-06-30.md")
+}
+
+func requireMarkdownSourceDigest(t *testing.T, ruta string) {
+	t.Helper()
+	for _, entrada := range traceReadMarkdownSourceRoles(t) {
+		if entrada.SourceRef != ruta {
+			continue
+		}
+		contenido, err := os.ReadFile(ruta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if actual := traceMarkdownSHA256(contenido); actual != entrada.SourceSHA256 {
+			t.Fatalf("digest %s=%s, se esperaba %s", ruta, actual, entrada.SourceSHA256)
+		}
+		return
+	}
+	t.Fatalf("no existe la fuente %s", ruta)
+}
+
 func traceReadMarkdownReviewFixtures(t *testing.T) traceMarkdownReviewFixtureSet {
 	t.Helper()
 	fixtures := traceMarkdownReviewFixtureSet{

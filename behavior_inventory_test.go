@@ -175,6 +175,36 @@ func TestBehaviorInventoryInitialContractKeepsConfirmedGapsPending(t *testing.T)
 	}
 }
 
+func TestBehaviorInventoryElasticConfigAnchorMatchesCurrentRegistry(t *testing.T) {
+	requireBehaviorInventoryAnchor(t, "BEHAVIOR-AGENT-RUNTIME-ELASTIC", "config/registry.json")
+}
+
+func TestBehaviorInventoryLiveInstructionAnchorMatchesCurrentPorts(t *testing.T) {
+	requireBehaviorInventoryAnchor(t, "BEHAVIOR-AGENT-SESSION-LIVE-INSTRUCTION", "internal/application/ports.go")
+}
+
+func requireBehaviorInventoryAnchor(t *testing.T, referencia, ruta string) {
+	t.Helper()
+	for _, entrada := range readBehaviorInventory(t) {
+		if entrada.BehaviorRef != referencia {
+			continue
+		}
+		for _, ancla := range entrada.V2Anchors {
+			if ancla.Path == ruta {
+				contenido, err := os.ReadFile(ruta)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if actual := traceBytesSHA256(contenido); actual != ancla.ContentSHA256 {
+					t.Fatalf("ancla %s=%s, se esperaba %s", ruta, actual, ancla.ContentSHA256)
+				}
+				return
+			}
+		}
+	}
+	t.Fatalf("no existe el ancla %s de %s", ruta, referencia)
+}
+
 func TestBehaviorInventoryCensusNeverImpliesEquivalence(t *testing.T) {
 	entry := readBehaviorInventory(t)[0]
 	entry.States.Census = "reviewed"
