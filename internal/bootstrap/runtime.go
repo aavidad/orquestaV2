@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"orquesta/internal/adapters/agent/codex"
+	"orquesta/internal/adapters/agent/staticcapacity"
 	"orquesta/internal/adapters/artifact/filesystem"
 	"orquesta/internal/adapters/attestor/bubblewrap"
 	"orquesta/internal/adapters/attestor/firecrackerclient"
@@ -41,6 +42,41 @@ type AgentAdapter interface {
 	application.AgentLauncher
 	application.AgentObserver
 	Shutdown(context.Context) error
+}
+
+type catalogoCapacidadColocacionAgente interface {
+	DescribirCapacidadColocaciones() ([]application.DescriptorCapacidadColocacionAgente, error)
+}
+
+func componerFuentesCapacidadAgente(agente AgentAdapter, vigencia time.Duration, ahora func() time.Time, requerido bool) ([]application.FuenteCapacidadColocacionAgente, error) {
+	catalogo, disponible := agente.(catalogoCapacidadColocacionAgente)
+	if !disponible {
+		if requerido {
+			return nil, errors.New("bootstrap.agent_capacity_catalog_required")
+		}
+		return nil, nil
+	}
+	descriptores, err := catalogo.DescribirCapacidadColocaciones()
+	if err != nil {
+		return nil, err
+	}
+	if len(descriptores) == 0 {
+		return nil, nil
+	}
+	resultado := make([]application.FuenteCapacidadColocacionAgente, 0, len(descriptores))
+	for _, descriptor := range descriptores {
+		if descriptor.BaseMedicion != application.BaseMedicionCapacidadBruta {
+			return nil, errors.New("bootstrap.agent_capacity_measurement_invalid")
+		}
+		observador, err := staticcapacity.New(staticcapacity.Config{ReferenciaFuente: descriptor.SourceRef,
+			ReferenciaPool: descriptor.PoolRef, Plazas: descriptor.Plazas, Vigencia: vigencia, Ahora: ahora})
+		if err != nil {
+			return nil, err
+		}
+		resultado = append(resultado, application.FuenteCapacidadColocacionAgente{descriptor.PlacementRef,
+			descriptor.SourceRef, descriptor.PoolRef, descriptor.BaseMedicion, observador})
+	}
+	return resultado, nil
 }
 
 type AgentFactory func(config.Snapshot, application.Clock) (AgentAdapter, error)
@@ -232,9 +268,18 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanup.add(func() {
 		_ = cerrarControladoresCuota(controladoresCuota, setup.snapshot.ServerShutdownTimeout())
 	})
+	fuentesCapacidad, err := componerFuentesCapacidadAgente(
+		agent, setup.snapshot.RuntimeCapacityObservationTTL(), setup.clock.Now, options.AgentFactory == nil,
+	)
+	if err != nil {
+		return nil, err
+	}
 	orchestrator, err := newBuildOrchestrator(
 		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
-		executionRuntimeComposition{sessions: executionBroker, postArtifactMailbox: postArtifactMailbox},
+		executionRuntimeComposition{
+			sessions: executionBroker, postArtifactMailbox: postArtifactMailbox,
+			capacitySources: fuentesCapacidad,
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -650,6 +695,7 @@ func newBuildOrchestrator(
 type executionRuntimeComposition struct {
 	sessions            ports.ExecutionSessionBroker
 	postArtifactMailbox application.PostArtifactMailboxAdmitter
+	capacitySources     []application.FuenteCapacidadColocacionAgente
 }
 
 func buildOrchestratorDependencies(
@@ -679,6 +725,7 @@ func buildOrchestratorDependencies(
 		ObservationDelay: setup.snapshot.SchedulerObservationInterval(), ExecutionTimeout: setup.snapshot.SchedulerExecutionTimeout(),
 		AgentCapabilities: capabilities,
 		ExecutionSessions: composition.sessions, PostArtifactMailbox: composition.postArtifactMailbox,
+		CapacitySources: composition.capacitySources, CapacityObservationWait: setup.snapshot.RuntimeCapacityObservationTimeout(),
 	}
 }
 

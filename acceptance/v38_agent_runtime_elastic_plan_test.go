@@ -82,7 +82,37 @@ func TestV38AgentRuntimeElasticPlanMatchesCanonicalRoadmap(t *testing.T) {
 	if !foundContract || !reflect.DeepEqual(owned, []string{"ORC-28"}) {
 		t.Fatalf("contrato o propiedad V38 inválidos: contrato=%v propiedad=%v", foundContract, owned)
 	}
+	for ruta, marcadores := range map[string][]string{
+		"internal/application/processing.go":                    {"obtenerCandidatosCapacidad", "CapacityCandidates:"},
+		"internal/bootstrap/runtime.go":                         {"componerFuentesCapacidadAgente", "RuntimeCapacityObservationTimeout"},
+		"internal/adapters/agent/staticcapacity/observer.go":    {"Round(0).UTC()", "Remaining: plazas"},
+		"internal/adapters/agent/codex/capacidad_colocacion.go": {"DescribirCapacidadColocaciones", "Plazas: 1"},
+	} {
+		fuente, err := os.ReadFile(filepath.Join(root, ruta))
+		if err != nil || !contieneTodosV38(string(fuente), marcadores) ||
+			(strings.Contains(ruta, "/agent/") && contieneAlgunoV38(string(fuente), []string{"database/sql", "StateRepository", "time.NewTicker", "for {"})) {
+			t.Fatalf("productor V38 no compuesto o con autoridad privada: %s (%v)", ruta, err)
+		}
+	}
 	v38AssertNoPrematureEvidence(t, filepath.Join(root, "product/evidence"))
+}
+
+func contieneTodosV38(fuente string, marcadores []string) bool {
+	for _, marcador := range marcadores {
+		if !strings.Contains(fuente, marcador) {
+			return false
+		}
+	}
+	return true
+}
+
+func contieneAlgunoV38(fuente string, marcadores []string) bool {
+	for _, marcador := range marcadores {
+		if strings.Contains(fuente, marcador) {
+			return true
+		}
+	}
+	return false
 }
 
 func TestV38AgentRuntimeElasticPlanRejectsSemanticDrift(t *testing.T) {

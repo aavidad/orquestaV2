@@ -8,10 +8,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
@@ -24,6 +26,17 @@ const (
 func TestPoolUsesDistinctPersistentHomesAndSpillsCapacity(t *testing.T) {
 	config, authPaths := poolTestFixture(t)
 	pool := openTestPool(t, config)
+	descriptores, err := pool.DescribirCapacidadColocaciones()
+	if err != nil || len(descriptores) != len(pool.profiles) {
+		t.Fatalf("catálogo capacidad=%+v error=%v", descriptores, err)
+	}
+	for indice, descriptor := range descriptores {
+		if descriptor.Plazas != 1 || descriptor.BaseMedicion != application.BaseMedicionCapacidadBruta ||
+			descriptor.PlacementRef.String() != "placement:"+pool.profiles[indice].ref ||
+			strings.Contains(descriptor.PlacementRef.String(), poolTestProfileA) || strings.Contains(descriptor.PlacementRef.String(), poolTestProfileB) {
+			t.Fatalf("descriptor no opaco: %+v", descriptor)
+		}
+	}
 
 	firstContext, cancelFirst := context.WithCancel(context.Background())
 	defer cancelFirst()

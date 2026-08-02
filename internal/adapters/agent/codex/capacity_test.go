@@ -72,6 +72,14 @@ func TestAdapterRejectsMissingCapacityAndErrorTemporaryUsesFlag(t *testing.T) {
 	}
 }
 
+func TestAdapterSinPerfilNoPublicaColocacionSinCuotaDurable(t *testing.T) {
+	adapter := openTestAdapter(t, testConfig(t))
+	descriptores, err := adapter.DescribirCapacidadColocaciones()
+	if err != nil || len(descriptores) != 0 {
+		t.Fatalf("descriptores=%+v error=%v", descriptores, err)
+	}
+}
+
 func isTemporaryCodexError(err error) bool {
 	var adapterErr *Error
 	return errors.As(err, &adapterErr) && adapterErr.Temporary()
