@@ -5,6 +5,20 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- A08 quedó `exercised` en `e6352ec2`. La compuerta neutral usa SQLite y el
+  almacén de artefactos reales con un agente sustituto contractual; conserva
+  cohortes lógicas `1/16/70/500`, capacidad física parcial `1/5/10/20`,
+  saturación y reservas tras reapertura, y refresco de observaciones sin KVM,
+  Firecracker ni `agentmicrovm`.
+- A08 consume `P=0,V=348` de `P=0,V=600`. Tres rondas normales y la pasada
+  focal con detector de carreras quedaron verdes; esta última tardó 329,839 s
+  en aceptación y 171,653 s en SQLite. También pasaron los contratos exactos
+  de orden/ACK del buzón, parada, recuperación, preservación y despacho.
+- A08 no crea todavía receipt en `product/evidence`, no cambia el contrato
+  V38 de `planned` ni promueve `ORC-28`: el comprobante publicable exige los
+  mismos resúmenes criptográficos de A+B+C y pertenece a C04/C05. La siguiente
+  dependencia causal es B03 en el repositorio hermano ya existente
+  `/home/alberto/Trabajo/agente_microvm`.
 - A07 quedó `exercised` en `fc5d920c` sobre las bases `7ae98026` y
   `e4a6a98e`. El despachador ya no lee el presupuesto global como límite de
   concurrencia ni usa `ExcludeLaunch`: solo ejecuta lanzamientos que el claim
@@ -44,8 +58,9 @@ Q4 como pendiente o A05 como meramente conectada.
   `BUG-ORQ-20260802-614`, sin ampliar timeouts ni ocultar un posible bloqueo.
 - Orquesta, Firecracker, jailer y Agente MicroVM permanecen detenidos; no se
   relanzaron los tres Goals V23 y no se hizo `push`.
-- A04/A05/A06/A07 quedan `exercised`, no `accredited`. La siguiente
-  dependencia causal es A08 sobre el mismo candidato.
+- A04/A05/A06/A07/A08 quedan `exercised`, no `accredited`. La siguiente
+  dependencia causal es B03; no se arrancó Orquesta ni se relanzaron los
+  Goals V23.
 
 ## Avance operativo del 2026-08-01
 

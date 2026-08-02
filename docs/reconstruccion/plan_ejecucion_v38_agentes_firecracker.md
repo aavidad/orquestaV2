@@ -411,6 +411,19 @@ aplicación y `vet` quedaron verdes. La capacidad física y el presupuesto
 durable permanecen autoridades distintas; bootstrap no vuelve a imponer
 política central.
 
+### A08 — `P=0, V=600`
+
+| Hijo | Write-set y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| A08.1 | `e6352ec2`: aceptación neutral con SQLite y almacén de artefactos reales, agente sustituto contractual y cohortes lógicas `1/16/70/500`. Reclama solo la capacidad física `1/5/10/20`, conserva las reservas al reabrir y vuelve a ofrecer el mismo trabajo tras refrescar una observación obsoleta. | `exercised`; cierra la comprobación neutral y abre B03 sin arrancar KVM, Firecracker ni Agente MicroVM. | Consumido `P=0,V=348` |
+| A08.2 | La misma prueba exige por nombre los contratos ejecutables de orden y ACK de buzón, parada, recuperación en fronteras causales, reserva exacta, preservación y despacho; además guarda que el núcleo neutral no contenga dependencias físicas. | Tres rondas normales, contratos focales y `-race` verdes. No acredita por sí sola `ORC-28` ni V38. | Incluido en `V=348` |
+
+A08 queda `exercised` dentro de `P=0,V=600`. No emite evidencia canónica
+mientras `AC-V38-AGENT-RUNTIME-ELASTIC` siga `planned`: el receipt ligado a
+los resúmenes criptográficos de ambos candidatos se emite en C04 y solo C05
+promueve `ORC-28` después de A+B+C. Esta separación evita que una compuerta
+neutral, ejecutada sin KVM, atribuya prematuramente la composición física.
+
 ### B01 — `P=0, V=50`
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
