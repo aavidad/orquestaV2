@@ -3,7 +3,6 @@ package sqlite
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +10,29 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+type atestadorSQLiteBloqueante struct {
+	base      *sqliteTestAttestor
+	iniciado  chan struct{}
+	continuar chan struct{}
+}
+
+func (atestador *atestadorSQLiteBloqueante) Attest(
+	ctx context.Context,
+	ejecutar ports.TestAttestationRun,
+) (ports.TestAttestationResult, error) {
+	select {
+	case atestador.iniciado <- struct{}{}:
+	case <-ctx.Done():
+		return ports.TestAttestationResult{}, ctx.Err()
+	}
+	select {
+	case <-atestador.continuar:
+	case <-ctx.Done():
+		return ports.TestAttestationResult{}, ctx.Err()
+	}
+	return atestador.base.Attest(ctx, ejecutar)
+}
 
 func TestSQLiteAttestationPassIsAtomicAndSurvivesRestart(t *testing.T) {
 	attestor := &sqliteTestAttestor{}
@@ -29,47 +51,56 @@ func TestSQLiteAttestationPassIsAtomicAndSurvivesRestart(t *testing.T) {
 }
 
 func TestConcurrentAttestationFenceAllowsOneWriter(t *testing.T) {
-	attestor := &sqliteTestAttestor{}
+	base := &sqliteTestAttestor{}
+	attestor := &atestadorSQLiteBloqueante{
+		base:      base,
+		iniciado:  make(chan struct{}),
+		continuar: make(chan struct{}),
+	}
+	liberado := false
+	defer func() {
+		if !liberado {
+			close(attestor.continuar)
+		}
+	}()
 	system, goalRef := seedSQLiteV17Committed(t, attestor)
 
 	type outcome struct {
 		result application.ProcessResult
 		err    error
 	}
-	start := make(chan struct{})
-	results := make(chan outcome, 2)
-	var workers sync.WaitGroup
-	for index := 0; index < 2; index++ {
-		workers.Add(1)
-		go func(worker int) {
-			defer workers.Done()
-			<-start
-			result, err := system.orchestrator.ProcessNext(
-				context.Background(), "worker:v17-concurrent:"+string(rune('a'+worker)),
-			)
-			results <- outcome{result: result, err: err}
-		}(index)
+	primero := make(chan outcome, 1)
+	go func() {
+		result, err := system.orchestrator.ProcessNext(
+			context.Background(), "worker:v17-concurrent:primero",
+		)
+		primero <- outcome{result: result, err: err}
+	}()
+	select {
+	case <-attestor.iniciado:
+	case <-time.After(2 * time.Second):
+		t.Fatal("el primer trabajador no alcanzó el efecto de atestación")
 	}
-	close(start)
-	workers.Wait()
-	close(results)
 
-	processed := 0
-	for outcome := range results {
-		if outcome.err != nil {
-			t.Fatalf("concurrent attestation: %v", outcome.err)
-		}
-		if outcome.result.Processed {
-			if outcome.result.Action != application.ActionAttestTest {
-				t.Fatalf("unexpected concurrent action: %+v", outcome.result)
-			}
-			processed++
-		}
+	segundo, err := system.orchestrator.ProcessNext(
+		context.Background(), "worker:v17-concurrent:segundo",
+	)
+	if err != nil || segundo.Processed {
+		t.Fatalf("el segundo trabajador atravesó la cerca viva: result=%+v err=%v", segundo, err)
 	}
-	if processed != 1 {
-		t.Fatalf("concurrent processed attestations=%d want=1", processed)
+	close(attestor.continuar)
+	liberado = true
+	var resultadoPrimero outcome
+	select {
+	case resultadoPrimero = <-primero:
+	case <-time.After(2 * time.Second):
+		t.Fatal("el primer trabajador no completó la atestación liberada")
 	}
-	if calls, effects := attestor.counts(); calls != 1 || effects != 1 {
+	if resultadoPrimero.err != nil || !resultadoPrimero.result.Processed ||
+		resultadoPrimero.result.Action != application.ActionAttestTest {
+		t.Fatalf("atestación cercada: result=%+v err=%v", resultadoPrimero.result, resultadoPrimero.err)
+	}
+	if calls, effects := base.counts(); calls != 1 || effects != 1 {
 		t.Fatalf("attestor calls/effects=%d/%d want=1/1", calls, effects)
 	}
 	assertSQLiteV17Pass(t, system.repository, goalRef)

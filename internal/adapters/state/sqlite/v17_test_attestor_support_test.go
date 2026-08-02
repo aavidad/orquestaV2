@@ -19,7 +19,7 @@ func sqliteTestNoError(t testing.TB, err error) {
 
 func seedSQLiteV17Committed(
 	t *testing.T,
-	attestor *sqliteTestAttestor,
+	attestor application.TestAttestor,
 ) (*sqliteV15System, goal.GoalRef) {
 	t.Helper()
 	system := newSQLiteV15System(t, 4)
