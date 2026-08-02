@@ -90,10 +90,10 @@ producirían doble contabilidad.
 
 La unidad física queda fijada así:
 
-- con varios perfiles Codex, cada perfil es un placement/pool reservable con
-  capacidad 1;
-- con un único perfil, cada lanzamiento reserva 1 de los N slots configurados
-  para ese pool.
+- con uno o varios perfiles Codex ligados a cuenta, cada perfil es un
+  placement/pool reservable con capacidad 1;
+- un adaptador sin perfil ligado no publica candidato: carece de cuota y
+  colocación durables, por lo que cierra solo lanzamientos nuevos.
 
 Cada launch tiene exactamente una `AgentCapacityReservation`. La capacidad del
 anfitrión Firecracker se gobierna mediante
@@ -484,7 +484,7 @@ La implementación deberá acreditar, como mínimo:
 - carrera sobre candidatos donde el claim fija el primero disponible y pool o
   launcher no reseleccionan;
 - held restado una sola vez por `source+pool`, incluida métrica neta rechazada;
-- multiperfil 1 por placement y perfil único 1 de N, con exactamente una
+- uno o varios perfiles ligados con capacidad 1 por placement, con exactamente una
   `AgentCapacityReservation` aunque el aislamiento sea Firecracker;
 - `unknown_applied` reteniendo la reserva física;
 - cambio de proveedor/aislamiento sin lectura de `runtime.codex.*` global;
