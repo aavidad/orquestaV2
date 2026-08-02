@@ -37,9 +37,7 @@
       "authentication": "single_use_neutral_signed_grant_and_attestation_binding",
       "test_attestor_scope": "unchanged_no_network_no_vsock",
       "test_refs": [
-        "internal/ports/agent_microvm_network_test.go",
-        "internal/ports/agent_microvm_launch_auth_test.go",
-        "internal/adapters/agent/firecracker/networkauth/verifier_test.go"
+        "internal/ports/agent_microvm_network_test.go"
       ]
     }
   },
@@ -67,14 +65,15 @@
       "direct_internet"
     ]
   },
-  "credential_store_proof": {
-    "store": "CredentialStore",
+  "signed_grant_proof": {
+    "authority": "agentmicrovm_ed25519_public_trust",
     "use": "single_use",
-    "replay": "denied",
-    "test_ref": "internal/adapters/agent/firecracker/networkauth/verifier_test.go",
+    "replay": "denied_durable_sqlite",
+    "portable_fixture": "contratos/fixtures/lanzamiento_firmado_v1.json",
+    "connector_test": "conectores/orquesta/concesion_test.go",
     "test_names": [
-      "TestVerifierAuthorizesOnceAndRejectsIdenticalReplay",
-      "TestVerifierConcurrentReplayHasSingleWinner"
+      "TestContratoFirmadoCoincideConElVectorRust",
+      "TestFirmanteVinculaAlcanceSinExportarReferenciasInternas"
     ]
   },
   "test_attestor_separation": {
@@ -121,7 +120,7 @@
     "guest_agent_claim": false
   },
   "required_test": {
-    "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAgentFirecrackerSingleVM' && go test -mod=vendor -count=1 ./internal/adapters/agent/firecracker/networkauth -run '^(TestVerifierAuthorizesOnceAndRejectsIdenticalReplay|TestVerifierConcurrentReplayHasSingleWinner)$' && go test -mod=vendor -count=1 ./internal/e2e/firecrackerattestor -run '^TestValidatePhaseRejectsEveryRequiredPhysicalInvariant$'",
+    "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAgentFirecrackerSingleVM' && go test -mod=vendor -count=1 ./internal/ports -run '^TestAgentMicroVMNetworkAuthorityLivesOnlyInSignedSiblingContract$' && go test -mod=vendor -count=1 ./internal/e2e/firecrackerattestor -run '^TestValidatePhaseRejectsEveryRequiredPhysicalInvariant$'",
     "reject_no_tests_to_run": true
   },
   "decision_files": [

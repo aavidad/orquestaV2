@@ -88,8 +88,8 @@ func TestAgentFirecrackerSingleVMProfileRejectsSemanticDrift(t *testing.T) {
 		{"transport_changed", []string{"connectivity", "transport"}, "tap"},
 		{"service_changed", []string{"connectivity", "allowed_services"}, []any{"orquesta_broker", "direct_proxy"}},
 		{"guest_ip_enabled", []string{"connectivity", "forbidden_connectivity"}, []any{"tap", "bridge", "nat", "inbound", "east_west", "direct_internet"}},
-		{"credential_reusable", []string{"credential_store_proof", "use"}, "reusable"},
-		{"credential_replay", []string{"credential_store_proof", "replay"}, "allowed"},
+		{"grant_reusable", []string{"signed_grant_proof", "use"}, "reusable"},
+		{"grant_replay", []string{"signed_grant_proof", "replay"}, "allowed"},
 		{"attestor_network", []string{"test_attestor_separation", "network"}, "present"},
 		{"attestor_vsock", []string{"test_attestor_separation", "vsock"}, "present"},
 		{"example_agents_expanded", []string{"bounded_example", "agent_count"}, float64(2)},
@@ -145,7 +145,7 @@ func TestAgentFirecrackerSingleVMRejectsInvalidJSON(t *testing.T) {
 func agentFirecrackerValidateFixture(fixture map[string]any) error {
 	if !agentFirecrackerHasExactKeys(fixture,
 		"schema_version", "fixture_id", "contract_kind", "authority", "bounded_example",
-		"connectivity", "credential_store_proof", "test_attestor_separation",
+		"connectivity", "signed_grant_proof", "test_attestor_separation",
 		"v38_alignment", "required_test", "decision_files",
 	) {
 		return fmt.Errorf("fixture fields drifted")
@@ -190,18 +190,19 @@ func agentFirecrackerValidateFixture(fixture map[string]any) error {
 		return fmt.Errorf("connectivity semantics drifted")
 	}
 
-	credential, ok := fixture["credential_store_proof"].(map[string]any)
-	if !ok || !agentFirecrackerHasExactKeys(credential,
-		"store", "use", "replay", "test_ref", "test_names",
+	grant, ok := fixture["signed_grant_proof"].(map[string]any)
+	if !ok || !agentFirecrackerHasExactKeys(grant,
+		"authority", "use", "replay", "portable_fixture", "connector_test", "test_names",
 	) ||
-		credential["store"] != "CredentialStore" || credential["use"] != "single_use" ||
-		credential["replay"] != "denied" ||
-		credential["test_ref"] != "internal/adapters/agent/firecracker/networkauth/verifier_test.go" ||
-		!reflect.DeepEqual(credential["test_names"], []any{
-			"TestVerifierAuthorizesOnceAndRejectsIdenticalReplay",
-			"TestVerifierConcurrentReplayHasSingleWinner",
+		grant["authority"] != "agentmicrovm_ed25519_public_trust" || grant["use"] != "single_use" ||
+		grant["replay"] != "denied_durable_sqlite" ||
+		grant["portable_fixture"] != "contratos/fixtures/lanzamiento_firmado_v1.json" ||
+		grant["connector_test"] != "conectores/orquesta/concesion_test.go" ||
+		!reflect.DeepEqual(grant["test_names"], []any{
+			"TestContratoFirmadoCoincideConElVectorRust",
+			"TestFirmanteVinculaAlcanceSinExportarReferenciasInternas",
 		}) {
-		return fmt.Errorf("CredentialStore single-use proof drifted")
+		return fmt.Errorf("signed grant proof drifted")
 	}
 	attestor, ok := fixture["test_attestor_separation"].(map[string]any)
 	if !ok || !agentFirecrackerHasExactKeys(attestor,
@@ -238,7 +239,7 @@ func agentFirecrackerValidateFixture(fixture map[string]any) error {
 	}
 
 	requiredTest, ok := fixture["required_test"].(map[string]any)
-	const requiredTestCommand = "go test -mod=vendor -count=1 ./acceptance -run '^TestAgentFirecrackerSingleVM' && go test -mod=vendor -count=1 ./internal/adapters/agent/firecracker/networkauth -run '^(TestVerifierAuthorizesOnceAndRejectsIdenticalReplay|TestVerifierConcurrentReplayHasSingleWinner)$' && go test -mod=vendor -count=1 ./internal/e2e/firecrackerattestor -run '^TestValidatePhaseRejectsEveryRequiredPhysicalInvariant$'"
+	const requiredTestCommand = "go test -mod=vendor -count=1 ./acceptance -run '^TestAgentFirecrackerSingleVM' && go test -mod=vendor -count=1 ./internal/ports -run '^TestAgentMicroVMNetworkAuthorityLivesOnlyInSignedSiblingContract$' && go test -mod=vendor -count=1 ./internal/e2e/firecrackerattestor -run '^TestValidatePhaseRejectsEveryRequiredPhysicalInvariant$'"
 	if !ok || !agentFirecrackerHasExactKeys(requiredTest, "command", "reject_no_tests_to_run") ||
 		requiredTest["command"] != requiredTestCommand ||
 		requiredTest["reject_no_tests_to_run"] != true {
