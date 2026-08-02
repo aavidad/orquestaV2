@@ -340,7 +340,7 @@ autorizan otro write-set de ese tamaño.
 |---|---|---|---:|
 | A04.1 | Base ya integrada en `33802c27`: estado de observación/reserva que ahora se caracteriza y migra al binding 1:1, sin segundo lifecycle. | Después de A02b; habilita A03.2, nunca A04.2 directamente. Completada parcial, no acreditante. | `P=114, V=53` consumidos |
 | A04.1b | Binding neutral exacto ya integrado en `4ccfedc0`; no posee writer, store ni lifecycle propios. | Después de A04.1; caracteriza Q2/Q3/A04.2. | `P=46, V=57` consumidos |
-| A04.2 / Q4 | `CapacityCandidates` ordenados/deduplicados en `ClaimRequest`; dentro del `BEGIN`, CAS revalida en orden y fija/reserva el primero disponible. Solo esta operación crea a la vez reserva física y binding 1:1. | Después de A03.3 y A05.4; exclusión sobre claim/SQLite. | `P=160, V=190` |
+| A04.2 / Q4 | `CapacityCandidates` ordenados/deduplicados en `ClaimRequest`; dentro del `BEGIN`, CAS revalida en orden y fija/reserva el primero disponible. Solo esta operación crea a la vez reserva física y binding 1:1. La entrega/candidato y sus negativos preparatorios consumieron `P=44,V=107` en `e7f9e60e`; falta el único escritor SQLite. | Desbloqueada por A05.4; exclusión sobre claim/SQLite. | `P=116, V=83` restantes del techo `P=160,V=190` |
 | A04.3 | Consume/libera/cuarentena la única reserva física. Cada perfil ligado reserva 1 de su pool unitario; sin perfil durable no hay candidato. Held se resta una vez por `source+pool` en `reserved/consumed/quarantined`; nunca por `observation_ref` ni sobre capacidad ya neta. Cuota, preflight Firecracker y leases CID/VM no crean otra reserva. | Después de A04.2; serial con A06. | `P=100, V=80` restantes |
 | A04.4 | Reinicio, lease expirado, recuperación ambigua, carrera del último candidato, replay sin reselección, doble contabilidad, proyecto, ausencia de límite Codex global y exactamente una `AgentCapacityReservation` por launch. | Último; no abre A07 hasta quedar verde. | `P=39, V=67` restantes |
 
@@ -352,20 +352,21 @@ autorizan otro write-set de ese tamaño.
 | A05.1b | `internal/bootstrap/runtime.go`, `cmd/orquesta/main.go`, catálogos `es.json`/`en.json`, manifest y pruebas compactas/reutilizadas: antes de construir renderizador, credenciales o Codex/proceso, `microvm` devuelve exactamente `bootstrap.runtime_isolation_not_composed`, presentado con `error.bootstrap.runtime_isolation_not_composed`; la CLI conserva el código y no lo degrada a `internal`. Cero fallback/recursos; `process` sigue verde. | Después de A05.1; antes de A05.4 y permanece serial con B01/B10 hasta que B10 lo sustituya. | `P=30, V=21` |
 | A05.1c | `config/registry.json` y proyecciones generadas: añadir `runtime.capacity.observation_timeout` positivo, separado de `observation_ttl` y de `runtime.codex.*`; comprobar valor por defecto, valor TOML explícito, rechazo de cero y sincronización canónica de todas las proyecciones. | Después de A05.1; serial sobre registro y antes de A05.4. | `P=14, V=5` |
 | A05.1d | Registro/bootstrap/scheduler: presupuesto global neutral, separación del límite Codex y tamaño máximo de trama `app-server`; retira la clave de informe sin alias ni fallback. | Integrada; serial sobre registro/bootstrap/scheduler. | `P=21, V=44` consumidos |
-| A05.2 | Fuente física configurada y candidatos opacos: slots brutos por `source+pool`, ventanas, ceros presentes, frescura y `AgentPlacementRef`; declara si la medida es bruta y rechaza la doble resta. El observador estático existe, pero carece de catálogo productivo, renovación viva y consumidor compuesto. | Parcial; tras A02b y antes de A05.4. No abre A04.2. | `P=53, V=64` consumidos por la porción existente; completar exige reasignación o retirada compensatoria explícita |
-| A05.2b | Sustituye la observación inmutable por fuentes renovables de capacidad bruta, cataloga `placement→source+pool` sin cuenta o ruta, obtiene la cuota vigente y entrega a `ClaimRequest` candidatos físicos sin revisión, ordenados y deduplicados. | Después de A05.2/A05.3b; completa A05.4 y abre A04.2. | `P=180,V=120`, trasladados de B10.3/B10.4 |
+| A05.2 | Fuente física configurada y candidatos opacos: slots brutos por `source+pool`, ventanas, ceros presentes, frescura y `AgentPlacementRef`; declara si la medida es bruta y rechaza la doble resta. El observador inmutable fue sustituido por la fuente renovable de A05.2b. | `wired`; no acreditada sin el consumidor Q4. | `P=53, V=64` de la base sustituida y compensada por A05.2b |
+| A05.2b | Sustituye la observación inmutable por fuentes renovables de capacidad bruta, cataloga `placement→source+pool` sin cuenta o ruta, obtiene la cuota vigente y entrega a `ClaimRequest` candidatos físicos sin revisión, ordenados y deduplicados. `e7f9e60e`+`993e3d03`; catálogo vacío conserva V23 hasta el cutover. | `wired`; completa A05.4 y abre A04.2, pero Q4 debe consumirla antes de acreditar. | `P=180,V=120` consumidos, trasladados de B10.3/B10.4 |
 | A05.3a | `internal/adapters/agent/codex/appserver/`: codec JSONL acotado con IDs/correlación, inicialización oficial, capacidades nulas, métodos de cuota exactos, descarte de errores remotos y fallo terminal por exceso. No arranca procesos ni importa Firecracker/application/config. | Tras A02b; precede A05.3b y B05.3. | `P=278, V=179` |
 | A05.3b | Traductor y controlador Codex anfitrión solo de cuota: un `app-server` persistente por perfil, lectura inicial, eventos, reconexión y rotación con cierre exacto; elimina el fichero y la ruta alternativa. | Integrada hasta `f2cb965b`; disjunta de la fuente física y no acreditante por sí sola. | Envolvente conjunta A05.3b+A05.4 consumida: `P=234,V=117`, dentro de `P≤237,V≤146` |
-| A05.4 | Application/bootstrap inicia controladores antes del planificador, espera lectura inicial, ordena/deduplica candidatos y recoge todos los recursos ante fallo o shutdown. El arranque y cierre de cuota y la primitiva de ordenación existen; falta producir candidatos físicos y entregarlos al `ClaimRequest` productivo. | Parcial hasta `f2cb965b`; no abre A04.2 hasta que el productor/consumidor real quede conectado y probado. | Misma medida conjunta A05.3b+A05.4 para la porción existente |
+| A05.4 | Application/bootstrap inicia controladores antes del planificador, espera lectura inicial, ordena/deduplica candidatos y recoge todos los recursos ante fallo o shutdown. `e7f9e60e`+`993e3d03` conectan el productor renovable y el consumidor productivo de `ClaimRequest`. | `wired`; abre A04.2 y no se acredita antes del claim transaccional. | La porción previa conserva `P=234,V=117`; la conexión final está medida en A05.2b |
 
 El techo acumulado de A05 es `P=862,V=628`:
 `49+30+14+21+53+278+237+180=862` y
 `49+21+5+44+64+179+146+120=628`. A05.3b y A05.4 conservaron tareas causales
 separadas y la porción existente consumió conjuntamente `P=234,V=117`. Las tres
-líneas productivas y veintinueve de verificación nominalmente libres no bastan
-para el catálogo, los observadores vivos y la inyección que faltan; antes de
-editar ese write-set se reasigna presupuesto o se identifica retirada
-compensatoria. No se añade otro almacén, writer, planificador o bucle de dominio.
+líneas productivas y veintinueve de verificación nominalmente libres no bastaban
+para el catálogo, los observadores vivos y la inyección. A05.2b consumió
+exactamente la reasignación `P=180,V=120`; el contrato compartido del claim
+consumió `P=44,V=107` de A04.2. No se añadió otro almacén, writer, planificador
+o bucle de dominio.
 
 ### B01 — `P=0, V=50`
 

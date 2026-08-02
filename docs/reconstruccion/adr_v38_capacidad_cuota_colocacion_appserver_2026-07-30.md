@@ -432,6 +432,13 @@ nombrada y reduce también la composición prevista. A05 queda en
 `P=862,V=628`; B10 queda en `P=470,V=480`. El total V38 permanece exactamente
 en `P=7.200,V=10.083`; no aparece contingencia ni segundo cliente.
 
+La implementación `e7f9e60e`+`993e3d03` consume esa reasignación completa.
+El contrato preparatorio compartido con Q4 consume además `P=44,V=107` de la
+bolsa A04.2 ya existente, que queda en `P=116,V=83`. Hasta el cutover, un
+catálogo Codex vacío no activa la compuerta y conserva V23; un perfil durable
+sí publica capacidad uno y exige cuota vigente. Este puente de compatibilidad
+no acredita A05: Q4 debe ser el primer escritor transaccional real.
+
 ## Alternativas rechazadas
 
 - **Reservar cuota como si fuera capacidad física:** produce sobrecontabilidad,

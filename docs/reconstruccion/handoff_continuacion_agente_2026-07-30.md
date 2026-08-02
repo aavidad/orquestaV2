@@ -14,25 +14,29 @@ A05 o la aplicación hermana como inexistentes.
 - A05.3b quedó implementada localmente en `f2cb965b`: controlador persistente
   por perfil, entorno exacto ya validado, reconexión gobernada por la política
   canónica y recogida exacta de procesos. No acredita por sí sola A05.
-- A05.2 y A05.4 siguen parciales: existe el observador estático y la primitiva
-  neutral de ordenación, y bootstrap inicia/espera los controladores de cuota,
-  pero no hay catálogo productivo de colocaciones, observadores físicos vivos
-  ni inyección de candidatos físicos en el `ClaimRequest`. La porción medida de
-  A05.3b+A05.4 es `P=234,V=117`, dentro de `P≤237,V≤146`; esa medida no cierra
-  la conducta ausente ni autoriza a ocultarla en A04.2.
-- Pasaron las suites de `internal/application`, Codex y `internal/bootstrap`,
-  sus pruebas focales con `-race`, la suite completa
-  `./internal/... ./cmd/orquesta` y `go vet`. El `-race` global de bootstrap
-  agotó diez minutos en la prueba histórica
-  `TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce`; la prueba focal
-  de cuotas pasó por separado y no se observó una carrera del cambio.
+- A05.2b/A05.4 quedaron `wired` en `e7f9e60e` y `993e3d03`: el observador
+  publica capacidad bruta renovable, Codex cataloga una colocación opaca de
+  capacidad uno por perfil durable y `application` obtiene la cuota vigente,
+  ordena/deduplica entregas físicas sin revisión y las presenta en
+  `ClaimRequest.CapacityCandidates`. Ausencia, error, timeout, cuota agotada u
+  obsoleta cierran solo nuevos lanzamientos; stop/observe siguen reclamables.
+  Un catálogo vacío no activa aún la compuerta y conserva la compatibilidad
+  V23 anterior al cutover. A05 no está acreditada hasta que Q4 sea el consumidor
+  transaccional real.
+- El corte conjunto consumió `P=180,V=120` de A05.2b y `P=44,V=107` del
+  contrato preparatorio ya presupuestado de A04.2; no amplió el total V38. La
+  guarda V38 exige productor, consumidor y composición, y prohíbe que la fuente
+  o el catálogo adquieran DB, `StateRepository` o bucle residente.
+- Pasaron completos `internal/application`, Codex y `internal/bootstrap`; las
+  pruebas focales `-race` de reclamo y fuente y la guarda V38 también pasaron.
+  Las suites globales y `vet` se repetirán sobre el candidato que incluya Q4.
 - La suite raíz solo falla porque los receipts reales Codex V17/V22 están
   ligados al árbol anterior. Deben renovarse con el candidato final, no
   reescribirse como evidencia de este corte parcial.
 - Orquesta continúa detenida, los tres Goals V23 se preservan sin relanzar y no
   se hizo `push` desde este repositorio. La siguiente dependencia causal es
-  reabrir y presupuestar el productor de A05.2/A05.4; A04.2/Q4 permanece
-  bloqueada hasta recibir candidatos físicos reales, ordenados y deduplicados.
+  A04.2/Q4: materializar/repetir la observación y reservar/fijar exactamente una
+  colocación dentro del mismo `BEGIN IMMEDIATE` del claim.
 
 ## Parada operativa del 2026-07-31
 
@@ -96,9 +100,8 @@ GOFLAGS=-mod=vendor go vet ./internal/... ./cmd/orquesta
 git diff --check
 ```
 
-La siguiente acción causal es auditar/corregir A05.3b+A05.4 sin atribuirle
-cierre, completar sus gates y continuar después con A04.2. No arrancar Orquesta
-ni Firecracker antes de consultar de nuevo el estado vivo.
+La siguiente acción causal es A04.2/Q4; A05 está conectada pero no acreditada.
+No arrancar Orquesta ni Firecracker antes de consultar de nuevo el estado vivo.
 
 ### Reanudación desde otro equipo
 
@@ -217,19 +220,17 @@ git log -10 --oneline --decorate
 No relanzar tareas ni usar Orquesta mientras siga sin cuota. Preservar los
 archivos ajenos sin seguimiento.
 
-La siguiente dependencia causal es A05.3b:
+La siguiente dependencia causal es A04.2/Q4:
 
-1. comprobar de nuevo que
-   `internal/adapters/agent/codex/capacity_observer.go` y su prueba no tienen
-   consumidores productivos;
-2. retirar en un commit pequeño ese lector de cuota por fichero, ya sustituido
-   por el protocolo oficial;
-3. implementar el controlador persistente de cuota Codex: exactamente un
-   `codex app-server` por perfil, lectura inicial, actualizaciones, reconexión,
-   rotación y cierre exacto;
-4. usar el traductor de `b09a4695` y el único `StateRepository` ampliado en
-   `6165b65e`; no crear otro almacén, escritor o ciclo de vida;
-5. continuar con A05.4, después A04.2 y la compuerta A.
+1. conservar `CapacityCandidates` como propuestas y revalidarlas por orden
+   dentro de la transacción del claim;
+2. materializar o repetir por CAS la entrega física, releer la cuota por
+   referencia/revisión y restar held una sola vez por `source+pool`;
+3. crear en la misma transacción la única reserva física, el binding de
+   colocación y el claim/outbox, o no reclamar el lanzamiento;
+4. devolver la colocación exacta para que A04.4 la propague sin reselección;
+5. probar carreras, replay, cuota/observación obsoletas y progreso de
+   stop/observe antes de abrir A06/A07.
 
 Antes de cada edición se debe consultar `ORC-28` mediante
 `scripts/consultar_lecciones_legacy.sh`. La consulta de las tareas cerradas en
