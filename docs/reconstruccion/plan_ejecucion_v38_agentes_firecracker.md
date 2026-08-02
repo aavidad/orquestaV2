@@ -102,12 +102,12 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
   MCP y buzón causal ya están acreditados. El conector Orquesta traduce esos almacenes a
   referencias y contenido verificado por el socket local; `agentmicrovm` y el huésped nunca
   reciben una ruta del anfitrión ni abren el CAS de Orquesta.
-- Ya existen contratos `agent_microvm_bundle`, `agent_microvm_network`,
-  `agent_microvm_launch_auth`, `agent_microvm_vsock_cid` y adaptadores de plan,
-  autenticación y allocator SQL. B02 y B08 deben mapearlos contra los nuevos
-  contratos del protocolo hermano, migrar sus consumidores y retirar las
-  superficies solapadas en la misma vertical; no se conservan dos contratos,
-  bridges ni adaptadores duplicados «por compatibilidad».
+- Siguen existiendo los contratos `agent_microvm_bundle`,
+  `agent_microvm_network` y `agent_microvm_launch_auth`, además del adaptador de
+  autenticación que B08 debe caracterizar y retirar. B02 ya migró la autoridad
+  CID al registro privado del proyecto hermano y el commit `127c0a45` retiró
+  de Orquesta `agent_microvm_vsock_cid`, el allocator y el renderer físicos,
+  sin consumidores, bridge ni adaptador duplicado «por compatibilidad».
 - El launcher de `TestAttestor` puede aportar primitivas pequeñas y comunes de
   path confiable, hashes, FDs, jailer/cgroup y teardown solo cuando dos
   consumidores reales lo justifiquen. Su protocolo one-shot, rootfs y
@@ -126,13 +126,13 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
   y migra el estado para reservar solo recursos físicos y tratar la cuota por
   perfil como compuerta durable sin débito ni liberación.
 
-No existe todavía el proyecto independiente `agentmicrovm`, su protocolo local
-versionado ni un motor persistente de agentes Firecracker, una fuente
-neutral de capacidad física viva, controlador de cuota estructurada,
-colocación opaca fijada dentro de la reclamación, composición canónica de
-concesiones temporales de CID, `rootfs` de agente, protocolo del huésped,
-intermediario/proxy, retorno sellado ni evidencia
-física `1/5/10/16/20`. Tampoco existe aún el conector Orquesta ni la prueba
+Ya existen el proyecto independiente `agentmicrovm`, su protocolo local
+versionado, el registro físico privado, la concesión CID durable y el motor
+Firecracker que consume ese CID. También existen la fuente neutral de
+capacidad, el controlador de cuota estructurada y la colocación opaca fijada
+dentro de la reclamación. Aún faltan cerrar el `rootfs` productivo, el
+protocolo huésped completo, el intermediario/proxy, el retorno sellado y la
+evidencia física `1/5/10/16/20`. Tampoco existe aún el conector final Orquesta ni la prueba
 cruzada de compatibilidad. Esas son las brechas que siguen.
 
 ## Orden causal y write-sets
@@ -430,6 +430,25 @@ neutral, ejecutada sin KVM, atribuya prematuramente la composición física.
 |---|---|---|---:|
 | B01.1 | Compuerta compacta: verifica selección A04, fuentes/controlador A05 y frontera cruzada B04 sin reimplementarlos. Cubre `process` sin conexión al hermano, microVM sin ruta alternativa, controlador anfitrión solo de cuota, procesos separados y ausencia de límite Codex global. | Tras A05/A08/B03/B04; abre B10. | `P=0, V=50` |
 
+### B02 — `P=200, V=250`
+
+| Hijo | Conjunto de escritura y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| B02.1 | `9ad41b6`: esquema SQLite privado v11, reserva transaccional de ejecución y concesión CID, rango `3..=65535`, idempotencia, revisión, cerca, expiración y exclusividad activa. | `exercised`; el registro físico pertenece solo al binario hermano. | Delta hermano incluido en el total B02 |
+| B02.2 | `b8fc520`: el motor, manifiesto, identidad y recuperación reciben el CID reservado; desaparece el CID constante y una respuesta física distinta falla cerrada. | `exercised`; no arranca KVM. | Delta hermano incluido en el total B02 |
+| B02.3 | `178d519`: una detención exacta libera, una cerca obsoleta no libera y la recuperación pone en cuarentena al propietario de una reserva expirada antes de reutilizar el CID. | `exercised`; cubre reapertura, agotamiento y ocho reservas concurrentes. | Delta hermano incluido en el total B02 |
+| B02.4 | `127c0a45`: retira de Orquesta el puerto CID, allocator y renderer sin consumidores, actualiza roadmap e inventario y conserva la brecha física pendiente. | Después de B02.1–B02.3; elimina la segunda autoridad. | Compensación `P=-1906,V=-2223` |
+
+El candidato documentado del repositorio hermano es `3c827d9`. Sus gates
+aportan 178 pruebas Rust correctas y dos smokes KVM ignorados, diez repeticiones
+de la asignación concurrente, Clippy, formato y el cliente Go normal, con
+detector de carreras y `vet`. El delta aislado es `P=372,V=314`; junto con la
+retirada causal de Orquesta queda `P=-1534,V=-1909`, dentro del límite B02.
+
+B02 queda `exercised`, no `accredited`: demuestra una única autoridad física,
+pero todavía no el recorrido sellado de la release. La siguiente dependencia
+serial elegida es B05; B06/B08/B09 siguen abiertas y B07 espera B05+B06.
+
 ### B03 — `P=250, V=300`
 
 | Hijo | Conjunto de escritura y resultado | Orden | Presupuesto |
@@ -449,9 +468,9 @@ B03 queda `exercised` en el candidato hermano `f3ae2b4`, con delta neto total
 `P=34,V=195` frente a `bdba503`. Pasaron formato, Clippy sin avisos, 172 pruebas
 Rust —más dos smokes KVM ignorados—, pruebas Go normales y con detector de
 carreras, `vet` y los contratos focales de independencia, configuración y
-transporte. No acredita B04, `ORC-28` ni V38. La siguiente dependencia causal
-serial es B02; B05/B06/B08/B09 también quedan causalmente abiertas, pero no se
-mezclan en su conjunto de escritura.
+transporte. No acredita B04, `ORC-28` ni V38. B02 cerró después su siguiente
+dependencia serial; B05/B06/B08/B09 quedan causalmente abiertas y no se
+mezclan en un mismo conjunto de escritura.
 
 ### B05 — `P=490, V=320`
 
@@ -567,11 +586,10 @@ hermano; no es una extracción pendiente ni una capability encubierta.
 
 ## Retirada de solapamientos y corrección P2 separada
 
-- B02 compara campo por campo `internal/ports/agent_microvm_vsock_cid.go` con
-  el contrato privado `RuntimeJournal`/`CIDLease` del proyecto hermano,
-  reimplementa allí las invariantes útiles y elimina contrato, asignador y
-  consumidores físicos de Orquesta al cerrar. No mueve ni copia el SQL a otro
-  paquete Orquesta y no mantiene un puente.
+- B02 comparó el puerto CID con el registro privado del proyecto hermano,
+  reimplementó allí las invariantes útiles y eliminó en `127c0a45` el contrato,
+  el asignador y el renderer físicos de Orquesta. No movió ni copió el SQL a
+  otro paquete Orquesta y no mantiene un puente.
 - B08 hace lo mismo con
   `internal/ports/agent_microvm_launch_auth.go` y caracteriza explícitamente
   `internal/adapters/agent/firecracker/networkauth/`, incluido `verifier.go` y
@@ -813,8 +831,10 @@ efecto autorizado, con alcance e idempotencia propios.
   de `V=283`, y conserva `P=66` para retirar los límites transitorios.
   B03 limita a `P=250,V=300` el delta posterior al baseline hermano medido en
   `adr_v38_baseline_agente_microvm_2026-08-02.md`; B10 consume su cliente Go
-  público en vez de duplicarlo y
-  transfiere `P=180,V=120` a A05.2b. Las demás tareas B contabilizan en sus
+  público en vez de duplicarlo y transfiere `P=180,V=120` a A05.2b. B02
+  consume aisladamente `P=372,V=314`, pero
+  la retirada causal de la autoridad duplicada deja su delta conjunto en
+  `P=-1534,V=-1909`, dentro de `P=200,V=250`. Las demás tareas B contabilizan en sus
   techos el lado de Orquesta y el lado `agentmicrovm`. El código generado se informa aparte y
   ninguna holgura se descuenta dos veces. No existe contingencia, bolsa de
   extracción ni presupuesto posterior a V38 oculto. Un exceso exige ADR,

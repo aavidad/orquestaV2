@@ -807,7 +807,7 @@ Fuentes vigentes revisadas:
 - `docs/runbooks/instalacion_launcher_firecracker_2026-07-25.md`
 - `docs/runbooks/formato_receipt_activacion_firecracker_v2_2026-07-25.md`
 - `internal/ports/agent_microvm_network.go`
-- `internal/ports/agent_microvm_vsock_cid.go`
+- `127c0a45`, retirada del antiguo puerto y asignador CID de Orquesta
 - `internal/ports/agent_microvm_launch_auth.go`
 - `internal/ports/agent_microvm_bundle.go`
 - `internal/adapters/agent/firecracker/`
