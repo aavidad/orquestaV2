@@ -352,17 +352,19 @@ autorizan otro write-set de ese tamaño.
 | A05.1b | `internal/bootstrap/runtime.go`, `cmd/orquesta/main.go`, catálogos `es.json`/`en.json`, manifest y pruebas compactas/reutilizadas: antes de construir renderizador, credenciales o Codex/proceso, `microvm` devuelve exactamente `bootstrap.runtime_isolation_not_composed`, presentado con `error.bootstrap.runtime_isolation_not_composed`; la CLI conserva el código y no lo degrada a `internal`. Cero fallback/recursos; `process` sigue verde. | Después de A05.1; antes de A05.4 y permanece serial con B01/B10 hasta que B10 lo sustituya. | `P=30, V=21` |
 | A05.1c | `config/registry.json` y proyecciones generadas: añadir `runtime.capacity.observation_timeout` positivo, separado de `observation_ttl` y de `runtime.codex.*`; comprobar valor por defecto, valor TOML explícito, rechazo de cero y sincronización canónica de todas las proyecciones. | Después de A05.1; serial sobre registro y antes de A05.4. | `P=14, V=5` |
 | A05.1d | Registro/bootstrap/scheduler: presupuesto global neutral, separación del límite Codex y tamaño máximo de trama `app-server`; retira la clave de informe sin alias ni fallback. | Integrada; serial sobre registro/bootstrap/scheduler. | `P=21, V=44` consumidos |
-| A05.2 | Fuente física configurada y candidatos opacos: slots brutos por `source+pool`, ventanas, ceros presentes, frescura y `AgentPlacementRef`; declara si la medida es bruta y rechaza la doble resta. | Tras A02b; paralela con A05.3a/A05.3b. | `P=53, V=64` consumidos |
+| A05.2 | Fuente física configurada y candidatos opacos: slots brutos por `source+pool`, ventanas, ceros presentes, frescura y `AgentPlacementRef`; declara si la medida es bruta y rechaza la doble resta. El observador estático existe, pero carece de catálogo productivo, renovación viva y consumidor compuesto. | Parcial; tras A02b y antes de A05.4. No abre A04.2. | `P=53, V=64` consumidos por la porción existente; completar exige reasignación o retirada compensatoria explícita |
 | A05.3a | `internal/adapters/agent/codex/appserver/`: codec JSONL acotado con IDs/correlación, inicialización oficial, capacidades nulas, métodos de cuota exactos, descarte de errores remotos y fallo terminal por exceso. No arranca procesos ni importa Firecracker/application/config. | Tras A02b; precede A05.3b y B05.3. | `P=278, V=179` |
 | A05.3b | Traductor y controlador Codex anfitrión solo de cuota: un `app-server` persistente por perfil, lectura inicial, eventos, reconexión y rotación con cierre exacto; elimina el fichero y la ruta alternativa. | Integrada hasta `f2cb965b`; disjunta de la fuente física y no acreditante por sí sola. | Envolvente conjunta A05.3b+A05.4 consumida: `P=234,V=117`, dentro de `P≤237,V≤146` |
-| A05.4 | Application/bootstrap inicia controladores antes del planificador, espera lectura inicial, ordena/deduplica candidatos y recoge todos los recursos ante fallo o shutdown. | Integrada hasta `f2cb965b`; abre A04.2, sin acreditar la compuerta A. | Misma medida conjunta A05.3b+A05.4 |
+| A05.4 | Application/bootstrap inicia controladores antes del planificador, espera lectura inicial, ordena/deduplica candidatos y recoge todos los recursos ante fallo o shutdown. El arranque y cierre de cuota y la primitiva de ordenación existen; falta producir candidatos físicos y entregarlos al `ClaimRequest` productivo. | Parcial hasta `f2cb965b`; no abre A04.2 hasta que el productor/consumidor real quede conectado y probado. | Misma medida conjunta A05.3b+A05.4 para la porción existente |
 
 El techo acumulado de A05 es `P=682,V=508`:
 `49+30+14+21+53+278+237=682` y
 `49+21+5+44+64+179+146=508`. A05.3b y A05.4 conservaron tareas causales
-separadas y consumieron conjuntamente `P=234,V=117`: tres líneas productivas y
-veintinueve de verificación quedaron sin consumir. No se usa contingencia ni
-se añade otro almacén, writer, planificador o bucle de dominio.
+separadas y la porción existente consumió conjuntamente `P=234,V=117`. Las tres
+líneas productivas y veintinueve de verificación nominalmente libres no bastan
+para el catálogo, los observadores vivos y la inyección que faltan; antes de
+editar ese write-set se reasigna presupuesto o se identifica retirada
+compensatoria. No se añade otro almacén, writer, planificador o bucle de dominio.
 
 ### B01 — `P=0, V=50`
 

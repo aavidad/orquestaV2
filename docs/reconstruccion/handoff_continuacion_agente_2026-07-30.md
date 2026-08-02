@@ -11,10 +11,15 @@ A05 o la aplicación hermana como inexistentes.
   Firecracker 1.16.1 y Jailer quedaron ejercitados físicamente y el candidato
   fue publicado en su repositorio independiente. Paperclip no forma parte del
   conector.
-- A05.3b+A05.4 quedó cerrada localmente en `f2cb965b`: controlador persistente
+- A05.3b quedó implementada localmente en `f2cb965b`: controlador persistente
   por perfil, entorno exacto ya validado, reconexión gobernada por la política
-  canónica, persistencia/ordenación neutral y recogida exacta de procesos. La
-  medida conjunta es `P=234,V=117`, dentro de `P≤237,V≤146`.
+  canónica y recogida exacta de procesos. No acredita por sí sola A05.
+- A05.2 y A05.4 siguen parciales: existe el observador estático y la primitiva
+  neutral de ordenación, y bootstrap inicia/espera los controladores de cuota,
+  pero no hay catálogo productivo de colocaciones, observadores físicos vivos
+  ni inyección de candidatos físicos en el `ClaimRequest`. La porción medida de
+  A05.3b+A05.4 es `P=234,V=117`, dentro de `P≤237,V≤146`; esa medida no cierra
+  la conducta ausente ni autoriza a ocultarla en A04.2.
 - Pasaron las suites de `internal/application`, Codex y `internal/bootstrap`,
   sus pruebas focales con `-race`, la suite completa
   `./internal/... ./cmd/orquesta` y `go vet`. El `-race` global de bootstrap
@@ -26,7 +31,8 @@ A05 o la aplicación hermana como inexistentes.
   reescribirse como evidencia de este corte parcial.
 - Orquesta continúa detenida, los tres Goals V23 se preservan sin relanzar y no
   se hizo `push` desde este repositorio. La siguiente dependencia causal es
-  A04.2/Q4: candidatos en el claim y reserva+binding atómicos en SQLite.
+  reabrir y presupuestar el productor de A05.2/A05.4; A04.2/Q4 permanece
+  bloqueada hasta recibir candidatos físicos reales, ordenados y deduplicados.
 
 ## Parada operativa del 2026-07-31
 
