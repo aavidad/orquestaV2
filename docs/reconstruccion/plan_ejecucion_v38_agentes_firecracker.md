@@ -102,9 +102,11 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
   MCP y buzón causal ya están acreditados. El conector Orquesta traduce esos almacenes a
   referencias y contenido verificado por el socket local; `agentmicrovm` y el huésped nunca
   reciben una ruta del anfitrión ni abren el CAS de Orquesta.
-- Siguen existiendo los contratos `agent_microvm_bundle`,
-  `agent_microvm_network` y `agent_microvm_launch_auth`, además del adaptador de
-  autenticación que B08 debe caracterizar y retirar. B02 ya migró la autoridad
+- Siguen existiendo los contratos `agent_microvm_network` y
+  `agent_microvm_launch_auth`, además del adaptador de autenticación que B08
+  debe caracterizar y retirar. B06 retiró `agent_microvm_bundle` y su único
+  consumidor `launchplan`: solo proyectaban metadata sin mover o verificar
+  bytes. B02 ya migró la autoridad
   CID al registro privado del proyecto hermano y el commit `127c0a45` retiró
   de Orquesta `agent_microvm_vsock_cid`, el allocator y el renderer físicos,
   sin consumidores, bridge ni adaptador duplicado «por compatibilidad».
@@ -490,8 +492,27 @@ Pasaron 181 pruebas Rust y quedaron ignorados los dos smokes KVM explícitos.
 
 B05 queda `exercised`, no `accredited`: sus eventos viven aún en la frontera
 huésped y B08/B10 deben exponerlos sin duplicar el supervisor; B07/B12 prueban
-el mismo candidato físicamente. La siguiente dependencia serial es B06, que
-junto con B05 abre B07.
+el mismo candidato físicamente. B06 cerró después la transferencia sellada y,
+junto con B05, abrió B07.
+
+### B06 — `P=400, V=350`
+
+| Hijo | Write-set y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| B06.1 | El baseline se caracteriza mediante su recorrido API Unix → ledger SQLite → CAS privado → motor/vsock → huésped y vuelta; no recibe rutas, CAS, repositorios o tipos del consumidor. | `exercised` sobre el candidato exacto, sin reatribuir el baseline. | Sin delta |
+| B06.2 | `54b80fb`: el cliente Go acredita base64, SHA-256, rutas, duplicados, límites y raíz canónica antes del socket; revalida todos los campos y blobs de la salida. Rust y Go fijan el mismo vector criptográfico. | Tras B06.1; es el conector público que B10 consumirá. | `P=193,V=115` netas |
+| B06.3 | `b1824ecd`: retira de Orquesta `agent_microvm_bundle` y `firecracker/launchplan`, sin consumidores productivos; desaparece la ruta que solo proyectaba metadata `planned_not_applied`. | Tras B06.2; no deja bridge ni transporte alternativo. | Compensación `P=-475,V=-453` |
+| B06.4 | Gates de API/CAS/SQLite/huésped, veinte rondas Go con `-race`, cross-project/CAS/memfd/write-set de Orquesta y suites completas sin KVM. | Último; B12 conserva el E2E físico continuo. | Incluido en B06.2 |
+
+El delta neto causal es `P=-282,V=-338`, dentro de `P<=400,V<=350`. La carga
+inline v1 queda acotada a 2.048 ficheros regulares y 8 MiB; no descomprime un
+archivo. Enlaces, dispositivos, traversal y rutas del anfitrión no son
+representables y fallan cerrados. `SCM_RIGHTS` era una optimización opcional
+para cargas grandes, por lo que no se añadió otra ruta antes de necesitarla.
+
+B06 queda `exercised`, no `accredited`: el recorrido contractual es ejecutable
+y B05+B06 abren B07. La microVM física continua y la persistencia final del
+conjunto de cambios en Orquesta pertenecen a B12 sobre el adaptador B10.
 
 ### B07 — `P=500, V=450`
 

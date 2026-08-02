@@ -5,6 +5,24 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- B06 quedó `exercised` en Agente MicroVM, candidato local `8ce4c12`, sin
+  `push`. `54b80fb` hace que el cliente Go acredite blobs, rutas, límites y
+  raíz canónica antes del socket y vuelva a acreditar la respuesta; Rust y Go
+  fijan el mismo vector. El recorrido durable ya enlaza API Unix, SQLite, CAS,
+  motor/vsock y huésped sin compartir rutas o almacenes.
+- Orquesta retiró en `b1824ecd` `agent_microvm_bundle` y su único consumidor
+  `firecracker/launchplan`: eran 475 líneas de producto que solo proyectaban
+  metadata `planned_not_applied` y no tenían consumidor productivo. B10
+  compondrá el módulo Go público sin reimplementar HTTP.
+- El delta B06 es `P=-282,V=-338` tras la retirada compensatoria, dentro de
+  `P<=400,V<=350`. Formato, Clippy, 181 pruebas Rust —más dos smokes KVM
+  ignorados—, Go normal/`-race`/`vet`, los focales de Orquesta, su suite
+  `internal/cmd`, `vet` y la aceptación V38 quedaron verdes. El gate raíz solo
+  conserva los dos receipts Codex caducados conocidos.
+- B06 no arrancó Orquesta, Agente MicroVM, Firecracker o Jailer y no acredita
+  V38. B05+B06 abren B07; B08 y B09 continúan abiertas. El E2E físico continuo
+  y la persistencia final del conjunto de cambios pertenecen a B12/B10.
+
 - B05 quedó `exercised` en `agente_microvm`, candidato local `1aec635`, sin
   `push`. `2295ee2`, `ce8ae2b` y `50d329a` fijan sesiones neutrales de agente,
   turnos idempotentes, reconexión por cursor, contrapresión y una única

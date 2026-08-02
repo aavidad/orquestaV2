@@ -809,7 +809,8 @@ Fuentes vigentes revisadas:
 - `internal/ports/agent_microvm_network.go`
 - `127c0a45`, retirada del antiguo puerto y asignador CID de Orquesta
 - `internal/ports/agent_microvm_launch_auth.go`
-- `internal/ports/agent_microvm_bundle.go`
+- `b1824ecd`, retirada del descriptor de artefactos y plan Firecracker que no
+  movían bytes
 - `internal/adapters/agent/firecracker/`
 - `internal/adapters/attestor/firecrackerclient/`
 - `internal/adapters/attestor/firecrackerlauncher/`
