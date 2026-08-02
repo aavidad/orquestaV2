@@ -368,6 +368,18 @@ exactamente la reasignación `P=180,V=120`; el contrato compartido del claim
 consumió `P=44,V=107` de A04.2. No se añadió otro almacén, writer, planificador
 o bucle de dominio.
 
+### A06 — `P=350, V=350`
+
+| Hijo | Write-set y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| A06.1 | Contrato neutral en `internal/ports/agent_environment.go` y modelo/validación en `internal/application/agent_environment.go`: estado único `preserved_pending_review`, ejecución e identidad externa exactas, cerca, workspace/base, change-set o bundle CAS, inventario, sello, configuración, rootfs y tiempos. No expone delete/GC. | Primero; reusa refs y comprobantes existentes. No añade lifecycle ni acción al scheduler. | `P=100,V=100` |
+| A06.2 | Migración progresiva 025, método cohesivo del mismo `StateRepository`, SQLite, lectura y recovery. La repetición exacta es idempotente; proyecto, digest, referencia, cerca o payload distintos fallan cerrados. | Tras A06.1; serial sobre migraciones y estado, ahora libres tras Q4. | `P=150,V=150` |
+| A06.3 | La aceptación de lanzamiento conserva de forma durable si el entorno exige preservación y toda escritura terminal aplica la misma compuerta de aplicación: sin comprobante válido no terminaliza ni desmonta. Prueba normal, duplicado, reinicio, tamper, proyecto/cerca ajenos y material direccionable. | Tras A06.2; abre A07/A08. B12 conectará después el efecto físico que produce el comprobante. | `P=100,V=100` |
+
+La suma `100+150+100=350` y `100+150+100=350` conserva el techo A06. El
+comprobante se persiste como hecho del `StateRepository`; no es otro agregado,
+cola o estado de `Goal`, y no autoriza retirada automática.
+
 ### B01 — `P=0, V=50`
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
