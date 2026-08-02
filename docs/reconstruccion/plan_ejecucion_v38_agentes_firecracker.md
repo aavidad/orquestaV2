@@ -565,10 +565,10 @@ siguiente dependencia abierta antes de B04; B12 conserva el recorrido físico.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B09.1 | Repositorio hermano, `firecracker/egress.go`: concesión neutral, servicio vsock y comprobante estable. | Primero; congela API pública. | `P=110, V=90` |
-| B09.2 | Repositorio hermano, `firecracker/egress_resolver.go`: DNS, redirecciones e IPv4/IPv6; bloqueo de bucle local, red privada, ULA, enlace local y metadatos. | Tras B09.1; paralelo con B09.3. | `P=170, V=160` |
-| B09.3 | Repositorio hermano, `firecracker/egress_receipts.go`: límites de tiempo/contenido, idempotencia y comprobantes ante éxito, rechazo y respuesta perdida. | Tras B09.1; paralelo con B09.2. | `P=140, V=130` |
-| B09.4 | Conector Orquesta: permisos/presupuesto a `EgressGrant` neutral por protocolo, sin tipos internos o secretos en `agentmicrovm`. | Tras B09.1; disjunto de B09.2/B09.3. | `P=100, V=90` |
+| B09.1 | Repositorio hermano, `src/contrato/concesiones.rs` y `src/adaptadores/firecracker/egreso.rs`: concesión neutral agregada, servicio vsock y comprobante estable. Firecracker/vsock permanecen en el núcleo Rust. | Primero; congela API pública. | `P=110, V=90` |
+| B09.2 | Repositorio hermano, módulo Rust de egreso: DNS, redirecciones e IPv4/IPv6; bloqueo de bucle local, red privada, ULA, enlace local y metadatos. | Tras B09.1; paralelo con B09.3. | `P=170, V=160` |
+| B09.3 | Repositorio hermano, persistencia SQLite privada y módulo Rust de egreso: límites de tiempo/contenido, idempotencia y comprobantes ante éxito, rechazo y respuesta perdida. | Tras B09.1; paralelo con B09.2. | `P=140, V=130` |
+| B09.4 | Conector Orquesta: permisos/presupuesto del efecto `agent_launch` a una concesión agregada `EgressGrant`, y registro posterior de receipts neutrales; no crea un lifecycle por conexión ni exporta tipos internos o secretos. Bytes de red son límite técnico firmado y no se falsean como `DiskBytes`. | Tras B09.1; disjunto de B09.2/B09.3. | `P=100, V=90` |
 | B09.5 | Revinculación DNS, redirección privada, VM vecina, entrada e Internet directo negativos. | Último, sobre B09.2–B09.4. | `P=80, V=80` |
 
 ### B10 — `P=280, V=430`
