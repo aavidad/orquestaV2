@@ -550,3 +550,12 @@ Hasta superar esas pruebas sobre la misma composición candidata y los
 resúmenes criptográficos exactos de Orquesta y `agentmicrovm`, y recibir
 evidencia independiente, todas las tareas de este ADR permanecen `planned` y
 no acreditantes.
+
+## Corrección presupuestaria A06 del 2026-08-01
+
+La migración 025 acredita el comprobante de preservación como columnas causales
+consultables y no como JSON opaco. Su codificación, lectura estricta, replay y
+recovery requieren `P=180` en A06.2. Se trasladan exactamente `P=30` desde
+A06.3, cuya compuerta terminal reutiliza el mismo lector y writer. A06.3 queda
+en `P=70`; el total A06 permanece `P=350`, ambos hijos siguen por debajo de 200
+LOC y el total V38 no cambia. No se añade almacén, lifecycle, acción ni bucle.
