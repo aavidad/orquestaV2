@@ -434,9 +434,9 @@ neutral, ejecutada sin KVM, atribuya prematuramente la composición física.
 
 | Hijo | Conjunto de escritura y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B03.1 | Caracterizar el repositorio hermano ya publicado, su crate y binario Rust `agente-microvm`, el módulo cliente Go, la configuración tipada, la documentación operativa y las guardas de independencia. El baseline vivo es `bdba503` y su medida separada queda fijada en `adr_v38_baseline_agente_microvm_2026-08-02.md`. | Primero; no atribuye todavía cierre del contrato cruzado ni convierte código preexistente en delta oculto. | Delta posterior al baseline: `P=60, V=80` |
-| B03.2 | Contratos neutrales `v1`, referencias/comprobantes/códigos estables y conjunto contractual; sin conceptos ni importaciones Orquesta. | Tras B03.1; congela la semántica pública. | `P=100, V=110` |
-| B03.3 | `agentmicrovm.local.v1` sobre socket Unix, cliente/servidor, negociación y modo `serve`; consumidor externo mínimo. | Tras B03.2; único proceso local técnico, sin TCP/HTTP. | `P=90, V=110` |
+| B03.1 | `27ca627`: caracteriza el repositorio hermano publicado, su crate/binario Rust, cliente Go y fronteras. La guarda ejecutable prohíbe dependencias de producto consumidoras, inversión hacia adaptadores, transporte TCP y rutas sin versión. El baseline `bdba503` se mide aparte en el ADR. | `exercised`; no atribuye el baseline ni el contrato cruzado a B03. | Consumido `P=0,V=71` de `P=60,V=80` |
+| B03.2 | `8cdd2a9`: concentra nombres estables en `OperacionV1`, añade DTO neutrales para eventos/recuperación y exige que capacidades solo anuncie operaciones conocidas y realizadas. Las dos operaciones futuras siguen ausentes hasta sus tareas causales. | `exercised`; congela la semántica pública sin simular rutas. | Consumido `P=87,V=79` de `P=100,V=110` |
+| B03.3 | `cfb6302` y `e84fd2a`: conserva `agentmicrovm.local.v1` sobre socket Unix y sus pruebas cliente/servidor; `servir` acepta solo `--config` absoluto y el cargador TOML estricto verifica identidad, propietario, modo, tamaño, schema y valores sin entorno. | `exercised`; un único proceso local técnico y ninguna escucha TCP. | Consumido neto `P=-53,V=45` de `P=90,V=110` |
 
 La suma `60+100+90=250` y `80+110+110=300` limita el delta posterior al
 baseline publicado `bdba503`. Sus 29.221 líneas físicas Rust/Go se inventarían
@@ -444,6 +444,14 @@ por separado y solo cuentan como conducta de una tarea cuando superan su gate;
 no se atribuyen en bloque a B03 ni desaparecen de la medida. No existe reserva
 posterior para «extraerlo», volver a publicarlo o convertirlo en servicio
 remoto.
+
+B03 queda `exercised` en el candidato hermano `f3ae2b4`, con delta neto total
+`P=34,V=195` frente a `bdba503`. Pasaron formato, Clippy sin avisos, 172 pruebas
+Rust —más dos smokes KVM ignorados—, pruebas Go normales y con detector de
+carreras, `vet` y los contratos focales de independencia, configuración y
+transporte. No acredita B04, `ORC-28` ni V38. La siguiente dependencia causal
+serial es B02; B05/B06/B08/B09 también quedan causalmente abiertas, pero no se
+mezclan en su conjunto de escritura.
 
 ### B05 — `P=490, V=320`
 
@@ -803,8 +811,9 @@ efecto autorizado, con alcance e idempotencia propios.
   A03 incorpora la base `139/270`; A04 incorpora base y vínculo `160/110`.
   A07 queda en `P=165,V=695`; sus pruebas integradas explican el aumento neto
   de `V=283`, y conserva `P=66` para retirar los límites transitorios.
-  B03 incluye íntegramente la creación del repositorio hermano en
-  `P=250,V=300`; B10 consume su cliente Go público en vez de duplicarlo y
+  B03 limita a `P=250,V=300` el delta posterior al baseline hermano medido en
+  `adr_v38_baseline_agente_microvm_2026-08-02.md`; B10 consume su cliente Go
+  público en vez de duplicarlo y
   transfiere `P=180,V=120` a A05.2b. Las demás tareas B contabilizan en sus
   techos el lado de Orquesta y el lado `agentmicrovm`. El código generado se informa aparte y
   ninguna holgura se descuenta dos veces. No existe contingencia, bolsa de

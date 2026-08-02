@@ -5,6 +5,22 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- B03 quedó `exercised` en el repositorio independiente
+  `/home/alberto/Trabajo/agente_microvm`, candidato local `f3ae2b4`, sin
+  `push`. La aplicación no importa ni comparte estado, rutas, configuración o
+  tipos de Orquesta; el protocolo sigue siendo `agentmicrovm.local.v1` por
+  HTTP/1.1 sobre socket Unix privado y sin escucha TCP.
+- Los commits `27ca627`, `8cdd2a9`, `cfb6302` y `e84fd2a` fijan guardas de
+  independencia, vocabulario neutral v1 y arranque desde una única
+  configuración TOML absoluta y estricta. Capacidades no anuncia
+  `eventos_ejecucion` ni `recuperar_ejecucion` antes de B05/B07/B10.
+- El delta B03 real frente a `bdba503` es `P=34,V=195`, dentro de
+  `P<=250,V<=300`; el baseline de 29.221 líneas Rust/Go continúa medido aparte.
+  Formato, Clippy, 172 pruebas Rust —más dos smokes KVM ignorados—, Go normal y
+  con detector de carreras, `vet` y las pruebas focales quedaron verdes.
+- B03 no acredita B04, `ORC-28` ni V38. La siguiente dependencia causal serial
+  es B02: registro físico privado, concesiones CID y recuperación/reconciliación
+  exactas. No se arrancó Orquesta, Firecracker, Jailer ni Agente MicroVM.
 - A08 quedó `exercised` en `e6352ec2`. La compuerta neutral usa SQLite y el
   almacén de artefactos reales con un agente sustituto contractual; conserva
   cohortes lógicas `1/16/70/500`, capacidad física parcial `1/5/10/20`,
