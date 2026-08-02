@@ -18,7 +18,7 @@ func TestAgentPlacementMigrationIsProgressiveAtomicAndExact(t *testing.T) {
 	var columns string
 	sqliteTestNoError(t, repository.db.QueryRow(`SELECT user_version,(SELECT COUNT(*) FROM schema_migrations WHERE version=23),(SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN ('agent_quota_observations','agent_placement_bindings')),(SELECT group_concat(name,',') FROM pragma_table_info('agent_placement_bindings')) FROM pragma_user_version`).Scan(&version, &receipts, &tables, &columns))
 	sqliteTestNoError(t, repository.Close())
-	if version != recoverySchemaV38Claim || receipts != 1 || tables != 2 ||
+	if version != recoverySchemaV38Environment || receipts != 1 || tables != 2 ||
 		columns != "reservation_ref,placement_ref,quota_observation_ref,quota_observation_revision" {
 		t.Fatalf("migración version=%d recibos=%d tablas=%d columnas=%q", version, receipts, tables, columns)
 	}

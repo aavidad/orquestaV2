@@ -661,13 +661,14 @@ WHERE ref=?`,
 		t, system.repository.db,
 		`DROP TABLE agent_placement_bindings; DROP TABLE agent_quota_observations;
 DROP TABLE agent_capacity_transitions; DROP TABLE agent_capacity_reservations;
-DROP TABLE agent_capacity_observations; DROP TABLE wizard_gaps_input_receipts`,
+DROP TABLE agent_capacity_observations; DROP TABLE agent_environment_receipts;
+DROP TABLE wizard_gaps_input_receipts`,
 	)
 	mustV10Exec(
 		t,
 		system.repository.db,
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?)`,
-		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?)`,
+		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim, recoverySchemaV38Environment,
 	)
 	mustV10Exec(
 		t,

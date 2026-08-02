@@ -678,6 +678,7 @@ type StateRepository interface {
 	ProjectRepository(context.Context, goal.ProjectRef) (identity.RepositoryRef, error)
 	CurrentAgentQuotaObservation(context.Context, ports.AgentPlacementRef) (AgentQuotaObservationRecord, bool, error)
 	AppendAgentQuotaObservation(context.Context, AgentQuotaObservationRecord) (AgentQuotaObservationRecord, bool, error)
+	RegistrarPreservacionEntornoAgente(context.Context, ComprobantePreservacionEntornoAgente) (ComprobantePreservacionEntornoAgente, bool, error)
 	ListPendingChanges(context.Context, PendingChangeQuery) ([]PendingChange, error)
 	DirectorReplay(context.Context, DirectorReplayRequest) (DirectorReplayRecord, bool, error)
 	ClaimDirector(context.Context, ClaimDirectorState) (DirectorLeaseRecord, bool, error)

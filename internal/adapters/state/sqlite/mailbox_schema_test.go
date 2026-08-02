@@ -86,7 +86,7 @@ FROM action_consumption_receipts ORDER BY action_ref`); !reflect.DeepEqual(after
 	if err := repository.db.QueryRow(`SELECT name FROM schema_migrations WHERE version = 8`).Scan(&migrationName); err != nil {
 		t.Fatal(err)
 	}
-	if version != recoverySchemaV38Claim || migrationName != "008_mailbox.sql" {
+	if version != recoverySchemaV38Environment || migrationName != "008_mailbox.sql" {
 		t.Fatalf("mailbox migration identity: version=%d name=%q", version, migrationName)
 	}
 

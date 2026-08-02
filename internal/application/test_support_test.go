@@ -46,6 +46,7 @@ type memoryRepository struct {
 	cuotasAgente         map[ports.AgentPlacementRef]AgentQuotaObservationRecord
 	reservasCapacidad    map[string]AgentCapacityReservation
 	colocaciones         map[string]ports.AgentPlacementRef
+	preservaciones       []ComprobantePreservacionEntornoAgente
 	now                  func() time.Time
 }
 
@@ -129,6 +130,26 @@ func (repository *memoryRepository) AppendAgentQuotaObservation(_ context.Contex
 	}
 	repository.cuotasAgente[cuota.PlacementRef] = cuota
 	return cuota, true, nil
+}
+
+func (repository *memoryRepository) RegistrarPreservacionEntornoAgente(_ context.Context, comprobante ComprobantePreservacionEntornoAgente) (ComprobantePreservacionEntornoAgente, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	for _, previo := range repository.preservaciones {
+		if previo.Ref == comprobante.Ref || previo.ClaveIdempotencia == comprobante.ClaveIdempotencia || previo.EjecucionRef == comprobante.EjecucionRef {
+			if reflect.DeepEqual(previo, comprobante) {
+				return previo, false, nil
+			}
+			return ComprobantePreservacionEntornoAgente{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	for referencia, registro := range repository.records {
+		if referencia == comprobante.ObjetivoRef && ValidarCausalidadPreservacionEntornoAgente(comprobante, registro) == nil {
+			repository.preservaciones = append(repository.preservaciones, comprobante)
+			return comprobante, true, nil
+		}
+	}
+	return ComprobantePreservacionEntornoAgente{}, false, &StateError{Code: StateConflict}
 }
 
 func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGoalState) (GoalRecord, bool, error) {
