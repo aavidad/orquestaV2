@@ -129,9 +129,9 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
 Ya existen el proyecto independiente `agentmicrovm`, su protocolo local
 versionado, el registro físico privado, la concesión CID durable y el motor
 Firecracker que consume ese CID. También existen la fuente neutral de
-capacidad, el controlador de cuota estructurada y la colocación opaca fijada
-dentro de la reclamación. Aún faltan cerrar el `rootfs` productivo, el
-protocolo huésped completo, el intermediario/proxy, el retorno sellado y la
+capacidad, el controlador de cuota estructurada, la colocación opaca fijada,
+el protocolo huésped vivo y la imagen reproducible con SBOM. Aún faltan cerrar
+el intermediario/proxy, el retorno sellado y la
 evidencia física `1/5/10/16/20`. Tampoco existe aún el conector final Orquesta ni la prueba
 cruzada de compatibilidad. Esas son las brechas que siguen.
 
@@ -476,11 +476,22 @@ mezclan en un mismo conjunto de escritura.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B05.1 | Repositorio hermano, `v1/guestproto/`: esquema y tramas neutrales versionadas para hilo, turno, control y eventos. | Primero; no importa Firecracker ni proveedor. | `P=100, V=70` |
-| B05.2 | Repositorio hermano, `v1/guestsupervisor/`: supervisor neutral, reconexión, deduplicación y contrapresión. | Tras B05.1; paralelo con B05.3. | `P=110, V=60` |
-| B05.3 | Enlace fino huésped: implementa el artefacto de esquema Codex neutral fijado y arranca su propia instancia dentro de la microVM. No importa el códec `internal` de Orquesta. | Tras B05.1 y el esquema fijado; paralelo con B05.2. | `P=50, V=30` |
-| B05.4 | Constructor de `rootfs`, núcleo/`init`, manifiesto, SBOM, licencias, propietario/modos y resumen criptográfico reproducible. | Después de B05.2–B05.3; serial sobre imagen. | `P=160, V=100` |
-| B05.5 | Incompatibilidad, preinicialización, reinicio, petición no autorizada, repetición/desorden, aislamiento anfitrión/huésped, límites y ausencia de WebSocket/tmux/secretos. | Último; mismo candidato de B05.4. | `P=70, V=60` |
+| B05.1 | `2295ee2`: `agentmicrovm.huesped.v1` fija inicio de sesión neutral, turnos idempotentes y eventos ordenados por cursor, sin proveedor, ruta host o variante abierta. | `exercised`; contrato estricto compartido solo entre host y huésped. | Incluido en el total B05 |
+| B05.2 | `ce8ae2b` y `50d329a`: PID 1 aloja una única sesión por microVM, reconecta por nuevas conexiones vsock, cerca turnos, acota salida, mata el grupo y reutiliza el mismo supervisor para la orden corta. | `exercised`; no crea parada ni lifecycle paralelos. | Incluido en el total B05 |
+| B05.3 | El perfil sellado conserva Codex 0.146.0 como ejecutor sustituible; el supervisor solo conoce un programa interno y puede alojar Claude, Gemini u otro perfil. B08/B10 traducen después la sesión pública. | `exercised` sin KVM; no importa el códec interno de Orquesta. | Baseline caracterizado, sin reatribuirlo |
+| B05.4 | `0970fee`: el manifiesto embebido incorpora SPDX 2.3 con huésped, Linux, Codex y BusyBox. Dos initramfs y dos perfiles ext4 independientes resultaron idénticos, privados y modo `0400`. | `exercised`; activos temporales retirados exactamente. | Datos SPDX informados aparte como `A=70` |
+| B05.5 | `ce8ae2b` y `0970fee`: incompatibilidad estricta, sesión distinta, turno conflictivo, cursor inválido, truncamiento, timeout, descendientes, rutas host ausentes y veinte/cien repeticiones focales. | Último; mismo candidato `1aec635`. | Total `P=480,V=319` |
+
+El huésped musl queda sellado por
+`dd0c0e8b94382603487b691d7ae775947a50b19439b5a1242c1d6392302d0ace`;
+el initramfs reproducible por `7e858d7215d5efbfb0479da379fe4420c34c6aeb875f6295bae0f5eb23992c30`
+y el perfil por `4c1daa5ad93b945b50416178436d9b6d636857de82422ff981936e04ea426ce8`.
+Pasaron 181 pruebas Rust y quedaron ignorados los dos smokes KVM explícitos.
+
+B05 queda `exercised`, no `accredited`: sus eventos viven aún en la frontera
+huésped y B08/B10 deben exponerlos sin duplicar el supervisor; B07/B12 prueban
+el mismo candidato físicamente. La siguiente dependencia serial es B06, que
+junto con B05 abre B07.
 
 ### B07 — `P=500, V=450`
 

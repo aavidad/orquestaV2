@@ -5,6 +5,20 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- B05 quedó `exercised` en `agente_microvm`, candidato local `1aec635`, sin
+  `push`. `2295ee2`, `ce8ae2b` y `50d329a` fijan sesiones neutrales de agente,
+  turnos idempotentes, reconexión por cursor, contrapresión y una única
+  autoridad de procesos por microVM. El perfil decide Codex, Claude, Gemini u
+  otro ejecutor; el núcleo huésped no conoce proveedores.
+- `0970fee` embebe una SBOM SPDX 2.3. Dos construcciones independientes
+  coincidieron en initramfs `7e858d…92c30` y perfil `4c1daa…26ce8`, ambos modo
+  `0400`; los temporales se retiraron exactamente. Pasaron 181 pruebas Rust,
+  dos smokes KVM quedaron ignorados, y las sesiones se repitieron 20 veces y
+  la compatibilidad corta 100 veces.
+- B05 consume `P=480,V=319` de `P<=490,V<=320`, más `A=70` líneas de datos
+  SPDX sin reglas. No acredita B07, B10, `ORC-28` ni V38 y no arrancó Orquesta,
+  Agente MicroVM, Firecracker o Jailer. La siguiente dependencia serial es B06;
+  B05+B06 abren B07.
 - B02 quedó `exercised` en `agente_microvm`, candidato local `3c827d9`, sin
   `push`. Los commits `9ad41b6`, `b8fc520` y `178d519` reservan la ejecución y
   el CID en una transacción SQLite privada, ligan el CID exacto al motor y
@@ -17,7 +31,7 @@ Q4 como pendiente o A05 como meramente conectada.
 - Orquesta retiró en `127c0a45` el puerto CID, allocator y renderer físicos sin
   consumidores. El delta hermano `P=372,V=314` queda compensado conjuntamente
   en `P=-1534,V=-1909`; no existe ya una segunda autoridad CID. B02 no acredita
-  B04, `ORC-28` ni V38. La siguiente dependencia serial elegida es B05.
+  B04, `ORC-28` ni V38. Su siguiente dependencia B05 ya quedó ejercitada.
 - B03 quedó `exercised` en el repositorio independiente
   `/home/alberto/Trabajo/agente_microvm`, candidato local `f3ae2b4`, sin
   `push`. La aplicación no importa ni comparte estado, rutas, configuración o
@@ -25,15 +39,16 @@ Q4 como pendiente o A05 como meramente conectada.
   HTTP/1.1 sobre socket Unix privado y sin escucha TCP.
 - Los commits `27ca627`, `8cdd2a9`, `cfb6302` y `e84fd2a` fijan guardas de
   independencia, vocabulario neutral v1 y arranque desde una única
-  configuración TOML absoluta y estricta. Capacidades no anuncia
-  `eventos_ejecucion` ni `recuperar_ejecucion` antes de B05/B07/B10.
+  configuración TOML absoluta y estricta. B05 ya implementa eventos dentro del
+  huésped, pero capacidades no anuncia `eventos_ejecucion` ni
+  `recuperar_ejecucion` antes de la traducción pública B10.
 - El delta B03 real frente a `bdba503` es `P=34,V=195`, dentro de
   `P<=250,V<=300`; el baseline de 29.221 líneas Rust/Go continúa medido aparte.
   Formato, Clippy, 172 pruebas Rust —más dos smokes KVM ignorados—, Go normal y
   con detector de carreras, `vet` y las pruebas focales quedaron verdes.
-- B03 no acredita B04, `ORC-28` ni V38. Su dependencia B02 ya quedó ejercitada;
-  B05 es el siguiente bloque serial. No se arrancó Orquesta, Firecracker,
-  Jailer ni Agente MicroVM.
+- B03 no acredita B04, `ORC-28` ni V38. Sus dependencias B02 y B05 ya quedaron
+  ejercitadas; B06 es el siguiente bloque serial. No se arrancó Orquesta,
+  Firecracker, Jailer ni Agente MicroVM.
 - A08 quedó `exercised` en `e6352ec2`. La compuerta neutral usa SQLite y el
   almacén de artefactos reales con un agente sustituto contractual; conserva
   cohortes lógicas `1/16/70/500`, capacidad física parcial `1/5/10/20`,
