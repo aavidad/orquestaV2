@@ -373,11 +373,11 @@ o bucle de dominio.
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
 | A06.1 | Contrato neutral en `internal/ports/agent_environment.go` y modelo/validación en `internal/application/agent_environment.go`: estado único `preserved_pending_review`, ejecución e identidad externa exactas, cerca, workspace/base, change-set o bundle CAS, inventario, sello, configuración, rootfs y tiempos. No expone delete/GC. | Primero; reusa refs y comprobantes existentes. No añade lifecycle ni acción al scheduler. | `P=100,V=100` |
-| A06.2 | Migración progresiva 025, método cohesivo del mismo `StateRepository`, SQLite, lectura y recovery. La repetición exacta es idempotente; proyecto, digest, referencia, cerca o payload distintos fallan cerrados. | Tras A06.1; serial sobre migraciones y estado, ahora libres tras Q4. | `P=180,V=150` |
-| A06.3 | La aceptación de lanzamiento conserva de forma durable si el entorno exige preservación y toda escritura terminal aplica la misma compuerta de aplicación: sin comprobante válido no terminaliza ni desmonta. Prueba normal, duplicado, reinicio, tamper, proyecto/cerca ajenos y material direccionable. | Tras A06.2; abre A07/A08. B12 conectará después el efecto físico que produce el comprobante. | `P=70,V=100` |
+| A06.2 | Migración progresiva 025, método cohesivo del mismo `StateRepository`, SQLite, lectura y recovery. La repetición exacta es idempotente; proyecto, digest, referencia, cerca o payload distintos fallan cerrados. | Tras A06.1; serial sobre migraciones y estado, ahora libres tras Q4. | `P=178,V=150` |
+| A06.3 | La aceptación de lanzamiento conserva de forma durable si el entorno exige preservación y toda escritura terminal aplica la misma compuerta de aplicación: sin comprobante válido no terminaliza ni desmonta. Prueba normal, duplicado, reinicio, tamper, proyecto/cerca ajenos y material direccionable. | Tras A06.2; abre A07/A08. B12 conectará después el efecto físico que produce el comprobante. | `P=72,V=100` |
 
-La suma `100+180+70=350` y `100+150+100=350` conserva el techo A06. La
-corrección presupuestaria del ADR V38 traslada `P=30` de A06.3 a A06.2: el
+La suma `100+178+72=350` y `100+150+100=350` conserva el techo A06. La
+corrección presupuestaria del ADR V38 traslada `P=28` de A06.3 a A06.2: el
 hecho durable necesita codificar y recuperar sus 27 campos causales sin JSON
 opaco, mientras la compuerta terminal reutiliza ese lector y no añade otro
 writer. Ambos hijos permanecen por debajo de 200 LOC. El comprobante se
