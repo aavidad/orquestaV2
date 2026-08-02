@@ -355,15 +355,15 @@ autorizan otro write-set de ese tamaño.
 | A05.1d | Registro/bootstrap/scheduler: presupuesto global neutral, separación del límite Codex y tamaño máximo de trama `app-server`; retira la clave de informe sin alias ni fallback. | Integrada; serial sobre registro/bootstrap/scheduler. | `P=21, V=44` consumidos |
 | A05.2 | Fuente física configurada y candidatos opacos: slots brutos por `source+pool`, ventanas, ceros presentes, frescura y `AgentPlacementRef`; declara si la medida es bruta y rechaza la doble resta. | Tras A02b; paralela con A05.3a/A05.3b. | `P=53, V=64` consumidos |
 | A05.3a | `internal/adapters/agent/codex/appserver/`: codec JSONL acotado con IDs/correlación, inicialización oficial, capacidades nulas, métodos de cuota exactos, descarte de errores remotos y fallo terminal por exceso. No arranca procesos ni importa Firecracker/application/config. | Tras A02b; precede A05.3b y B05.3. | `P=278, V=179` |
-| A05.3b | Traductor y controlador Codex anfitrión solo de cuota: un `app-server` persistente por perfil, lectura inicial, eventos, reconexión y rotación con cierre exacto; elimina el fichero y la ruta alternativa. | Tras A05.3a; disjunto de la fuente física. | Envolvente conjunta A05.3b+A05.4: `P≤237,V≤146` |
-| A05.4 | Application/bootstrap inicia controladores antes del planificador, espera lectura inicial, ordena/deduplica candidatos y recoge todos los recursos ante fallo o shutdown. | Después de A05.1b–A05.3b; prerequisito de A04.2. | Misma envolvente conjunta; debe asignarse antes de abrir ambos write-sets |
+| A05.3b | Traductor y controlador Codex anfitrión solo de cuota: un `app-server` persistente por perfil, lectura inicial, eventos, reconexión y rotación con cierre exacto; elimina el fichero y la ruta alternativa. | Integrada hasta `f2cb965b`; disjunta de la fuente física y no acreditante por sí sola. | Envolvente conjunta A05.3b+A05.4 consumida: `P=234,V=117`, dentro de `P≤237,V≤146` |
+| A05.4 | Application/bootstrap inicia controladores antes del planificador, espera lectura inicial, ordena/deduplica candidatos y recoge todos los recursos ante fallo o shutdown. | Integrada hasta `f2cb965b`; abre A04.2, sin acreditar la compuerta A. | Misma medida conjunta A05.3b+A05.4 |
 
 El techo acumulado de A05 es `P=682,V=508`:
 `49+30+14+21+53+278+237=682` y
-`49+21+5+44+64+179+146=508`. A05.3b y A05.4 siguen siendo tareas causales
-separadas; compartir envolvente evita inventar una precisión antes de medir su
-frontera. No se usa contingencia ni se añade otro almacén, writer, planificador
-o bucle de dominio.
+`49+21+5+44+64+179+146=508`. A05.3b y A05.4 conservaron tareas causales
+separadas y consumieron conjuntamente `P=234,V=117`: tres líneas productivas y
+veintinueve de verificación quedaron sin consumir. No se usa contingencia ni
+se añade otro almacén, writer, planificador o bucle de dominio.
 
 ### B01 — `P=0, V=50`
 

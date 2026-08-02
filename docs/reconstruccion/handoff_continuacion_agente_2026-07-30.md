@@ -1,5 +1,33 @@
 # Documento de continuidad de Orquesta — 2026-07-30
 
+## Avance operativo del 2026-08-01
+
+Este apartado prevalece sobre las menciones posteriores que todavía presentan
+A05 o la aplicación hermana como inexistentes.
+
+- La aplicación hermana existe como **Agente MicroVM** en
+  `/home/alberto/Trabajo/agente_microvm`; su repositorio, crate y CLI conservan
+  ese nombre y su protocolo máquina sigue siendo `agentmicrovm.local.v1`.
+  Firecracker 1.16.1 y Jailer quedaron ejercitados físicamente y el candidato
+  fue publicado en su repositorio independiente. Paperclip no forma parte del
+  conector.
+- A05.3b+A05.4 quedó cerrada localmente en `f2cb965b`: controlador persistente
+  por perfil, entorno exacto ya validado, reconexión gobernada por la política
+  canónica, persistencia/ordenación neutral y recogida exacta de procesos. La
+  medida conjunta es `P=234,V=117`, dentro de `P≤237,V≤146`.
+- Pasaron las suites de `internal/application`, Codex y `internal/bootstrap`,
+  sus pruebas focales con `-race`, la suite completa
+  `./internal/... ./cmd/orquesta` y `go vet`. El `-race` global de bootstrap
+  agotó diez minutos en la prueba histórica
+  `TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce`; la prueba focal
+  de cuotas pasó por separado y no se observó una carrera del cambio.
+- La suite raíz solo falla porque los receipts reales Codex V17/V22 están
+  ligados al árbol anterior. Deben renovarse con el candidato final, no
+  reescribirse como evidencia de este corte parcial.
+- Orquesta continúa detenida, los tres Goals V23 se preservan sin relanzar y no
+  se hizo `push` desde este repositorio. La siguiente dependencia causal es
+  A04.2/Q4: candidatos en el claim y reserva+binding atómicos en SQLite.
+
 ## Parada operativa del 2026-07-31
 
 Este corte prevalece sobre el corte del 30 de julio y sobre las menciones
