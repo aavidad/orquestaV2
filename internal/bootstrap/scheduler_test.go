@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"errors"
-	"fmt"
 	"reflect"
 	"strconv"
 	"sync"
@@ -11,54 +10,36 @@ import (
 	"time"
 
 	"orquesta/internal/application"
-	"orquesta/internal/config"
 )
 
-func TestSchedulerBoundsLaunchAdmissionsWithoutExpandingLogicalDemand(t *testing.T) {
-	const demand = 500
-	for _, limits := range []struct {
-		processSlots int
-		codex        int
-	}{
-		{processSlots: 1, codex: 70},
-		{processSlots: 5, codex: 1},
-		{processSlots: 5, codex: 4096},
-		{processSlots: 10, codex: 70},
-		{processSlots: 16, codex: 70},
-		{processSlots: 20, codex: 70},
-	} {
-		limits := limits
-		t.Run("limite_"+strconv.Itoa(limits.processSlots)+"_codex_"+strconv.Itoa(limits.codex), func(t *testing.T) {
-			snapshot, err := config.Resolve(config.ResolveOptions{TOML: []byte(fmt.Sprintf(
-				"[governance]\nglobal_process_slots_budget = %d\n[runtime.codex]\nmax_concurrent_executions = %d\n",
-				limits.processSlots, limits.codex,
-			))})
-			if err != nil {
-				t.Fatal(err)
+func TestSchedulerRespetaCapacidadFisicaDurableSinLimiteLocal(t *testing.T) {
+	const demanda = 500
+	for _, capacidad := range []int{1, 5, 10, 16, 20} {
+		capacidad := capacidad
+		t.Run("capacidad_"+strconv.Itoa(capacidad), func(t *testing.T) {
+			acciones := make([]application.ActionKind, demanda)
+			for indice := range acciones {
+				acciones[indice] = application.ActionLaunchAgent
 			}
-			limit := int(dispatcherProcessSlotLimit(snapshot))
-			actions := make([]application.ActionKind, demand)
-			for index := range actions {
-				actions[index] = application.ActionLaunchAgent
-			}
-			queue := newSchedulerActionQueue(actions...)
-			started := make(chan struct{}, limit)
+			cola := newSchedulerActionQueue(capacidad, acciones...)
+			iniciados := make(chan struct{}, capacidad)
 			var mu sync.Mutex
-			active, maximum := 0, 0
-			process := func(ctx context.Context, claim application.ActionClaim) (application.ProcessResult, error) {
+			activos, maximo := 0, 0
+			procesar := func(ctx context.Context, claim application.ActionClaim) (application.ProcessResult, error) {
 				mu.Lock()
-				active++
-				if active > maximum {
-					maximum = active
+				activos++
+				if activos > maximo {
+					maximo = activos
 				}
 				mu.Unlock()
 				defer func() {
 					mu.Lock()
-					active--
+					activos--
 					mu.Unlock()
+					cola.liberarLanzamiento()
 				}()
 				select {
-				case started <- struct{}{}:
+				case iniciados <- struct{}{}:
 				case <-ctx.Done():
 				}
 				<-ctx.Done()
@@ -69,39 +50,34 @@ func TestSchedulerBoundsLaunchAdmissionsWithoutExpandingLogicalDemand(t *testing
 			t.Cleanup(cancel)
 			done := runSchedulerForTest(ctx, scheduler{
 				workerRef: "worker:elastic-500", pollInterval: time.Hour,
-				maxConcurrentLaunches:  int64(limit),
-				claimNextForTesting:    queue.claim,
-				processClaimForTesting: process,
+				claimNextForTesting:    cola.claim,
+				processClaimForTesting: procesar,
 			})
-			for range limit {
-				awaitSchedulerSignal(t, started, "admisión launch")
+			for range capacidad {
+				awaitSchedulerSignal(t, iniciados, "admisión launch")
 			}
-			for call := 0; call <= limit; call++ {
-				selection := awaitSchedulerSignal(t, queue.calls, "reclamo")
-				wantExcluded := call == limit
-				if selection.ExcludeLaunch != wantExcluded {
-					t.Fatalf("selección %d ExcludeLaunch=%t, esperado %t",
-						call+1, selection.ExcludeLaunch, wantExcluded)
-				}
+			for llamada := 0; llamada <= capacidad; llamada++ {
+				awaitSchedulerSignal(t, cola.calls, "reclamo")
 			}
-			assertNoSchedulerSignal(t, queue.calls, "giro activo con capacidad saturada")
+			assertNoSchedulerSignal(t, cola.calls, "giro activo con capacidad saturada")
 
-			remaining, claimed := queue.stats()
+			pendientes, reclamados, reservados := cola.stats()
 			mu.Lock()
-			gotActive, gotMaximum := active, maximum
+			activosObservados, maximoObservado := activos, maximo
 			mu.Unlock()
-			if remaining != demand-limit || claimed != limit ||
-				gotActive != limit || gotMaximum != limit {
-				t.Fatalf("demanda restante=%d reclamos=%d activos=%d máximo=%d",
-					remaining, claimed, gotActive, gotMaximum)
+			if pendientes != demanda-capacidad || reclamados != capacidad || reservados != capacidad ||
+				activosObservados != capacidad || maximoObservado != capacidad {
+				t.Fatalf("demanda restante=%d reclamos=%d reservas=%d activos=%d máximo=%d",
+					pendientes, reclamados, reservados, activosObservados, maximoObservado)
 			}
 
 			cancel()
 			awaitSchedulerSignal(t, done, "parada del despachador")
 			mu.Lock()
 			defer mu.Unlock()
-			if active != 0 {
-				t.Fatalf("admisiones activas tras parada=%d", active)
+			_, _, reservados = cola.stats()
+			if activos != 0 || reservados != 0 {
+				t.Fatalf("admisiones/reservas activas tras parada=%d/%d", activos, reservados)
 			}
 		})
 	}
@@ -123,7 +99,6 @@ func TestSchedulerPassesTheExactFencedClaimToConcurrentProcessing(t *testing.T) 
 	claimNext := func(
 		ctx context.Context,
 		_ string,
-		_ application.ActionClaimSelection,
 	) (application.ActionClaim, bool, error) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -145,7 +120,7 @@ func TestSchedulerPassesTheExactFencedClaimToConcurrentProcessing(t *testing.T) 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	done := runSchedulerForTest(ctx, scheduler{
-		workerRef: "worker:dispatcher", pollInterval: time.Hour, maxConcurrentLaunches: 1,
+		workerRef: "worker:dispatcher", pollInterval: time.Hour,
 		claimNextForTesting: claimNext, processClaimForTesting: process,
 	})
 	if got := awaitSchedulerSignal(t, received, "claim exacto"); !reflect.DeepEqual(got, want) {
@@ -157,6 +132,7 @@ func TestSchedulerPassesTheExactFencedClaimToConcurrentProcessing(t *testing.T) 
 
 func TestSchedulerKeepsStopAndObserveMovingWhileLaunchesAreSaturated(t *testing.T) {
 	queue := newSchedulerActionQueue(
+		2,
 		application.ActionLaunchAgent,
 		application.ActionLaunchAgent,
 		application.ActionStopAgent,
@@ -172,6 +148,7 @@ func TestSchedulerKeepsStopAndObserveMovingWhileLaunchesAreSaturated(t *testing.
 	process := func(ctx context.Context, claim application.ActionClaim) (application.ProcessResult, error) {
 		result := application.ProcessResult{Processed: true, Action: claim.Action.Kind}
 		if claim.Action.Kind == application.ActionLaunchAgent {
+			defer queue.liberarLanzamiento()
 			mu.Lock()
 			activeLaunches++
 			if activeLaunches == 2 {
@@ -230,7 +207,7 @@ func TestSchedulerKeepsStopAndObserveMovingWhileLaunchesAreSaturated(t *testing.
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	done := runSchedulerForTest(ctx, scheduler{
-		workerRef: "worker:control-progress", pollInterval: time.Hour, maxConcurrentLaunches: 2,
+		workerRef: "worker:control-progress", pollInterval: time.Hour,
 		claimNextForTesting: queue.claim, processClaimForTesting: process,
 	})
 	for range 2 {
@@ -252,18 +229,19 @@ func TestSchedulerKeepsStopAndObserveMovingWhileLaunchesAreSaturated(t *testing.
 }
 
 func TestSchedulerReportsAsynchronousLaunchError(t *testing.T) {
-	queue := newSchedulerActionQueue(application.ActionLaunchAgent)
+	queue := newSchedulerActionQueue(1, application.ActionLaunchAgent)
 	want := errors.New("test.launch_failed")
 	reported := make(chan error, 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	done := runSchedulerForTest(ctx, scheduler{
-		workerRef: "worker:report", pollInterval: time.Hour, maxConcurrentLaunches: 1,
+		workerRef: "worker:report", pollInterval: time.Hour,
 		claimNextForTesting: queue.claim,
 		processClaimForTesting: func(
 			context.Context,
 			application.ActionClaim,
 		) (application.ProcessResult, error) {
+			queue.liberarLanzamiento()
 			return application.ProcessResult{Processed: true, Action: application.ActionLaunchAgent}, want
 		},
 		report: func(err error) { reported <- err },
@@ -276,7 +254,7 @@ func TestSchedulerReportsAsynchronousLaunchError(t *testing.T) {
 }
 
 func TestSchedulerCancellationWaitsForOwnedLaunchCleanupWithoutReportingNoise(t *testing.T) {
-	queue := newSchedulerActionQueue(application.ActionLaunchAgent)
+	queue := newSchedulerActionQueue(1, application.ActionLaunchAgent)
 	launchStarted := make(chan struct{}, 1)
 	cancellationSeen := make(chan struct{})
 	allowCleanup := make(chan struct{})
@@ -291,6 +269,7 @@ func TestSchedulerCancellationWaitsForOwnedLaunchCleanupWithoutReportingNoise(t 
 		<-ctx.Done()
 		close(cancellationSeen)
 		<-allowCleanup
+		queue.liberarLanzamiento()
 		return application.ProcessResult{Processed: true, Action: claim.Action.Kind}, ctx.Err()
 	}
 
@@ -298,7 +277,7 @@ func TestSchedulerCancellationWaitsForOwnedLaunchCleanupWithoutReportingNoise(t 
 	t.Cleanup(cancel)
 	t.Cleanup(releaseCleanup)
 	done := runSchedulerForTest(ctx, scheduler{
-		workerRef: "worker:clean-shutdown", pollInterval: time.Hour, maxConcurrentLaunches: 1,
+		workerRef: "worker:clean-shutdown", pollInterval: time.Hour,
 		claimNextForTesting: queue.claim, processClaimForTesting: process,
 		report: func(err error) { reported <- err },
 	})
@@ -316,46 +295,61 @@ func TestSchedulerCancellationWaitsForOwnedLaunchCleanupWithoutReportingNoise(t 
 }
 
 type schedulerActionQueue struct {
-	mu      sync.Mutex
-	actions []application.ActionKind
-	claimed int
-	calls   chan application.ActionClaimSelection
+	mu                    sync.Mutex
+	actions               []application.ActionKind
+	claimed               int
+	capacidadLanzamientos int
+	reservasLanzamiento   int
+	calls                 chan struct{}
 }
 
-func newSchedulerActionQueue(actions ...application.ActionKind) *schedulerActionQueue {
+func newSchedulerActionQueue(
+	capacidadLanzamientos int,
+	actions ...application.ActionKind,
+) *schedulerActionQueue {
 	return &schedulerActionQueue{
-		actions: append([]application.ActionKind(nil), actions...),
-		calls:   make(chan application.ActionClaimSelection, len(actions)+16),
+		actions:               append([]application.ActionKind(nil), actions...),
+		capacidadLanzamientos: capacidadLanzamientos,
+		calls:                 make(chan struct{}, len(actions)+16),
 	}
 }
 
 func (queue *schedulerActionQueue) claim(
 	ctx context.Context,
 	_ string,
-	selection application.ActionClaimSelection,
 ) (application.ActionClaim, bool, error) {
 	select {
-	case queue.calls <- selection:
+	case queue.calls <- struct{}{}:
 	case <-ctx.Done():
 		return application.ActionClaim{}, false, ctx.Err()
 	}
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	for index, kind := range queue.actions {
-		if selection.ExcludeLaunch && kind == application.ActionLaunchAgent {
+		if kind == application.ActionLaunchAgent &&
+			queue.reservasLanzamiento >= queue.capacidadLanzamientos {
 			continue
 		}
 		queue.actions = append(queue.actions[:index], queue.actions[index+1:]...)
 		queue.claimed++
+		if kind == application.ActionLaunchAgent {
+			queue.reservasLanzamiento++
+		}
 		return application.ActionClaim{Action: application.ActionRecord{Kind: kind}}, true, nil
 	}
 	return application.ActionClaim{}, false, nil
 }
 
-func (queue *schedulerActionQueue) stats() (remaining int, claimed int) {
+func (queue *schedulerActionQueue) liberarLanzamiento() {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
-	return len(queue.actions), queue.claimed
+	queue.reservasLanzamiento--
+}
+
+func (queue *schedulerActionQueue) stats() (remaining, claimed, reservasLanzamiento int) {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	return len(queue.actions), queue.claimed, queue.reservasLanzamiento
 }
 
 func runSchedulerForTest(ctx context.Context, candidate scheduler) <-chan struct{} {

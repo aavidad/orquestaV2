@@ -11,15 +11,13 @@ type scheduler struct {
 	orchestrator           *application.Orchestrator
 	workerRef              string
 	pollInterval           time.Duration
-	maxConcurrentLaunches  int64
 	report                 func(error)
-	claimNextForTesting    func(context.Context, string, application.ActionClaimSelection) (application.ActionClaim, bool, error)
+	claimNextForTesting    func(context.Context, string) (application.ActionClaim, bool, error)
 	processClaimForTesting func(context.Context, application.ActionClaim) (application.ProcessResult, error)
 }
 
 func (scheduler scheduler) run(ctx context.Context) {
-	limit := int(scheduler.maxConcurrentLaunches)
-	completions := make(chan error, limit)
+	completions := make(chan error)
 	inFlight := 0
 	defer func() {
 		scheduler.waitForLaunches(completions, inFlight)
@@ -31,8 +29,7 @@ func (scheduler scheduler) run(ctx context.Context) {
 			return
 		}
 
-		selection := application.ActionClaimSelection{ExcludeLaunch: inFlight >= limit}
-		claim, found, err := scheduler.claimNext(ctx, selection)
+		claim, found, err := scheduler.claimNext(ctx)
 		if err != nil {
 			scheduler.reportWhileActive(ctx, err)
 			if !scheduler.wait(ctx, completions, &inFlight) {
@@ -52,14 +49,6 @@ func (scheduler scheduler) run(ctx context.Context) {
 			continue
 		}
 
-		// ExcludeLaunch guarantees that a launch is not claimed while every
-		// admission slot is occupied. Keep the guard local so a faulty test
-		// double cannot make the dispatcher exceed its configured capacity.
-		for inFlight >= limit {
-			if !scheduler.wait(ctx, completions, &inFlight) {
-				return
-			}
-		}
 		inFlight++
 		go func(claim application.ActionClaim) {
 			_, err := scheduler.processClaim(ctx, claim)
@@ -126,12 +115,13 @@ func (scheduler scheduler) reportWhileActive(ctx context.Context, err error) {
 
 func (scheduler scheduler) claimNext(
 	ctx context.Context,
-	selection application.ActionClaimSelection,
 ) (application.ActionClaim, bool, error) {
 	if scheduler.claimNextForTesting != nil {
-		return scheduler.claimNextForTesting(ctx, scheduler.workerRef, selection)
+		return scheduler.claimNextForTesting(ctx, scheduler.workerRef)
 	}
-	return scheduler.orchestrator.ClaimNextAction(ctx, scheduler.workerRef, selection)
+	return scheduler.orchestrator.ClaimNextAction(
+		ctx, scheduler.workerRef, application.ActionClaimSelection{},
+	)
 }
 
 func (scheduler scheduler) processClaim(
