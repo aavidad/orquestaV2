@@ -131,13 +131,15 @@ exponer cuenta, perfil o ruta:
 - capacidades compatibles.
 
 `application` observa, ordena de forma determinista y deduplica los candidatos.
-`ClaimRequest` lleva `CapacityCandidates` ordenados, cada uno con presentación
-física y binding de cuota. Dentro de la misma transacción, el claim revalida
-por CAS en ese orden y fija/reserva el primer candidato todavía disponible. Si
-ninguno conserva validez, no reclama la acción. El claim devuelto contiene la
-`AgentPlacementRef` exacta y el request/receipt del agente debe hacer eco de
-ella; pool y launcher jamás reseleccionan. Un replay conserva la misma
-colocación.
+`ClaimRequest` lleva `CapacityCandidates` ordenados, cada uno con una entrega
+física todavía sin revisión y una presentación durable de cuota. Dentro de la
+misma transacción, el claim repite o materializa por CAS la observación física,
+revalida la cuota por referencia y revisión y fija/reserva el primer candidato
+todavía disponible. Versionar la observación física antes de ese `BEGIN`
+reabriría la carrera entre observación y reserva. Si ninguno conserva validez,
+no reclama la acción. El claim devuelto contiene la `AgentPlacementRef` exacta
+y el request/receipt del agente debe hacer eco de ella; pool y launcher jamás
+reseleccionan. Un replay conserva la misma colocación.
 
 La referencia opaca sí atraviesa application; nombre, ruta, cuenta y secreto
 del perfil no lo hacen. Bootstrap construye conectores y registra el mapa
@@ -413,6 +415,22 @@ incluyen ambos repositorios y no contienen contingencia
 oculta. Superar cualquiera de estos techos
 requiere otro ADR, compensación concreta y autorización antes de programar. Un
 exceso no se oculta como generado, prueba existente o trabajo de otra tarea.
+
+## Corrección presupuestaria del 2026-08-01
+
+La auditoría posterior a `f2cb965b` demostró que A05.2/A05.4 solo tenían el
+observador estático, la ordenación neutral y el arranque de los controladores de
+cuota: faltaban catálogo productivo, observaciones físicas renovables e
+inyección en el reclamo. El hueco se registró como
+`BUG-ORQ-20260801-613`; A04.2 no puede absorberlo sin superar su techo.
+
+Se trasladan exactamente `P=180,V=120` desde B10 hacia A05. B10 ya no vuelve a
+implementar un `client.go`: consume el módulo Go público de Agente MicroVM,
+ligado a una revisión, y conserva en Orquesta únicamente traducción hexagonal,
+composición y guardas de independencia. Esto elimina una duplicación futura
+nombrada y reduce también la composición prevista. A05 queda en
+`P=862,V=628`; B10 queda en `P=470,V=480`. El total V38 permanece exactamente
+en `P=7.200,V=10.083`; no aparece contingencia ni segundo cliente.
 
 ## Alternativas rechazadas
 
