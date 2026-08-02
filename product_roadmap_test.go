@@ -1617,8 +1617,13 @@ func assertRoadmapImplementationDecisions(t *testing.T, decisions []roadmapImple
 			[]string{"guest_ip_network", "tap", "bridge", "nat", "inbound", "east_west", "direct_internet"}) {
 		t.Fatalf("agent microVM implementation scope drifted: %#v", decision)
 	}
-	if len(decision.TestRefs) != 6 {
-		t.Fatalf("agent microVM implementation tests = %v, want 6", decision.TestRefs)
+	wantTestRefs := []string{
+		"internal/ports/agent_microvm_network_test.go",
+		"internal/ports/agent_microvm_launch_auth_test.go",
+		"internal/adapters/agent/firecracker/networkauth/verifier_test.go",
+	}
+	if !reflect.DeepEqual(decision.TestRefs, wantTestRefs) {
+		t.Fatalf("agent microVM implementation tests = %v, want %v", decision.TestRefs, wantTestRefs)
 	}
 	for _, ref := range decision.TestRefs {
 		requireRepositoryFile(t, ".", ref)

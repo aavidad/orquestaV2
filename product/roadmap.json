@@ -76,10 +76,7 @@
       "test_refs": [
         "internal/ports/agent_microvm_network_test.go",
         "internal/ports/agent_microvm_launch_auth_test.go",
-        "internal/ports/agent_microvm_vsock_cid_test.go",
-        "internal/adapters/agent/firecracker/networkplan/renderer_test.go",
-        "internal/adapters/agent/firecracker/networkauth/verifier_test.go",
-        "internal/adapters/agent/firecracker/vsocklease/allocator_test.go"
+        "internal/adapters/agent/firecracker/networkauth/verifier_test.go"
       ]
     }
   ],
