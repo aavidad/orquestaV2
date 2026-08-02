@@ -518,10 +518,23 @@ conjunto de cambios en Orquesta pertenecen a B12 sobre el adaptador B10.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B07.1 | Repositorio hermano, `firecracker/launcher.go`: plan físico, recursos sellados, jailer/`cgroup` y una VM por `RunRef`. | Primero; no importa proveedor ni Orquesta. | `P=150, V=120` |
-| B07.2 | Repositorio hermano, `firecracker/{engine,recovery}.go`: identificador opaco durable, registro físico/CID privado e idempotencia de lanzamiento. | Tras B02/B07.1; serial sobre `engine.go`. | `P=130, V=110` |
-| B07.3 | Repositorio hermano, `firecracker/observer.go` y reconciliación exacta PID/hora de inicio/`cgroup`/CID tras reinicio. | Tras B07.2; conjunto de escritura disjunto del lanzador. | `P=120, V=110` |
-| B07.4 | Fallos por etapa, PID reutilizado, KVM/agotamiento de memoria, limpieza exacta y conjunto contractual sin recursos huérfanos. | Último; no modifica API salvo incidencia causal separada. | `P=100, V=110` |
+| B07.1 | `c938451`: la configuración estricta fija `maximo_ejecuciones`; SQLite reserva capacidad, ejecución y CID en la misma transacción y devuelve un rechazo estable al agotarse. | `exercised`; replay conserva plaza, terminal libera y la última plaza tiene un único ganador. | Incluido en el total B07 |
+| B07.2 | `a0792b5`: schema SQLite v12 y ledger de recuperación cercado, idempotente y reanudable con una única operación activa por referencia. | `exercised`; no crea otro writer ni relanza Firecracker tras reinicio. | Incluido en el total B07 |
+| B07.3 | `daca72b`: el motor elimina la exclusión global y admite referencias/CIDs distintos, conservando identidad exacta e idempotencia para la misma microVM. | `exercised`; sigue sin NIC/TAP/puente/NAT ni conocimiento de Orquesta o proveedor. | Incluido en el total B07 |
+| B07.4 | `9b89f93` y `1811361`: aplicación revalida PID/inicio/`boot_id`/`cgroup`/socket/CID, reanuda recuperación al arrancar o apagar y conserva ambigüedad en cuarentena. | Último gate contractual sin KVM; B12 ejecuta el recorrido físico simultáneo. | Total `P=490,V=418` |
+
+El candidato de código `1811361` y su corte documentado `e663bd3` pasan
+formato, Clippy, 187 pruebas activas —más dos smokes KVM ignorados— y el
+cliente Go normal, con detector de carreras y `vet`. La carrera por la última
+plaza y la recuperación tras reinicio pasaron veinte repeticiones cada una.
+La medida frente a `8ce4c12` queda en `P=490,V=418`, dentro de
+`P<=500,V<=450`; el último refactor retiró la duplicación de arranque y
+apagado en vez de ampliar el presupuesto.
+
+B07 queda `exercised`, no `accredited`: no arrancó Orquesta, Agente MicroVM,
+Firecracker o Jailer. Dos microVM físicas simultáneas, los fallos dependientes
+de KVM y la ausencia final de recursos huérfanos permanecen en la compuerta
+B12 sobre el candidato compuesto. B08 y B09 siguen abiertas antes de B04.
 
 ### B08 — `P=550, V=450`
 

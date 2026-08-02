@@ -5,6 +5,25 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- B07 quedó `exercised` en Agente MicroVM, candidato de código `1811361` y
+  corte documentado local `e663bd3`, sin `push`. `c938451` reserva capacidad,
+  ejecución y CID de forma atómica; `a0792b5` añade el ledger SQLite v12 de
+  recuperación; `daca72b` retira la exclusión global de una sola VM; y
+  `9b89f93`/`1811361` reanudan la misma operación cercada sin relanzar.
+- El máximo físico configurado queda entre 1 y 256 y llega a capacidades y al
+  repositorio desde una sola configuración. La misma referencia o CID se
+  rechazan; referencias y CIDs distintos conviven. Replay, revisión, cerca,
+  PID/inicio/`boot_id`/`cgroup`/socket/CID, reinicio, ausencia inequívoca y
+  ambigüedad quedan verificados.
+- B07 consume `P=490,V=418` de `P<=500,V<=450`. Pasaron formato, Clippy, 187
+  pruebas activas —más dos smokes KVM ignorados—, Go normal/`-race`/`vet` y
+  veinte repeticiones tanto de la última plaza concurrente como de la
+  recuperación tras reinicio.
+- El read-model local no encontró una lección para
+  `ORC-28 + registrar-motor-b07`; queda documentado como hueco advisory y no
+  se creó otra autoridad. B07 no acredita `ORC-28` ni V38: dos microVM físicas
+  simultáneas y limpieza final pertenecen a B12. B08 y B09 siguen abiertas
+  antes de B04. Orquesta, Agente MicroVM, Firecracker y Jailer no se arrancaron.
 - B06 quedó `exercised` en Agente MicroVM, candidato local `8ce4c12`, sin
   `push`. `54b80fb` hace que el cliente Go acredite blobs, rutas, límites y
   raíz canónica antes del socket y vuelva a acreditar la respuesta; Rust y Go
