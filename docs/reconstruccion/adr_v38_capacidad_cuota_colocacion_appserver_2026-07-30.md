@@ -460,9 +460,9 @@ adaptadores B10.1/B10.2, no otro producto. A04 queda en `P=649,V=497` y B10 en
 La ejecución de la suite global encontró además 52 fixtures de bootstrap que
 todavía omitían la colocación o reconstruían `Orchestrator` sin sus fuentes de
 capacidad. Su migración y el simulador común de cuota `app-server` consumen
-verificación de Q4, no producto A08. Se trasladan por ello `V=100` de A08 a la
-bolsa indivisible A04.2–A04.4: queda en `P=489,V=487`, A04 en `P=649,V=597` y
-A08 en `P=0,V=650`. El subtotal y V38 permanecen invariantes.
+verificación de Q4, no producto A08. La medición neta definitiva exige trasladar
+`V=150` de A08 a la bolsa indivisible A04.2–A04.4: queda en `P=489,V=537`, A04
+en `P=649,V=647` y A08 en `P=0,V=600`. El subtotal y V38 permanecen invariantes.
 
 ## Alternativas rechazadas
 

@@ -245,9 +245,10 @@ compensación exacta `P=190,V=50` sale de B10.4/B10.5; A04+B10 conserva
 siguen inmutables.
 
 La suite global posterior hizo visible la migración de 52 fixtures que aún
-omitían la colocación o reconstruían aplicación sin capacidad. Se trasladan
-`V=100` desde A08 a Q4: la bolsa queda `P=489,V=487`, A04 `P=649,V=597` y A08
-`P=0,V=650`, sin variar el total V38.
+omitían la colocación o reconstruían aplicación sin capacidad. La medición neta
+definitiva tras componer los perfiles reales traslada `V=150` desde A08 a Q4:
+la bolsa queda `P=489,V=537`, A04 `P=649,V=647` y A08 `P=0,V=600`, sin variar
+el total V38.
 
 Antes de cada edición se debe consultar `ORC-28` mediante
 `scripts/consultar_lecciones_legacy.sh`. La consulta de las tareas cerradas en
