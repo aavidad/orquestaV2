@@ -239,6 +239,11 @@ durables en cada escritor. Los tres hijos usan desde entonces la bolsa conjunta
 restante `P=299,V=337`, sin aumentar A04 ni V38. No se editan las migraciones
 022/023.
 
+La medición ejecutable posterior corrige esa bolsa a `P=489,V=387`. La
+compensación exacta `P=190,V=50` sale de B10.4/B10.5; A04+B10 conserva
+`P=929,V=927` y V38 no crece. La migración progresiva nueva es 024; 022/023
+siguen inmutables.
+
 Antes de cada edición se debe consultar `ORC-28` mediante
 `scripts/consultar_lecciones_legacy.sh`. La consulta de las tareas cerradas en
 este corte no encontró patrones; se conservó como hueco consultivo.

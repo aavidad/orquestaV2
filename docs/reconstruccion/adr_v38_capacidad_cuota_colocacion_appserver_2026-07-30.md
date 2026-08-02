@@ -449,6 +449,14 @@ A04.2, A04.3 y A04.4 se gobiernan como una sola bolsa y un solo gate
 modifica 022/023: impone una reserva por acción y permite que una transición se
 acredite mediante un intento posterior cercado, ligado a su propio receipt.
 
+La medición ejecutable posterior del mismo gate demostró que el escritor, las
+transiciones atómicas y la recuperación semántica completa consumen
+`P=489,V=387`. Se trasladan `P=190,V=50` desde B10.4/B10.5: B10.4 se compensa
+por la retirada de la compuerta provisional y B10.5 es verificación sobre los
+adaptadores B10.1/B10.2, no otro producto. A04 queda en `P=649,V=497` y B10 en
+`P=280,V=430`; su subtotal conjunto sigue siendo exactamente
+`P=929,V=927`. V38 permanece en `P=7.200,V=10.083`.
+
 ## Alternativas rechazadas
 
 - **Reservar cuota como si fuera capacidad física:** produce sobrecontabilidad,
