@@ -10,6 +10,12 @@ confundir producto nuevo, trazabilidad histórica y copia legacy.
 El último estado de parada y reanudación vive en
 `docs/reconstruccion/HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
 
+Si el write-set afecta a la aplicación hermana Agente MicroVM, lee además
+`/home/alberto/Trabajo/agente_microvm/AGENTS.md` y
+`/home/alberto/Trabajo/agente_microvm/docs/HANDOFF_CONTINUACION_2026-08-02.md`.
+El segundo documento fija el candidato B09 guardado, sus gates lógicos y lo
+que aún no puede atribuirse a Orquesta ni a un smoke Firecracker.
+
 ## Misión y estado honesto
 
 Orquesta es un núcleo reutilizable que recibe una intención, mantiene un Goal

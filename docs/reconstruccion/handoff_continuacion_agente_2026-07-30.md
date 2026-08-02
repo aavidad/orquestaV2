@@ -5,6 +5,33 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- B09 queda guardada en el repositorio hermano Agente MicroVM hasta el
+  candidato de código `fde9654` y el corte documental `cae246f`, sin
+  acreditación física. `34bc74c`/`53403d1` fijan la misma concesión de egreso
+  firmada en Rust y Go; `3b612ec` persiste intentos y comprobantes idempotentes
+  en SQLite v14; `c95d808` aplica lista exacta, DNS/IP pública fijada, límites y
+  túnel host; `fde9654` conecta las sesiones de agente mediante CONNECT local y
+  AF_VSOCK sin NIC, TAP, puente o NAT.
+- El túnel B09 es opaco: Agente MicroVM no termina TLS ni representa URL,
+  ruta, consulta, cabeceras, cuerpo o credenciales. El host recibe solo
+  host/puerto, reserva el intento antes de red y rechaza resoluciones vacías,
+  mixtas, locales, privadas, ULA, enlace local, metadatos, multicast y rangos
+  especiales. El ejecutor sigue siendo neutral para Codex, Claude, Gemini u
+  otro perfil.
+- Pasaron 221 pruebas Rust activas, permanecen dos smokes físicos ignorados de
+  forma declarada, Clippy estricto y el conector Go normal, con `-race` y
+  `vet`. No se arrancaron Orquesta, Agente MicroVM, Firecracker, Jailer o KVM.
+- B09 no se promueve a `accredited`: falta reconstruir y acreditar el
+  initramfs/SBOM, ejecutar ioctl/vsock/tráfico real en B12 y registrar el
+  comprobante en la causalidad de Orquesta mediante B09.4/B10. El delta físico
+  bruto es `+3836/-181`; excede el presupuesto prospectivo y requiere medida
+  `P/V` y corrección canónica del plan, sin reutilizar la compensación B08.
+- Para reanudar desde otro equipo, leer primero
+  `agente_microvm/docs/HANDOFF_CONTINUACION_2026-08-02.md`. No relanzar bloques
+  ya implementados. El orden causal siguiente es reconstrucción/evidencia B09,
+  corrección presupuestaria, B04, B10, B11 y B12. Orquesta solo se arranca en
+  la prueba final pedida por el operador y se detiene con limpieza exacta.
+
 - B08 quedó `exercised` en Agente MicroVM, candidato de código `2f65254`, sin
   `push`. `713235f`/`42ad492` implementan el intermediario `vsock` bloqueante,
   identidad bilateral exacta, separación causal por `RunRef`/CID, recuperación
