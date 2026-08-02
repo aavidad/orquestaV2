@@ -394,6 +394,23 @@ con una violación de fencing. A06 sigue sin acreditar por sí sola `ORC-28` ni
 V38: la siguiente dependencia causal es A07 y el cierre de la compuerta A
 pertenece a A08.
 
+### A07 — `P=165, V=695`
+
+| Hijo | Write-set y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| A07.1 | `7ae98026`: separa `ClaimNextAction` de `ProcessClaim`, conserva el reclamo cercado exacto y permite filtrar lanzamientos sin frenar acciones de control. | Base caracterizada; dependía del cierre durable de A04. | Consumido `P=21,V=363` |
+| A07.2 | `e4a6a98e`: un único despachador procesa en serie salvo `launch_agent`, que continúa en una gorutina corta ligada a su reclamo; los errores vuelven al mismo canal y la parada drena trabajo propio. | Base caracterizada; no cerraba mientras mantuviera el límite transitorio. | Consumido `P=78,V=332` |
+| A07.3 | `fc5d920c`: retira del despachador `maxConcurrentLaunches`, la lectura de `governance.global_process_slots_budget` y el uso de `ExcludeLaunch`. Solo el claim, ya ligado a reserva física durable por A04, decide cuántos lanzamientos entrega. | `exercised`; abre A08 y no acredita por sí solo `ORC-28`. | Retirada neta `P=-15,V=-6` |
+
+A07 consume por tanto `P=84,V=689` de `P=165,V=695`. Las cohortes físicas
+de prueba `1/5/10/16/20` conservan una demanda lógica de 500, stop y observe
+progresan durante saturación, el reclamo cercado llega intacto, no existe giro
+activo y la parada espera la limpieza de todos los lanzamientos propios. La
+suite bootstrap completa, cinco repeticiones focales con detector de carreras,
+aplicación y `vet` quedaron verdes. La capacidad física y el presupuesto
+durable permanecen autoridades distintas; bootstrap no vuelve a imponer
+política central.
+
 ### B01 — `P=0, V=50`
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |

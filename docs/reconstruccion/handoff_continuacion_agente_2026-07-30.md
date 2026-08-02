@@ -5,6 +5,16 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- A07 quedó `exercised` en `fc5d920c` sobre las bases `7ae98026` y
+  `e4a6a98e`. El despachador ya no lee el presupuesto global como límite de
+  concurrencia ni usa `ExcludeLaunch`: solo ejecuta lanzamientos que el claim
+  entrega después de la reserva física durable de A04. Stop y observe siguen
+  progresando, no hay giro activo y la parada drena las gorutinas propias.
+- A07 consume `P=84,V=689` de `P=165,V=695`; el corte final retiró 15 líneas
+  netas de producto y 6 de prueba. Las cohortes `1/5/10/16/20`, cinco rondas
+  focales con detector de carreras, bootstrap completo, aplicación y `vet`
+  quedaron verdes. La siguiente dependencia causal es A08, compuerta A
+  neutral sin KVM.
 - A06.1–A06.3 quedó `exercised` en `4e5a7ae3`, `af0639de` y `2831d3c2`.
   El contrato neutral, las migraciones 025/026 y el mismo `StateRepository`
   conservan el comprobante causal exacto; el requisito de preservación se fija
@@ -34,8 +44,8 @@ Q4 como pendiente o A05 como meramente conectada.
   `BUG-ORQ-20260802-614`, sin ampliar timeouts ni ocultar un posible bloqueo.
 - Orquesta, Firecracker, jailer y Agente MicroVM permanecen detenidos; no se
   relanzaron los tres Goals V23 y no se hizo `push`.
-- A04/A05/A06 quedan `exercised`, no `accredited`. La siguiente dependencia
-  causal es A07; A08 cerrará después la compuerta A sobre el mismo candidato.
+- A04/A05/A06/A07 quedan `exercised`, no `accredited`. La siguiente
+  dependencia causal es A08 sobre el mismo candidato.
 
 ## Avance operativo del 2026-08-01
 
