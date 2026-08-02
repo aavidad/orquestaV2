@@ -329,9 +329,9 @@ func TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites(t
 		"con aislamiento microVM todos los hilos turnos y agentes Codex viven dentro de la microVM; en el anfitrión solo puede persistir un app-server mínimo para identidad y cuota sin hilo turno agente ni autoridad de ejecución",
 		"el núcleo persiste por el puerto StateRepository con una sola fuente transaccional activa elegida por composición; SQLite queda para local desarrollo y pruebas PostgreSQL es el adaptador productivo futuro y se prohíbe dual write",
 		"la demanda completa conserva cohortes lógicas exactas de 1 16 70 y 500 sin techo oculto; las olas físicas obligatorias progresan por 1 5 10 16 y 20 sin atribuir 70 o 500 físicos sin recursos medidos",
-		"la compuerta A acredita solo el núcleo elástico neutral sin KVM; B conecta por protocolo local el candidato agentmicrovm de activación explícita sin ruta alternativa y una microVM por agente; C exige olas físicas con los mismos resúmenes criptográficos de Orquesta y agentmicrovm y solo A+B+C permiten acreditar V38",
-		"agentmicrovm es una aplicación hermana independiente en /home/alberto/Trabajo/agentmicrovm con repositorio módulo binario configuración pruebas y documentación propios; Orquesta la consume solo mediante un conector de protocolo local versionado sobre socket Unix",
-		"agentmicrovm conserva en almacenamiento físico privado su registro físico identificadores opacos concesiones temporales CID y recuperación; no comparte con Orquesta base de datos sistema de archivos secretos rutas ni importaciones y recibe únicamente referencias opacas contenido enmarcado y una concesión neutral firmada de un solo uso",
+		"la compuerta A acredita solo el núcleo elástico neutral sin KVM; B conecta por protocolo local el candidato Agente MicroVM de activación explícita sin ruta alternativa y una microVM por agente; C exige olas físicas con los mismos resúmenes criptográficos de Orquesta y Agente MicroVM y solo A+B+C permiten acreditar V38",
+		"Agente MicroVM es una aplicación hermana independiente publicada en https://github.com/aavidad/agente_microvm con crate agente_microvm binario agente-microvm configuración pruebas documentación y cliente Go propios; Orquesta la consume solo mediante agentmicrovm.local.v1 por HTTP/1.1 sobre socket Unix",
+		"Agente MicroVM conserva en almacenamiento físico privado su registro físico identificadores opacos concesiones temporales CID y recuperación; no comparte con Orquesta base de datos sistema de archivos secretos rutas ni importaciones y recibe únicamente referencias opacas contenido enmarcado y una concesión neutral firmada de un solo uso",
 		"un único despachador global prioriza stop permite progreso de observe con launch saturado y paraleliza únicamente launch_agent sin selector privado solo-launch ni goroutines ociosas",
 		"la continuidad de mensajes la parada exacta y la conservación del entorno son comportamientos estrechos de V38 que no acreditan ORC-15 OPS-16 ni OPS-17",
 		"antes de desmontar se sellan e inventarían los datos y el entorno queda preserved_pending_review sin borrado automático",
@@ -423,6 +423,30 @@ func TestProductRoadmapV38OwnsElasticAgentRuntimeWithoutReopeningPrerequisites(t
 	}
 	if len(prerequisites) != 0 {
 		t.Fatalf("faltan prerrequisitos acreditados: %#v", prerequisites)
+	}
+}
+
+func TestProductRoadmapV38UsesCanonicalAgenteMicroVMIdentity(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	var assertions string
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID == "AC-V38-AGENT-RUNTIME-ELASTIC" {
+			assertions = strings.Join(contract.Assertions, "\n")
+		}
+	}
+	for _, required := range []string{
+		"Agente MicroVM", "https://github.com/aavidad/agente_microvm", "crate agente_microvm",
+		"binario agente-microvm", "agentmicrovm.local.v1", "HTTP/1.1 sobre socket Unix",
+	} {
+		if !strings.Contains(assertions, required) {
+			t.Fatalf("la identidad V38 omite %q", required)
+		}
+	}
+	for _, obsolete := range []string{"/home/alberto/Trabajo/agentmicrovm", "agentmicrovm es una aplicación hermana"} {
+		if strings.Contains(assertions, obsolete) {
+			t.Fatalf("la identidad V38 conserva la prescripción obsoleta %q", obsolete)
+		}
 	}
 }
 

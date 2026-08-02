@@ -126,10 +126,9 @@ documento.
 - No se ha usado Orquesta porque no dispone de cuota. La coordinación directa
   de Codex se mantiene como excepción temporal de arranque.
 - No se ha hecho `push`.
-- `agentmicrovm` todavía no existe. La decisión vigente exige crearlo como
-  aplicación hermana independiente en `/home/alberto/Trabajo/agentmicrovm`,
-  con repositorio, módulo, binario, configuración, pruebas, documentación y
-  estado físico propios.
+- La mención histórica a una aplicación inexistente quedó sustituida: Agente
+  MicroVM existe en `https://github.com/aavidad/agente_microvm`, con checkout
+  operativo actual en `/home/alberto/Trabajo/agente_microvm`.
 - Orquesta solo lo consumirá mediante `agentmicrovm.local.v1` sobre socket Unix.
   No compartirán base de datos, sistema de archivos, rutas, secretos ni
   importaciones.
@@ -230,9 +229,9 @@ Antes de cada edición se debe consultar `ORC-28` mediante
 `scripts/consultar_lecciones_legacy.sh`. La consulta de las tareas cerradas en
 este corte no encontró patrones; se conservó como hueco consultivo.
 
-No crear todavía `/home/alberto/Trabajo/agentmicrovm`: el orden causal vigente
-lo abre en B03 después de acreditar la compuerta A. Cuando llegue B03, debe
-crearse como proyecto hermano real, nunca bajo un subdirectorio de Orquesta.
+No recrear ni renombrar Agente MicroVM. B03, después de la compuerta A,
+caracteriza y completa el proyecto hermano ya existente; nunca lo copia bajo
+un subdirectorio de Orquesta.
 
 V23 queda preservada como frente posterior e independiente. No se relanza ni se
 mezcla con el write-set de V38. Solo cuando se retome V23 se consulta su estado

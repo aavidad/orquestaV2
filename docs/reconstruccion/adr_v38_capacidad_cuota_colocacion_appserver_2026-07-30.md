@@ -33,10 +33,11 @@ Firecracker original resuelve el proceso de la microVM y su API física. No
 resuelve el DAG, la elección de agente, la cuota de proveedor, la reserva
 durable, la colocación, la recuperación de Orquesta, el protocolo de trabajo,
 la preservación de resultados ni el cierre acreditado. La aplicación hermana
-`agentmicrovm`, en `/home/alberto/Trabajo/agentmicrovm`, añadirá las garantías
-físicas reutilizables alrededor de Firecracker sin bifurcarlo ni reimplementar
-su monitor de máquinas virtuales. Será un proyecto independiente, no un árbol
-público dentro del módulo Orquesta.
+**Agente MicroVM**, publicada como `aavidad/agente_microvm`, aporta las
+garantías físicas reutilizables alrededor de Firecracker sin bifurcarlo ni
+reimplementar su monitor de máquinas virtuales. Su núcleo y CLI
+`agente-microvm` son Rust; el cliente de Orquesta es Go. Es un proyecto
+independiente, no un árbol público dentro del módulo Orquesta.
 
 ## Consulta previa
 
@@ -262,12 +263,12 @@ No añade clase, saldo ni lifecycle de cuota. Q3 amplía el mismo
 observaciones. No existe writer ni store independiente para el binding:
 únicamente `ClaimNextAction` lo inserta atómicamente junto con la reserva.
 
-### 8. `agentmicrovm` es una aplicación hermana independiente
+### 8. Agente MicroVM es una aplicación hermana independiente
 
-La frontera física se implementará en
-`/home/alberto/Trabajo/agentmicrovm`, con repositorio, `go.mod`, binario
-`agentmicrovm`, configuración tipada, pruebas y documentación propios. No será
-un subárbol, paquete público ni binario de Orquesta. Esta separación está
+La frontera física vive en `https://github.com/aavidad/agente_microvm`, con
+crate `agente_microvm`, binario Rust `agente-microvm`, cliente Go,
+configuración tipada, pruebas y documentación propios. No es un subárbol,
+paquete público ni binario de Orquesta. Esta separación está
 justificada por tecnología y aislamiento: posee procesos Firecracker, KVM,
 jailer/cgroups, sockets vsock y recuperación física, pero no adquiere
 ciclo de vida, planificación ni política de dominio.
