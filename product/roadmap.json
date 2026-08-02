@@ -74,9 +74,7 @@
       "authentication": "single_use_neutral_signed_grant_and_attestation_binding",
       "test_attestor_scope": "unchanged_no_network_no_vsock",
       "test_refs": [
-        "internal/ports/agent_microvm_network_test.go",
-        "internal/ports/agent_microvm_launch_auth_test.go",
-        "internal/adapters/agent/firecracker/networkauth/verifier_test.go"
+        "internal/ports/agent_microvm_network_test.go"
       ]
     }
   ],

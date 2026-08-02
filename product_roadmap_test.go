@@ -1619,14 +1619,23 @@ func assertRoadmapImplementationDecisions(t *testing.T, decisions []roadmapImple
 	}
 	wantTestRefs := []string{
 		"internal/ports/agent_microvm_network_test.go",
-		"internal/ports/agent_microvm_launch_auth_test.go",
-		"internal/adapters/agent/firecracker/networkauth/verifier_test.go",
 	}
 	if !reflect.DeepEqual(decision.TestRefs, wantTestRefs) {
 		t.Fatalf("agent microVM implementation tests = %v, want %v", decision.TestRefs, wantTestRefs)
 	}
 	for _, ref := range decision.TestRefs {
 		requireRepositoryFile(t, ".", ref)
+	}
+	for _, retired := range []string{
+		"internal/ports/agent_microvm_launch_auth.go",
+		"internal/ports/agent_microvm_launch_auth_test.go",
+	} {
+		if _, err := os.Lstat(retired); !os.IsNotExist(err) {
+			t.Fatalf("retired launch authorization route remains at %q: %v", retired, err)
+		}
+	}
+	if entries, err := os.ReadDir("internal/adapters/agent/firecracker/networkauth"); err != nil && !os.IsNotExist(err) || len(entries) != 0 {
+		t.Fatalf("retired networkauth adapter remains: entries=%v err=%v", entries, err)
 	}
 }
 
