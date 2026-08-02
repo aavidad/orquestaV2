@@ -372,9 +372,9 @@ o bucle de dominio.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| A06.1 | Contrato neutral en `internal/ports/agent_environment.go` y modelo/validación en `internal/application/agent_environment.go`: estado único `preserved_pending_review`, ejecución e identidad externa exactas, cerca, workspace/base, change-set o bundle CAS, inventario, sello, configuración, rootfs y tiempos. No expone delete/GC. | Primero; reusa refs y comprobantes existentes. No añade lifecycle ni acción al scheduler. | `P=100,V=100` |
-| A06.2 | Migración progresiva 025, método cohesivo del mismo `StateRepository`, SQLite, lectura y recovery. La repetición exacta es idempotente; proyecto, digest, referencia, cerca o payload distintos fallan cerrados. | Tras A06.1; serial sobre migraciones y estado, ahora libres tras Q4. | `P=178,V=150` |
-| A06.3 | La aceptación de lanzamiento conserva de forma durable si el entorno exige preservación y toda escritura terminal aplica la misma compuerta de aplicación: sin comprobante válido no terminaliza ni desmonta. Prueba normal, duplicado, reinicio, tamper, proyecto/cerca ajenos y material direccionable. | Tras A06.2; abre A07/A08. B12 conectará después el efecto físico que produce el comprobante. | `P=72,V=100` |
+| A06.1 | `4e5a7ae3`: contrato neutral en `internal/ports/agent_environment.go` y modelo/validación en `internal/application/agent_environment.go`: estado único `preserved_pending_review`, ejecución e identidad externa exactas, cerca, workspace/base, change-set o bundle CAS, inventario, sello, configuración, rootfs y tiempos. No expone delete/GC. | `exercised`; reusa refs y comprobantes existentes, sin lifecycle ni acción adicional del scheduler. | Consumido `P=100,V=77` |
+| A06.2 | `af0639de`: migración progresiva 025, método cohesivo del mismo `StateRepository`, SQLite, lectura y recovery. La repetición exacta es idempotente; proyecto, digest, referencia, cerca o payload distintos fallan cerrados. | `exercised`; serial sobre migraciones y estado. | Consumido `P=178,V=128` |
+| A06.3 | `2831d3c2`: la aceptación de lanzamiento conserva de forma durable si el entorno exige preservación; la migración 026 lo hace write-once y toda escritura terminal aplica la misma compuerta de aplicación. Sin comprobante causal exacto no terminaliza. | `exercised`; abre A07/A08. B12 conectará después el efecto físico que produce el comprobante. | Consumido `P=72,V=42` |
 
 La suma `100+178+72=350` y `100+150+100=350` conserva el techo A06. La
 corrección presupuestaria del ADR V38 traslada `P=28` de A06.3 a A06.2: el
@@ -383,6 +383,16 @@ opaco, mientras la compuerta terminal reutiliza ese lector y no añade otro
 writer. Ambos hijos permanecen por debajo de 200 LOC. El comprobante se
 persiste como hecho del `StateRepository`; no es otro agregado,
 cola o estado de `Goal`, y no autoriza retirada automática.
+
+A06 consume `P=350,V=247` de su techo `P=350,V=350`. Sus pruebas cubren
+registro, repetición exacta, reinicio, alteración, proyecto y cerca ajenos,
+material direccionable y rechazo de toda terminalización previa al
+comprobante. La suite SQLite completa quedó verde sobre el mismo candidato.
+La incidencia test-only `BUG-REBUILD-20260802-001` fija una barrera causal en
+la prueba concurrente del atestador para que no confunda la acción posterior
+con una violación de fencing. A06 sigue sin acreditar por sí sola `ORC-28` ni
+V38: la siguiente dependencia causal es A07 y el cierre de la compuerta A
+pertenece a A08.
 
 ### B01 — `P=0, V=50`
 

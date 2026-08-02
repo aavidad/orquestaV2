@@ -5,6 +5,17 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- A06.1–A06.3 quedó `exercised` en `4e5a7ae3`, `af0639de` y `2831d3c2`.
+  El contrato neutral, las migraciones 025/026 y el mismo `StateRepository`
+  conservan el comprobante causal exacto; el requisito de preservación se fija
+  al aceptar el lanzamiento y todas las escrituras terminales fallan cerradas
+  mientras falte ese comprobante.
+- A06 consumió `P=350,V=247` de `P=350,V=350`. Sus focales normales y con
+  detector de carreras, aplicación, puertos, `vet` y la suite SQLite completa
+  quedaron verdes; esta última tardó 170,968 s. La carrera intermitente de la
+  prueba V17 quedó aislada y cerrada como `BUG-REBUILD-20260802-001`: el test
+  mantiene vivo el primer efecto y prueba la cerca antes de liberar la acción
+  posterior.
 - Q4/A04.2–A04.4 quedó integrada en `a6c326d7`. El mismo
   `BEGIN IMMEDIATE` del claim materializa o repite la observación física,
   relee la cuota exacta, resta held una vez por `source+pool`, crea una única
@@ -23,8 +34,8 @@ Q4 como pendiente o A05 como meramente conectada.
   `BUG-ORQ-20260802-614`, sin ampliar timeouts ni ocultar un posible bloqueo.
 - Orquesta, Firecracker, jailer y Agente MicroVM permanecen detenidos; no se
   relanzaron los tres Goals V23 y no se hizo `push`.
-- A04/A05 quedan `exercised`, no `accredited`. La siguiente dependencia causal
-  es A06, preservación durable antes del desmontaje; después siguen A07 y A08.
+- A04/A05/A06 quedan `exercised`, no `accredited`. La siguiente dependencia
+  causal es A07; A08 cerrará después la compuerta A sobre el mismo candidato.
 
 ## Avance operativo del 2026-08-01
 
