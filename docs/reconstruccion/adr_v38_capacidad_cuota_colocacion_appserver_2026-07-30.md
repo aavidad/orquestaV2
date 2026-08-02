@@ -457,6 +457,13 @@ adaptadores B10.1/B10.2, no otro producto. A04 queda en `P=649,V=497` y B10 en
 `P=280,V=430`; su subtotal conjunto sigue siendo exactamente
 `P=929,V=927`. V38 permanece en `P=7.200,V=10.083`.
 
+La ejecución de la suite global encontró además 52 fixtures de bootstrap que
+todavía omitían la colocación o reconstruían `Orchestrator` sin sus fuentes de
+capacidad. Su migración y el simulador común de cuota `app-server` consumen
+verificación de Q4, no producto A08. Se trasladan por ello `V=100` de A08 a la
+bolsa indivisible A04.2–A04.4: queda en `P=489,V=487`, A04 en `P=649,V=597` y
+A08 en `P=0,V=650`. El subtotal y V38 permanecen invariantes.
+
 ## Alternativas rechazadas
 
 - **Reservar cuota como si fuera capacidad física:** produce sobrecontabilidad,
