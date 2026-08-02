@@ -289,12 +289,14 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 	repository.now = clock.Now
 	ids := &restartIDs{}
 	agent := &sqliteEscalationAgent{clock: clock}
+	_, fuentes := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	sqliteTestNoError(t, err)
@@ -831,12 +833,14 @@ func newRecoveryV14ControlOrchestrator(
 	if repository == nil {
 		t.Fatal("recovery V14 repository unavailable")
 	}
+	_, fuentes := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock}, Clock: clock, IDs: ids,
 		MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	sqliteTestNoError(t, err)

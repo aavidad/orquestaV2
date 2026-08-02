@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -102,7 +103,8 @@ func (repository *Repository) ClaimNextAction(
 		if err != nil {
 			return application.ActionClaim{}, false, err
 		}
-		selected, found, err = selectClaimCandidate(ctx, transaction, candidates, requirements, request.Capabilities, now)
+		selected, found, err = selectClaimCandidate(ctx, transaction, candidates, requirements,
+			request.Capabilities, request.CapacityCandidates, now)
 		if err != nil {
 			return application.ActionClaim{}, false, err
 		}
@@ -151,6 +153,10 @@ func validateClaimRequest(request application.ClaimRequest) error {
 	if err := application.ValidateBudgetPolicy(request.BudgetPolicy); err != nil {
 		return invalid(err)
 	}
+	ordenados, err := application.OrdenarCandidatosColocacion(request.CapacityCandidates)
+	if err != nil || !slices.Equal(ordenados, request.CapacityCandidates) {
+		return invalid(errors.New("sqlite.claim_capacity_candidates_invalid"))
+	}
 	return nil
 }
 
@@ -175,12 +181,13 @@ type claimSelection struct {
 	reservationExists bool
 	disposition       application.ActionClaimDisposition
 	budgetExhaustion  application.RetryBudgetExhaustion
+	capacidad         seleccionCapacidadReclamo
 }
 
 func selectClaimCandidate(
 	ctx context.Context, tx *sql.Tx, candidates []claimCandidate,
 	requirements map[claimRequirementKey]ports.AgentRequirements,
-	capabilities ports.AgentCapabilities, now time.Time,
+	capabilities ports.AgentCapabilities, capacityCandidates []application.AgentCapacityPlacementCandidate, now time.Time,
 ) (claimSelection, bool, error) {
 	for index := range candidates {
 		candidate := &candidates[index]
@@ -215,9 +222,16 @@ func selectClaimCandidate(
 		if !capacity {
 			continue
 		}
+		fisica, disponible, err := seleccionarCapacidadReclamo(ctx, tx, *candidate, capacityCandidates, now)
+		if err != nil {
+			return claimSelection{}, false, err
+		}
+		if !disponible {
+			continue
+		}
 		return claimSelection{
 			candidate: *candidate, approval: approval, reservation: reservation, reservationExists: exists,
-			disposition: application.ActionClaimDispositionNormal,
+			disposition: application.ActionClaimDispositionNormal, capacidad: fisica,
 		}, true, nil
 	}
 	return claimSelection{}, false, nil
@@ -399,11 +413,16 @@ AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, request.Toke
 	if err := requireOneRow(result); err != nil {
 		return application.ActionClaim{}, err
 	}
+	reservaCapacidad, colocacion, err := reservarCapacidadReclamo(ctx, tx, selected.capacidad, candidate, uint64(fence), now)
+	if err != nil {
+		return application.ActionClaim{}, err
+	}
 	claim := application.ActionClaim{Action: candidate.action, Token: request.Token, WorkerRef: request.WorkerRef,
 		DeliveryAttempt: uint64(deliveryAttempt), Fence: uint64(fence),
 		Disposition: selected.disposition, RetryBudgetExhaustion: selected.budgetExhaustion,
 		BudgetReservationRef: reservation.Ref,
-		BudgetReservation:    reservation, EffectApproval: selected.approval, LeaseUntil: leaseUntil}
+		BudgetReservation:    reservation, CapacityReservation: reservaCapacidad, ReferenciaColocacion: colocacion,
+		EffectApproval: selected.approval, LeaseUntil: leaseUntil}
 	if candidate.governanceVersion == 1 && candidate.action.Kind == application.ActionLaunchAgent {
 		if err := advanceFairness(ctx, tx, candidate.projectRef, candidate.action.GoalRef, now); err != nil {
 			return application.ActionClaim{}, err
@@ -798,6 +817,16 @@ WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
 		}
 	default:
 		return conflict(errors.New("sqlite.claim_disposition_invalid"))
+	}
+	if claim.Action.Kind == application.ActionLaunchAgent && claim.Action.EffectIntentRef != "" &&
+		claim.Disposition == application.ActionClaimDispositionNormal {
+		reserva, colocacion, encontrada, err := leerReservaCapacidadAccion(ctx, transaction, claim.Action.Ref)
+		if err != nil {
+			return err
+		}
+		if !encontrada || colocacion != claim.ReferenciaColocacion || !coincideReservaCapacidadReclamo(reserva, claim.CapacityReservation) {
+			return conflict(errors.New("sqlite.claim_capacity_conflict"))
+		}
 	}
 	return nil
 }

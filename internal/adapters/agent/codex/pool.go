@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
@@ -60,11 +59,9 @@ type Pool struct {
 
 	lifecycle       context.Context
 	cancelLifecycle context.CancelCauseFunc
-	next            atomic.Uint64
-
-	shutdownOnce sync.Once
-	shutdownDone chan struct{}
-	shutdownErr  error
+	shutdownOnce    sync.Once
+	shutdownDone    chan struct{}
+	shutdownErr     error
 }
 
 type poolProfile struct {
@@ -420,46 +417,34 @@ func (pool *Pool) Launch(
 		return ports.AgentLaunchReceipt{}, err
 	}
 	defer end()
+	seleccionado := pool.perfilColocacion(request.ReferenciaColocacion)
+	if seleccionado == nil {
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodePoolRoutingInvalid}
+	}
 	profile, selectProfile, err := pool.route(operationContext, request.ExecutionRef, true)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
 	if !selectProfile {
+		if profile != seleccionado {
+			return ports.AgentLaunchReceipt{}, &Error{Code: CodePoolRoutingInvalid}
+		}
 		return profile.adapter.Launch(ctx, request)
 	}
-	return pool.launchOnAvailableProfile(ctx, request)
+	receipt, launchErr := seleccionado.adapter.Launch(ctx, request)
+	if err := pool.finishSelection(request.ExecutionRef, seleccionado, launchErr == nil); err != nil {
+		return ports.AgentLaunchReceipt{}, errors.Join(err, launchErr)
+	}
+	return receipt, launchErr
 }
 
-func (pool *Pool) launchOnAvailableProfile(
-	ctx context.Context,
-	request ports.AgentLaunchRequest,
-) (ports.AgentLaunchReceipt, error) {
-	start := int((pool.next.Add(1) - 1) % uint64(len(pool.profiles)))
-	var capacityErr error
-	for offset := 0; offset < len(pool.profiles); offset++ {
-		profile := pool.profiles[(start+offset)%len(pool.profiles)]
-		receipt, err := profile.adapter.Launch(ctx, request)
-		if capacityDefinitelyNotApplied(err) {
-			capacityErr = err
-			continue
+func (pool *Pool) perfilColocacion(referencia ports.AgentPlacementRef) *poolProfile {
+	for _, perfil := range pool.profiles {
+		if referencia.String() == "placement:"+perfil.ref {
+			return perfil
 		}
-		routeErr := pool.finishSelection(request.ExecutionRef, profile, err == nil)
-		if routeErr != nil {
-			return ports.AgentLaunchReceipt{}, errors.Join(routeErr, err)
-		}
-		return receipt, err
 	}
-	pool.abandonSelection(request.ExecutionRef)
-	if capacityErr == nil {
-		capacityErr = &Error{Code: CodeCapacityUnavailable, TemporaryFailure: true}
-	}
-	return ports.AgentLaunchReceipt{}, capacityErr
-}
-
-func capacityDefinitelyNotApplied(err error) bool {
-	var proof interface{ DefinitelyNotApplied() bool }
-	return ErrorCode(err) == CodeCapacityUnavailable &&
-		errors.As(err, &proof) && proof.DefinitelyNotApplied()
+	return nil
 }
 
 func (pool *Pool) Observe(
@@ -680,16 +665,6 @@ func (pool *Pool) finishSelection(
 		delete(pool.routes, key)
 	}
 	return err
-}
-
-func (pool *Pool) abandonSelection(executionRef goal.ExecutionRef) {
-	key := executionRef.String()
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-	if selection := pool.routes[key]; selection != nil && selection.selecting != nil {
-		close(selection.selecting)
-	}
-	delete(pool.routes, key)
 }
 
 func (pool *Pool) BindSessionResolver(resolver SessionResolver) error {

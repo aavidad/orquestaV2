@@ -234,6 +234,7 @@ func TestRepositoryV10ApplicationMembershipReplayAcceptsFreshAuthorizationReceip
 	clock := &sqliteMembershipClock{now: time.Date(2026, 7, 15, 8, 0, 0, 0, time.UTC)}
 	ids := &sqliteMembershipIDs{}
 	stub := sqliteMembershipExternalStub{}
+	_, fuentes := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: stub, Observer: stub, Artifacts: stub,
 		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
@@ -242,6 +243,7 @@ func TestRepositoryV10ApplicationMembershipReplayAcceptsFreshAuthorizationReceip
 		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
+		CapacitySources:   fuentes, CapacityObservationWait: time.Second,
 	})
 	sqliteTestNoError(t, err)
 	project := mustRef(t, "project:application-membership", goal.NewProjectRef)

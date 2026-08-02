@@ -69,6 +69,9 @@ func (repository *Repository) RecordLaunchAccepted(ctx context.Context, state ap
 		); err != nil {
 			return err
 		}
+		if err := consumirCapacidadLanzamiento(ctx, transaction, state); err != nil {
+			return err
+		}
 		if err := insertAction(ctx, transaction, state.NextAction); err != nil {
 			return err
 		}
@@ -118,6 +121,9 @@ func (repository *Repository) QuarantineAction(ctx context.Context, state applic
 			if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
 				return err
 			}
+		}
+		if err := liquidarCapacidadLanzamiento(ctx, transaction, state); err != nil {
+			return err
 		}
 		return completeClaim(
 			ctx,

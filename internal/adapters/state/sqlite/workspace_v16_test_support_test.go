@@ -317,6 +317,7 @@ func newSQLiteV16OrchestratorWithStateAttestorSessionsAndMaxOutput(
 	maxOutputBytes int64,
 ) *application.Orchestrator {
 	t.Helper()
+	_, fuentes := prepararCapacidadSQLiteV15(t, system.repository, system.clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: system.repository,
 		Launcher: system.external, Observer: system.external, Controller: system.external,
@@ -333,6 +334,7 @@ func newSQLiteV16OrchestratorWithStateAttestorSessionsAndMaxOutput(
 		EffectApprovalTTL:     system.policy.EffectApprovalTTL, BudgetPolicy: system.policy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(), ExecutionSessions: sessions,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 	})
 	sqliteTestNoError(t, err)
 	return orchestrator

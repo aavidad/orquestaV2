@@ -154,6 +154,7 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 		DirectorLeaseDuration: time.Minute,
 		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		CapacitySources: fuentesCapacidadPruebaEstaticas(), CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -282,6 +283,7 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 		DirectorLeaseDuration: time.Minute,
 		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		CapacitySources: fuentesCapacidadPruebaEstaticas(), CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -342,6 +344,7 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 		DirectorLeaseDuration: time.Minute,
 		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		CapacitySources: fuentesCapacidadPruebaEstaticas(), CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)

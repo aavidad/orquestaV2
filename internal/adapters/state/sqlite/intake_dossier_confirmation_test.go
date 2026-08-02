@@ -82,6 +82,7 @@ func (system *sqliteIntakeDossierConfirmationSystem) newOrchestrator(
 	state application.StateRepository,
 ) *application.Orchestrator {
 	t.Helper()
+	_, fuentes := prepararCapacidadSQLiteV15(t, system.repository, system.clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, WizardGapsStore: system.repository,
 		IntakeDossierStore: system.repository,
@@ -96,6 +97,7 @@ func (system *sqliteIntakeDossierConfirmationSystem) newOrchestrator(
 		BudgetPolicy:      system.policy,
 		ObservationDelay:  time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
+		CapacitySources:   fuentes, CapacityObservationWait: time.Second,
 	})
 	sqliteTestNoError(t, err)
 	return orchestrator

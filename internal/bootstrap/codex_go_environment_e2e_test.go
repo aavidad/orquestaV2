@@ -33,6 +33,7 @@ func TestCodexProductionProcessReceivesPinnedGoEnvironment(t *testing.T) {
 			"env_allowlist = [\"PATH\", \"HOME\", \"CODEX_HOME\", \"GOENV\", \"GOTOOLCHAIN\", \"GOROOT\", \"GOCACHE\", \"GOMODCACHE\", \"GOPATH\", \"GOTMPDIR\", \"TMPDIR\", \"GOPROXY\"]\n"+
 			"timeout = \"5s\"",
 	)
+	configurarPerfilCuotaCodexPrueba(t, root, configPath, helperPath, 1)
 	configureTestCodexRuntimeCgroup(t, configPath)
 
 	t.Setenv("PATH", "/poisoned/bin")

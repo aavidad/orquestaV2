@@ -306,6 +306,7 @@ type ActionClaim struct {
 	BudgetReservationRef  string
 	BudgetReservation     governance.BudgetReservation
 	CapacityReservation   AgentCapacityReservation
+	ReferenciaColocacion  ports.AgentPlacementRef
 	EffectApproval        EffectApproval
 	LeaseUntil            time.Time
 }

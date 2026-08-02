@@ -961,6 +961,25 @@ func validReviewDigest(value string) bool {
 }
 
 func validateClaim(claim application.ActionClaim) error {
+	if err := validateClaimBase(claim); err != nil {
+		return err
+	}
+	requerida := claim.Action.Kind == application.ActionLaunchAgent && claim.Action.EffectIntentRef != "" &&
+		claim.Disposition == application.ActionClaimDispositionNormal
+	presente := claim.CapacityReservation != (application.AgentCapacityReservation{}) && claim.ReferenciaColocacion.String() != ""
+	reserva := claim.CapacityReservation
+	if requerida != presente || presente && (application.ValidateAgentCapacityReservation(reserva) != nil ||
+		reserva.ActionRef != claim.Action.Ref || reserva.EffectIntentRef != claim.Action.EffectIntent.Ref ||
+		reserva.ProjectRef != claim.Action.EffectIntent.Subject.ProjectRef || reserva.GoalRef != claim.Action.GoalRef ||
+		reserva.WorkItemRef != claim.Action.WorkItemRef || reserva.ExecutionRef != claim.Action.ExecutionRef ||
+		reserva.PlanGeneration != claim.Action.PlanGeneration || reserva.WorkItemGeneration != claim.Action.WorkItemGeneration ||
+		reserva.Fence > claim.Fence || !claim.LeaseUntil.After(reserva.ReservedAt)) {
+		return errors.New("sqlite.claim_capacity_invalid")
+	}
+	return nil
+}
+
+func validateClaimBase(claim application.ActionClaim) error {
 	if !validText(claim.Token) || !validText(claim.WorkerRef) || claim.DeliveryAttempt == 0 ||
 		claim.DeliveryAttempt > maxSQLiteInteger || claim.Fence == 0 ||
 		claim.Fence > maxSQLiteInteger || claim.LeaseUntil.IsZero() {

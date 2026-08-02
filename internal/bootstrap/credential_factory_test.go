@@ -406,8 +406,9 @@ func bootstrapCredentialAgentRequest(t *testing.T, suffix, objective string) por
 	workItemRef, _ := goal.NewWorkItemRef("work-item:" + suffix)
 	actorRef, _ := goal.NewActorRef("actor:local-owner")
 	projectRef, _ := goal.NewProjectRef("project:default")
+	placementRef, _ := ports.NewAgentPlacementRef("placement:test")
 	return ports.AgentLaunchRequest{
-		ExecutionRef: executionRef, GoalRef: goalRef, WorkItemRef: workItemRef,
+		ExecutionRef: executionRef, ReferenciaColocacion: placementRef, GoalRef: goalRef, WorkItemRef: workItemRef,
 		PlanGeneration: 1, AppSpecGeneration: 1, ExecutionAttempt: 1,
 		SpecHash: strings.Repeat("0", 64), ActorRef: actorRef, ProjectRef: projectRef, Objective: objective,
 		PhaseRef: "phase-instance:build", PhaseKey: "phase:build", PhaseTemplateRef: "phase-template:program",

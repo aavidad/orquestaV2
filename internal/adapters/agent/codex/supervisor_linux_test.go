@@ -1419,8 +1419,10 @@ func supervisorTestRequest(suffix, objective string, maxOutput int64) ports.Agen
 	workItemRef, _ := goal.NewWorkItemRef("work-item:" + suffix)
 	actorRef, _ := goal.NewActorRef("actor:local-owner")
 	projectRef, _ := goal.NewProjectRef("project:default")
+	colocacion, _ := ports.NewAgentPlacementRef("placement:test")
 	request := ports.AgentLaunchRequest{
-		ExecutionRef: executionRef, GoalRef: goalRef, WorkItemRef: workItemRef,
+		ExecutionRef: executionRef, ReferenciaColocacion: colocacion,
+		GoalRef: goalRef, WorkItemRef: workItemRef,
 		PlanGeneration: 2, AppSpecGeneration: 3, ExecutionAttempt: 1,
 		SpecHash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		ActorRef: actorRef, ProjectRef: projectRef, Objective: objective,

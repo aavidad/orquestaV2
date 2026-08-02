@@ -58,6 +58,7 @@ type v16FixtureFile struct {
 type v16Write map[string]string
 
 type v16WorkspaceAgent struct {
+	capacidadAgentePrueba
 	now      func() time.Time
 	writes   map[string]v16Write
 	launches *atomic.Int64

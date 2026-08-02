@@ -666,8 +666,8 @@ DROP TABLE agent_capacity_observations; DROP TABLE wizard_gaps_input_receipts`,
 	mustV10Exec(
 		t,
 		system.repository.db,
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?)`,
-		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?)`,
+		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim,
 	)
 	mustV10Exec(
 		t,

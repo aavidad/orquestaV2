@@ -43,6 +43,7 @@ func TestRealCodexCooperativeStopLeavesResidentSchedulerLive(t *testing.T) {
 	replaceTestConfigValue(t, configPath, "[runtime.codex]\ntimeout = \"1s\"",
 		"[runtime.codex]\ncommand = "+strconv.Quote(helperPath)+"\ntimeout = \"5s\"",
 	)
+	configurarPerfilCuotaCodexPrueba(t, root, configPath, helperPath, 2)
 	configureTestCodexRuntimeCgroup(t, configPath)
 	runtime, err := Build(context.Background(), Options{
 		ConfigPath: configPath, Version: "v14-cooperative-scheduler-liveness",
@@ -161,6 +162,7 @@ func TestRealCodexControlsThroughProductionComposition(t *testing.T) {
 	replaceTestConfigValue(t, configPath, "[runtime.codex]\ntimeout = \"1s\"",
 		"[runtime.codex]\ncommand = "+strconv.Quote(executable)+"\ntimeout = \"5s\"",
 	)
+	configurarPerfilCuotaCodexPrueba(t, root, configPath, executable, 1)
 	// Race instrumentation can extend cgroup/process-tree stop settlement beyond
 	// the shared one-second fixture lease. Match this real-runtime case to the
 	// existing ten-second observation window so its fenced receipt can settle.

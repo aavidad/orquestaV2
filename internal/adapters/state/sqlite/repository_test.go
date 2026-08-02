@@ -67,7 +67,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV38Capacity {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV38Claim {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -1646,12 +1646,14 @@ func assertRecordMatchesCreate(t *testing.T, record application.GoalRecord, stat
 func mustClaim(t *testing.T, repository *Repository, worker, token string, now time.Time) application.ActionClaim {
 	t.Helper()
 	repository.now = func() time.Time { return now }
+	clock := &sqliteMembershipClock{now: now}
+	candidatos, _ := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: worker, Token: token, LeaseDuration: 30 * time.Second, Capabilities: sqliteTestCapabilities(),
-		BudgetPolicy: sqliteTestBudgetPolicy(now),
+		BudgetPolicy: sqliteTestBudgetPolicy(now), CapacityCandidates: candidatos,
 	})
 	if err != nil || !found {
-		t.Fatalf("claim = found:%v err:%v", found, err)
+		t.Fatalf("claim = found:%v err:%s", found, sqliteTestErrorChain(err))
 	}
 	if claim.Action.Kind == application.ActionPrepareWorkspace {
 		prepareLegacyWorkspaceClaim(t, repository, claim, now)

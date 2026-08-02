@@ -221,7 +221,8 @@ func TestSQLiteQueuedRetryBecomesIrreversibleAfterPeerSettlement(t *testing.T) {
 		t.Run("forged_"+name, func(t *testing.T) {
 			err := system.repository.mutate(context.Background(), forge(firstClaim), system.clock.Now(),
 				func(*sql.Tx) error { return nil })
-			if !application.IsStateError(err, application.StateConflict) {
+			if !application.IsStateError(err, application.StateConflict) &&
+				!application.IsStateError(err, application.StateInvalid) {
 				t.Fatalf("forged %s accepted: %v", name, err)
 			}
 		})
@@ -822,6 +823,7 @@ func TestSQLiteDependentWorkKeepsHistoricalPolicyAfterRuntimeRotation(t *testing
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:v15-policy-rotated-claim", Token: "claim:v15-policy-rotated-dependent",
 		LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: rotated,
+		CapacityCandidates: system.capacidad,
 	})
 	if err != nil || !found || claim.Action.EffectIntent.PolicyHash != oldIntent.PolicyHash ||
 		claim.BudgetReservation.PolicyHash != oldIntent.PolicyHash {

@@ -256,6 +256,7 @@ func sqliteV22Orchestrator(
 	t *testing.T, system *sqliteV15System, sessions ports.ExecutionSessionBroker,
 ) *application.Orchestrator {
 	t.Helper()
+	_, fuentes := prepararCapacidadSQLiteV15(t, system.repository, system.clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: system.repository, Access: system.repository, Launcher: system.external,
 		Observer: system.external, Controller: system.external, Artifacts: system.external,
@@ -264,6 +265,7 @@ func sqliteV22Orchestrator(
 		DirectorLeaseDuration: 30 * time.Second, EffectApprovalTTL: system.policy.EffectApprovalTTL,
 		BudgetPolicy: system.policy, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(), ExecutionSessions: sessions,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)

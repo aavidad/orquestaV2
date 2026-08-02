@@ -536,6 +536,7 @@ func v04NewOrchestrator(
 		DirectorLeaseDuration: time.Minute,
 		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		CapacitySources: fuentesCapacidadPruebaEstaticas(), CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatalf("new orchestrator: %v", err)

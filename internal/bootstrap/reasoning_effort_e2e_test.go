@@ -39,6 +39,7 @@ func TestReasoningEffortXHighSurvivesProductionCompositionAndRestart(t *testing.
 	replaceTestConfigValue(t, configPath, "[runtime.codex]\ntimeout = \"1s\"",
 		"[runtime.codex]\ncommand = "+strconv.Quote(helperPath)+"\nreasoning = \"high\"\ntimeout = \"5s\"",
 	)
+	configurarPerfilCuotaCodexPrueba(t, root, configPath, helperPath, 1)
 	configureTestCodexRuntimeCgroup(t, configPath)
 
 	first := buildReasoningEffortRuntime(t, configPath)
@@ -73,7 +74,7 @@ func TestReasoningEffortXHighSurvivesProductionCompositionAndRestart(t *testing.
 		t.Fatalf("submit xhigh Goal: %v", err)
 	}
 	terminal := waitTerminalGoal(t, first, result.Record.Goal.Ref())
-	request := requireReasoningEffortCausality(t, terminal)
+	request := requireReasoningEffortCausality(t, terminal, colocacionAgentePrueba(t, first.agent))
 	requirePhysicalReasoningEffort(t, argumentsPath, governance.ReasoningEffortXHigh)
 	requireReasoningEffortLaunchCount(t, invocationsPath, 1)
 
@@ -174,7 +175,7 @@ func writeReasoningEffortHelper(t *testing.T, helperPath, invocationsPath, argum
 	}
 }
 
-func requireReasoningEffortCausality(t *testing.T, record application.GoalRecord) ports.AgentLaunchRequest {
+func requireReasoningEffortCausality(t *testing.T, record application.GoalRecord, colocacion ports.AgentPlacementRef) ports.AgentLaunchRequest {
 	t.Helper()
 	if record.Goal.State() != goal.GoalStateSucceeded ||
 		len(record.Goal.WorkItems()) != 1 ||
@@ -196,7 +197,7 @@ func requireReasoningEffortCausality(t *testing.T, record application.GoalRecord
 		t.Fatalf("phase %s not found", item.Phase())
 	}
 	request := ports.AgentLaunchRequest{
-		ExecutionRef: execution.Ref, SessionRef: execution.ExecutionSessionRef,
+		ExecutionRef: execution.Ref, ReferenciaColocacion: colocacion, SessionRef: execution.ExecutionSessionRef,
 		ExecutionWorkspaceRef: execution.ExecutionWorkspaceRef,
 		GoalRef:               record.Goal.Ref(), WorkItemRef: item.Ref(),
 		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
@@ -278,7 +279,7 @@ func readReasoningEffortJournal(
 	root string,
 ) (string, []byte, reasoningEffortLaunchJournal) {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(root, "work", "executions", "*", "request.json"))
+	matches, err := filepath.Glob(filepath.Join(root, "work", "profiles", "*", "executions", "*", "request.json"))
 	if err != nil || len(matches) != 1 {
 		t.Fatalf("V7 launch journals=%d error=%v paths=%q", len(matches), err, matches)
 	}

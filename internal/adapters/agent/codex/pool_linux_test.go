@@ -41,6 +41,7 @@ func TestPoolUsesDistinctPersistentHomesAndSpillsCapacity(t *testing.T) {
 	firstContext, cancelFirst := context.WithCancel(context.Background())
 	defer cancelFirst()
 	first := testRequest(t, "pool-capacity-a", "helper:fd-audit-block helper:account-home", 1024)
+	colocarEnPerfil(t, pool, &first, 0)
 	firstReceipt, err := pool.Launch(firstContext, first)
 	if err != nil {
 		t.Fatalf("Launch(first) error = %v", err)
@@ -48,6 +49,7 @@ func TestPoolUsesDistinctPersistentHomesAndSpillsCapacity(t *testing.T) {
 	secondContext, cancelSecond := context.WithCancel(context.Background())
 	defer cancelSecond()
 	second := testRequest(t, "pool-capacity-b", "helper:fd-audit-block helper:account-home", 1024)
+	colocarEnPerfil(t, pool, &second, 1)
 	secondReceipt, err := pool.Launch(secondContext, second)
 	if err != nil {
 		t.Fatalf("Launch(second) error = %v", err)
@@ -66,6 +68,7 @@ func TestPoolUsesDistinctPersistentHomesAndSpillsCapacity(t *testing.T) {
 	}
 
 	third := testRequest(t, "pool-capacity-full", "helper:account-home helper:success", 1024)
+	colocarEnPerfil(t, pool, &third, 0)
 	if _, err := pool.Launch(context.Background(), third); ErrorCode(err) != CodeCapacityUnavailable {
 		t.Fatalf("Launch(full pool) error=%v code=%q", err, ErrorCode(err))
 	}
@@ -117,6 +120,7 @@ func TestPoolHonorsAggregateCapacityAndReplayDoesNotConsumeSlot(t *testing.T) {
 	firstContext, cancelFirst := context.WithCancel(context.Background())
 	defer cancelFirst()
 	first := testRequest(t, "pool-aggregate-first", "helper:fd-audit-block helper:account-home", 1024)
+	colocarEnPerfil(t, pool, &first, 0)
 	firstReceipt, err := pool.Launch(firstContext, first)
 	if err != nil {
 		t.Fatalf("Launch(first) error = %v", err)
@@ -124,10 +128,11 @@ func TestPoolHonorsAggregateCapacityAndReplayDoesNotConsumeSlot(t *testing.T) {
 	secondContext, cancelSecond := context.WithCancel(context.Background())
 	defer cancelSecond()
 	second := testRequest(t, "pool-aggregate-second", "helper:fd-audit-block helper:account-home", 1024)
+	colocarEnPerfil(t, pool, &second, 1)
 	if _, err := pool.Launch(secondContext, second); ErrorCode(err) != CodeCapacityUnavailable ||
-		!capacityDefinitelyNotApplied(err) {
+		!pruebaCapacidadNoAplicada(err) {
 		t.Fatalf("Launch(second) error=%v code=%q definitely_not_applied=%v",
-			err, ErrorCode(err), capacityDefinitelyNotApplied(err))
+			err, ErrorCode(err), pruebaCapacidadNoAplicada(err))
 	}
 
 	cancelFirst()
@@ -151,6 +156,7 @@ func TestPoolConcurrentIdempotentLaunchPublishesOneJournalAndProcess(t *testing.
 	config, _ := poolTestFixture(t)
 	pool := openTestPool(t, config)
 	request := testRequest(t, "pool-idempotent-concurrent", "helper:account-home helper:success", 1024)
+	colocarEnPerfil(t, pool, &request, 0)
 
 	const callers = 12
 	receipts := make(chan ports.AgentLaunchReceipt, callers)
@@ -197,6 +203,7 @@ func TestPoolRebuildsExactRoutingFromJournalsAcrossRestart(t *testing.T) {
 	config, _ := poolTestFixture(t)
 	pool := openTestPool(t, config)
 	request := testRequest(t, "pool-restart-routing", "helper:account-home helper:success", 1024)
+	colocarEnPerfil(t, pool, &request, 0)
 	receipt, err := pool.Launch(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Launch() error = %v", err)
@@ -221,6 +228,11 @@ func TestPoolRebuildsExactRoutingFromJournalsAcrossRestart(t *testing.T) {
 	if err != nil || replayed != receipt {
 		t.Fatalf("Launch(replay)=%+v error=%v want=%+v", replayed, err, receipt)
 	}
+	alterada := request
+	colocarEnPerfil(t, reopened, &alterada, 1)
+	if _, err := reopened.Launch(context.Background(), alterada); ErrorCode(err) != CodePoolRoutingInvalid {
+		t.Fatalf("Launch(colocación alterada) error=%v", err)
+	}
 	owner := poolExecutionOwner(t, reopened, request.ExecutionRef)
 	invocations, err := os.ReadFile(filepath.Join(
 		owner.workRoot, filepath.FromSlash(executionPath(request.ExecutionRef)), "helper-invocations",
@@ -234,11 +246,13 @@ func TestPoolStopRoutesToExactJournalAndShutdownCoversAllProfiles(t *testing.T) 
 	config, _ := poolTestFixture(t)
 	pool := openTestPool(t, config)
 	first := testRequest(t, "pool-stop-first", "helper:fd-audit-block helper:account-home", 1024)
+	colocarEnPerfil(t, pool, &first, 0)
 	firstReceipt, err := pool.Launch(context.Background(), first)
 	if err != nil {
 		t.Fatalf("Launch(first) error = %v", err)
 	}
 	second := testRequest(t, "pool-stop-second", "helper:fd-audit-block helper:account-home", 1024)
+	colocarEnPerfil(t, pool, &second, 1)
 	if _, err := pool.Launch(context.Background(), second); err != nil {
 		t.Fatalf("Launch(second) error = %v", err)
 	}
@@ -316,6 +330,7 @@ func TestPoolShutdownCancelsBlockedLaunchAuthorityWithoutDeadlock(t *testing.T) 
 		t.Fatalf("BindSessionResolver() error = %v", err)
 	}
 	request := testRequest(t, "pool-blocked-resolver", "helper:account-home helper:success", 1024)
+	colocarEnPerfil(t, pool, &request, 0)
 	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:pool-blocked-resolver")
 	launchDone := make(chan error, 1)
 	go func() {
@@ -396,6 +411,7 @@ func TestPoolAllowsAdditionButRejectsMaterializedProfileWithdrawal(t *testing.T)
 		t.Fatalf("NewPool(first profile) error = %v", err)
 	}
 	request := testRequest(t, "pool-safe-addition", "helper:account-home helper:success", 1024)
+	colocarEnPerfil(t, first, &request, 0)
 	if _, err := first.Launch(context.Background(), request); err != nil {
 		t.Fatalf("Launch(first profile) error = %v", err)
 	}
@@ -492,6 +508,7 @@ func TestPoolFailsClosedForDuplicateOrCorruptConfigurationAndJournals(t *testing
 		config, _ := poolTestFixture(t)
 		pool := openTestPool(t, config)
 		request := testRequest(t, "pool-corrupt-journal", "helper:account-home helper:success", 1024)
+		colocarEnPerfil(t, pool, &request, 0)
 		if _, err := pool.Launch(context.Background(), request); err != nil {
 			t.Fatalf("Launch() error = %v", err)
 		}
@@ -515,6 +532,7 @@ func TestPoolFailsClosedForDuplicateOrCorruptConfigurationAndJournals(t *testing
 		config, _ := poolTestFixture(t)
 		pool := openTestPool(t, config)
 		request := testRequest(t, "pool-duplicate-journal", "helper:account-home helper:success", 1024)
+		colocarEnPerfil(t, pool, &request, 0)
 		if _, err := pool.Launch(context.Background(), request); err != nil {
 			t.Fatalf("Launch() error = %v", err)
 		}
@@ -678,6 +696,23 @@ func openTestPool(t *testing.T, config PoolConfig) *Pool {
 		}
 	})
 	return pool
+}
+
+func colocarEnPerfil(t *testing.T, pool *Pool, request *ports.AgentLaunchRequest, indice int) {
+	t.Helper()
+	if indice < 0 || indice >= len(pool.profiles) {
+		t.Fatalf("perfil de prueba fuera de rango: %d", indice)
+	}
+	referencia, err := ports.NewAgentPlacementRef("placement:" + pool.profiles[indice].ref)
+	if err != nil {
+		t.Fatalf("NewAgentPlacementRef() error = %v", err)
+	}
+	request.ReferenciaColocacion = referencia
+}
+
+func pruebaCapacidadNoAplicada(err error) bool {
+	var prueba interface{ DefinitelyNotApplied() bool }
+	return errors.As(err, &prueba) && prueba.DefinitelyNotApplied()
 }
 
 func awaitPoolTerminal(

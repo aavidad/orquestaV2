@@ -36,17 +36,18 @@ func TestRealCodexBudgetsAndEffectsThroughProductionComposition(t *testing.T) {
 	replaceTestConfigValue(t, configPath, "[runtime.codex]\ntimeout = \"1s\"",
 		"[runtime.codex]\ncommand = "+strconv.Quote(helperPath)+"\ntimeout = \"5s\"",
 	)
-	replaceTestConfigValue(t, configPath, "max_concurrent_executions = 4\n", "")
+	configurarPerfilCuotaCodexPrueba(t, root, configPath, helperPath, 1)
 	configureTestCodexRuntimeCgroup(t, configPath)
 
 	runtime, err := Build(context.Background(), Options{ConfigPath: configPath, Version: "v15-budget-effect-e2e"})
 	if err != nil {
 		t.Fatalf("build production composition: %v cause=%v", err, errors.Unwrap(err))
 	}
-	if runtime.config.RuntimeCodexMaxConcurrentExecutions() != 70 ||
+	if runtime.config.RuntimeCodexMaxConcurrentExecutions() != 1 ||
+		runtime.config.GovernanceGlobalProcessSlotsBudget() != 4 ||
 		runtime.config.SchedulerMaxChildrenPerParent() != 6 {
-		t.Fatalf("production defaults = launches %d fanout %d",
-			runtime.config.RuntimeCodexMaxConcurrentExecutions(), runtime.config.SchedulerMaxChildrenPerParent())
+		t.Fatalf("production limits = profile %d global %d fanout %d",
+			runtime.config.RuntimeCodexMaxConcurrentExecutions(), runtime.config.GovernanceGlobalProcessSlotsBudget(), runtime.config.SchedulerMaxChildrenPerParent())
 	}
 	if err := runtime.Start(context.Background()); err != nil {
 		t.Fatalf("start production composition: %v", err)

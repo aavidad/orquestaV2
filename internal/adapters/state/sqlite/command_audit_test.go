@@ -346,7 +346,7 @@ func TestRecoveryRejectsTamperedCommandAuditCrossLinksAndUnsupportedSchema(t *te
 	raw, err := openCommandAuditRawDatabase(path)
 	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = raw.Close() })
-	_, err = raw.Exec(`PRAGMA user_version=` + strconv.Itoa(recoverySchemaV38Capacity+1))
+	_, err = raw.Exec(`PRAGMA user_version=` + strconv.Itoa(recoverySchemaV38Claim+1))
 	sqliteTestNoError(t, err)
 	if _, _, err := validateRecoveryDatabase(ctx, raw); err == nil ||
 		!recoveryErrorContains(err, "sqlite.recovery_schema_version_invalid") {
@@ -380,7 +380,7 @@ func TestSQLiteCommandRegistryMigrationAndRestartPreserveHistoricalDigest(t *tes
 	sqliteTestNoError(t, repository.db.QueryRow(
 		`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN ('command_invocations','command_outcomes')`,
 	).Scan(&auditTables))
-	if version != recoverySchemaV38Capacity || v19Receipts != 1 || v20Receipts != 1 || auditTables != 2 {
+	if version != recoverySchemaV38Claim || v19Receipts != 1 || v20Receipts != 1 || auditTables != 2 {
 		t.Fatalf("V20 migration version=%d receipts=%d/%d tables=%d",
 			version, v19Receipts, v20Receipts, auditTables)
 	}

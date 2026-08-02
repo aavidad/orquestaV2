@@ -116,6 +116,10 @@ func (harness *v16Harness) installPassingTestAttestor(
 	if err != nil {
 		t.Fatal(err)
 	}
+	fuentes, err := componerFuentesCapacidadAgente(runtime.agent, runtime.config.RuntimeCapacityObservationTTL(), clock.Now, false)
+	if err != nil {
+		t.Fatal(err)
+	}
 	policy := legacyTestAttestationPolicy()
 	// V16 remains a legacy harness: Build opened the real Git/SQLite/CAS
 	// adapters, then only its application wiring receives this canonical fake.
@@ -124,6 +128,7 @@ func (harness *v16Harness) installPassingTestAttestor(
 		buildSetup{snapshot: runtime.config, clock: clock, budgetPolicy: budgetPolicy},
 		runtime.repository, runtime.artifacts, runtime.agent, nil, capabilities, workspace,
 		buildTestAttestorComposition{attestor: legacyPassingTestAttestor{}, policy: policy},
+		executionRuntimeComposition{capacitySources: fuentes},
 	)
 	if err != nil {
 		t.Fatalf("install V16 canonical test attestor: %v", err)

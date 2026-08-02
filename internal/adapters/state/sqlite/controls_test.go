@@ -97,6 +97,7 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 	ids := &restartIDs{}
 	agent := &sqliteTerminalStopAgent{clock: clock}
 	capabilities := sqliteMultiControlCapabilities()
+	_, fuentes := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	newOrchestrator := func(state application.StateRepository) *application.Orchestrator {
 		orchestrator, err := application.New(application.Dependencies{
 			State: state, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
@@ -104,6 +105,7 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 			MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 			MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 			AgentCapabilities: capabilities, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+			CapacitySources: fuentes, CapacityObservationWait: time.Second,
 			ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
 		sqliteTestNoError(t, err)
@@ -511,6 +513,7 @@ func newSQLiteMultiControlOrchestrator(
 	agent *sqliteMultiControlAgent,
 ) *application.Orchestrator {
 	t.Helper()
+	_, fuentes := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		WorkspaceManager: &sqliteTestWorkspaceManager{},
@@ -518,6 +521,7 @@ func newSQLiteMultiControlOrchestrator(
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	sqliteTestNoError(t, err)

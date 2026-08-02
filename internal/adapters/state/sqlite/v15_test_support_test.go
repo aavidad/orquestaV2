@@ -338,6 +338,15 @@ type sqliteV15System struct {
 	external     *sqliteV15External
 	policy       application.BudgetPolicy
 	ids          *sqliteV15IDs
+	capacidad    []application.AgentCapacityPlacementCandidate
+}
+
+type observadorCapacidadSQLiteV15 struct {
+	observacion application.AgentCapacityObservation
+}
+
+func (observador observadorCapacidadSQLiteV15) ObserveCapacity(context.Context, application.AgentCapacitySourceRef, application.AgentCapacityPoolRef) (application.AgentCapacityObservation, error) {
+	return observador.observacion, nil
 }
 
 func newSQLiteV15System(t *testing.T, slots int64) *sqliteV15System {
@@ -352,11 +361,12 @@ func newSQLiteV15System(t *testing.T, slots int64) *sqliteV15System {
 	sqliteTestNoError(t, err)
 	external := newSQLiteV15External(clock)
 	policy := sqliteBudgetPolicyWithSlots(clock.Now(), slots)
+	capacidad, _ := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	ids := &sqliteV15IDs{}
 	orchestrator := newSQLiteV15Orchestrator(t, repository, clock, external, policy, ids)
 	return &sqliteV15System{
 		repository: repository, path: path, clock: clock, orchestrator: orchestrator,
-		access: access, project: project, external: external, policy: policy, ids: ids,
+		access: access, project: project, external: external, policy: policy, ids: ids, capacidad: capacidad,
 	}
 }
 
@@ -381,6 +391,12 @@ func newSQLiteV15OrchestratorWithState(
 	ids *sqliteV15IDs,
 ) *application.Orchestrator {
 	t.Helper()
+	var fuentes []application.FuenteCapacidadColocacionAgente
+	persistida, err := sqliteTableHasColumn(context.Background(), repository.db, "agent_quota_observations", "placement_ref")
+	sqliteTestNoError(t, err)
+	if persistida {
+		_, fuentes = prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
+	}
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: repository, Launcher: external, Observer: external,
 		Controller: external, Artifacts: external, Clock: clock, IDs: ids,
@@ -388,10 +404,33 @@ func newSQLiteV15OrchestratorWithState(
 		MaxExecutionAttempts: 3, MaxChildrenPerParent: 6, ClaimLease: time.Minute,
 		DirectorLeaseDuration: 30 * time.Second, EffectApprovalTTL: policy.EffectApprovalTTL,
 		BudgetPolicy: policy, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
-		AgentCapabilities: sqliteTestCapabilities(),
+		AgentCapabilities: sqliteTestCapabilities(), CapacitySources: fuentes, CapacityObservationWait: time.Second,
 	})
 	sqliteTestNoError(t, err)
 	return orchestrator
+}
+
+func prepararCapacidadSQLiteV15(t *testing.T, repository *Repository, clock interface{ Now() time.Time }, plazas int64) ([]application.AgentCapacityPlacementCandidate, []application.FuenteCapacidadColocacionAgente) {
+	t.Helper()
+	colocacion, err := ports.NewAgentPlacementRef("placement:sqlite-v15")
+	sqliteTestNoError(t, err)
+	cuota, encontrada, err := repository.CurrentAgentQuotaObservation(context.Background(), colocacion)
+	sqliteTestNoError(t, err)
+	if !encontrada {
+		cuota, err = application.MaterializeAgentQuotaObservation(application.AgentQuotaObservationSubmission{
+			AgentQuotaObservation: application.AgentQuotaObservation{PlacementRef: colocacion, WindowRef: "quota-window:sqlite-v15", Status: application.AgentQuotaAvailable, Quality: governance.UsageQualityExact, ObservedAt: clock.Now(), ExpiresAt: clock.Now().Add(365 * 24 * time.Hour)},
+			Ref:                   "quota-observation:sqlite-v15", IdempotencyKey: "quota-observation:sqlite-v15",
+		}, 0)
+		sqliteTestNoError(t, err)
+		_, _, err = repository.AppendAgentQuotaObservation(context.Background(), cuota)
+		sqliteTestNoError(t, err)
+	}
+	noAplicable := application.AgentCapacityDimension{Applicability: application.AgentCapacityApplicabilityNotApplicable}
+	fisica := application.AgentCapacityObservation{SourceRef: "capacity-source:sqlite-v15", PoolRef: "capacity-pool:sqlite-v15", WindowRef: "capacity-window:sqlite-v15", Status: application.AgentCapacityAvailable, Quality: governance.UsageQualityExact, ObservedAt: clock.Now(), ExpiresAt: clock.Now().Add(24 * time.Hour), Resources: application.AgentCapacityResources{Slots: application.AgentCapacityDimension{Applicability: application.AgentCapacityApplicabilityApplicable, Limit: application.AgentCapacityAmount{Present: true, Value: plazas}, Remaining: application.AgentCapacityAmount{Present: true, Value: plazas}}, Seconds: noAplicable, Messages: noAplicable, Tokens: noAplicable, Credits: noAplicable}}
+	entrega, err := application.NuevaEntregaObservacionCapacidad(fisica)
+	sqliteTestNoError(t, err)
+	candidato := application.AgentCapacityPlacementCandidate{PlacementRef: colocacion, Physical: entrega, Quota: application.AgentPlacementObservationPresentation{ObservationRef: cuota.Ref, ObservationRevision: cuota.Revision}}
+	return []application.AgentCapacityPlacementCandidate{candidato}, []application.FuenteCapacidadColocacionAgente{{PlacementRef: colocacion, SourceRef: fisica.SourceRef, PoolRef: fisica.PoolRef, BaseMedicion: application.BaseMedicionCapacidadBruta, Observer: observadorCapacidadSQLiteV15{fisica}}}
 }
 
 func (system *sqliteV15System) submit(t *testing.T, ref string) application.SubmitResult {

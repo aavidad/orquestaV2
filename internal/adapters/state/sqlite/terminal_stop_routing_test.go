@@ -206,12 +206,14 @@ func newTerminalStopRoutingOrchestrator(
 	capabilities ports.AgentCapabilities,
 ) *application.Orchestrator {
 	t.Helper()
+	_, fuentes := prepararCapacidadSQLiteV15(t, access.(*Repository), clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: access, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock}, Clock: clock, IDs: ids,
 		MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: capabilities, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {

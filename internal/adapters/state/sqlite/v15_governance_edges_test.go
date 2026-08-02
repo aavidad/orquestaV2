@@ -50,7 +50,7 @@ SELECT COUNT(*),SUM(CASE WHEN last_error_code<>'' THEN 1 ELSE 0 END),
 	rotated := rotatedSQLiteV15Policy(system.policy, system.clock.Now())
 	claim, found, err := system.repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:v15-rotated-policy", Token: "claim:v15-rotated-policy", LeaseDuration: time.Minute,
-		Capabilities: sqliteTestCapabilities(), BudgetPolicy: rotated,
+		Capabilities: sqliteTestCapabilities(), BudgetPolicy: rotated, CapacityCandidates: system.capacidad,
 	})
 	if err != nil || !found {
 		t.Fatalf("valid rotated runtime policy claim=%+v found=%v err=%v", claim, found, err)

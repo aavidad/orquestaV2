@@ -108,6 +108,7 @@ func newV18ExternalAgent(writes v16Write) *v18ExternalAgent {
 }
 
 type v18PersistentAgentAdapter struct {
+	capacidadAgentePrueba
 	mu       sync.Mutex
 	external *v18ExternalAgent
 	now      func() time.Time

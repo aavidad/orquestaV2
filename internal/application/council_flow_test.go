@@ -64,6 +64,7 @@ func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
 			t.Fatal("Council phase missing")
 		}
 		request, err := councilAgentLaunchRequestForSubject(record, record.Goal.WorkItems()[0], execution, phase, round.Subject)
+		request.ReferenciaColocacion, _ = ports.NewAgentPlacementRef("placement:application-test")
 		if err != nil || request.OutputContract != string(goal.OutputContractArtifact) || request.ArtifactMediaType != council.ContributionMediaType || ports.ValidateAgentLaunchRequest(request) != nil {
 			t.Fatalf("Council launch contract request=%+v err=%v", request, err)
 		}

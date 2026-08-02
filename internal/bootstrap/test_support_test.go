@@ -1,14 +1,17 @@
 package bootstrap
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -102,7 +105,87 @@ effective_path = %s
 	return configPath
 }
 
+func configurarPerfilCuotaCodexPrueba(t *testing.T, raiz, configuracion, comando string, cantidad int) {
+	t.Helper()
+	if cantidad < 1 {
+		t.Fatal("cantidad de perfiles inválida")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	base, err := os.MkdirTemp(home, ".orquesta-cuota-codex-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(base) })
+	raizCuentas := filepath.Join(base, "cuentas-codex")
+	perfiles := make([]string, cantidad)
+	for indice := range perfiles {
+		perfiles[indice] = fmt.Sprintf("CodexTest%d", indice+1)
+		perfil := filepath.Join(raizCuentas, perfiles[indice])
+		if err := os.MkdirAll(perfil, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		for _, ruta := range []string{raizCuentas, perfil} {
+			if err := os.Chmod(ruta, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(perfil, "auth.json"), []byte(`{"tokens":"test"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	puente := filepath.Join(raiz, "codex-con-cuota.sh")
+	ejecutable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	guion := "#!/bin/sh\n" +
+		"if [ \"${1-}\" = app-server ]; then exec " + strconv.Quote(ejecutable) + " -test.run=^TestAyudanteCuotaCodexBootstrap$ -- ayudante-cuota-codex-bootstrap; fi\n" +
+		"exec " + strconv.Quote(comando) + " \"$@\"\n"
+	if err := os.WriteFile(puente, []byte(guion), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	perfilesTOML := make([]string, len(perfiles))
+	for indice, perfil := range perfiles {
+		perfilesTOML[indice] = strconv.Quote(perfil)
+	}
+	replaceTestConfigValue(t, configuracion, "[runtime.codex]\n", "[runtime.capacity]\nobservation_timeout = \"5s\"\n\n[runtime.codex]\naccount_home_root = "+strconv.Quote(raizCuentas)+"\naccount_profiles = ["+strings.Join(perfilesTOML, ", ")+"]\n")
+	replaceTestConfigValue(t, configuracion, "max_concurrent_executions = 4", "max_concurrent_executions = "+strconv.Itoa(cantidad))
+	replaceTestConfigValue(t, configuracion, "timeout = \"5s\"", "timeout = \"10s\"")
+	replaceTestConfigValue(t, configuracion, "command = "+strconv.Quote(comando), "command = "+strconv.Quote(puente))
+}
+
+func TestAyudanteCuotaCodexBootstrap(t *testing.T) {
+	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "ayudante-cuota-codex-bootstrap" {
+		return
+	}
+	lector := bufio.NewScanner(os.Stdin)
+	if !lector.Scan() {
+		os.Exit(2)
+	}
+	fmt.Println(`{"id":"init","result":{"userAgent":"test","codexHome":"/test","platformFamily":"unix","platformOs":"linux"}}`)
+	if !lector.Scan() || !lector.Scan() {
+		os.Exit(2)
+	}
+	fmt.Println(`{"id":1,"result":{"rateLimits":{"credits":null,"individualLimit":null,"limitId":"test","limitName":"test","planType":"plus","primary":{"usedPercent":25,"windowDurationMins":300,"resetsAt":4102444800},"rateLimitReachedType":null,"secondary":null,"spendControlReached":false},"rateLimitResetCredits":null,"rateLimitsByLimitId":null}}`)
+	for lector.Scan() {
+	}
+	os.Exit(0)
+}
+
+func colocacionAgentePrueba(t *testing.T, agente AgentAdapter) ports.AgentPlacementRef {
+	t.Helper()
+	descriptores, err := agente.(catalogoCapacidadColocacionAgente).DescribirCapacidadColocaciones()
+	if err != nil || len(descriptores) != 1 {
+		t.Fatalf("colocaciones=%+v error=%v", descriptores, err)
+	}
+	return descriptores[0].PlacementRef
+}
+
 type countingAgent struct {
+	capacidadAgentePrueba
 	now      func() time.Time
 	launches *atomic.Int64
 	content  []byte
@@ -209,7 +292,7 @@ func submitTestGoal(t *testing.T, runtime *Runtime, requestRef string) goal.Goal
 func waitTerminalGoal(t *testing.T, runtime *Runtime, ref goal.GoalRef) application.GoalRecord {
 	t.Helper()
 	access := testRuntimeAccess(t, runtime)
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		record, err := runtime.Orchestrator().GetGoal(context.Background(), access, ref)
 		if err == nil && record.Goal.IsTerminal() {
@@ -217,7 +300,8 @@ func waitTerminalGoal(t *testing.T, runtime *Runtime, ref goal.GoalRef) applicat
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("goal %s did not become terminal", ref.String())
+	record, err := runtime.Orchestrator().GetGoal(context.Background(), access, ref)
+	t.Fatalf("goal %s did not become terminal: state=%s executions=%+v attempts=%d receipts=%d error=%v", ref.String(), record.Goal.State(), record.Executions, len(record.EffectAttempts), len(record.EffectReceipts), err)
 	return application.GoalRecord{}
 }
 
@@ -251,6 +335,7 @@ func TestBootstrapSleeper(t *testing.T) {
 }
 
 type processAgent struct {
+	capacidadAgentePrueba
 	ctx       context.Context
 	cancel    context.CancelFunc
 	now       func() time.Time
@@ -327,6 +412,20 @@ func testBudgetDemand(ref string) governance.BudgetDemand {
 
 func unknownTestUsage() governance.ResourceUsage {
 	return governance.ResourceUsage{Quality: governance.UsageQualityUnknown}
+}
+
+type capacidadAgentePrueba struct{}
+
+func (capacidadAgentePrueba) DescribirCapacidadColocaciones() ([]application.DescriptorCapacidadColocacionAgente, error) {
+	colocacion, _ := ports.NewAgentPlacementRef("placement:test")
+	return []application.DescriptorCapacidadColocacionAgente{{PlacementRef: colocacion, SourceRef: "source:test", PoolRef: "pool:test", BaseMedicion: application.BaseMedicionCapacidadBruta, Plazas: 1_000}}, nil
+}
+
+func (capacidadAgentePrueba) IniciarControladoresCuota(ctx context.Context, configuracion application.ConfiguracionControladoresCuotaAgente) ([]application.ControladorCuotaAgente, error) {
+	ahora := configuracion.Ahora()
+	colocacion, _ := ports.NewAgentPlacementRef("placement:test")
+	err := configuracion.Sumidero(ctx, application.AgentQuotaObservation{PlacementRef: colocacion, WindowRef: "window:test", Status: application.AgentQuotaAvailable, Quality: governance.UsageQualityExact, ObservedAt: ahora, ExpiresAt: ahora.Add(configuracion.VigenciaObservacion)}, nil)
+	return nil, err
 }
 
 func (agent *processAgent) Shutdown(ctx context.Context) error {

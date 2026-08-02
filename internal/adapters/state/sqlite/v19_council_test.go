@@ -88,6 +88,7 @@ func newSQLiteV19CouncilOrchestrator(
 	t *testing.T, system *sqliteV15System, observer application.AgentObserver,
 ) *application.Orchestrator {
 	t.Helper()
+	_, fuentes := prepararCapacidadSQLiteV15(t, system.repository, system.clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: system.repository, Access: system.repository, Launcher: system.external, Observer: observer,
 		Controller: system.external, Artifacts: system.external, WorkspaceManager: &sqliteTestWorkspaceManager{},
@@ -99,6 +100,7 @@ func newSQLiteV19CouncilOrchestrator(
 		AttestTestClaimLease: 20 * time.Minute, DirectorLeaseDuration: 30 * time.Second,
 		EffectApprovalTTL: system.policy.EffectApprovalTTL, BudgetPolicy: system.policy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour, AgentCapabilities: sqliteTestCapabilities(),
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 	})
 	sqliteTestNoError(t, err)
 	return orchestrator

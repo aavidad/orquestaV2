@@ -293,6 +293,7 @@ func newEffectDecisionFixture(
 		DirectorLeaseDuration: time.Minute, EffectApprovalTTL: configuredTTL,
 		MaxChildrenPerParent: 6, BudgetPolicy: policy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour, AgentCapabilities: testAgentCapabilities(),
+		CapacitySources: fuentesCapacidadPruebaEstaticas(), CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatal(err)

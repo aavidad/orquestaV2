@@ -26,9 +26,9 @@ func TestAgentCapacityMigrationRunsOnceAndRollsBackAsAUnit(t *testing.T) {
 	sqliteTestNoError(t, repository.db.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, repository.db.QueryRow(
 		`SELECT COUNT(*) FROM schema_migrations WHERE version=?`,
-		recoverySchemaV38Physical,
+		recoverySchemaV38Claim,
 	).Scan(&receipts))
-	if version != recoverySchemaV38Capacity || receipts != 1 {
+	if version != recoverySchemaV38Claim || receipts != 1 {
 		t.Fatalf("migración inicial version=%d recibos=%d", version, receipts)
 	}
 	sqliteTestNoError(t, repository.Close())
@@ -64,43 +64,28 @@ func TestAgentCapacityFactsFenceScopeCASReopenAndBackupRestore(t *testing.T) {
 	system := newSQLiteV15System(t, 2)
 	system.submit(t, "request:a03-capacity")
 	claim := claimSQLiteV15(t, system, "claim:a03-capacity")
-
-	insertAgentCapacityObservation(t, system.repository.db,
-		"capacity-observation:one", "capacity-window:one", 0, 1, "observe:one")
-	if _, err := system.repository.db.Exec(agentCapacityObservationInsert,
-		"capacity-observation:gap", "capacity-window:one", 3, 2, 4, "observe:gap"); err == nil {
-		t.Fatal("la observación omitió la revisión anterior")
+	if claim.CapacityReservation.Ref == "" {
+		t.Fatal("el claim no creó la reserva física")
 	}
-	insertAgentCapacityObservation(t, system.repository.db,
-		"capacity-observation:two", "capacity-window:one", 1, 2, "observe:two")
-
 	if err := insertAgentCapacityReservation(system.repository.db, claim,
-		"project:otro", "capacity-observation:two", 2,
+		"project:otro", claim.CapacityReservation.ObservationRef, int(claim.CapacityReservation.ObservationRevision),
 		"capacity-reservation:cross", "reserve:cross", claim.Fence, "reserved", 1); err == nil {
 		t.Fatal("la reserva cruzó de proyecto")
 	}
 	if err := insertAgentCapacityReservation(system.repository.db, claim,
-		system.project.String(), "capacity-observation:one", 1,
-		"capacity-reservation:stale", "reserve:stale", claim.Fence, "reserved", 1); err == nil {
-		t.Fatal("la reserva usó una observación obsoleta")
-	}
-	if err := insertAgentCapacityReservation(system.repository.db, claim,
-		system.project.String(), "capacity-observation:two", 2,
+		system.project.String(), claim.CapacityReservation.ObservationRef, int(claim.CapacityReservation.ObservationRevision),
 		"capacity-reservation:fence", "reserve:fence", claim.Fence+1, "reserved", 1); err == nil {
 		t.Fatal("la reserva aceptó un fence ajeno")
 	}
 	if err := insertAgentCapacityReservation(system.repository.db, claim,
-		system.project.String(), "capacity-observation:two", 2,
+		system.project.String(), claim.CapacityReservation.ObservationRef, int(claim.CapacityReservation.ObservationRevision),
 		"capacity-reservation:initial", "reserve:initial", claim.Fence, "consumed", 2); err == nil {
 		t.Fatal("la reserva saltó el snapshot inicial")
 	}
-	sqliteTestNoError(t, insertAgentCapacityReservation(system.repository.db, claim,
-		system.project.String(), "capacity-observation:two", 2,
-		"capacity-reservation:one", "reserve:one", claim.Fence, "reserved", 1))
 	if err := insertAgentCapacityReservation(system.repository.db, claim,
-		system.project.String(), "capacity-observation:two", 2,
-		"capacity-reservation:duplicate", "reserve:one", claim.Fence, "reserved", 1); err == nil {
-		t.Fatal("la reserva perdió idempotencia")
+		system.project.String(), claim.CapacityReservation.ObservationRef, int(claim.CapacityReservation.ObservationRevision),
+		"capacity-reservation:duplicate", "reserve:duplicate", claim.Fence, "reserved", 1); err == nil {
+		t.Fatal("la acción obtuvo una segunda reserva")
 	}
 
 	prepareSQLiteV15Launch(t, system, claim)
@@ -111,30 +96,29 @@ func TestAgentCapacityFactsFenceScopeCASReopenAndBackupRestore(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("intento created=%v err=%v", created, err)
 	}
-	applyAgentCapacityTransition(t, system.repository.db,
-		"capacity-transition:quarantined", 1, "quarantined", "unknown_applied",
-		attempt.Ref, attempt.Ref, "", "transition:quarantined", claim.Fence)
-	receiptRef := acceptAgentCapacityLaunch(t, system, claim, attempt)
-	applyAgentCapacityTransition(t, system.repository.db,
-		"capacity-transition:consumed", 2, "consumed", "reconciliation",
-		receiptRef, attempt.Ref, receiptRef, "transition:consumed", claim.Fence)
-	if err := insertAgentCapacityTransition(system.repository.db,
-		"capacity-transition:impossible", 4, "released", "execution_terminal",
-		claim.Action.ExecutionRef.String(), "", "", "transition:impossible", claim.Fence); err == nil {
-		t.Fatal("la transición omitió la revisión esperada")
+	acceptAgentCapacityLaunch(t, system, claim, attempt)
+	var estado string
+	var revision int
+	sqliteTestNoError(t, system.repository.db.QueryRow(`SELECT state,revision FROM agent_capacity_reservations WHERE ref=?`, claim.CapacityReservation.Ref).Scan(&estado, &revision))
+	if estado != "consumed" || revision != 2 {
+		t.Fatalf("reserva aceptada estado=%s revisión=%d", estado, revision)
 	}
-	applyAgentCapacityTransition(t, system.repository.db,
-		"capacity-transition:released", 3, "released", "execution_terminal",
-		claim.Action.ExecutionRef.String(), "", "", "transition:released", claim.Fence)
-	assertAgentCapacityCounts(t, system.repository.db, 2, 1, 3)
+	transaction, err := system.repository.db.Begin()
+	sqliteTestNoError(t, err)
+	execution := application.ExecutionRecord{Ref: claim.Action.ExecutionRef, State: application.ExecutionFailed, FinishedAt: system.clock.Now()}
+	sqliteTestNoError(t, liberarCapacidadEjecucionTerminal(ctx, transaction, execution))
+	sqliteTestNoError(t, transaction.Commit())
+	assertAgentCapacityCounts(t, system.repository.db, claim.CapacityReservation.Ref, 1, 1, 2, 3)
 
 	sqliteTestNoError(t, system.repository.Close())
 	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
-	assertAgentCapacityCounts(t, reopened.db, 2, 1, 3)
+	assertAgentCapacityCounts(t, reopened.db, claim.CapacityReservation.Ref, 1, 1, 2, 3)
 
 	recovery, _, _ := newV09TestRecovery(t, reopened, system.clock.Now(), nil)
 	backup, err := recovery.CreateBackup(ctx)
-	sqliteTestNoError(t, err)
+	if err != nil {
+		t.Fatalf("crear backup: %s", sqliteTestErrorChain(err))
+	}
 	_, err = recovery.VerifyBackup(ctx, backup.Ref)
 	sqliteTestNoError(t, err)
 	target, err := application.NewRecoveryTargetRef("recovery-target:a03-capacity")
@@ -144,7 +128,23 @@ func TestAgentCapacityFactsFenceScopeCASReopenAndBackupRestore(t *testing.T) {
 	targetPath, err := recovery.TargetPath(target)
 	sqliteTestNoError(t, err)
 	restored := openSQLiteV15Repository(t, targetPath, system.clock.Now)
-	assertAgentCapacityCounts(t, restored.db, 2, 1, 3)
+	assertAgentCapacityCounts(t, restored.db, claim.CapacityReservation.Ref, 1, 1, 2, 3)
+}
+
+func TestAgentCapacityRecoveryRejectsPhysicalSemanticTampering(t *testing.T) {
+	system := newSQLiteV15System(t, 2)
+	system.submit(t, "request:q4-recuperacion-fisica")
+	claim := claimSQLiteV15(t, system, "claim:q4-recuperacion-fisica")
+	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
+		t.Fatalf("candidato físico válido rechazado: %s", sqliteTestErrorChain(err))
+	}
+	rewriteRecoveryTrigger(t, system.repository.db, "agent_capacity_observations_immutable_update", func() {
+		mustV10Exec(t, system.repository.db, `UPDATE agent_capacity_observations SET window_ref='capacity-window:alterada' WHERE ref=?`, claim.CapacityReservation.ObservationRef)
+	})
+	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err == nil ||
+		!recoveryErrorContains(err, "sqlite.recovery_v38_agent_placement_invalid") {
+		t.Fatalf("la recuperación aceptó observación física alterada: %v", err)
+	}
 }
 
 func acceptAgentCapacityLaunch(t *testing.T, system *sqliteV15System, claim application.ActionClaim, attempt application.EffectAttempt) string {
@@ -172,19 +172,6 @@ func acceptAgentCapacityLaunch(t *testing.T, system *sqliteV15System, claim appl
 	return receipt.Ref
 }
 
-const agentCapacityObservationInsert = `
-INSERT INTO agent_capacity_observations(
- ref,source_ref,pool_ref,window_ref,revision,expected_revision,status,quality,observed_at,expires_at,
- slots_applicability,slots_limit,slots_remaining,seconds_applicability,messages_applicability,tokens_applicability,credits_applicability,idempotency_key
-) VALUES (?, 'capacity-source:test', 'capacity-pool:test', ?, ?, ?,
- 'available','exact',1,100,'applicable',5,?,'not_applicable','not_applicable','not_applicable','not_applicable',?)`
-
-func insertAgentCapacityObservation(t *testing.T, db *sql.DB, ref, window string, expected, revision int, key string) {
-	t.Helper()
-	_, err := db.Exec(agentCapacityObservationInsert, ref, window, revision, expected, 4, key)
-	sqliteTestNoError(t, err)
-}
-
 func insertAgentCapacityReservation(db *sql.DB, claim application.ActionClaim, project, observation string,
 	observationRevision int, ref, key string, fence uint64, state string, revision int) error {
 	_, err := db.Exec(`
@@ -200,43 +187,7 @@ INSERT INTO agent_capacity_reservations(
 	return err
 }
 
-func insertAgentCapacityTransition(db interface {
-	Exec(string, ...any) (sql.Result, error)
-},
-	ref string, expected int, outcome, causeKind, causeRef, attemptRef, receiptRef, key string, fence uint64) error {
-	_, err := db.Exec(`
-INSERT INTO agent_capacity_transitions(
- ref,reservation_ref,project_ref,fence,expected_revision,revision,outcome,cause_kind,cause_ref,effect_attempt_ref,effect_receipt_ref,idempotency_key,recorded_at
-) VALUES (?,'capacity-reservation:one','project:v15',?,?,?, ?,?,?,?,?,?,3)`,
-		ref, fence, expected, expected+1, outcome, causeKind, causeRef,
-		nullableString(attemptRef), nullableString(receiptRef), key)
-	return err
-}
-
-func applyAgentCapacityTransition(t *testing.T, db *sql.DB, ref string, expected int, outcome, causeKind,
-	causeRef, attemptRef, receiptRef, key string, fence uint64) {
-	t.Helper()
-	transaction, err := db.Begin()
-	sqliteTestNoError(t, err)
-	defer transaction.Rollback()
-	sqliteTestNoError(t, insertAgentCapacityTransition(
-		transaction, ref, expected, outcome, causeKind, causeRef,
-		attemptRef, receiptRef, key, fence,
-	))
-	var settled any
-	if outcome == "released" {
-		settled = int64(3)
-	}
-	_, err = transaction.Exec(`
-UPDATE agent_capacity_reservations
-SET state=?,revision=?,last_transition_ref=?,last_cause_ref=?,updated_at=3,settled_at=?
-WHERE ref='capacity-reservation:one' AND revision=?`,
-		outcome, expected+1, ref, causeRef, settled, expected)
-	sqliteTestNoError(t, err)
-	sqliteTestNoError(t, transaction.Commit())
-}
-
-func assertAgentCapacityCounts(t *testing.T, db *sql.DB, observations, reservations, transitions int) {
+func assertAgentCapacityCounts(t *testing.T, db *sql.DB, reservationRef string, observations, reservations, transitions, expectedRevision int) {
 	t.Helper()
 	var gotObservations, gotReservations, gotTransitions int
 	var state string
@@ -245,12 +196,12 @@ func assertAgentCapacityCounts(t *testing.T, db *sql.DB, observations, reservati
 	sqliteTestNoError(t, db.QueryRow(`SELECT COUNT(*) FROM agent_capacity_reservations`).Scan(&gotReservations))
 	sqliteTestNoError(t, db.QueryRow(`SELECT COUNT(*) FROM agent_capacity_transitions`).Scan(&gotTransitions))
 	sqliteTestNoError(t, db.QueryRow(`SELECT state,revision FROM agent_capacity_reservations
-WHERE ref='capacity-reservation:one'`).Scan(&state, &revision))
+WHERE ref=?`, reservationRef).Scan(&state, &revision))
 	if gotObservations != observations || gotReservations != reservations || gotTransitions != transitions {
 		t.Fatalf("hechos observaciones=%d reservas=%d transiciones=%d",
 			gotObservations, gotReservations, gotTransitions)
 	}
-	if state != "released" || revision != 4 {
+	if state != "released" || revision != expectedRevision {
 		t.Fatalf("snapshot autoritativo state=%s revision=%d", state, revision)
 	}
 }

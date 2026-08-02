@@ -43,6 +43,9 @@ type memoryRepository struct {
 	integrationAdmits    map[string]memoryIntegrationAdmission
 	dossierConfirmations map[string]IntakeDossierConfirmationRecord
 	confirmedDossiers    map[IntakeDossierRef]string
+	cuotasAgente         map[ports.AgentPlacementRef]AgentQuotaObservationRecord
+	reservasCapacidad    map[string]AgentCapacityReservation
+	colocaciones         map[string]ports.AgentPlacementRef
 	now                  func() time.Time
 }
 
@@ -75,7 +78,7 @@ type memoryIntegrationAdmission struct {
 }
 
 func newMemoryRepository() *memoryRepository {
-	return &memoryRepository{
+	repository := &memoryRepository{
 		records:              make(map[goal.GoalRef]GoalRecord),
 		requests:             make(map[string]goal.GoalRef),
 		successors:           make(map[goal.AppSpecRef]goal.GoalRef),
@@ -89,16 +92,43 @@ func newMemoryRepository() *memoryRepository {
 		integrationAdmits:    make(map[string]memoryIntegrationAdmission),
 		dossierConfirmations: make(map[string]IntakeDossierConfirmationRecord),
 		confirmedDossiers:    make(map[IntakeDossierRef]string),
+		cuotasAgente:         make(map[ports.AgentPlacementRef]AgentQuotaObservationRecord),
+		reservasCapacidad:    make(map[string]AgentCapacityReservation),
+		colocaciones:         make(map[string]ports.AgentPlacementRef),
 		now:                  time.Now,
 	}
+	colocacion, _ := ports.NewAgentPlacementRef("placement:application-test")
+	cuota, _ := MaterializeAgentQuotaObservation(AgentQuotaObservationSubmission{AgentQuotaObservation: AgentQuotaObservation{
+		PlacementRef: colocacion, WindowRef: "quota-window:application-test", Status: AgentQuotaAvailable,
+		Quality: governance.UsageQualityExact, ObservedAt: time.Unix(1, 0).UTC(), ExpiresAt: time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)},
+		Ref: "quota-observation:application-test", IdempotencyKey: "quota-observation:application-test"}, 0)
+	repository.cuotasAgente[colocacion] = cuota
+	return repository
 }
 
-func (*memoryRepository) CurrentAgentQuotaObservation(context.Context, ports.AgentPlacementRef) (AgentQuotaObservationRecord, bool, error) {
-	return AgentQuotaObservationRecord{}, false, &StateError{Code: StateInvalid, Cause: errors.New("application.test_agent_quota_unavailable")}
+func (repository *memoryRepository) CurrentAgentQuotaObservation(_ context.Context, colocacion ports.AgentPlacementRef) (AgentQuotaObservationRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	cuota, encontrada := repository.cuotasAgente[colocacion]
+	return cuota, encontrada, nil
 }
 
-func (*memoryRepository) AppendAgentQuotaObservation(context.Context, AgentQuotaObservationRecord) (AgentQuotaObservationRecord, bool, error) {
-	return AgentQuotaObservationRecord{}, false, &StateError{Code: StateInvalid, Cause: errors.New("application.test_agent_quota_unavailable")}
+func (repository *memoryRepository) AppendAgentQuotaObservation(_ context.Context, cuota AgentQuotaObservationRecord) (AgentQuotaObservationRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	materializada, err := MaterializeAgentQuotaObservation(cuota.AgentQuotaObservationSubmission, cuota.ExpectedRevision)
+	if err != nil || materializada != cuota {
+		return AgentQuotaObservationRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	vigente, encontrada := repository.cuotasAgente[cuota.PlacementRef]
+	if encontrada && vigente == cuota {
+		return vigente, false, nil
+	}
+	if cuota.ExpectedRevision != vigente.Revision {
+		return AgentQuotaObservationRecord{}, false, &StateError{Code: StateConflict}
+	}
+	repository.cuotasAgente[cuota.PlacementRef] = cuota
+	return cuota, true, nil
 }
 
 func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGoalState) (GoalRecord, bool, error) {
@@ -1280,6 +1310,10 @@ func memoryMailboxAuthorizationValid(
 func (repository *memoryRepository) ClaimNextAction(_ context.Context, request ClaimRequest) (ActionClaim, bool, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
+	ordenados, err := OrdenarCandidatosColocacion(request.CapacityCandidates)
+	if err != nil || !reflect.DeepEqual(ordenados, request.CapacityCandidates) {
+		return ActionClaim{}, false, &StateError{Code: StateInvalid}
+	}
 	now := repository.now().UTC()
 	refs := make([]string, 0, len(repository.actions))
 	for ref := range repository.actions {
@@ -1308,7 +1342,7 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		}
 		if action.record.Kind == ActionLaunchAgent {
 			paused, _ := record.Goal.EffectivePause(item.Ref())
-			if paused || record.Goal.CancelRequested() || item.CancelRequested() {
+			if paused || record.Goal.CancelRequested() || item.CancelRequested() || len(request.CapacityCandidates) == 0 {
 				continue
 			}
 		}
@@ -1334,6 +1368,8 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		}
 		var approval EffectApproval
 		var reservation governance.BudgetReservation
+		var reservaCapacidad AgentCapacityReservation
+		var colocacion ports.AgentPlacementRef
 		terminalStop := action.record.Kind == ActionStopAgent && executionFound &&
 			(execution.State == ExecutionSucceeded || execution.State == ExecutionFailed ||
 				execution.State == ExecutionCanceled || execution.State == ExecutionStopped)
@@ -1347,6 +1383,11 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 			}
 		}
 		if action.record.Kind == ActionLaunchAgent {
+			candidato := request.CapacityCandidates[0]
+			cuota, vigente := repository.cuotasAgente[candidato.PlacementRef]
+			if !vigente || cuota.Ref != candidato.Quota.ObservationRef || cuota.Revision != candidato.Quota.ObservationRevision {
+				continue
+			}
 			if ValidateBudgetPolicy(request.BudgetPolicy) != nil {
 				return ActionClaim{}, false, &StateError{Code: StateInvalid}
 			}
@@ -1370,6 +1411,13 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 				record.Executions = replaceExecution(record.Executions, execution)
 			}
 			repository.records[record.Goal.Ref()] = record
+			reservaCapacidad, found = repository.reservasCapacidad[action.record.Ref]
+			if !found {
+				reservaCapacidad = reservaCapacidadMemoria(action.record, candidato, action.fence+1, now)
+				repository.reservasCapacidad[action.record.Ref] = reservaCapacidad
+				repository.colocaciones[action.record.Ref] = candidato.PlacementRef
+			}
+			colocacion = repository.colocaciones[action.record.Ref]
 		}
 		action.token = request.Token
 		action.workerRef = request.WorkerRef
@@ -1380,10 +1428,21 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		return ActionClaim{
 			Action: action.record, Token: action.token, WorkerRef: action.workerRef,
 			DeliveryAttempt: action.deliveryAttempt, Fence: action.fence, LeaseUntil: action.lease,
-			BudgetReservationRef: reservation.Ref, BudgetReservation: reservation, EffectApproval: approval,
+			BudgetReservationRef: reservation.Ref, BudgetReservation: reservation, CapacityReservation: reservaCapacidad,
+			ReferenciaColocacion: colocacion, EffectApproval: approval,
 		}, true, nil
 	}
 	return ActionClaim{}, false, nil
+}
+
+func reservaCapacidadMemoria(accion ActionRecord, candidato AgentCapacityPlacementCandidate, cerca uint64, ahora time.Time) AgentCapacityReservation {
+	demanda, _ := AgentCapacityDemandFromBudget(accion.EffectIntent.Demand)
+	return AgentCapacityReservation{Ref: "capacity-reservation:" + accion.Ref, ObservationRef: candidato.Physical.Ref, ObservationRevision: 1,
+		ActionRef: accion.Ref, EffectIntentRef: accion.EffectIntent.Ref, IdempotencyKey: "capacity-reserve:" + accion.Ref,
+		ProjectRef: accion.EffectIntent.Subject.ProjectRef, GoalRef: accion.GoalRef, WorkItemRef: accion.WorkItemRef,
+		ExecutionRef: accion.ExecutionRef, PlanGeneration: accion.PlanGeneration, WorkItemGeneration: accion.WorkItemGeneration,
+		Revision: 1, Fence: cerca, Allocation: AgentCapacityAllocation{Slots: demanda.Slots.Value, Seconds: demanda.Seconds.Value,
+			Messages: demanda.Messages.Value, Tokens: demanda.Tokens.Value, Credits: demanda.Credits.Value}, State: AgentCapacityReserved, ReservedAt: ahora, UpdatedAt: ahora}
 }
 
 func memoryLiveApproval(record GoalRecord, action ActionRecord, now time.Time) (EffectApproval, bool) {
@@ -3514,6 +3573,7 @@ func newTestOrchestratorWithAccess(
 ) (*Orchestrator, *memoryArtifactStore) {
 	artifacts := newMemoryArtifactStore()
 	repository.now = clock.Now
+	fuentes := fuentesCapacidadPrueba(t, repository, artifacts, clock)
 	capabilities, err := agent.Capabilities(context.Background())
 	if err != nil {
 		t.Fatalf("agent capabilities: %v", err)
@@ -3530,12 +3590,52 @@ func newTestOrchestratorWithAccess(
 		MaxExecutionAttempts:    3, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
-		AgentCapabilities: capabilities,
+		AgentCapabilities: capabilities, CapacitySources: fuentes, CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatalf("new orchestrator: %v", err)
 	}
 	return orchestrator, artifacts
+}
+
+type observadorCapacidadAplicacion struct{ observacion AgentCapacityObservation }
+
+func (observador observadorCapacidadAplicacion) ObserveCapacity(context.Context, AgentCapacitySourceRef, AgentCapacityPoolRef) (AgentCapacityObservation, error) {
+	return observador.observacion, nil
+}
+
+func fuentesCapacidadPruebaEstaticas() []FuenteCapacidadColocacionAgente {
+	colocacion, _ := ports.NewAgentPlacementRef("placement:application-test")
+	noAplicable := AgentCapacityDimension{Applicability: AgentCapacityApplicabilityNotApplicable}
+	observacion := AgentCapacityObservation{SourceRef: "capacity-source:application-test", PoolRef: "capacity-pool:application-test",
+		WindowRef: "capacity-window:application-test", Status: AgentCapacityAvailable, Quality: governance.UsageQualityExact,
+		ObservedAt: time.Unix(1, 0).UTC(), ExpiresAt: time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC), Resources: AgentCapacityResources{
+			Slots:   AgentCapacityDimension{Applicability: AgentCapacityApplicabilityApplicable, Limit: AgentCapacityAmount{Present: true, Value: 1_000}, Remaining: AgentCapacityAmount{Present: true, Value: 1_000}},
+			Seconds: noAplicable, Messages: noAplicable, Tokens: noAplicable, Credits: noAplicable}}
+	return []FuenteCapacidadColocacionAgente{{PlacementRef: colocacion, SourceRef: observacion.SourceRef, PoolRef: observacion.PoolRef,
+		BaseMedicion: BaseMedicionCapacidadBruta, Observer: observadorCapacidadAplicacion{observacion}}}
+}
+
+func fuentesCapacidadPrueba(t interface{ Fatalf(string, ...any) }, repository *memoryRepository, artifacts *memoryArtifactStore, clock *mutableClock) []FuenteCapacidadColocacionAgente {
+	colocacion, err := ports.NewAgentPlacementRef("placement:application-test")
+	if err != nil {
+		t.Fatalf("colocación de prueba: %v", err)
+	}
+	ahora := clock.Now().UTC()
+	err = RegistrarObservacionCuota(context.Background(), repository, artifacts, AgentQuotaObservation{PlacementRef: colocacion,
+		WindowRef: "quota-window:application-test", Status: AgentQuotaAvailable, Quality: governance.UsageQualityExact,
+		ObservedAt: ahora, ExpiresAt: ahora.Add(24 * time.Hour)}, nil)
+	if err != nil {
+		t.Fatalf("cuota de prueba: %v", err)
+	}
+	noAplicable := AgentCapacityDimension{Applicability: AgentCapacityApplicabilityNotApplicable}
+	observacion := AgentCapacityObservation{SourceRef: "capacity-source:application-test", PoolRef: "capacity-pool:application-test",
+		WindowRef: "capacity-window:application-test", Status: AgentCapacityAvailable, Quality: governance.UsageQualityExact,
+		ObservedAt: ahora, ExpiresAt: ahora.Add(24 * time.Hour), Resources: AgentCapacityResources{
+			Slots:   AgentCapacityDimension{Applicability: AgentCapacityApplicabilityApplicable, Limit: AgentCapacityAmount{Present: true, Value: 1_000}, Remaining: AgentCapacityAmount{Present: true, Value: 1_000}},
+			Seconds: noAplicable, Messages: noAplicable, Tokens: noAplicable, Credits: noAplicable}}
+	return []FuenteCapacidadColocacionAgente{{PlacementRef: colocacion, SourceRef: observacion.SourceRef, PoolRef: observacion.PoolRef,
+		BaseMedicion: BaseMedicionCapacidadBruta, Observer: observadorCapacidadAplicacion{observacion}}}
 }
 
 func testBudgetPolicy(at time.Time) BudgetPolicy {

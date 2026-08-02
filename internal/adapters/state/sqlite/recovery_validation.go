@@ -397,7 +397,7 @@ ORDER BY o.ref`, executionPurpose, stopCancelProof, boundPurpose))
 				DeliveryAttempt: uint64(deliveryAttempt), Fence: uint64(fence),
 				LeaseUntil: time.Unix(0, claimedUntil.Int64).UTC(),
 			}
-			if err := validateClaim(claim); err != nil {
+			if err := validateClaimBase(claim); err != nil {
 				return err
 			}
 			if !completedAt.Valid && !quarantinedAt.Valid && currentFence.Int64 != fence {

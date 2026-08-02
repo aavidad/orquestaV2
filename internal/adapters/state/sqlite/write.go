@@ -540,7 +540,10 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 	if err := updateExecutionWorkspaceCAS(ctx, transaction, execution); err != nil {
 		return err
 	}
-	return updateExecutionSessionCAS(ctx, transaction, execution)
+	if err := updateExecutionSessionCAS(ctx, transaction, execution); err != nil {
+		return err
+	}
+	return liberarCapacidadEjecucionTerminal(ctx, transaction, execution)
 }
 
 func requireExecutionReviewIdentity(ctx context.Context, source queryer, execution application.ExecutionRecord) error {

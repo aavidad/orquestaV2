@@ -241,6 +241,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		}
 	}
 	request.SessionRef = sessionRef
+	request.ReferenciaColocacion = claim.ReferenciaColocacion
 	targetDigest := authorLaunchTargetDigest(request)
 	if isReviewerExecution(execution) || isCouncilExecution(execution) {
 		targetDigest = reviewerLaunchTargetDigest(request)

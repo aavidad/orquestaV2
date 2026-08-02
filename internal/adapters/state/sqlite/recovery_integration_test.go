@@ -30,6 +30,7 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 	}
 	t.Cleanup(func() { _ = repository.Close() })
 	agent := &leaseCompletionAgent{clock: clock}
+	_, fuentes := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock, advance: 2 * time.Second},
@@ -40,6 +41,7 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 			ProviderRef: "provider:lease-test", ModelRef: "model:lease-test", AgentRef: "agent:lease-test", Unrestricted: true,
 		},
 		ClaimLease: time.Second, DirectorLeaseDuration: time.Minute,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 		ObservationDelay: time.Millisecond, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -164,11 +166,12 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 	if err != nil {
 		t.Fatalf("submit: %v", err)
 	}
+	candidatos, _ := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:crashed", Token: "claim:crashed", LeaseDuration: time.Second,
 		Capabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
-		}, BudgetPolicy: sqliteRuntimeTestPolicy(),
+		}, BudgetPolicy: sqliteRuntimeTestPolicy(), CapacityCandidates: candidatos,
 	})
 	if err != nil || !found || claim.DeliveryAttempt != 1 {
 		t.Fatalf("first claim = %+v found=%v err=%v", claim, found, err)
@@ -198,7 +201,8 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 		t.Fatalf("record prepared before crash: %v", err)
 	}
 	expectedRequest := ports.AgentLaunchRequest{
-		ExecutionRef: preparedExecution.Ref, GoalRef: preparedGoal.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: preparedExecution.Ref, ReferenciaColocacion: claim.ReferenciaColocacion,
+		GoalRef: preparedGoal.Ref(), WorkItemRef: item.Ref(),
 		PlanGeneration: preparedGoal.PlanGeneration(), AppSpecGeneration: preparedGoal.AppSpec().Generation(),
 		ExecutionAttempt: preparedExecution.AttemptNo, SpecHash: preparedGoal.SpecHash(),
 		ActorRef: preparedGoal.Actor(), ProjectRef: preparedGoal.Project(), Objective: item.Objective(),
@@ -247,6 +251,7 @@ func newRestartOrchestrator(
 	agent *restartAgent,
 ) *application.Orchestrator {
 	t.Helper()
+	_, fuentes := prepararCapacidadSQLiteV15(t, repository, clock, 1_000)
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: restartArtifacts{},
 		Clock: clock, IDs: ids, MaxOutputBytes: 4096,
@@ -256,6 +261,7 @@ func newRestartOrchestrator(
 			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
 		},
 		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		CapacitySources: fuentes, CapacityObservationWait: time.Second,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {

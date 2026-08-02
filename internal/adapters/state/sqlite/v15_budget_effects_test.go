@@ -38,7 +38,7 @@ func TestConcurrentBudgetReservationsNeverExceedEnvelope(t *testing.T) {
 			<-start
 			claim, found, err := system.repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 				WorkerRef: "worker:v15-concurrent", Token: fmt.Sprintf("claim:v15-concurrent:%03d", index),
-				LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy,
+				LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy, CapacityCandidates: system.capacidad,
 			})
 			results <- result{claim: claim, found: found, err: err}
 		}(index)
@@ -86,14 +86,14 @@ func TestTemporaryQuotaParksActionWithoutTerminalFailure(t *testing.T) {
 	second := system.submit(t, "request:v15-quota:second")
 	claim, found, err := system.repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:v15-quota", Token: "claim:v15-quota:first", LeaseDuration: time.Minute,
-		Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy,
+		Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy, CapacityCandidates: system.capacidad,
 	})
 	if err != nil || !found || claim.BudgetReservationRef == "" {
 		t.Fatalf("first claim = %+v found=%v err=%v", claim, found, err)
 	}
 	_, found, err = system.repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:v15-quota", Token: "claim:v15-quota:second", LeaseDuration: time.Minute,
-		Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy,
+		Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy, CapacityCandidates: system.capacidad,
 	})
 	if err != nil || found {
 		t.Fatalf("quota claim found=%v err=%v", found, err)
@@ -179,7 +179,7 @@ func TestHierarchicalFairnessBoundsProjectAndGoalStarvation(t *testing.T) {
 			<-start
 			claim, found, err := system.repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 				WorkerRef: "worker:v15-fair", Token: fmt.Sprintf("claim:v15-fair:%03d", index),
-				LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy,
+				LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy, CapacityCandidates: system.capacidad,
 			})
 			results <- result{claim: claim, found: found, err: err}
 		}(index)
@@ -267,7 +267,7 @@ WHERE last_error_code='budget.temporarily_unavailable'`).Scan(&deferred, &delive
 	system.clock.Advance(time.Second)
 	next, found, err := system.repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:v15-fair:durable", Token: "claim:v15-fair:durable",
-		LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy,
+		LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy, CapacityCandidates: system.capacidad,
 	})
 	if err != nil || !found || next.Action.GoalRef != unserved || next.Action.Ref != firstAction[unserved] {
 		t.Fatalf("durable fairness claim=%+v found=%v err=%v unserved=%s", next, found, err, unserved)
@@ -1060,7 +1060,7 @@ func claimSQLiteV15(t *testing.T, system *sqliteV15System, token string) applica
 	t.Helper()
 	claim, found, err := system.repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:v15", Token: token, LeaseDuration: time.Minute,
-		Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy,
+		Capabilities: sqliteTestCapabilities(), BudgetPolicy: system.policy, CapacityCandidates: system.capacidad,
 	})
 	if err != nil || !found {
 		t.Fatalf("claim %s found=%v err=%v", token, found, err)

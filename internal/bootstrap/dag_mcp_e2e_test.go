@@ -495,6 +495,19 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	}
 	agent := newDAGAgent(clock, failures)
 	artifacts := newDAGArtifacts()
+	_, err = agent.IniciarControladoresCuota(context.Background(), application.ConfiguracionControladoresCuotaAgente{
+		VigenciaObservacion: time.Hour, Ahora: clock.Now,
+		Sumidero: func(ctx context.Context, observacion application.AgentQuotaObservation, evidencia []byte) error {
+			return application.RegistrarObservacionCuota(ctx, repository, artifacts, observacion, evidencia)
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepare DAG quota: %v", err)
+	}
+	fuentes, err := componerFuentesCapacidadAgente(agent, time.Hour, clock.Now, false)
+	if err != nil {
+		t.Fatalf("prepare DAG capacity: %v", err)
+	}
 	workspace := newDAGWorkspace()
 	versionControl := newDAGVersionControl()
 	snapshot, err := config.Resolve(config.ResolveOptions{})
@@ -518,6 +531,7 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 		EffectApprovalTTL: snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: budgetPolicy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: dagAgentCapabilities(),
+		CapacitySources:   fuentes, CapacityObservationWait: time.Second,
 	})
 	if err != nil {
 		t.Fatalf("new DAG orchestrator: %v", err)
@@ -799,6 +813,7 @@ func (clock *dagClock) Advance(duration time.Duration) {
 }
 
 type dagAgent struct {
+	capacidadAgentePrueba
 	mu            sync.Mutex
 	clock         *dagClock
 	failures      map[string]bool
@@ -819,6 +834,8 @@ func newDAGAgent(clock *dagClock, failures map[string]bool) *dagAgent {
 func (agent *dagAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
 	return dagAgentCapabilities(), nil
 }
+
+func (agent *dagAgent) Shutdown(context.Context) error { return nil }
 
 func dagAgentCapabilities() ports.AgentCapabilities {
 	return ports.AgentCapabilities{

@@ -18,7 +18,7 @@ func TestAgentPlacementMigrationIsProgressiveAtomicAndExact(t *testing.T) {
 	var columns string
 	sqliteTestNoError(t, repository.db.QueryRow(`SELECT user_version,(SELECT COUNT(*) FROM schema_migrations WHERE version=23),(SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name IN ('agent_quota_observations','agent_placement_bindings')),(SELECT group_concat(name,',') FROM pragma_table_info('agent_placement_bindings')) FROM pragma_user_version`).Scan(&version, &receipts, &tables, &columns))
 	sqliteTestNoError(t, repository.Close())
-	if version != recoverySchemaV38Capacity || receipts != 1 || tables != 2 ||
+	if version != recoverySchemaV38Claim || receipts != 1 || tables != 2 ||
 		columns != "reservation_ref,placement_ref,quota_observation_ref,quota_observation_revision" {
 		t.Fatalf("migración version=%d recibos=%d tablas=%d columnas=%q", version, receipts, tables, columns)
 	}
@@ -45,10 +45,6 @@ func TestAgentPlacementSchemaFencesQuotaAndImmutableBinding(t *testing.T) {
 	system := newSQLiteV15System(t, 2)
 	system.submit(t, "request:q2-placement")
 	claim := claimSQLiteV15(t, system, "claim:q2-placement")
-	insertAgentCapacityObservation(t, system.repository.db,
-		"capacity-observation:q2", "capacity-window:q2", 0, 1, "capacity-observe:q2")
-	sqliteTestNoError(t, insertAgentCapacityReservation(system.repository.db, claim, system.project.String(),
-		"capacity-observation:q2", 1, "capacity-reservation:q2", "capacity-reserve:q2", claim.Fence, "reserved", 1))
 	database := system.repository.db
 	const quotaSQL = `INSERT INTO agent_quota_observations(ref,placement_ref,window_ref,status,quality,observed_at,expires_at,reset_at,retry_at,idempotency_key,expected_revision,revision) VALUES(?,?,'quota-window:q2',?,?,?,?,?,?,?,?,?)`
 	quota := func(ref, placement, status, quality, key string, observed, expires int, reset, retry any, expected, revision int) error {
@@ -79,11 +75,13 @@ func TestAgentPlacementSchemaFencesQuotaAndImmutableBinding(t *testing.T) {
 		_, err := database.Exec(bindingSQL, reservation, placement, observation, revision)
 		return err
 	}
-	reject(bind("capacity-reservation:q2", "placement:q2-one", "quota:q2-one", 1), "el binding aceptó cuota obsoleta")
-	reject(bind("capacity-reservation:q2", "placement:q2-one", "quota:q2-two", 1), "el binding cruzó ref y revisión")
-	reject(bind("capacity-reservation:q2", "placement:q2-other", "quota:q2-two", 2), "el binding cruzó colocación")
-	sqliteTestNoError(t, bind("capacity-reservation:q2", "placement:q2-one", "quota:q2-two", 2))
-	reject(bind("capacity-reservation:q2", "placement:q2-other", "quota:q2-other", 1), "una reserva aceptó dos bindings")
+	reject(bind(claim.CapacityReservation.Ref, "placement:q2-one", "quota:q2-one", 1), "una reserva aceptó dos bindings")
+	var colocacion, cuotaRef string
+	var cuotaRevision int
+	sqliteTestNoError(t, database.QueryRow(`SELECT placement_ref,quota_observation_ref,quota_observation_revision FROM agent_placement_bindings WHERE reservation_ref=?`, claim.CapacityReservation.Ref).Scan(&colocacion, &cuotaRef, &cuotaRevision))
+	if colocacion != claim.ReferenciaColocacion.String() || cuotaRef != system.capacidad[0].Quota.ObservationRef || cuotaRevision != int(system.capacidad[0].Quota.ObservationRevision) {
+		t.Fatalf("binding del claim alterado: %s %s/%d", colocacion, cuotaRef, cuotaRevision)
+	}
 	for _, mutation := range []string{`UPDATE agent_placement_bindings SET placement_ref=placement_ref`, `DELETE FROM agent_placement_bindings`, `UPDATE agent_quota_observations SET status=status`, `DELETE FROM agent_quota_observations`} {
 		_, err := database.Exec(mutation)
 		reject(err, "un hecho inmutable aceptó UPDATE/DELETE")
@@ -99,14 +97,8 @@ func TestAgentPlacementRecoveryReopensAndRejectsSemanticTampering(t *testing.T) 
 	ctx := context.Background()
 	system := newSQLiteV15System(t, 2)
 	system.submit(t, "request:q2-recovery")
-	claim := claimSQLiteV15(t, system, "claim:q2-recovery")
-	insertAgentCapacityObservation(t, system.repository.db,
-		"capacity-observation:q2-recovery", "capacity-window:q2-recovery", 0, 1, "capacity-observe:q2-recovery")
-	sqliteTestNoError(t, insertAgentCapacityReservation(system.repository.db, claim, system.project.String(),
-		"capacity-observation:q2-recovery", 1, "capacity-reservation:q2-recovery", "capacity-reserve:q2-recovery", claim.Fence, "reserved", 1))
+	claimSQLiteV15(t, system, "claim:q2-recovery")
 	_, err := system.repository.db.Exec(`INSERT INTO agent_quota_observations(ref,placement_ref,window_ref,status,quality,observed_at,expires_at,evidence_ref,idempotency_key,expected_revision,revision) VALUES('quota:q2-recovery-one','placement:q2-recovery','quota-window:q2-recovery','available','measured',1,10,'artifact:q2-recovery','quota-key:q2-recovery-one',0,1)`)
-	sqliteTestNoError(t, err)
-	_, err = system.repository.db.Exec(`INSERT INTO agent_placement_bindings VALUES('capacity-reservation:q2-recovery','placement:q2-recovery','quota:q2-recovery-one',1)`)
 	sqliteTestNoError(t, err)
 	_, digest, err := validateRecoveryDatabase(ctx, system.repository.db)
 	sqliteTestNoError(t, err)

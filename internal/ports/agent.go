@@ -60,6 +60,8 @@ type AgentRequirements struct {
 
 type AgentLaunchRequest struct {
 	ExecutionRef goal.ExecutionRef
+	// ReferenciaColocacion fija la cuenta/aislamiento elegido por el claim.
+	ReferenciaColocacion AgentPlacementRef
 	// SessionRef binds a child runtime to the exact durable execution tuple.
 	// Empty preserves compositions that do not expose execution-bound APIs.
 	SessionRef ExecutionSessionRef
@@ -187,6 +189,8 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 		}
 	}
 	switch {
+	case request.ReferenciaColocacion.String() == "":
+		return &AgentContractError{Code: "agent.placement_ref_required"}
 	case request.ExecutionRef.String() == "":
 		return &AgentContractError{Code: "agent.execution_ref_required"}
 	case request.GoalRef.String() == "":
