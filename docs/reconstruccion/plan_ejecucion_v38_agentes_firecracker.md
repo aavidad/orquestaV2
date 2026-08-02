@@ -540,10 +540,26 @@ B12 sobre el candidato compuesto. B08 y B09 siguen abiertas antes de B04.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B08.1 | Repositorio hermano: intermediario físico enlaza la VM exacta a los servicios del protocolo local sin conocer comandos o ciclo de vida Orquesta. | Primero; fija la frontera del intermediario. | `P=120, V=100` |
-| B08.2 | Caracterizar y retirar `agent_microvm_launch_auth` y `firecracker/networkauth`; definir/verificar la concesión neutral firmada en `agentmicrovm`, con audiencia, resumen criptográfico del plan, `RunRef`, cerca, expiración y uso único. | Tras B08.1; serial sobre autorización. | `P=160, V=130` |
-| B08.3 | Conector Orquesta: aplica permisos/atestación, firma la concesión y traduce sesión, artefactos, MCP y buzón causal a mensajes/referencias; no exporta `CredentialStore`, secretos ni tipos internos. | Tras B08.2; no comparte almacén ni ruta. | `P=170, V=130` |
-| B08.4 | Repetición/concurrencia, firma/audiencia/resumen criptográfico/cerca/expiración, reinicio independiente, alcance cruzado, orden posterior y comprobante perdido. | Después de B08.2–B08.3. | `P=100, V=90` |
+| B08.1 | `713235f` y `42ad492`: el intermediario bloqueante enlaza el PID/UID Firecracker exacto con un socket anfitrión privado de identidad verificada; separa `RunRef`/CID aun con el mismo puerto, recupera solo sockets propios y no conoce lifecycle Orquesta. | `exercised` sin KVM; el proxy de salida sigue cerrado hasta B09. | Medida real en el ADR B08 |
+| B08.2 | `59f84d98` y `0e1abc67`: retira `agent_microvm_launch_auth`, `firecracker/networkauth` y `agent_microvm_network`. La concesión neutral Ed25519 del hermano conserva audiencia, plan, `RunRef`, cerca, expiración y uso único. | Tras B08.1; no queda HMAC, `CredentialStore`, bridge o fallback. | Compensación `P=-1146,V=-1248` |
+| B08.3 | `d12d41f`: el conector Go firma el vector exacto Rust y liga proyecto, Goal, WorkItem, ejecución, permiso, atestación, sesión, artefactos, MCP y buzón sin exportar esas referencias. | `exercised`; admite cualquier proveedor y recibe la clave privada por inyección. | Firmante `P=234,V=127` |
+| B08.4 | Repetición y concurrencia, firma/plan/cerca/expiración, alcance cruzado, peer/destino erróneos, mismo puerto, recuperación de listener y guarda estricta de configuración. | Último gate contractual; B12 conserva el consumo físico y comprobante perdido. | Incluido en la medida B08 |
+
+La medida del candidato hermano `2f65254` es `P=928,V=512`. La estimación del
+hijo intermediario resultó insuficiente para el lifecycle Unix real de
+Firecracker, la identidad bilateral, la parada sin sondeo y la recuperación
+segura. El
+[ADR B08](adr_v38_b08_intermediario_compensado_2026-08-02.md) registra la
+redistribución y la retirada compensatoria exacta. El delta causal conjunto
+queda `P=-218,V=-736`, dentro del límite del padre y sin crear holgura para
+otra tarea.
+
+B08 queda `exercised`, no `accredited`. Pasaron formato, Clippy, 193 pruebas
+Rust activas —más dos smokes KVM omitidos—, nueve pruebas Go normales y con
+detector de carreras, `vet`, la suite interna completa de Orquesta y sus gates
+focales. El gate raíz solo conserva los dos receipts Codex caducados conocidos.
+No se arrancó Orquesta, Agente MicroVM, Firecracker o Jailer. B09 es la
+siguiente dependencia abierta antes de B04; B12 conserva el recorrido físico.
 
 ### B09 — `P=600, V=550`
 

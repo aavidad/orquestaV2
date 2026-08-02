@@ -5,6 +5,26 @@
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
 Q4 como pendiente o A05 como meramente conectada.
 
+- B08 quedó `exercised` en Agente MicroVM, candidato de código `2f65254`, sin
+  `push`. `713235f`/`42ad492` implementan el intermediario `vsock` bloqueante,
+  identidad bilateral exacta, separación causal por `RunRef`/CID, recuperación
+  de sockets propios y parada sin sondeo. `d12d41f` añade el firmante Go
+  Ed25519 neutral y portable para cualquier proveedor.
+- Orquesta retiró en `59f84d98` y `0e1abc67` la autorización física duplicada,
+  el desafío HMAC, `CredentialStore` y la política de red sin consumidor. La
+  concesión final no exporta secretos ni tipos internos; el proxy continúa
+  rechazado hasta B09.
+- La medida hermana es `P=928,V=512`; la retirada exacta aporta
+  `P=-1146,V=-1248` y deja el delta causal B08 en `P=-218,V=-736`, dentro del
+  padre. El exceso del hijo intermediario y su compensación quedan explícitos
+  en `adr_v38_b08_intermediario_compensado_2026-08-02.md`; no crean bolsa para
+  B09.
+- Pasaron formato, Clippy, 193 pruebas Rust activas —más dos smokes KVM
+  omitidos—, nueve pruebas Go normales y con `-race`, `vet`, la suite interna
+  completa de Orquesta y los focales de trazabilidad. El gate raíz conserva
+  solo los dos receipts Codex caducados que se regenerarán en el smoke final.
+  B08 no acredita `ORC-28` ni V38; B09 sigue antes de B04 y B12 conserva KVM.
+  No se arrancó Orquesta, Agente MicroVM, Firecracker o Jailer.
 - B07 quedó `exercised` en Agente MicroVM, candidato de código `1811361` y
   corte documentado local `e663bd3`, sin `push`. `c938451` reserva capacidad,
   ejecución y CID de forma atómica; `a0792b5` añade el ledger SQLite v12 de
