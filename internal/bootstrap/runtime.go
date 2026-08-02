@@ -73,8 +73,7 @@ func componerFuentesCapacidadAgente(agente AgentAdapter, vigencia time.Duration,
 		if err != nil {
 			return nil, err
 		}
-		resultado = append(resultado, application.FuenteCapacidadColocacionAgente{descriptor.PlacementRef,
-			descriptor.SourceRef, descriptor.PoolRef, descriptor.BaseMedicion, observador})
+		resultado = append(resultado, application.FuenteCapacidadColocacionAgente{PlacementRef: descriptor.PlacementRef, SourceRef: descriptor.SourceRef, PoolRef: descriptor.PoolRef, BaseMedicion: descriptor.BaseMedicion, Observer: observador})
 	}
 	return resultado, nil
 }
