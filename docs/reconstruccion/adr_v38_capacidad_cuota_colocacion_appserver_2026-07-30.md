@@ -439,6 +439,16 @@ catálogo Codex vacío no activa la compuerta y conserva V23; un perfil durable
 sí publica capacidad uno y exige cuota vigente. Este puente de compatibilidad
 no acredita A05: Q4 debe ser el primer escritor transaccional real.
 
+La revisión viva de Q4 del 2026-08-01 encontró que el escritor no puede
+separarse honestamente del replay cercado ni de las transiciones: una reserva
+única por acción conserva su cerca original, mientras un reclamo recuperado
+recibe una cerca posterior. La validación, el esquema progresivo y el consumo
+de esa misma reserva deben evolucionar juntos. Por ello los remanentes de
+A04.2, A04.3 y A04.4 se gobiernan como una sola bolsa y un solo gate
+`P=299,V=337`; no cambia el techo A04 ni el total V38. La migración nueva no
+modifica 022/023: impone una reserva por acción y permite que una transición se
+acredite mediante un intento posterior cercado, ligado a su propio receipt.
+
 ## Alternativas rechazadas
 
 - **Reservar cuota como si fuera capacidad física:** produce sobrecontabilidad,

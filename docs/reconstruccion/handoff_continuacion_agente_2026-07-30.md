@@ -232,6 +232,13 @@ La siguiente dependencia causal es A04.2/Q4:
 5. probar carreras, replay, cuota/observación obsoletas y progreso de
    stop/observe antes de abrir A06/A07.
 
+La auditoría viva del 2026-08-01 hizo indivisible ese trabajo de A04.3/A04.4:
+reutilizar exactamente una reserva tras expirar el lease exige evolucionar de
+forma progresiva el fencing de sus transiciones y verificar la reserva/binding
+durables en cada escritor. Los tres hijos usan desde entonces la bolsa conjunta
+restante `P=299,V=337`, sin aumentar A04 ni V38. No se editan las migraciones
+022/023.
+
 Antes de cada edición se debe consultar `ORC-28` mediante
 `scripts/consultar_lecciones_legacy.sh`. La consulta de las tareas cerradas en
 este corte no encontró patrones; se conservó como hueco consultivo.
