@@ -1,5 +1,31 @@
 # Documento de continuidad de Orquesta — 2026-07-30
 
+## Avance operativo del 2026-08-02
+
+Este apartado prevalece sobre las menciones posteriores que todavía presentan
+Q4 como pendiente o A05 como meramente conectada.
+
+- Q4/A04.2–A04.4 quedó integrada en `a6c326d7`. El mismo
+  `BEGIN IMMEDIATE` del claim materializa o repite la observación física,
+  relee la cuota exacta, resta held una vez por `source+pool`, crea una única
+  reserva y su binding 1:1, y devuelve la colocación opaca fijada.
+- Receipt aceptado, prueba estructural de no aplicación, ambigüedad y
+  terminalización transicionan la reserva con CAS y fencing. Un lease expirado
+  puede adquirir una cerca posterior, pero replay conserva la reserva y la
+  colocación originales; el pool Codex ya no reselecciona perfiles.
+- El corte consumió exactamente `P=489,V=515` de `P≤489,V≤537`. SQLite,
+  Codex, bootstrap, `internal/**`, `cmd/orquesta`, `vet`, compilación global,
+  aceptación V38 planificada y focales `-race` quedaron verdes. La suite raíz
+  solo conserva los dos receipts Codex físicos del 25 de julio, obsoletos por
+  diseño hasta emitir el candidato final.
+- `BUG-ORQ-20260801-613` queda cerrado en código. La latencia aislada y no
+  reproducida de un E2E bootstrap se conserva como
+  `BUG-ORQ-20260802-614`, sin ampliar timeouts ni ocultar un posible bloqueo.
+- Orquesta, Firecracker, jailer y Agente MicroVM permanecen detenidos; no se
+  relanzaron los tres Goals V23 y no se hizo `push`.
+- A04/A05 quedan `exercised`, no `accredited`. La siguiente dependencia causal
+  es A06, preservación durable antes del desmontaje; después siguen A07 y A08.
+
 ## Avance operativo del 2026-08-01
 
 Este apartado prevalece sobre las menciones posteriores que todavía presentan
@@ -220,35 +246,21 @@ git log -10 --oneline --decorate
 No relanzar tareas ni usar Orquesta mientras siga sin cuota. Preservar los
 archivos ajenos sin seguimiento.
 
-La siguiente dependencia causal es A04.2/Q4:
+La siguiente dependencia causal es A06:
 
-1. conservar `CapacityCandidates` como propuestas y revalidarlas por orden
-   dentro de la transacción del claim;
-2. materializar o repetir por CAS la entrega física, releer la cuota por
-   referencia/revisión y restar held una sola vez por `source+pool`;
-3. crear en la misma transacción la única reserva física, el binding de
-   colocación y el claim/outbox, o no reclamar el lanzamiento;
-4. devolver la colocación exacta para que A04.4 la propague sin reselección;
-5. probar carreras, replay, cuota/observación obsoletas y progreso de
-   stop/observe antes de abrir A06/A07.
+1. caracterizar el contrato neutral de preservación y su relación exacta con
+   una ejecución, cerca, base de workspace, change-set/bundle, inventario,
+   configuración y rootfs;
+2. persistir el comprobante durable antes de desmontar y fallar cerrado ante
+   ausencia, digest alterado, proyecto ajeno o cerca obsoleta;
+3. impedir que V38 introduzca una operación de borrado/GC o un nuevo estado del
+   `Goal`;
+4. cubrir repetición, reinicio y material todavía direccionable; después abrir
+   A07 y la compuerta neutral A08.
 
-La auditoría viva del 2026-08-01 hizo indivisible ese trabajo de A04.3/A04.4:
-reutilizar exactamente una reserva tras expirar el lease exige evolucionar de
-forma progresiva el fencing de sus transiciones y verificar la reserva/binding
-durables en cada escritor. Los tres hijos usan desde entonces la bolsa conjunta
-restante `P=299,V=337`, sin aumentar A04 ni V38. No se editan las migraciones
-022/023.
-
-La medición ejecutable posterior corrige esa bolsa a `P=489,V=387`. La
-compensación exacta `P=190,V=50` sale de B10.4/B10.5; A04+B10 conserva
-`P=929,V=927` y V38 no crece. La migración progresiva nueva es 024; 022/023
-siguen inmutables.
-
-La suite global posterior hizo visible la migración de 52 fixtures que aún
-omitían la colocación o reconstruían aplicación sin capacidad. La medición neta
-definitiva tras componer los perfiles reales traslada `V=150` desde A08 a Q4:
-la bolsa queda `P=489,V=537`, A04 `P=649,V=647` y A08 `P=0,V=600`, sin variar
-el total V38.
+Q4 consumió `P=489,V=515` de su bolsa `P≤489,V≤537` sin aumentar V38. La
+migración progresiva es 024 y 022/023 siguen inmutables. Los commits
+`a6c326d7`, `79799a4e` y `ad3c549f` conservan implementación y trazabilidad.
 
 Antes de cada edición se debe consultar `ORC-28` mediante
 `scripts/consultar_lecciones_legacy.sh`. La consulta de las tareas cerradas en
