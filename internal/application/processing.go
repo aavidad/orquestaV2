@@ -45,12 +45,18 @@ func (orchestrator *Orchestrator) ClaimNextAction(
 	if err != nil {
 		return ActionClaim{}, false, err
 	}
+	candidatos, err := orchestrator.obtenerCandidatosCapacidad(ctx, selection.ExcludeLaunch)
+	if err != nil {
+		return ActionClaim{}, false, err
+	}
+	excluirLanzamiento := selection.ExcludeLaunch || len(candidatos) == 0 && orchestrator.capacitySources != nil
 	return orchestrator.state.ClaimNextAction(ctx, ClaimRequest{
 		WorkerRef: workerRef, Token: token, LeaseDuration: orchestrator.claimLease,
 		AttestTestLeaseDuration: orchestrator.attestTestClaimLease,
 		Capabilities:            orchestrator.agentCapabilities,
 		BudgetPolicy:            orchestrator.budgetPolicy,
-		ExcludeLaunch:           selection.ExcludeLaunch,
+		ExcludeLaunch:           excluirLanzamiento,
+		CapacityCandidates:      candidatos,
 	})
 }
 

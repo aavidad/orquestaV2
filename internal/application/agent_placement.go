@@ -134,9 +134,30 @@ type AgentPlacementObservationPresentation struct {
 	ObservationRevision uint64
 }
 type AgentCapacityPlacementCandidate struct {
-	PlacementRef    ports.AgentPlacementRef
-	Physical, Quota AgentPlacementObservationPresentation
+	PlacementRef ports.AgentPlacementRef
+	Physical     AgentCapacityObservationSubmission
+	Quota        AgentPlacementObservationPresentation
 }
+
+type FuenteCapacidadColocacionAgente struct {
+	PlacementRef ports.AgentPlacementRef
+	SourceRef    AgentCapacitySourceRef
+	PoolRef      AgentCapacityPoolRef
+	BaseMedicion BaseMedicionCapacidadAgente
+	Observer     AgentCapacityObserver
+}
+
+type DescriptorCapacidadColocacionAgente struct {
+	PlacementRef ports.AgentPlacementRef
+	SourceRef    AgentCapacitySourceRef
+	PoolRef      AgentCapacityPoolRef
+	BaseMedicion BaseMedicionCapacidadAgente
+	Plazas       int64
+}
+
+type BaseMedicionCapacidadAgente string
+
+const BaseMedicionCapacidadBruta BaseMedicionCapacidadAgente = "bruta"
 
 func OrdenarCandidatosColocacion(candidatos []AgentCapacityPlacementCandidate) ([]AgentCapacityPlacementCandidate, error) {
 	porReferencia := make(map[string]AgentCapacityPlacementCandidate, len(candidatos))
@@ -158,14 +179,32 @@ func OrdenarCandidatosColocacion(candidatos []AgentCapacityPlacementCandidate) (
 }
 
 func ValidateAgentCapacityPlacementCandidate(candidate AgentCapacityPlacementCandidate) error {
-	if candidate.PlacementRef.String() == "" ||
-		!validAgentCapacityRef(candidate.Physical.ObservationRef) ||
+	entrega, err := NuevaEntregaObservacionCapacidad(candidate.Physical.Observation)
+	if candidate.PlacementRef.String() == "" || err != nil || entrega != candidate.Physical ||
 		!validAgentCapacityRef(candidate.Quota.ObservationRef) ||
-		candidate.Physical.ObservationRef == candidate.Quota.ObservationRef ||
-		candidate.Physical.ObservationRevision == 0 || candidate.Quota.ObservationRevision == 0 {
+		candidate.Physical.Ref == candidate.Quota.ObservationRef ||
+		candidate.Quota.ObservationRevision == 0 {
 		return ErrAgentCapacityInvalid
 	}
 	return nil
+}
+
+func normalizarFuentesCapacidadColocacion(fuentes []FuenteCapacidadColocacionAgente) ([]FuenteCapacidadColocacionAgente, error) {
+	if fuentes == nil {
+		return nil, nil
+	}
+	resultado := append(make([]FuenteCapacidadColocacionAgente, 0, len(fuentes)), fuentes...)
+	slices.SortFunc(resultado, func(a, b FuenteCapacidadColocacionAgente) int {
+		return cmp.Compare(a.PlacementRef.String(), b.PlacementRef.String())
+	})
+	for indice, fuente := range resultado {
+		if fuente.PlacementRef.String() == "" || !validAgentCapacityRef(string(fuente.SourceRef)) ||
+			!validAgentCapacityRef(string(fuente.PoolRef)) || fuente.BaseMedicion != BaseMedicionCapacidadBruta ||
+			fuente.Observer == nil || indice > 0 && resultado[indice-1].PlacementRef == fuente.PlacementRef {
+			return nil, ErrAgentCapacityInvalid
+		}
+	}
+	return resultado, nil
 }
 
 type AgentPlacementBinding struct {
@@ -177,8 +216,7 @@ type AgentPlacementBinding struct {
 func NewAgentPlacementBinding(candidate AgentCapacityPlacementCandidate, reservation AgentCapacityReservation, quota AgentQuotaObservationRecord) (AgentPlacementBinding, error) {
 	if ValidateAgentCapacityPlacementCandidate(candidate) != nil ||
 		ValidateAgentCapacityReservation(reservation) != nil || !validAgentQuotaObservationRecord(quota) ||
-		candidate.Physical.ObservationRef != reservation.ObservationRef ||
-		candidate.Physical.ObservationRevision != reservation.ObservationRevision ||
+		candidate.Physical.Ref != reservation.ObservationRef ||
 		candidate.Quota.ObservationRef != quota.Ref || candidate.Quota.ObservationRevision != quota.Revision ||
 		candidate.PlacementRef != quota.PlacementRef {
 		return AgentPlacementBinding{}, ErrAgentCapacityInvalid

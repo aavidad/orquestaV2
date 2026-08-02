@@ -42,6 +42,8 @@ type Dependencies struct {
 	AgentCapabilities       ports.AgentCapabilities
 	ExecutionSessions       ports.ExecutionSessionBroker
 	PostArtifactMailbox     PostArtifactMailboxAdmitter
+	CapacitySources         []FuenteCapacidadColocacionAgente
+	CapacityObservationWait time.Duration
 }
 
 type Orchestrator struct {
@@ -73,9 +75,15 @@ type Orchestrator struct {
 	agentCapabilities       ports.AgentCapabilities
 	executionSessions       ports.ExecutionSessionBroker
 	postArtifactMailbox     PostArtifactMailboxAdmitter
+	capacitySources         []FuenteCapacidadColocacionAgente
+	capacityObservationWait time.Duration
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
+	capacitySources, capacityErr := normalizarFuentesCapacidadColocacion(dependencies.CapacitySources)
+	if capacityErr != nil {
+		return nil, errors.New("application.agent_capacity_sources_invalid")
+	}
 	switch {
 	case dependencies.IntakeStore != nil && dependencies.WizardGapsStore != nil:
 		return nil, errors.New("application.wizard_gaps_store_composition_invalid")
@@ -118,6 +126,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.observation_delay_invalid")
 	case dependencies.ExecutionTimeout <= 0:
 		return nil, errors.New("application.execution_timeout_invalid")
+	case len(capacitySources) > 0 && dependencies.CapacityObservationWait <= 0:
+		return nil, errors.New("application.agent_capacity_observation_wait_invalid")
 	case dependencies.TestAttestor == nil && dependencies.TestAttestationPolicy != (TestAttestationPolicy{}):
 		return nil, errors.New("application.test_attestor_required")
 	case dependencies.TestAttestor != nil && ValidateTestAttestationPolicy(dependencies.TestAttestationPolicy) != nil:
@@ -189,6 +199,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		agentCapabilities:       cloneAgentCapabilities(dependencies.AgentCapabilities),
 		executionSessions:       dependencies.ExecutionSessions,
 		postArtifactMailbox:     dependencies.PostArtifactMailbox,
+		capacitySources:         capacitySources,
+		capacityObservationWait: dependencies.CapacityObservationWait,
 	}, nil
 }
 

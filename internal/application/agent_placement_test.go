@@ -41,8 +41,11 @@ func TestRegistrarObservacionCuotaPersisteEvidenciaYRepiteExactamente(t *testing
 func TestOrdenarCandidatosColocacionDeduplicaYRechazaConflictos(t *testing.T) {
 	candidato := func(ref string, revision uint64) AgentCapacityPlacementCandidate {
 		colocacion, _ := ports.NewAgentPlacementRef(ref)
+		observacion := validAgentCapacityObservation(t)
+		observacion.PoolRef = AgentCapacityPoolRef("pool:" + ref)
+		entrega, _ := NuevaEntregaObservacionCapacidad(observacion)
 		return AgentCapacityPlacementCandidate{PlacementRef: colocacion,
-			Physical: AgentPlacementObservationPresentation{"fisica:" + ref, revision},
+			Physical: entrega,
 			Quota:    AgentPlacementObservationPresentation{"cuota:" + ref, revision}}
 	}
 	primero, segundo := candidato("placement:b", 1), candidato("placement:a", 2)
@@ -54,6 +57,18 @@ func TestOrdenarCandidatosColocacionDeduplicaYRechazaConflictos(t *testing.T) {
 	conflicto.Quota.ObservationRevision++
 	if _, err := OrdenarCandidatosColocacion([]AgentCapacityPlacementCandidate{primero, conflicto}); !errors.Is(err, ErrAgentCapacityInvalid) {
 		t.Fatalf("duplicado conflictivo aceptado: %v", err)
+	}
+	observador := &observadorCapacidadClaim{}
+	fuentes := []FuenteCapacidadColocacionAgente{
+		{primero.PlacementRef, primero.Physical.Observation.SourceRef, primero.Physical.Observation.PoolRef, BaseMedicionCapacidadBruta, observador},
+		{segundo.PlacementRef, segundo.Physical.Observation.SourceRef, segundo.Physical.Observation.PoolRef, BaseMedicionCapacidadBruta, observador},
+	}
+	normalizadas, err := normalizarFuentesCapacidadColocacion(fuentes)
+	if err != nil || normalizadas[0].PlacementRef != segundo.PlacementRef {
+		t.Fatalf("fuentes no normalizadas: %+v %v", normalizadas, err)
+	}
+	if _, err := normalizarFuentesCapacidadColocacion(append(fuentes, fuentes[0])); !errors.Is(err, ErrAgentCapacityInvalid) {
+		t.Fatalf("fuente duplicada aceptada: %v", err)
 	}
 }
 
@@ -163,36 +178,39 @@ func TestAgentPlacementBindingUsesExactReservationAndQuota(t *testing.T) {
 		Allocation: AgentCapacityAllocation{Slots: 1}, State: AgentCapacityReserved, ReservedAt: now, UpdatedAt: now}
 	placementRef, _ := ports.NewAgentPlacementRef("placement:one")
 	quota := placementQuotaRecord(now)
+	observacion := validAgentCapacityObservation(t)
+	entrega, _ := NuevaEntregaObservacionCapacidad(observacion)
 	candidate := AgentCapacityPlacementCandidate{PlacementRef: placementRef,
-		Physical: AgentPlacementObservationPresentation{"physical:one", 3},
+		Physical: entrega,
 		Quota:    AgentPlacementObservationPresentation{"quota:one", 7}}
+	reservation.ObservationRef = entrega.Ref
 	binding, err := NewAgentPlacementBinding(candidate, reservation, quota)
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidate.Physical.ObservationRevision, reservation.Ref, quota.Ref = 2, "reservation:changed", "quota:changed"
+	candidate.Physical.Ref, reservation.Ref, quota.Ref = "physical:changed", "reservation:changed", "quota:changed"
 	if binding.placementRef != placementRef || binding.reservationRef != "reservation:one" ||
 		binding.quotaObservationRef != "quota:one" || binding.quotaObservationRevision != 7 {
 		t.Fatalf("binding cambió tras mutar entradas: %+v", binding)
 	}
 	for _, mutate := range []func(*AgentCapacityPlacementCandidate){
 		func(value *AgentCapacityPlacementCandidate) { value.PlacementRef = ports.AgentPlacementRef{} },
-		func(value *AgentCapacityPlacementCandidate) { value.Physical.ObservationRevision = 2 },
+		func(value *AgentCapacityPlacementCandidate) { value.Physical.Observation.SourceRef = "" },
 		func(value *AgentCapacityPlacementCandidate) { value.Quota.ObservationRevision = 6 },
-		func(value *AgentCapacityPlacementCandidate) { value.Physical.ObservationRef = " physical:one" },
+		func(value *AgentCapacityPlacementCandidate) { value.Physical.Ref = " physical:one" },
 		func(value *AgentCapacityPlacementCandidate) {
-			value.Quota.ObservationRef = value.Physical.ObservationRef
+			value.Quota.ObservationRef = value.Physical.Ref
 		},
 	} {
 		invalid := AgentCapacityPlacementCandidate{PlacementRef: placementRef,
-			Physical: AgentPlacementObservationPresentation{"physical:one", 3},
+			Physical: entrega,
 			Quota:    AgentPlacementObservationPresentation{"quota:one", 7}}
 		mutate(&invalid)
 		if _, err := NewAgentPlacementBinding(invalid, reservation, placementQuotaRecord(now)); !errors.Is(err, ErrAgentCapacityInvalid) {
 			t.Fatalf("candidato inválido aceptado: %+v", invalid)
 		}
 	}
-	candidate.Physical.ObservationRevision, candidate.Quota.ObservationRevision = 3, 7
+	candidate.Physical.Ref, candidate.Quota.ObservationRevision = entrega.Ref, 7
 	invalidReservation, invalidQuota := reservation, placementQuotaRecord(now)
 	invalidReservation.Fence, invalidQuota.WindowRef = 0, ""
 	if _, err := NewAgentPlacementBinding(candidate, invalidReservation, placementQuotaRecord(now)); !errors.Is(err, ErrAgentCapacityInvalid) {

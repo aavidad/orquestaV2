@@ -5,6 +5,7 @@ package application
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -52,6 +53,72 @@ func TestProcessNextPreservesClaimRequestAndEmptyOutcomes(t *testing.T) {
 				t.Fatalf("claim calls=%d request=%+v want=%+v", state.claimCalls, state.request, wantRequest)
 			}
 		})
+	}
+}
+
+func TestClaimNextActionPresentaCapacidadYFallaCerradoSoloParaLanzamientos(t *testing.T) {
+	now := agentCapacityBaseTime().Add(time.Minute)
+	for _, caso := range []struct {
+		nombre                         string
+		accion                         ActionKind
+		excluir, ausente, errorCuota   bool
+		agotada, obsoleta, errorFuente bool
+	}{
+		{nombre: "disponible", accion: ActionStopAgent},
+		{nombre: "control_explicito", accion: ActionObserveAgent, excluir: true},
+		{nombre: "ausente", accion: ActionStopAgent, ausente: true},
+		{nombre: "error_cuota", accion: ActionStopAgent, errorCuota: true},
+		{nombre: "agotada", accion: ActionStopAgent, agotada: true},
+		{nombre: "obsoleta", accion: ActionStopAgent, obsoleta: true},
+		{nombre: "fuente", accion: ActionObserveAgent, errorFuente: true},
+	} {
+		t.Run(caso.nombre, func(t *testing.T) {
+			estado := &processingClaimState{claim: ActionClaim{Action: ActionRecord{Kind: caso.accion}}, found: true, cuotas: make(map[string]AgentQuotaObservationRecord)}
+			fuente, observador := prepararFuenteCapacidadClaim(t, estado, now, caso.nombre)
+			cuota := estado.cuotas[fuente.PlacementRef.String()]
+			switch {
+			case caso.ausente:
+				delete(estado.cuotas, fuente.PlacementRef.String())
+			case caso.errorCuota:
+				estado.quotaErr = errors.New("state.quota_unavailable")
+			case caso.agotada:
+				cuota.Status = AgentQuotaExhausted
+				estado.cuotas[fuente.PlacementRef.String()] = cuota
+			case caso.obsoleta:
+				cuota.ExpiresAt = now
+				estado.cuotas[fuente.PlacementRef.String()] = cuota
+			case caso.errorFuente:
+				observador.err = errors.New("source.unavailable")
+			}
+			orquestador := &Orchestrator{state: estado, ids: &sequentialIDs{}, clock: agentCapacityClock{now: now}, claimLease: time.Minute,
+				budgetPolicy: testBudgetPolicy(now), capacitySources: []FuenteCapacidadColocacionAgente{fuente}, capacityObservationWait: time.Second}
+			reclamo, encontrado, err := orquestador.ClaimNextAction(context.Background(), "worker:control", ActionClaimSelection{ExcludeLaunch: caso.excluir})
+			admitida := caso.nombre == "disponible"
+			if err != nil || !encontrado || reclamo.Action.Kind != caso.accion || estado.request.ExcludeLaunch == admitida ||
+				(len(estado.request.CapacityCandidates) == 1) != admitida {
+				t.Fatalf("reclamo=%+v encontrado=%v request=%+v error=%v", reclamo, encontrado, estado.request, err)
+			}
+		})
+	}
+}
+
+func TestClaimNextActionAplicaUnSoloTimeoutAlLoteDeFuentes(t *testing.T) {
+	now, espera := agentCapacityBaseTime().Add(time.Minute), 20*time.Millisecond
+	estado := &processingClaimState{cuotas: make(map[string]AgentQuotaObservationRecord)}
+	var fuentes []FuenteCapacidadColocacionAgente
+	for indice := range 20 {
+		fuente, observador := prepararFuenteCapacidadClaim(t, estado, now, fmt.Sprintf("timeout:%d", indice))
+		observador.esperar = true
+		fuentes = append(fuentes, fuente)
+	}
+	orquestador := &Orchestrator{state: estado, ids: &sequentialIDs{}, clock: agentCapacityClock{now: now}, claimLease: time.Minute,
+		budgetPolicy: testBudgetPolicy(now), capacitySources: fuentes, capacityObservationWait: espera}
+	inicio := time.Now()
+	if _, _, err := orquestador.ClaimNextAction(context.Background(), "worker:timeout", ActionClaimSelection{}); err != nil {
+		t.Fatal(err)
+	}
+	if duracion := time.Since(inicio); duracion >= 5*espera || !estado.request.ExcludeLaunch {
+		t.Fatalf("timeout multiplicado: duración=%s request=%+v", duracion, estado.request)
 	}
 }
 
@@ -189,6 +256,13 @@ type processingClaimState struct {
 	claimContext    context.Context
 	getGoalContext  context.Context
 	getGoalRef      goal.GoalRef
+	cuotas          map[string]AgentQuotaObservationRecord
+	quotaErr        error
+}
+
+func (state *processingClaimState) CurrentAgentQuotaObservation(_ context.Context, colocacion ports.AgentPlacementRef) (AgentQuotaObservationRecord, bool, error) {
+	cuota, encontrada := state.cuotas[colocacion.String()]
+	return cuota, encontrada, state.quotaErr
 }
 
 func (state *processingClaimState) ClaimNextAction(
@@ -217,4 +291,30 @@ func (state *processingClaimState) QuarantineAction(
 ) error {
 	state.quarantineCalls++
 	return nil
+}
+
+type observadorCapacidadClaim struct {
+	observacion AgentCapacityObservation
+	err         error
+	esperar     bool
+}
+
+func prepararFuenteCapacidadClaim(t *testing.T, estado *processingClaimState, ahora time.Time, nombre string) (FuenteCapacidadColocacionAgente, *observadorCapacidadClaim) {
+	colocacion, _ := ports.NewAgentPlacementRef("placement:" + nombre)
+	cuota := placementQuotaRecord(ahora)
+	cuota.PlacementRef, cuota.Ref, cuota.IdempotencyKey = colocacion, "quota:"+nombre, "quota-key:"+nombre
+	estado.cuotas[colocacion.String()] = cuota
+	observacion := validAgentCapacityObservation(t)
+	observacion.PoolRef = AgentCapacityPoolRef("pool:" + nombre)
+	observador := &observadorCapacidadClaim{observacion: observacion}
+	return FuenteCapacidadColocacionAgente{colocacion, observacion.SourceRef, observacion.PoolRef,
+		BaseMedicionCapacidadBruta, observador}, observador
+}
+
+func (observador *observadorCapacidadClaim) ObserveCapacity(ctx context.Context, _ AgentCapacitySourceRef, _ AgentCapacityPoolRef) (AgentCapacityObservation, error) {
+	if observador.esperar {
+		<-ctx.Done()
+		return AgentCapacityObservation{}, ctx.Err()
+	}
+	return observador.observacion, observador.err
 }

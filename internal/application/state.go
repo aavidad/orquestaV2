@@ -318,7 +318,7 @@ type ClaimRequest struct {
 	ExcludeLaunch           bool
 	Capabilities            ports.AgentCapabilities
 	BudgetPolicy            BudgetPolicy
-	CapacityObservation     AgentCapacityObservationSubmission
+	CapacityCandidates      []AgentCapacityPlacementCandidate
 }
 
 type ActionConsumptionOutcome string

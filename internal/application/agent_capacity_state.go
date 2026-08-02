@@ -1,6 +1,9 @@
 package application
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"orquesta/internal/goal"
@@ -14,6 +17,25 @@ type AgentCapacityObservationSubmission struct {
 type AgentCapacityObservationRecord struct {
 	AgentCapacityObservationSubmission
 	ExpectedRevision, Revision uint64
+}
+
+func NuevaEntregaObservacionCapacidad(observacion AgentCapacityObservation) (AgentCapacityObservationSubmission, error) {
+	if ValidateAgentCapacityObservation(observacion) != nil {
+		return AgentCapacityObservationSubmission{}, ErrAgentCapacityInvalid
+	}
+	observacion.ObservedAt, observacion.ExpiresAt = observacion.ObservedAt.Round(0).UTC(), observacion.ExpiresAt.Round(0).UTC()
+	observacion.ResetAt, observacion.RetryAt = observacion.ResetAt.Round(0).UTC(), observacion.RetryAt.Round(0).UTC()
+	identidad := []any{string(observacion.SourceRef), string(observacion.PoolRef), string(observacion.WindowRef),
+		string(observacion.Status), string(observacion.Quality), observacion.ObservedAt.UnixNano(),
+		observacion.ExpiresAt.UnixNano(), observacion.ResetAt.UnixNano(), observacion.RetryAt.UnixNano(),
+		observacion.Resources, observacion.ArtifactRef.String()}
+	contenido, err := json.Marshal(identidad)
+	if err != nil {
+		return AgentCapacityObservationSubmission{}, ErrAgentCapacityInvalid
+	}
+	digest := sha256.Sum256(append([]byte("orquesta.agent-capacity-observation.v1\x00"), contenido...))
+	referencia := fmt.Sprintf("capacity-observation:v1:sha256:%x", digest)
+	return AgentCapacityObservationSubmission{Ref: referencia, IdempotencyKey: referencia, Observation: observacion}, nil
 }
 
 type AgentCapacityReservationState string

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -49,5 +50,23 @@ func TestAgentCapacityStateValidatesBindingsAmountsAndTransitions(t *testing.T) 
 		if err := ValidateAgentCapacityTransition(current, next); (err == nil) != test.valid {
 			t.Fatalf("%s→%s/%s válida=%v error=%v", test.from, test.outcome, test.cause, test.valid, err)
 		}
+	}
+}
+
+func TestNuevaEntregaObservacionCapacidadEsDeterministaYNormalizaLaZona(t *testing.T) {
+	observacion := validAgentCapacityObservation(t)
+	misma := observacion
+	misma.ObservedAt = misma.ObservedAt.In(time.FixedZone("otra", 3600))
+	misma.ExpiresAt = misma.ExpiresAt.In(time.FixedZone("otra", 3600))
+	primera, primerErr := NuevaEntregaObservacionCapacidad(observacion)
+	segunda, segundoErr := NuevaEntregaObservacionCapacidad(misma)
+	otroArtefacto, _ := goal.NewArtifactRef("artifact:capacity-other")
+	observacion.ArtifactRef = otroArtefacto
+	tercera, tercerErr := NuevaEntregaObservacionCapacidad(observacion)
+	observacion.ExpiresAt = observacion.ObservedAt
+	_, invalidErr := NuevaEntregaObservacionCapacidad(observacion)
+	if primerErr != nil || segundoErr != nil || tercerErr != nil || primera != segunda ||
+		primera.Ref != primera.IdempotencyKey || tercera.Ref == primera.Ref || !errors.Is(invalidErr, ErrAgentCapacityInvalid) {
+		t.Fatalf("entregas no canónicas: %v %v %v %v", primerErr, segundoErr, tercerErr, invalidErr)
 	}
 }
