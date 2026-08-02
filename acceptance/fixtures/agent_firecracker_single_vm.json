@@ -34,15 +34,12 @@
         "east_west",
         "direct_internet"
       ],
-      "authentication": "single_use_credential_store_proof_and_attestation",
+      "authentication": "single_use_neutral_signed_grant_and_attestation_binding",
       "test_attestor_scope": "unchanged_no_network_no_vsock",
       "test_refs": [
         "internal/ports/agent_microvm_network_test.go",
         "internal/ports/agent_microvm_launch_auth_test.go",
-        "internal/ports/agent_microvm_vsock_cid_test.go",
-        "internal/adapters/agent/firecracker/networkplan/renderer_test.go",
-        "internal/adapters/agent/firecracker/networkauth/verifier_test.go",
-        "internal/adapters/agent/firecracker/vsocklease/allocator_test.go"
+        "internal/adapters/agent/firecracker/networkauth/verifier_test.go"
       ]
     }
   },
