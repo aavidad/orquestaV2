@@ -11,27 +11,28 @@ import (
 )
 
 const (
-	recoverySchemaV09             = 5
-	recoverySchemaV10             = 6
-	recoverySchemaV12             = 7
-	recoverySchemaV13             = 8
-	recoverySchemaV14             = 9
-	recoverySchemaV15             = 10
-	recoverySchemaV16             = 11
-	recoverySchemaV17             = 12
-	recoverySchemaV18             = 13
-	recoverySchemaV19             = 14
-	recoverySchemaV20             = 15
-	recoverySchemaV21             = 16
-	recoverySchemaV23Intake       = 17
-	recoverySchemaV23Dossier      = 18
-	recoverySchemaV23Confirmation = 19
-	recoverySchemaV23WizardGaps   = 20
-	recoverySchemaV23             = 21
-	recoverySchemaV38Physical     = 22
-	recoverySchemaV38Capacity     = 23
-	recoverySchemaV38Claim        = 24
-	recoverySchemaV38Environment  = 25
+	recoverySchemaV09                = 5
+	recoverySchemaV10                = 6
+	recoverySchemaV12                = 7
+	recoverySchemaV13                = 8
+	recoverySchemaV14                = 9
+	recoverySchemaV15                = 10
+	recoverySchemaV16                = 11
+	recoverySchemaV17                = 12
+	recoverySchemaV18                = 13
+	recoverySchemaV19                = 14
+	recoverySchemaV20                = 15
+	recoverySchemaV21                = 16
+	recoverySchemaV23Intake          = 17
+	recoverySchemaV23Dossier         = 18
+	recoverySchemaV23Confirmation    = 19
+	recoverySchemaV23WizardGaps      = 20
+	recoverySchemaV23                = 21
+	recoverySchemaV38Physical        = 22
+	recoverySchemaV38Capacity        = 23
+	recoverySchemaV38Claim           = 24
+	recoverySchemaV38Environment     = 25
+	recoverySchemaV38EnvironmentGate = 26
 )
 
 func migrationSchemaRef(migrations []migration) string {
@@ -52,7 +53,7 @@ func recoveryMigrationPrefix(migrations []migration, version int) ([]migration, 
 		version != recoverySchemaV23Confirmation &&
 		version != recoverySchemaV23WizardGaps &&
 		version != recoverySchemaV23 && version != recoverySchemaV38Physical &&
-		version != recoverySchemaV38Capacity && version != recoverySchemaV38Claim && version != recoverySchemaV38Environment {
+		version != recoverySchemaV38Capacity && version != recoverySchemaV38Claim && version != recoverySchemaV38Environment && version != recoverySchemaV38EnvironmentGate {
 		return nil, errors.New("sqlite.recovery_schema_version_invalid")
 	}
 	if version > len(migrations) || migrations[version-1].version != version {

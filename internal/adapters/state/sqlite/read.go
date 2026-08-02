@@ -649,6 +649,10 @@ func readExecutions(ctx context.Context, source queryer, goalValue string) ([]ap
 	if schema.session {
 		sessionProjection = "execution_session_ref"
 	}
+	preservacionProjection := "0"
+	if schema.preservacion {
+		preservacionProjection = "environment_preservation_required"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
        attempt_no, max_execution_attempts, replaces_execution_ref,
@@ -657,7 +661,7 @@ SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key
 	       external_ref, created_at,
        deadline_at, started_at, provider_accepted_at, last_observed_at,
        provider_observed_at, finished_at, failure_code, `+markerProjection+`,
-	       `+governanceProjection+`, `+workspaceProjection+`, `+reviewProjection+`, `+sessionProjection+`
+	       `+governanceProjection+`, `+workspaceProjection+`, `+reviewProjection+`, `+sessionProjection+`, `+preservacionProjection+`
 FROM executions
 WHERE goal_ref = ?
 ORDER BY (
@@ -687,13 +691,13 @@ ORDER BY (
 }
 
 type storedExecution struct {
-	record                                                            application.ExecutionRecord
-	ref, goalRef, workItemRef, state                                  string
-	created                                                           int64
-	deadline, started, accepted, observed, providerObserved, finished sql.NullInt64
-	replaces, reservation, intent, receipt, repository, workspace     sql.NullString
-	purpose, reviewSubject, councilSubject, session                   string
-	attempt, maxAttempts, plan, appSpec, mailbox, governanceVersion   int64
+	record                                                                        application.ExecutionRecord
+	ref, goalRef, workItemRef, state                                              string
+	created                                                                       int64
+	deadline, started, accepted, observed, providerObserved, finished             sql.NullInt64
+	replaces, reservation, intent, receipt, repository, workspace                 sql.NullString
+	purpose, reviewSubject, councilSubject, session                               string
+	attempt, maxAttempts, plan, appSpec, mailbox, governanceVersion, preservacion int64
 }
 
 func scanExecution(rows *sql.Rows) (storedExecution, error) {
@@ -704,7 +708,7 @@ func scanExecution(rows *sql.Rows) (storedExecution, error) {
 		&v.record.AgentRef, &v.record.ExternalRef, &v.created, &v.deadline, &v.started,
 		&v.accepted, &v.observed, &v.providerObserved, &v.finished, &v.record.FailureCode,
 		&v.mailbox, &v.governanceVersion, &v.reservation, &v.intent, &v.receipt, &v.repository, &v.workspace,
-		&v.purpose, &v.reviewSubject, &v.councilSubject, &v.session)
+		&v.purpose, &v.reviewSubject, &v.councilSubject, &v.session, &v.preservacion)
 	if err != nil {
 		return storedExecution{}, mapDatabaseError(err)
 	}
@@ -729,7 +733,8 @@ func restoreExecution(v storedExecution) (application.ExecutionRecord, error) {
 		}
 	}
 	if v.attempt <= 0 || v.maxAttempts <= 0 || v.plan <= 0 || v.appSpec <= 0 ||
-		(v.mailbox != 0 && v.mailbox != 1) || (v.governanceVersion != 0 && v.governanceVersion != 1) {
+		(v.mailbox != 0 && v.mailbox != 1) || (v.governanceVersion != 0 && v.governanceVersion != 1) ||
+		(v.preservacion != 0 && v.preservacion != 1) {
 		return record, invalid(fmt.Errorf("sqlite.execution_generation_invalid"))
 	}
 	record.State, record.AttemptNo, record.MaxExecutionAttempts = application.ExecutionState(v.state), uint64(v.attempt), uint64(v.maxAttempts)
@@ -740,6 +745,7 @@ func restoreExecution(v storedExecution) (application.ExecutionRecord, error) {
 	record.StartedAt, record.ProviderAcceptedAt = restoredTime(v.started), restoredTime(v.accepted)
 	record.LastObservedAt, record.ProviderObservedAt = restoredTime(v.observed), restoredTime(v.providerObserved)
 	record.FinishedAt, record.RecipientMailboxRetired = restoredTime(v.finished), v.mailbox == 1
+	record.RequierePreservacionEntorno = v.preservacion == 1
 	if v.reservation.Valid {
 		record.BudgetReservationRef = v.reservation.String
 	}

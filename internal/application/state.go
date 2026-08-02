@@ -107,37 +107,38 @@ const (
 )
 
 type ExecutionRecord struct {
-	Ref                   goal.ExecutionRef
-	GoalRef               goal.GoalRef
-	WorkItemRef           goal.WorkItemRef
-	AttemptNo             uint64
-	MaxExecutionAttempts  uint64
-	ReplacesExecutionRef  goal.ExecutionRef
-	PlanGeneration        goal.PlanGeneration
-	AppSpecGeneration     goal.AppSpecGeneration
-	SpecHash              string
-	RepositoryRef         identity.RepositoryRef
-	State                 ExecutionState
-	ArtifactMediaType     string
-	IdempotencyKey        string
-	MaxOutputBytes        int64
-	ProviderRef           string
-	ModelRef              string
-	AgentRef              string
-	ExternalRef           string
-	ExecutionSessionRef   ports.ExecutionSessionRef
-	ExecutionWorkspaceRef ports.ExecutionWorkspaceRef
-	BudgetReservationRef  string
-	EffectIntentRef       string
-	LaunchReceiptRef      string
-	CreatedAt             time.Time
-	DeadlineAt            time.Time
-	StartedAt             time.Time
-	ProviderAcceptedAt    time.Time
-	LastObservedAt        time.Time
-	ProviderObservedAt    time.Time
-	FinishedAt            time.Time
-	FailureCode           string
+	Ref                         goal.ExecutionRef
+	GoalRef                     goal.GoalRef
+	WorkItemRef                 goal.WorkItemRef
+	AttemptNo                   uint64
+	MaxExecutionAttempts        uint64
+	ReplacesExecutionRef        goal.ExecutionRef
+	PlanGeneration              goal.PlanGeneration
+	AppSpecGeneration           goal.AppSpecGeneration
+	SpecHash                    string
+	RepositoryRef               identity.RepositoryRef
+	State                       ExecutionState
+	ArtifactMediaType           string
+	IdempotencyKey              string
+	MaxOutputBytes              int64
+	ProviderRef                 string
+	ModelRef                    string
+	AgentRef                    string
+	ExternalRef                 string
+	ExecutionSessionRef         ports.ExecutionSessionRef
+	ExecutionWorkspaceRef       ports.ExecutionWorkspaceRef
+	BudgetReservationRef        string
+	EffectIntentRef             string
+	LaunchReceiptRef            string
+	RequierePreservacionEntorno bool
+	CreatedAt                   time.Time
+	DeadlineAt                  time.Time
+	StartedAt                   time.Time
+	ProviderAcceptedAt          time.Time
+	LastObservedAt              time.Time
+	ProviderObservedAt          time.Time
+	FinishedAt                  time.Time
+	FailureCode                 string
 	// RecipientMailboxRetired is durable evidence that stopping or canceling
 	// this exact recipient retired at least one unresolved V13 envelope. A
 	// later execution retry must reject instead of readdressing that evidence.

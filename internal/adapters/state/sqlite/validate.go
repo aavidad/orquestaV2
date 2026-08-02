@@ -352,7 +352,6 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 			return err
 		}
 	}
-
 	artifacts := make(map[goal.ArtifactRef]application.ArtifactRecord, len(record.Artifacts))
 	occurrences := make(map[string]struct{}, len(record.Artifacts))
 	for _, artifact := range record.Artifacts {

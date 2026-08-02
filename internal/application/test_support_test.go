@@ -3517,6 +3517,7 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 		ExternalRef:    "external:" + request.ExecutionRef.String(),
 		ReceiptRef:     "receipt:launch:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: now(),
+		RequierePreservacionEntorno: request.RequierePreservacionEntorno,
 	}, nil
 }
 

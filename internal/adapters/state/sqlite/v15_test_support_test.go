@@ -82,22 +82,23 @@ func (ids *sqliteV15IDs) NewID(ctx context.Context, prefix string) (string, erro
 }
 
 type sqliteV15External struct {
-	mu                sync.Mutex
-	clock             *sqliteMembershipClock
-	launches          map[string]ports.AgentLaunchReceipt
-	launchRequests    map[goal.ExecutionRef]ports.AgentLaunchRequest
-	content           map[goal.ArtifactRef]ports.ArtifactContent
-	launchErr         error
-	launchStart       chan struct{}
-	launchGate        chan struct{}
-	launchCalls       int
-	stopCalls         int
-	stopStatus        ports.AgentStopStatus
-	observationStatus ports.AgentStatus
-	observationError  string
-	observationUsage  governance.ResourceUsage
-	reviewContent     []byte
-	reviewVerdict     review.Verdict
+	mu                   sync.Mutex
+	clock                *sqliteMembershipClock
+	launches             map[string]ports.AgentLaunchReceipt
+	launchRequests       map[goal.ExecutionRef]ports.AgentLaunchRequest
+	content              map[goal.ArtifactRef]ports.ArtifactContent
+	launchErr            error
+	launchStart          chan struct{}
+	launchGate           chan struct{}
+	launchCalls          int
+	stopCalls            int
+	stopStatus           ports.AgentStopStatus
+	observationStatus    ports.AgentStatus
+	observationError     string
+	observationUsage     governance.ResourceUsage
+	reviewContent        []byte
+	reviewVerdict        review.Verdict
+	requierePreservacion bool
 }
 
 type sqliteV15DefinitelyUnapplied struct{}
@@ -116,7 +117,9 @@ func newSQLiteV15External(clock *sqliteMembershipClock) *sqliteV15External {
 }
 
 func (external *sqliteV15External) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return sqliteTestCapabilities(), nil
+	capacidades := sqliteTestCapabilities()
+	capacidades.RequierePreservacionEntorno = external.requierePreservacion
+	return capacidades, nil
 }
 
 func (external *sqliteV15External) Launch(
@@ -148,6 +151,7 @@ func (external *sqliteV15External) Launch(
 		ProviderRef: capabilities.ProviderRef, ModelRef: capabilities.ModelRef, AgentRef: capabilities.AgentRef,
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		ReceiptRef: "provider-receipt:" + request.ExecutionRef.String(), AcceptedAt: external.clock.Now(),
+		RequierePreservacionEntorno: request.RequierePreservacionEntorno,
 	}
 	external.launches[request.IdempotencyKey] = receipt
 	external.launchRequests[request.ExecutionRef] = request

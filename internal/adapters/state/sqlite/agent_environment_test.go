@@ -16,6 +16,7 @@ import (
 func TestPreservacionEntornoEsDurableIdempotenteYCausal(t *testing.T) {
 	ctx := context.Background()
 	sistema := newSQLiteV15System(t, 2)
+	sistema.external.requierePreservacion = true
 	sistema.orchestrator = newSQLiteV16Orchestrator(t, sistema)
 	creado, err := sistema.orchestrator.Submit(ctx, sistema.access, application.SubmitRequest{
 		RequestRef: "request:a06-preservacion", Statement: "preservar un entorno aislado", Confirm: true,
@@ -32,6 +33,9 @@ func TestPreservacionEntornoEsDurableIdempotenteYCausal(t *testing.T) {
 		t.Fatalf("frontera de preservación incompleta: %+v", registro)
 	}
 	ejecutada, binding := registro.Executions[0], registro.WorkspaceBindings[0]
+	if !ejecutada.RequierePreservacionEntorno {
+		t.Fatal("la aceptación perdió el requisito de preservación")
+	}
 	var cerca uint64
 	for _, consumo := range registro.ConsumptionReceipts {
 		if consumo.Kind == application.ActionLaunchAgent && consumo.ExecutionRef == ejecutada.Ref {
@@ -39,6 +43,24 @@ func TestPreservacionEntornoEsDurableIdempotenteYCausal(t *testing.T) {
 		}
 	}
 	comprobante := comprobantePreservacionSQLite(t, registro, ejecutada, binding, cerca, sistema.clock.Now())
+	terminal := ejecutada
+	terminal.State, terminal.FinishedAt = application.ExecutionSucceeded, sistema.clock.Now().Add(time.Second)
+	tx, err := beginTransaction(ctx, sistema.repository)
+	sqliteTestNoError(t, err)
+	if err = updateExecutionCAS(ctx, tx, terminal, application.ExecutionRunning); !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("terminalización sin preservar aceptada: %v", err)
+	}
+	sqliteTestNoError(t, tx.Rollback())
+	_, err = sistema.repository.db.Exec(`UPDATE executions SET state='succeeded',finished_at=? WHERE ref=?`, requiredTime(terminal.FinishedAt), ejecutada.Ref.String())
+	sqliteTestNoError(t, err)
+	tx, err = beginReadTransaction(ctx, sistema.repository)
+	sqliteTestNoError(t, err)
+	if err = validarRecuperacionPreservacionEntorno(ctx, tx); err == nil || !recoveryErrorContains(err, "sqlite.recovery_agent_environment_preservation_required") {
+		t.Fatalf("recovery específico aceptó terminalización sin preservar: %v", err)
+	}
+	sqliteTestNoError(t, tx.Rollback())
+	_, err = sistema.repository.db.Exec(`UPDATE executions SET state='running',finished_at=NULL WHERE ref=?`, ejecutada.Ref.String())
+	sqliteTestNoError(t, err)
 	persistido, creadoAhora, err := sistema.repository.RegistrarPreservacionEntornoAgente(ctx, comprobante)
 	if err != nil || !creadoAhora || !reflect.DeepEqual(persistido, comprobante) {
 		t.Fatalf("persistir comprobante: creado=%v got=%+v err=%v", creadoAhora, persistido, err)
@@ -70,11 +92,21 @@ func TestPreservacionEntornoEsDurableIdempotenteYCausal(t *testing.T) {
 	if _, _, err := validateRecoveryDatabase(ctx, sistema.repository.db); err != nil {
 		t.Fatalf("recovery previo al reinicio: %v", err)
 	}
+	tx, err = beginTransaction(ctx, sistema.repository)
+	sqliteTestNoError(t, err)
+	if err = updateExecutionCAS(ctx, tx, terminal, application.ExecutionRunning); err != nil {
+		t.Fatalf("comprobante exacto no abrió la compuerta terminal: %v", err)
+	}
+	sqliteTestNoError(t, tx.Rollback())
 	sqliteTestNoError(t, sistema.repository.Close())
 	reiniciado := openSQLiteV15Repository(t, sistema.path, sistema.clock.Now)
 	recuperado, creadoTrasReinicio, err := reiniciado.RegistrarPreservacionEntornoAgente(ctx, comprobante)
 	if err != nil || creadoTrasReinicio || !reflect.DeepEqual(recuperado, comprobante) {
 		t.Fatalf("reinicio perdió el comprobante: creado=%v got=%+v err=%v", creadoTrasReinicio, recuperado, err)
+	}
+	registroReiniciado, err := reiniciado.GetGoal(ctx, registro.Goal.Ref())
+	if err != nil || !registroReiniciado.Executions[0].RequierePreservacionEntorno {
+		t.Fatalf("reinicio perdió la compuerta: err=%v", err)
 	}
 	if _, err := reiniciado.db.Exec(`UPDATE agent_environment_receipts SET fence=fence+1`); err == nil {
 		t.Fatal("la evidencia mutable aceptó una cerca ajena")

@@ -240,8 +240,8 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 			return orchestrator.quarantineUnapplied(ctx, claim, err.Error())
 		}
 	}
-	request.SessionRef = sessionRef
-	request.ReferenciaColocacion = claim.ReferenciaColocacion
+	request.SessionRef, request.ReferenciaColocacion, request.RequierePreservacionEntorno =
+		sessionRef, claim.ReferenciaColocacion, orchestrator.agentCapabilities.RequierePreservacionEntorno
 	targetDigest := authorLaunchTargetDigest(request)
 	if isReviewerExecution(execution) || isCouncilExecution(execution) {
 		targetDigest = reviewerLaunchTargetDigest(request)
@@ -267,7 +267,8 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State = ExecutionRunning
 	execution.ProviderRef, execution.ModelRef = receipt.ProviderRef, receipt.ModelRef
-	execution.AgentRef, execution.ExternalRef = receipt.AgentRef, receipt.ExternalRef
+	execution.AgentRef, execution.ExternalRef, execution.RequierePreservacionEntorno =
+		receipt.AgentRef, receipt.ExternalRef, receipt.RequierePreservacionEntorno
 	execution.StartedAt = transitionAt
 	execution.DeadlineAt = transitionAt.Add(orchestrator.executionTimeout)
 	execution.ProviderAcceptedAt = receipt.AcceptedAt.UTC()

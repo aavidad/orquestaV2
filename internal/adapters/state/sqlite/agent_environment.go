@@ -64,6 +64,33 @@ func leerPreservacionEntorno(ctx context.Context, source queryer, consulta strin
 	return comprobante, err == nil, err
 }
 
+func validarRecuperacionPreservacionEntorno(ctx context.Context, tx *sql.Tx) error {
+	refs, err := readSingleColumn(ctx, tx, `SELECT ref FROM agent_environment_receipts ORDER BY ref`)
+	if err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		comprobante, encontrado, readErr := leerPreservacionEntorno(ctx, tx, consultaPreservacionEntorno+` WHERE ref=?`, ref)
+		if readErr != nil || !encontrado {
+			return errors.New("sqlite.recovery_agent_environment_receipt_invalid")
+		}
+		registro, readErr := readGoalRecord(ctx, tx, comprobante.ObjetivoRef.String())
+		if readErr != nil || application.ValidarCausalidadPreservacionEntornoAgente(comprobante, registro) != nil {
+			return errors.New("sqlite.recovery_agent_environment_receipt_invalid")
+		}
+	}
+	conCompuerta, err := sqliteTableHasColumn(ctx, tx, "executions", "environment_preservation_required")
+	if err != nil || !conCompuerta {
+		return mapDatabaseError(err)
+	}
+	var ausentes int
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM executions e LEFT JOIN agent_environment_receipts r ON r.execution_ref=e.ref WHERE e.environment_preservation_required=1 AND e.state IN ('succeeded','failed','canceled','stopped') AND r.ref IS NULL`).Scan(&ausentes)
+	if err != nil || ausentes != 0 {
+		return errors.New("sqlite.recovery_agent_environment_preservation_required")
+	}
+	return nil
+}
+
 type escanerFila interface{ Scan(...any) error }
 
 func escanearPreservacionEntorno(fila escanerFila) (application.ComprobantePreservacionEntornoAgente, error) {

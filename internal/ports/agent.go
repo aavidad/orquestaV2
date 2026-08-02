@@ -39,14 +39,15 @@ func NewAgentPlacementRef(value string) (AgentPlacementRef, error) {
 func (ref AgentPlacementRef) String() string { return ref.value }
 
 type AgentCapabilities struct {
-	ProviderRef    string
-	ModelRef       string
-	AgentRef       string
-	Unrestricted   bool
-	RoleKeys       []string
-	SkillRefs      []string
-	ToolRefs       []string
-	CapabilityRefs []string
+	ProviderRef                 string
+	ModelRef                    string
+	AgentRef                    string
+	Unrestricted                bool
+	RequierePreservacionEntorno bool
+	RoleKeys                    []string
+	SkillRefs                   []string
+	ToolRefs                    []string
+	CapabilityRefs              []string
 }
 
 // AgentRequirements describes the neutral capabilities required by one work
@@ -68,50 +69,52 @@ type AgentLaunchRequest struct {
 	// ExecutionWorkspaceRef is an opaque, optional execution workspace binding.
 	// When empty the adapter preserves the non-code path.  A physical path is
 	// deliberately never carried through this provider-neutral request.
-	ExecutionWorkspaceRef ExecutionWorkspaceRef
-	GoalRef               goal.GoalRef
-	WorkItemRef           goal.WorkItemRef
-	PlanGeneration        goal.PlanGeneration
-	AppSpecGeneration     goal.AppSpecGeneration
-	ExecutionAttempt      uint64
-	SpecHash              string
-	ActorRef              goal.ActorRef
-	ProjectRef            goal.ProjectRef
-	Objective             string
-	PhaseRef              string
-	PhaseKey              string
-	PhaseTemplateRef      string
-	PhaseInputRefs        []string
-	PhaseCriterionRefs    []string
-	RoleKey               string
-	SkillRefs             []string
-	ToolRefs              []string
-	CapabilityRefs        []string
-	WriteSet              []string
-	OutputContract        string
-	ArtifactMediaType     string
-	IdempotencyKey        string
-	MaxOutputBytes        int64
-	BudgetDemand          governance.BudgetDemand
-	SecurityCriticality   governance.SecurityCriticality
-	ReasoningEffort       governance.ReasoningEffort
+	ExecutionWorkspaceRef       ExecutionWorkspaceRef
+	GoalRef                     goal.GoalRef
+	WorkItemRef                 goal.WorkItemRef
+	PlanGeneration              goal.PlanGeneration
+	AppSpecGeneration           goal.AppSpecGeneration
+	ExecutionAttempt            uint64
+	SpecHash                    string
+	ActorRef                    goal.ActorRef
+	ProjectRef                  goal.ProjectRef
+	Objective                   string
+	PhaseRef                    string
+	PhaseKey                    string
+	PhaseTemplateRef            string
+	PhaseInputRefs              []string
+	PhaseCriterionRefs          []string
+	RoleKey                     string
+	SkillRefs                   []string
+	ToolRefs                    []string
+	CapabilityRefs              []string
+	WriteSet                    []string
+	OutputContract              string
+	ArtifactMediaType           string
+	IdempotencyKey              string
+	MaxOutputBytes              int64
+	BudgetDemand                governance.BudgetDemand
+	SecurityCriticality         governance.SecurityCriticality
+	ReasoningEffort             governance.ReasoningEffort
+	RequierePreservacionEntorno bool
 }
 
 type AgentLaunchReceipt struct {
-	ExecutionRef      goal.ExecutionRef
-	GoalRef           goal.GoalRef
-	WorkItemRef       goal.WorkItemRef
-	PlanGeneration    goal.PlanGeneration
-	AppSpecGeneration goal.AppSpecGeneration
-	ExecutionAttempt  uint64
-	SpecHash          string
-	ProviderRef       string
-	ModelRef          string
-	AgentRef          string
-	ExternalRef       string
-	IdempotencyKey    string
-	ReceiptRef        string
-	AcceptedAt        time.Time
+	ExecutionRef                goal.ExecutionRef
+	GoalRef                     goal.GoalRef
+	WorkItemRef                 goal.WorkItemRef
+	PlanGeneration              goal.PlanGeneration
+	AppSpecGeneration           goal.AppSpecGeneration
+	ExecutionAttempt            uint64
+	SpecHash                    string
+	ProviderRef                 string
+	ModelRef                    string
+	AgentRef                    string
+	ExternalRef                 string
+	IdempotencyKey              string
+	ReceiptRef                  string
+	AcceptedAt                  time.Time
+	RequierePreservacionEntorno bool
 }
 
 type AgentObservation struct {
@@ -400,6 +403,9 @@ func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchR
 	}
 	if receipt.ExecutionAttempt != request.ExecutionAttempt {
 		return &AgentContractError{Code: "agent.receipt_execution_attempt_mismatch"}
+	}
+	if receipt.RequierePreservacionEntorno != request.RequierePreservacionEntorno {
+		return &AgentContractError{Code: "agent.receipt_environment_preservation_mismatch"}
 	}
 	if receipt.SpecHash == "" {
 		return &AgentContractError{Code: "agent.receipt_spec_hash_required"}

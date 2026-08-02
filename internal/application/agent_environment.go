@@ -75,3 +75,7 @@ func ValidarCausalidadPreservacionEntornoAgente(comprobante ComprobantePreservac
 	}
 	return nil
 }
+
+func PermiteTerminalizarEntornoAgente(ejecucion ExecutionRecord, preservada bool) bool {
+	return !ejecucion.RequierePreservacionEntorno || !terminalExecutionState(ejecucion.State) || preservada
+}

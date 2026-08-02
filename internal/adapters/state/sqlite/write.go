@@ -444,7 +444,7 @@ func executionInsertArguments(execution application.ExecutionRecord) []any {
 	}
 }
 
-type executionSchema struct{ mailbox, governance, workspace, reviews, council, session bool }
+type executionSchema struct{ mailbox, governance, workspace, reviews, council, session, preservacion bool }
 
 func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, error) {
 	var schema executionSchema
@@ -453,7 +453,8 @@ func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, 
 		value *bool
 	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance},
 		{"execution_workspace_ref", &schema.workspace}, {"purpose", &schema.reviews},
-		{"council_subject_digest", &schema.council}, {"execution_session_ref", &schema.session}} {
+		{"council_subject_digest", &schema.council}, {"execution_session_ref", &schema.session},
+		{"environment_preservation_required", &schema.preservacion}} {
 		found, err := sqliteTableHasColumn(ctx, source, "executions", column.name)
 		if err != nil {
 			return executionSchema{}, mapDatabaseError(err)
@@ -470,6 +471,9 @@ func updateExecutionCAS(
 	expected application.ExecutionState,
 ) error {
 	if err := requireExecutionReviewIdentity(ctx, transaction, execution); err != nil {
+		return err
+	}
+	if err := exigirPreservacionEntornoTerminal(ctx, transaction, execution); err != nil {
 		return err
 	}
 	governancePersisted, err := sqliteTableHasColumn(ctx, transaction, "executions", "governance_version")
@@ -495,6 +499,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
   AND plan_generation = ? AND app_spec_generation = ? AND spec_hash = ?
   AND artifact_media_type = ? AND idempotency_key = ?
   AND max_output_bytes = ? AND created_at = ?
+  AND environment_preservation_required = ?
   AND (budget_reservation_ref IS NULL OR budget_reservation_ref IS ?)
   AND (effect_intent_ref IS NULL OR effect_intent_ref IS ?)
   AND (launch_receipt_ref IS NULL OR launch_receipt_ref IS ?)`,
@@ -528,6 +533,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 		execution.IdempotencyKey,
 		execution.MaxOutputBytes,
 		requiredTime(execution.CreatedAt),
+		storedBool(execution.RequierePreservacionEntorno),
 		nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef),
 		nullableString(execution.LaunchReceiptRef),
 	)
@@ -578,6 +584,22 @@ func executionPurposeValue(execution application.ExecutionRecord) string {
 	return string(execution.Purpose)
 }
 
+func exigirPreservacionEntornoTerminal(ctx context.Context, source queryer, ejecucion application.ExecutionRecord) error {
+	if application.PermiteTerminalizarEntornoAgente(ejecucion, false) {
+		return nil
+	}
+	var comprobantes int
+	err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM agent_environment_receipts WHERE goal_ref=? AND work_item_ref=? AND execution_ref=? AND workspace_ref=? AND execution_attempt=? AND external_ref=?`,
+		ejecucion.GoalRef.String(), ejecucion.WorkItemRef.String(), ejecucion.Ref.String(), ejecucion.ExecutionWorkspaceRef.String(), ejecucion.AttemptNo, ejecucion.ExternalRef).Scan(&comprobantes)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if !application.PermiteTerminalizarEntornoAgente(ejecucion, comprobantes == 1) {
+		return conflict(errors.New("application.agent_environment_preservation_required"))
+	}
+	return nil
+}
+
 func updateExecutionWorkspaceCAS(
 	ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord,
 ) error {
@@ -624,7 +646,7 @@ UPDATE executions
 SET state = ?, provider_ref = ?, model_ref = ?, agent_ref = ?, external_ref = ?,
     deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
     provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?,
-    governance_version = CASE WHEN budget_reservation_ref IS NULL AND effect_intent_ref IS NULL THEN 0 ELSE 1 END, launch_receipt_ref = ?
+    governance_version = CASE WHEN budget_reservation_ref IS NULL AND effect_intent_ref IS NULL THEN 0 ELSE 1 END, launch_receipt_ref = ?, environment_preservation_required = ?
 WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
   AND provider_ref = '' AND model_ref = '' AND agent_ref = '' AND external_ref = ''
   AND attempt_no = ? AND max_execution_attempts = ?
@@ -648,6 +670,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
 		execution.FailureCode,
 		storedBool(execution.RecipientMailboxRetired),
 		nullableString(execution.LaunchReceiptRef),
+		storedBool(execution.RequierePreservacionEntorno),
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),

@@ -28,7 +28,7 @@ func TestAgentCapacityMigrationRunsOnceAndRollsBackAsAUnit(t *testing.T) {
 		`SELECT COUNT(*) FROM schema_migrations WHERE version=?`,
 		recoverySchemaV38Claim,
 	).Scan(&receipts))
-	if version != recoverySchemaV38Environment || receipts != 1 {
+	if version != recoverySchemaV38EnvironmentGate || receipts != 1 {
 		t.Fatalf("migración inicial version=%d recibos=%d", version, receipts)
 	}
 	sqliteTestNoError(t, repository.Close())

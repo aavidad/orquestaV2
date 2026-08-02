@@ -54,20 +54,21 @@ func validAgentLaunchRequest(t *testing.T) AgentLaunchRequest {
 
 func validAgentLaunchReceipt(request AgentLaunchRequest) AgentLaunchReceipt {
 	return AgentLaunchReceipt{
-		ExecutionRef:      request.ExecutionRef,
-		GoalRef:           request.GoalRef,
-		WorkItemRef:       request.WorkItemRef,
-		PlanGeneration:    request.PlanGeneration,
-		AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt:  request.ExecutionAttempt,
-		SpecHash:          request.SpecHash,
-		ProviderRef:       "provider:fake",
-		ModelRef:          "model:fake",
-		AgentRef:          "agent:fake",
-		ExternalRef:       "external:1",
-		IdempotencyKey:    request.IdempotencyKey,
-		ReceiptRef:        "receipt:launch:1",
-		AcceptedAt:        time.Unix(10, 0).UTC(),
+		ExecutionRef:                request.ExecutionRef,
+		GoalRef:                     request.GoalRef,
+		WorkItemRef:                 request.WorkItemRef,
+		PlanGeneration:              request.PlanGeneration,
+		AppSpecGeneration:           request.AppSpecGeneration,
+		ExecutionAttempt:            request.ExecutionAttempt,
+		SpecHash:                    request.SpecHash,
+		ProviderRef:                 "provider:fake",
+		ModelRef:                    "model:fake",
+		AgentRef:                    "agent:fake",
+		ExternalRef:                 "external:1",
+		IdempotencyKey:              request.IdempotencyKey,
+		ReceiptRef:                  "receipt:launch:1",
+		AcceptedAt:                  time.Unix(10, 0).UTC(),
+		RequierePreservacionEntorno: request.RequierePreservacionEntorno,
 	}
 }
 
@@ -312,14 +313,15 @@ func TestAgentReceiptRejectsEveryCausalAndAdapterIdentityMismatch(t *testing.T) 
 		mutate   func(*AgentLaunchReceipt)
 		wantCode string
 	}{
-		"goal":      {func(value *AgentLaunchReceipt) { value.GoalRef = otherGoal }, "agent.receipt_goal_mismatch"},
-		"work item": {func(value *AgentLaunchReceipt) { value.WorkItemRef = otherWorkItem }, "agent.receipt_work_item_mismatch"},
-		"plan":      {func(value *AgentLaunchReceipt) { value.PlanGeneration++ }, "agent.receipt_plan_generation_mismatch"},
-		"app spec":  {func(value *AgentLaunchReceipt) { value.AppSpecGeneration++ }, "agent.receipt_app_spec_generation_mismatch"},
-		"attempt":   {func(value *AgentLaunchReceipt) { value.ExecutionAttempt++ }, "agent.receipt_execution_attempt_mismatch"},
-		"provider":  {func(value *AgentLaunchReceipt) { value.ProviderRef = "" }, "agent.receipt_provider_ref_required"},
-		"model":     {func(value *AgentLaunchReceipt) { value.ModelRef = "" }, "agent.receipt_model_ref_required"},
-		"agent":     {func(value *AgentLaunchReceipt) { value.AgentRef = "" }, "agent.receipt_agent_ref_required"},
+		"goal":         {func(value *AgentLaunchReceipt) { value.GoalRef = otherGoal }, "agent.receipt_goal_mismatch"},
+		"work item":    {func(value *AgentLaunchReceipt) { value.WorkItemRef = otherWorkItem }, "agent.receipt_work_item_mismatch"},
+		"plan":         {func(value *AgentLaunchReceipt) { value.PlanGeneration++ }, "agent.receipt_plan_generation_mismatch"},
+		"app spec":     {func(value *AgentLaunchReceipt) { value.AppSpecGeneration++ }, "agent.receipt_app_spec_generation_mismatch"},
+		"attempt":      {func(value *AgentLaunchReceipt) { value.ExecutionAttempt++ }, "agent.receipt_execution_attempt_mismatch"},
+		"preservación": {func(value *AgentLaunchReceipt) { value.RequierePreservacionEntorno = true }, "agent.receipt_environment_preservation_mismatch"},
+		"provider":     {func(value *AgentLaunchReceipt) { value.ProviderRef = "" }, "agent.receipt_provider_ref_required"},
+		"model":        {func(value *AgentLaunchReceipt) { value.ModelRef = "" }, "agent.receipt_model_ref_required"},
+		"agent":        {func(value *AgentLaunchReceipt) { value.AgentRef = "" }, "agent.receipt_agent_ref_required"},
 	}
 	for name, testCase := range tests {
 		t.Run(name, func(t *testing.T) {
