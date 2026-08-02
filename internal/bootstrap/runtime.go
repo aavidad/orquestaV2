@@ -608,7 +608,7 @@ func abrirControladoresCuota(
 	}
 	controladores, err := iniciador.IniciarControladoresCuota(context.Background(), application.ConfiguracionControladoresCuotaAgente{
 		VigenciaObservacion: setup.snapshot.RuntimeCapacityObservationTTL(),
-		DemoraReconexion:    time.Second, Ahora: setup.clock.Now,
+		DemoraReconexion:    setup.budgetPolicy.QuotaRetryDelay, Ahora: setup.clock.Now,
 		Sumidero: func(ctx context.Context, observacion application.AgentQuotaObservation, evidencia []byte) error {
 			return application.RegistrarObservacionCuota(ctx, estado, artefactos, observacion, evidencia)
 		},
@@ -627,14 +627,13 @@ func abrirControladoresCuota(
 	return controladores, nil
 }
 
-func cerrarControladoresCuota(controladores []application.ControladorCuotaAgente, limite time.Duration) error {
+func cerrarControladoresCuota(controladores []application.ControladorCuotaAgente, limite time.Duration) (err error) {
 	ctx, cancelar := context.WithTimeout(context.Background(), limite)
 	defer cancelar()
-	var fallos []error
 	for _, controlador := range controladores {
-		fallos = append(fallos, controlador.Cerrar(ctx))
+		err = errors.Join(err, controlador.Cerrar(ctx))
 	}
-	return errors.Join(fallos...)
+	return err
 }
 
 func newBuildOrchestrator(

@@ -23,18 +23,20 @@ func TestControladorCuotaLeeReconectaRotaYCierraExactamente(t *testing.T) {
 	contador := t.TempDir() + "/starts"
 	colocacion, _ := ports.NewAgentPlacementRef("placement:codex:test")
 	observaciones := make(chan application.AgentQuotaObservation, 5)
-	controlador, err := IniciarControladorCuota(context.Background(), ConfiguracionControladorCuota{
-		Comando: os.Args[0], DirectorioCuenta: t.TempDir(),
-		Entorno:              map[string]string{},
-		ReferenciaColocacion: colocacion, MaximoBytesTrama: 4096, VigenciaObservacion: time.Minute,
-		DemoraReconexion: time.Millisecond, Ahora: func() time.Time { return time.Unix(1_000, 0).UTC() },
-		Sumidero: func(_ context.Context, observacion application.AgentQuotaObservation, evidencia []byte) error {
-			if strings.Contains(string(evidencia), "secret") {
-				return fmt.Errorf("la evidencia conservó datos sensibles")
-			}
-			observaciones <- observacion
-			return nil
+	controlador, err := iniciarControladorCuota(context.Background(), configuracionControladorCuota{
+		ConfiguracionControladoresCuotaAgente: application.ConfiguracionControladoresCuotaAgente{
+			VigenciaObservacion: time.Minute, DemoraReconexion: time.Millisecond,
+			Ahora: func() time.Time { return time.Unix(1_000, 0).UTC() },
+			Sumidero: func(_ context.Context, observacion application.AgentQuotaObservation, evidencia []byte) error {
+				if strings.Contains(string(evidencia), "secret") {
+					return fmt.Errorf("la evidencia conservó datos sensibles")
+				}
+				observaciones <- observacion
+				return nil
+			},
 		},
+		comando: os.Args[0], entorno: []string{},
+		referenciaColocacion: colocacion, maximoBytesTrama: 4096,
 		argumentosParaPruebas: []string{"-test.run=^TestControladorCuotaLeeReconectaRotaYCierraExactamente$", "--", "ayudante-cuota", contador},
 	})
 	if err != nil {
@@ -77,7 +79,7 @@ func TestControladorCuotaLeeReconectaRotaYCierraExactamente(t *testing.T) {
 }
 
 func TestControladorCuotaRechazaConfiguracionInvalida(t *testing.T) {
-	if controlador, err := IniciarControladorCuota(context.Background(), ConfiguracionControladorCuota{}); controlador != nil || ErrorCode(err) != CodeStateInvalid {
+	if controlador, err := iniciarControladorCuota(context.Background(), configuracionControladorCuota{}); controlador != nil || ErrorCode(err) != CodeStateInvalid {
 		t.Fatalf("controlador=%v error=%v", controlador, err)
 	}
 }

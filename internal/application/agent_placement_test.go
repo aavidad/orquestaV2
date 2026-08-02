@@ -171,9 +171,8 @@ func TestAgentPlacementBindingUsesExactReservationAndQuota(t *testing.T) {
 		t.Fatal(err)
 	}
 	candidate.Physical.ObservationRevision, reservation.Ref, quota.Ref = 2, "reservation:changed", "quota:changed"
-	quotaRef, quotaRevision := binding.QuotaObservation()
-	if binding.PlacementRef() != placementRef || binding.ReservationRef() != "reservation:one" ||
-		quotaRef != "quota:one" || quotaRevision != 7 {
+	if binding.placementRef != placementRef || binding.reservationRef != "reservation:one" ||
+		binding.quotaObservationRef != "quota:one" || binding.quotaObservationRevision != 7 {
 		t.Fatalf("binding cambió tras mutar entradas: %+v", binding)
 	}
 	for _, mutate := range []func(*AgentCapacityPlacementCandidate){

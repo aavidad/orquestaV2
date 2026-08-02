@@ -2,10 +2,12 @@
 package application
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"time"
 
 	"orquesta/internal/goal"
@@ -65,10 +67,7 @@ func RegistrarObservacionCuota(
 	if err != nil {
 		return err
 	}
-	var revision uint64
-	if encontrada {
-		revision = vigente.Revision
-	}
+	revision := vigente.Revision
 	identidad := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%d\x00%d\x00%d\x00%d\x00%s",
 		observacion.PlacementRef.String(), observacion.WindowRef, observacion.Status, observacion.Quality,
 		observacion.ObservedAt.UnixNano(), observacion.ExpiresAt.UnixNano(),
@@ -98,22 +97,20 @@ func MaterializeAgentQuotaObservation(submission AgentQuotaObservationSubmission
 }
 
 func DecideAgentQuotaGate(now time.Time, record *AgentQuotaObservationRecord) (AgentCapacityAdmissionReason, error) {
-	if record == nil {
+	switch {
+	case record == nil:
 		return AgentCapacityAdmissionUnknown, nil
-	}
-	if now.IsZero() || !validAgentQuotaObservationRecord(*record) || now.Before(record.ObservedAt) {
+	case now.IsZero() || !validAgentQuotaObservationRecord(*record) || now.Before(record.ObservedAt):
 		return "", ErrAgentCapacityInvalid
-	}
-	if !now.Before(record.ExpiresAt) {
+	case !now.Before(record.ExpiresAt):
 		return AgentCapacityAdmissionStale, nil
-	}
-	if record.Quality == governance.UsageQualityUnknown || record.Status == AgentQuotaUnknown {
+	case record.Quality == governance.UsageQualityUnknown || record.Status == AgentQuotaUnknown:
 		return AgentCapacityAdmissionUnknown, nil
-	}
-	if record.Status == AgentQuotaExhausted {
+	case record.Status == AgentQuotaExhausted:
 		return AgentCapacityAdmissionExhausted, nil
+	default:
+		return AgentCapacityAdmissionAvailable, nil
 	}
-	return AgentCapacityAdmissionAvailable, nil
 }
 
 func validAgentQuotaObservationRecord(record AgentQuotaObservationRecord) bool {
@@ -153,12 +150,9 @@ func OrdenarCandidatosColocacion(candidatos []AgentCapacityPlacementCandidate) (
 		}
 		porReferencia[referencia] = candidato
 	}
-	ordenados := make([]AgentCapacityPlacementCandidate, 0, len(porReferencia))
-	for _, candidato := range porReferencia {
-		ordenados = append(ordenados, candidato)
-	}
-	sort.Slice(ordenados, func(i, j int) bool {
-		return ordenados[i].PlacementRef.String() < ordenados[j].PlacementRef.String()
+	ordenados := slices.Collect(maps.Values(porReferencia))
+	slices.SortFunc(ordenados, func(a, b AgentCapacityPlacementCandidate) int {
+		return cmp.Compare(a.PlacementRef.String(), b.PlacementRef.String())
 	})
 	return ordenados, nil
 }
@@ -190,12 +184,4 @@ func NewAgentPlacementBinding(candidate AgentCapacityPlacementCandidate, reserva
 		return AgentPlacementBinding{}, ErrAgentCapacityInvalid
 	}
 	return AgentPlacementBinding{candidate.PlacementRef, reservation.Ref, quota.Ref, quota.Revision}, nil
-}
-
-func (binding AgentPlacementBinding) PlacementRef() ports.AgentPlacementRef {
-	return binding.placementRef
-}
-func (binding AgentPlacementBinding) ReservationRef() string { return binding.reservationRef }
-func (binding AgentPlacementBinding) QuotaObservation() (string, uint64) {
-	return binding.quotaObservationRef, binding.quotaObservationRevision
 }
