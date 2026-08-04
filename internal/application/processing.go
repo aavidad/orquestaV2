@@ -548,6 +548,8 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 		EffectAttemptRef:        attempt.Ref,
 		ActionFence:             attempt.ActionFence,
 		StartedAt:               attempt.StartedAt,
+		ClaimLeaseUntil:         claim.LeaseUntil,
+		ApprovalExpiresAt:       claim.EffectApproval.ExpiresAt,
 	}
 	if err := ports.ValidateAgentLaunchEffectAuthority(request.EffectAuthority); err != nil {
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false,

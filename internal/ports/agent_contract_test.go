@@ -79,6 +79,8 @@ func TestAgentLaunchEffectAuthorityRequiresEveryDurableFact(t *testing.T) {
 		EffectAttemptRef:        "effect-attempt:launch:1",
 		ActionFence:             7,
 		StartedAt:               time.Unix(10, 0).UTC(),
+		ClaimLeaseUntil:         time.Unix(30, 0).UTC(),
+		ApprovalExpiresAt:       time.Unix(20, 0).UTC(),
 	}
 	if err := ValidateAgentLaunchEffectAuthority(valid); err != nil {
 		t.Fatalf("valid authority rejected: %v", err)
@@ -89,6 +91,11 @@ func TestAgentLaunchEffectAuthorityRequiresEveryDurableFact(t *testing.T) {
 		"attempt":       func(value *AgentLaunchEffectAuthority) { value.EffectAttemptRef = "" },
 		"fence":         func(value *AgentLaunchEffectAuthority) { value.ActionFence = 0 },
 		"time":          func(value *AgentLaunchEffectAuthority) { value.StartedAt = time.Time{} },
+		"lease missing": func(value *AgentLaunchEffectAuthority) { value.ClaimLeaseUntil = time.Time{} },
+		"lease expired": func(value *AgentLaunchEffectAuthority) { value.ClaimLeaseUntil = value.StartedAt },
+		"approval expired": func(value *AgentLaunchEffectAuthority) {
+			value.ApprovalExpiresAt = value.StartedAt
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -98,6 +105,11 @@ func TestAgentLaunchEffectAuthorityRequiresEveryDurableFact(t *testing.T) {
 				t.Fatalf("invalid authority accepted: %+v", candidate)
 			}
 		})
+	}
+	automatic := valid
+	automatic.ApprovalExpiresAt = time.Time{}
+	if err := ValidateAgentLaunchEffectAuthority(automatic); err != nil {
+		t.Fatalf("durable automatic approval rejected: %v", err)
 	}
 }
 

@@ -111,6 +111,11 @@ type AgentLaunchEffectAuthority struct {
 	EffectAttemptRef        string
 	ActionFence             uint64
 	StartedAt               time.Time
+	ClaimLeaseUntil         time.Time
+	// ApprovalExpiresAt is zero only for durable automatic approvals, whose
+	// existing contract has no expiry. Isolation-specific adapters may require
+	// an explicit approval and therefore a non-zero value.
+	ApprovalExpiresAt time.Time
 }
 
 func ValidateAgentLaunchEffectAuthority(authority AgentLaunchEffectAuthority) error {
@@ -125,6 +130,12 @@ func ValidateAgentLaunchEffectAuthority(authority AgentLaunchEffectAuthority) er
 		return &AgentContractError{Code: "agent.action_fence_required"}
 	case authority.StartedAt.IsZero():
 		return &AgentContractError{Code: "agent.effect_started_at_required"}
+	case authority.ClaimLeaseUntil.IsZero():
+		return &AgentContractError{Code: "agent.claim_lease_until_required"}
+	case !authority.ClaimLeaseUntil.After(authority.StartedAt):
+		return &AgentContractError{Code: "agent.claim_lease_until_invalid"}
+	case !authority.ApprovalExpiresAt.IsZero() && !authority.ApprovalExpiresAt.After(authority.StartedAt):
+		return &AgentContractError{Code: "agent.approval_expires_at_invalid"}
 	default:
 		return nil
 	}

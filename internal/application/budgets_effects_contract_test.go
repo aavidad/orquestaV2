@@ -173,12 +173,15 @@ func TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation(t *testing.T) {
 		}
 		request := fixture.agent.launchRequests[0]
 		authority, attempt := request.EffectAuthority, record.EffectAttempts[0]
+		persistedClaim := fixture.repository.effectAttemptClaim()
 		if ports.ValidateAgentLaunchEffectAuthority(authority) != nil ||
 			authority.AuthorizationReceiptRef != fixture.intent.Authority.Ref() ||
 			authority.EffectApprovalRef != attempt.ApprovalRef ||
 			authority.EffectAttemptRef != attempt.Ref || authority.ActionFence != attempt.ActionFence ||
-			!authority.StartedAt.Equal(attempt.StartedAt) {
-			t.Fatalf("launch lost durable effect authority: authority=%+v attempt=%+v", authority, attempt)
+			!authority.StartedAt.Equal(attempt.StartedAt) ||
+			!authority.ClaimLeaseUntil.Equal(persistedClaim.LeaseUntil) ||
+			!authority.ApprovalExpiresAt.Equal(persistedClaim.EffectApproval.ExpiresAt) {
+			t.Fatalf("launch lost durable effect authority: authority=%+v attempt=%+v claim=%+v", authority, attempt, persistedClaim)
 		}
 	})
 }

@@ -20,9 +20,11 @@ type effectDecisionMutation struct {
 
 type effectDecisionRepository struct {
 	*memoryRepository
-	governanceMu sync.Mutex
-	decisions    map[string]effectDecisionMutation
-	decideCalls  int
+	governanceMu           sync.Mutex
+	effectAttemptMu        sync.Mutex
+	decisions              map[string]effectDecisionMutation
+	decideCalls            int
+	lastEffectAttemptClaim ActionClaim
 }
 
 func newEffectDecisionRepository() *effectDecisionRepository {
@@ -110,7 +112,16 @@ func (repository *effectDecisionRepository) RecordEffectAttempt(
 	}
 	record.EffectAttempts = append(record.EffectAttempts, state.Attempt)
 	repository.memoryRepository.records[state.Attempt.Subject.GoalRef] = record
+	repository.effectAttemptMu.Lock()
+	repository.lastEffectAttemptClaim = state.Claim
+	repository.effectAttemptMu.Unlock()
 	return state.Attempt, true, nil
+}
+
+func (repository *effectDecisionRepository) effectAttemptClaim() ActionClaim {
+	repository.effectAttemptMu.Lock()
+	defer repository.effectAttemptMu.Unlock()
+	return repository.lastEffectAttemptClaim
 }
 
 func TestDecideEffectIsAuthorizedRequestIdempotentAndExact(t *testing.T) {
