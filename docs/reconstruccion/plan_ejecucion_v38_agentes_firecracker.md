@@ -606,9 +606,13 @@ sobre estados físicos aproximados.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B10.0a | `agente_microvm@3f4a57b`: contrato puro de sesión, entrada y eventos paginados; usa `ejecutor_ref`, una sola idempotencia HTTP extremo a extremo y separa `revision`, `revision_trabajo` y `revision_sesion`. No anuncia capacidad. | Cerrada con revisión premium, suite Rust completa, Clippy estricto y build musl; sin KVM. | Se mide al cerrar B10.0 |
-| B10.0b | Repositorio hermano: caso de uso y ledger durable de sesión/eventos, separado de revisiones física y de trabajo. | Tras B10.0a. | Se mide al cerrar B10.0 |
-| B10.0c | Repositorio hermano: puente del protocolo huésped reconectable al puerto `MotorMicrovm`, con negativos sin KVM. | Tras B10.0b. | Se mide al cerrar B10.0 |
+| B10.0a | `agente_microvm@3f4a57b`: contrato público puro de sesión, entrada y eventos paginados; usa `ejecutor_ref`, una sola idempotencia HTTP extremo a extremo y separa `revision`, `revision_trabajo` y `revision_sesion`. No anuncia capacidad. | Cerrada con revisión premium, suite Rust completa, Clippy estricto y build musl; sin KVM. | Se mide al cerrar B10.0 |
+| B10.0a2 | `agente_microvm@33ca509`: descriptor físico inmutable con digest y ejecutor, validado de forma cruzada por Rust y Go. Conserva la frontera del perfil sin convertir el descriptor en observación, reserva o anuncio de capacidad. | Tras B10.0a; cerrada sin KVM. | Se mide al cerrar B10.0 |
+| B10.0b1 | `agente_microvm@c8fcd3c`: modelo durable de sesión con siete estados, cuarentena explícita `Ambigua` y resultado terminal. Separa revisiones física y de trabajo; todavía no incorpora ledger ni persistencia de eventos. | Tras B10.0a2; cerrada sin KVM. | Se mide al cerrar B10.0 |
+| B10.0b2 | Repositorio hermano: puertos mínimos para sesión, entrada, observación por cursor y resultado, dependientes del modelo durable; no exponen SQLite, Firecracker ni tipos del consumidor. | Tras B10.0b1. | Se mide al cerrar B10.0 |
+| B10.0b3 | Repositorio hermano: adaptador SQLite privado para sesión/eventos y resultado terminal, con idempotencia, revisión y cuarentena `Ambigua`; no crea un ledger paralelo al estado de sesión. | Tras B10.0b2. | Se mide al cerrar B10.0 |
+| B10.0b4 | Repositorio hermano: casos de uso y recuperación causal sobre los puertos y el adaptador durable; conserva la ambigüedad y no reinicia trabajo por intuición. | Tras B10.0b3. | Se mide al cerrar B10.0 |
+| B10.0c | Repositorio hermano: puente del protocolo huésped reconectable al puerto `MotorMicrovm`, con negativos sin KVM. | Tras B10.0b4. | Se mide al cerrar B10.0 |
 | B10.0d | Repositorio hermano: API Unix y cliente Go para iniciar sesión, enviar entrada y observar eventos por cursor. | Tras B10.0a–c; fija revisión pública. | Se mide al cerrar B10.0 |
 | B10.1 | `60bf4646` + `6262dc43`: `AgentLaunchRequest` transporta autorización, aprobación, intento, cerca, tiempo, vencimiento del claim y vencimiento de la aprobación durables; la liquidación defensiva conserva el enlace causal al intento. | Cerrada con revisión premium y pruebas normal/race; no usa reloj vivo, no cambia el fingerprint histórico ni obliga al adaptador de proceso. | Delta real al regularizar |
 | B10.2 | Guarda de dependencia: fija la revisión B10.0 del módulo Go público; prohíbe `replace` local, segundo HTTP, tipos físicos o acceso al registro hermano. | Tras B10.0d; no añade producto. | Estimación histórica `P=0,V=20` |
@@ -616,10 +620,13 @@ sobre estados físicos aproximados.
 | B10.4 | Registro canónico y bootstrap componen socket, secreto por referencia y adaptador; retira A05.1b solo al completar negociación. | Tras B10.3; serial en composición. | Se mide al cerrar |
 | B10.5 | Reinicio, concesión byte a byte, cerca, duplicado, receipt/socket perdidos, cursor durable, concurrencia y `-race`. | Último; sin KVM. | Se mide al cerrar |
 
-B10 queda `wired/exercised_without_kvm`. B11 conserva parada exacta y B12
-conserva preservación, sello y el primer Codex físico real. Una microVM
-`disponible`, una orden síncrona o un evento físico no acreditan trabajo de
-agente iniciado o completado.
+B10.0 sigue abierto: B10.0a, B10.0a2 y B10.0b1 aportan contrato, descriptor y
+modelo, pero faltan puertos, persistencia, casos de uso, recuperación, puente y
+cliente público. B10.1 está cerrado; B10 completo no está `wired` ni
+`exercised_without_kvm`. B11 conserva parada exacta y B12 conserva
+preservación, sello y el primer Codex físico real. Una microVM `disponible`,
+una orden síncrona o un evento físico no acreditan trabajo de agente iniciado o
+completado.
 
 ### B12 — `P=400, V=500`
 
