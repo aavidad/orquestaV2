@@ -23,6 +23,10 @@ Este apartado prevalece sobre los cortes anteriores.
   cambios privados, CAS canónico y conflicto para toda repetición divergente.
   Pasaron 218 pruebas activas, Clippy estricto y build musl; B10, SQLite y el
   primer agente físico siguen abiertos.
+- B10.0b3a queda cerrado en Agente MicroVM `ee8f15c` + `56f1426`: SQLite v15
+  persiste claves, intención, sesión, receipts, eventos y resultado sin otra
+  autoridad de revisión/efectos; migra v14 poblada y revierte completa ante
+  fallo DDL. `B10.0b3b`, recovery y el recorrido real siguen abiertos.
 - No se arrancaron Orquesta, Firecracker, Jailer ni KVM. El servidor técnico
   mínimo B04 terminó cooperativamente y retiró su socket; no quedan procesos
   propios.
