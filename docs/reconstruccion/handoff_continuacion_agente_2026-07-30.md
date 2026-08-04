@@ -1,5 +1,26 @@
 # Documento de continuidad de Orquesta — 2026-07-30
 
+## Avance operativo del 2026-08-04
+
+Este apartado prevalece sobre los cortes anteriores.
+
+- B09 queda `exercised` sobre el candidato reproducible `bb90346`: dos builds
+  dieron huésped `44941753…`, initramfs `837a38ed…` y perfil `04954ea4…`
+  idénticos. `df6469c` cerró el falso verde musl y `BUG-ORQ-20260804-615`
+  conserva la incidencia.
+- El ADR B09 regulariza el corte `7c9ef00..bb90346` como
+  `P=+2683/-117,V=+1179/-69`, sin reutilizar B08 ni crear holgura. V38 queda en
+  `P=9.283,V=10.712`.
+- B04 queda `exercised_without_kvm`: Orquesta `e80b8873` y Agente MicroVM
+  `da0bd609` están ligados por commits, árboles Git, contrato SHA-256 y binario
+  reproducible `faa230b9…`. El gate cruzado pasó normal y con `-race`; el
+  hermano pasó 221 pruebas activas, Clippy y su conector Go normal/`-race`/vet.
+- No se arrancaron Orquesta, Firecracker, Jailer ni KVM. El servidor técnico
+  mínimo B04 terminó cooperativamente y retiró su socket; no quedan procesos
+  propios.
+- Orden causal vigente: B01, B10, B11 y B12. La microVM física real permanece
+  reservada a B12; no relanzar Goals V23 antiguos.
+
 ## Avance operativo del 2026-08-02
 
 Este apartado prevalece sobre las menciones posteriores que todavía presentan

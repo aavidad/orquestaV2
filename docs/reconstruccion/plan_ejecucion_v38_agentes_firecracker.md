@@ -129,13 +129,11 @@ antiguo ni convertirá esta coordinación temporal en otra arquitectura.
   perfil como compuerta durable sin débito ni liberación.
 
 Ya existen el proyecto independiente `agentmicrovm`, su protocolo local
-versionado, el registro físico privado, la concesión CID durable y el motor
-Firecracker que consume ese CID. También existen la fuente neutral de
-capacidad, el controlador de cuota estructurada, la colocación opaca fijada,
-el protocolo huésped vivo y la imagen reproducible con SBOM. Aún faltan cerrar
-el intermediario/proxy, el retorno sellado y la
-evidencia física `1/5/10/16/20`. Tampoco existe aún el conector final Orquesta ni la prueba
-cruzada de compatibilidad. Esas son las brechas que siguen.
+versionado, el registro físico privado, la concesión CID durable, el motor
+Firecracker, el intermediario de egreso controlado, el protocolo huésped y la
+imagen reproducible. B04 ya ejercita el contrato cruzado contra candidatos
+sellados sin KVM. Aún faltan el conector final Orquesta, parada/preservación
+compuestas, retorno sellado y evidencia física `1/5/10/16/20`.
 
 ## Orden causal y write-sets
 
@@ -473,6 +471,20 @@ carreras, `vet` y los contratos focales de independencia, configuración y
 transporte. No acredita B04, `ORC-28` ni V38. B02 cerró después su siguiente
 dependencia serial; B05/B06/B08/B09 quedan causalmente abiertas y no se
 mezclan en un mismo conjunto de escritura.
+
+### B04 — `P=50, V=350`
+
+| Hijo | Conjunto de escritura y resultado | Orden | Presupuesto |
+|---|---|---|---:|
+| B04.1 | `e80b8873`: aceptación opt-in construye el binario hermano locked, verifica versión/digest, lo sirve en socket Unix privado y consume capacidades solo por `agentmicrovm.local.v1`; cubre protocolo, método, trama, socket, digest, dependencias y limpieza. | Después de B02/B07/B08/B09; no arranca KVM. | Consumido `P=0,V=336` |
+| B04.2 | `7f8e0f20` y manifiesto de evidencia: fijan commits, árboles Git, contrato, binario reproducible, toolchains, resultados e inventario sin hash autorreferente. | Último; abre B01. | Consumido `P=0,V=2` |
+
+B04 queda `exercised_without_kvm` con `P=0,V=338`. Dos builds aislados dieron
+el binario `faa230b9…56764a`; el gate normal y con `-race`, las 221 pruebas
+activas Rust, Clippy y el conector Go normal/`-race`/`vet` quedaron verdes.
+La evidencia está en
+[`evidencia_b04_contrato_cruzado_2026-08-04.md`](evidencia_b04_contrato_cruzado_2026-08-04.md).
+No acredita B10, B12, `ORC-28` ni V38. La siguiente dependencia es B01.
 
 ### B05 — `P=490, V=320`
 
