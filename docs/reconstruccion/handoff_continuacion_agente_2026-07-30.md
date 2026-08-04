@@ -15,10 +15,13 @@ Este apartado prevalece sobre los cortes anteriores.
   `da0bd609` están ligados por commits, árboles Git, contrato SHA-256 y binario
   reproducible `faa230b9…`. El gate cruzado pasó normal y con `-race`; el
   hermano pasó 221 pruebas activas, Clippy y su conector Go normal/`-race`/vet.
+- B01 queda `exercised` en `d3134bab`, `P=0,V=50`: selección, aislamiento,
+  cuota, colocación y evidencia B04 permanecen ortogonales; microVM incompleta
+  falla antes de construir proceso y el límite Codex no gobierna el despacho.
 - No se arrancaron Orquesta, Firecracker, Jailer ni KVM. El servidor técnico
   mínimo B04 terminó cooperativamente y retiró su socket; no quedan procesos
   propios.
-- Orden causal vigente: B01, B10, B11 y B12. La microVM física real permanece
+- Orden causal vigente: B10, B11 y B12. La microVM física real permanece
   reservada a B12; no relanzar Goals V23 antiguos.
 
 ## Avance operativo del 2026-08-02

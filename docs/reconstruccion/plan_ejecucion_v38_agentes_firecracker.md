@@ -428,7 +428,12 @@ neutral, ejecutada sin KVM, atribuya prematuramente la composición física.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B01.1 | Compuerta compacta: verifica selección A04, fuentes/controlador A05 y frontera cruzada B04 sin reimplementarlos. Cubre `process` sin conexión al hermano, microVM sin ruta alternativa, controlador anfitrión solo de cuota, procesos separados y ausencia de límite Codex global. | Tras A05/A08/B03/B04; abre B10. | `P=0, V=50` |
+| B01.1 | `d3134bab`: compuerta compacta verifica selección A04, fuentes/controlador A05 y evidencia B04 sin reimplementarlos. Cubre fallo cerrado de microVM incompleta antes de proceso, controlador anfitrión solo de cuota, colocación/candidatos neutrales y ausencia del límite Codex en gobierno/processing. | `exercised` tras A05/A08/B03/B04; abre B10. | Consumido `P=0,V=50` |
+
+B01 queda `exercised` en su techo exacto. El focal normal y con `-race`, más
+los focales dinámicos de bootstrap para microVM incompleta y catálogo de
+capacidad, quedaron verdes. No compone todavía el adaptador, no abre socket ni
+arranca Orquesta, Codex, Agente MicroVM o KVM. La siguiente dependencia es B10.
 
 ### B02 — `P=200, V=250`
 
