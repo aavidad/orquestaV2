@@ -18,6 +18,11 @@ Este apartado prevalece sobre los cortes anteriores.
 - B01 queda `exercised` en `d3134bab`, `P=0,V=50`: selección, aislamiento,
   cuota, colocación y evidencia B04 permanecen ortogonales; microVM incompleta
   falla antes de construir proceso y el límite Codex no gobierna el despacho.
+- B10.0b2 queda cerrado en Agente MicroVM `3fc86eb`: el puerto durable fija
+  intención exacta, replay conservador, receipt reconstruible sin fabricar
+  cambios privados, CAS canónico y conflicto para toda repetición divergente.
+  Pasaron 218 pruebas activas, Clippy estricto y build musl; B10, SQLite y el
+  primer agente físico siguen abiertos.
 - No se arrancaron Orquesta, Firecracker, Jailer ni KVM. El servidor técnico
   mínimo B04 terminó cooperativamente y retiró su socket; no quedan procesos
   propios.
