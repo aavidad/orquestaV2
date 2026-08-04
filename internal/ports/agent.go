@@ -97,6 +97,37 @@ type AgentLaunchRequest struct {
 	SecurityCriticality         governance.SecurityCriticality
 	ReasoningEffort             governance.ReasoningEffort
 	RequierePreservacionEntorno bool
+	// EffectAuthority carries the durable facts that authorized this physical
+	// launch. Process adapters may ignore it; adapters crossing a stronger
+	// isolation boundary can require ValidateAgentLaunchEffectAuthority.
+	EffectAuthority AgentLaunchEffectAuthority
+}
+
+// AgentLaunchEffectAuthority is provider-neutral and contains no credential
+// material. Every value is copied from already persisted governance facts.
+type AgentLaunchEffectAuthority struct {
+	AuthorizationReceiptRef string
+	EffectApprovalRef       string
+	EffectAttemptRef        string
+	ActionFence             uint64
+	StartedAt               time.Time
+}
+
+func ValidateAgentLaunchEffectAuthority(authority AgentLaunchEffectAuthority) error {
+	switch {
+	case !validAgentReceiptRef(authority.AuthorizationReceiptRef):
+		return &AgentContractError{Code: "agent.authorization_receipt_ref_required"}
+	case !validAgentReceiptRef(authority.EffectApprovalRef):
+		return &AgentContractError{Code: "agent.effect_approval_ref_required"}
+	case !validAgentReceiptRef(authority.EffectAttemptRef):
+		return &AgentContractError{Code: "agent.effect_attempt_ref_required"}
+	case authority.ActionFence == 0:
+		return &AgentContractError{Code: "agent.action_fence_required"}
+	case authority.StartedAt.IsZero():
+		return &AgentContractError{Code: "agent.effect_started_at_required"}
+	default:
+		return nil
+	}
 }
 
 type AgentLaunchReceipt struct {

@@ -72,6 +72,35 @@ func validAgentLaunchReceipt(request AgentLaunchRequest) AgentLaunchReceipt {
 	}
 }
 
+func TestAgentLaunchEffectAuthorityRequiresEveryDurableFact(t *testing.T) {
+	valid := AgentLaunchEffectAuthority{
+		AuthorizationReceiptRef: "authorization:launch:1",
+		EffectApprovalRef:       "effect-approval:launch:1",
+		EffectAttemptRef:        "effect-attempt:launch:1",
+		ActionFence:             7,
+		StartedAt:               time.Unix(10, 0).UTC(),
+	}
+	if err := ValidateAgentLaunchEffectAuthority(valid); err != nil {
+		t.Fatalf("valid authority rejected: %v", err)
+	}
+	tests := map[string]func(*AgentLaunchEffectAuthority){
+		"authorization": func(value *AgentLaunchEffectAuthority) { value.AuthorizationReceiptRef = "" },
+		"approval":      func(value *AgentLaunchEffectAuthority) { value.EffectApprovalRef = "" },
+		"attempt":       func(value *AgentLaunchEffectAuthority) { value.EffectAttemptRef = "" },
+		"fence":         func(value *AgentLaunchEffectAuthority) { value.ActionFence = 0 },
+		"time":          func(value *AgentLaunchEffectAuthority) { value.StartedAt = time.Time{} },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := valid
+			mutate(&candidate)
+			if AgentContractErrorCode(ValidateAgentLaunchEffectAuthority(candidate)) == "" {
+				t.Fatalf("invalid authority accepted: %+v", candidate)
+			}
+		})
+	}
+}
+
 func TestAgentPlacementRefIsOpaqueAndCanonical(t *testing.T) {
 	ref, err := NewAgentPlacementRef("placement:codex:account-1")
 	if err != nil || ref.String() != "placement:codex:account-1" {

@@ -542,6 +542,17 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 	if err != nil {
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
 	}
+	request.EffectAuthority = ports.AgentLaunchEffectAuthority{
+		AuthorizationReceiptRef: claim.Action.EffectIntent.Authority.Ref(),
+		EffectApprovalRef:       attempt.ApprovalRef,
+		EffectAttemptRef:        attempt.Ref,
+		ActionFence:             attempt.ActionFence,
+		StartedAt:               attempt.StartedAt,
+	}
+	if err := ports.ValidateAgentLaunchEffectAuthority(request.EffectAuthority); err != nil {
+		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false,
+			orchestrator.quarantineUnappliedAttempt(ctx, claim, err.Error(), attempt.Ref)
+	}
 	receipt, launchErr := orchestrator.launcher.Launch(ctx, request)
 	if launchErr != nil {
 		var handled error
@@ -1253,6 +1264,15 @@ func (orchestrator *Orchestrator) quarantineUnapplied(ctx context.Context, claim
 	return orchestrator.quarantineEffect(ctx, claim, code, true)
 }
 
+func (orchestrator *Orchestrator) quarantineUnappliedAttempt(
+	ctx context.Context,
+	claim ActionClaim,
+	code string,
+	attemptRef string,
+) error {
+	return orchestrator.quarantineEffectWithAttempt(ctx, claim, code, true, attemptRef)
+}
+
 func (orchestrator *Orchestrator) quarantineUnknownApplied(ctx context.Context, claim ActionClaim) error {
 	return orchestrator.quarantineUnknownAppliedWithCause(ctx, claim, "")
 }
@@ -1288,9 +1308,24 @@ func (orchestrator *Orchestrator) quarantineEffect(
 	code string,
 	definitelyUnapplied bool,
 ) error {
+	return orchestrator.quarantineEffectWithAttempt(ctx, claim, code, definitelyUnapplied, "")
+}
+
+func (orchestrator *Orchestrator) quarantineEffectWithAttempt(
+	ctx context.Context,
+	claim ActionClaim,
+	code string,
+	definitelyUnapplied bool,
+	attemptRef string,
+) error {
 	code = stableFailureCode(code)
 	now := orchestrator.clock.Now()
 	settlement, settlementErr := claimBudgetSettlement(claim, now, definitelyUnapplied)
+	if settlementErr == nil && definitelyUnapplied && attemptRef != "" &&
+		claim.Action.Kind == ActionLaunchAgent && claim.BudgetReservationRef != "" {
+		causal, err := releaseSettlementForAttempt(claim, attemptRef, now)
+		settlement, settlementErr = &causal, err
+	}
 	if settlementErr != nil {
 		return settlementErr
 	}

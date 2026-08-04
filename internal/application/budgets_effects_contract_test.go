@@ -171,6 +171,15 @@ func TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation(t *testing.T) {
 			t.Fatalf("live approval did not invoke exactly once: result=%+v launches=%d attempts=%d receipts=%d err=%v/%v",
 				result, fixture.agent.launches, len(record.EffectAttempts), len(record.EffectReceipts), err, loadErr)
 		}
+		request := fixture.agent.launchRequests[0]
+		authority, attempt := request.EffectAuthority, record.EffectAttempts[0]
+		if ports.ValidateAgentLaunchEffectAuthority(authority) != nil ||
+			authority.AuthorizationReceiptRef != fixture.intent.Authority.Ref() ||
+			authority.EffectApprovalRef != attempt.ApprovalRef ||
+			authority.EffectAttemptRef != attempt.Ref || authority.ActionFence != attempt.ActionFence ||
+			!authority.StartedAt.Equal(attempt.StartedAt) {
+			t.Fatalf("launch lost durable effect authority: authority=%+v attempt=%+v", authority, attempt)
+		}
 	})
 }
 
