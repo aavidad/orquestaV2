@@ -606,7 +606,7 @@ sobre estados físicos aproximados.
 
 | Hijo | Write-set y resultado | Orden | Presupuesto |
 |---|---|---|---:|
-| B10.0a | Repositorio hermano: contrato puro de sesión, entrada y eventos paginados. No anuncia capacidad. | Primero; sin KVM. | Se mide al cerrar B10.0 |
+| B10.0a | `agente_microvm@3f4a57b`: contrato puro de sesión, entrada y eventos paginados; usa `ejecutor_ref`, una sola idempotencia HTTP extremo a extremo y separa `revision`, `revision_trabajo` y `revision_sesion`. No anuncia capacidad. | Cerrada con revisión premium, suite Rust completa, Clippy estricto y build musl; sin KVM. | Se mide al cerrar B10.0 |
 | B10.0b | Repositorio hermano: caso de uso y ledger durable de sesión/eventos, separado de revisiones física y de trabajo. | Tras B10.0a. | Se mide al cerrar B10.0 |
 | B10.0c | Repositorio hermano: puente del protocolo huésped reconectable al puerto `MotorMicrovm`, con negativos sin KVM. | Tras B10.0b. | Se mide al cerrar B10.0 |
 | B10.0d | Repositorio hermano: API Unix y cliente Go para iniciar sesión, enviar entrada y observar eventos por cursor. | Tras B10.0a–c; fija revisión pública. | Se mide al cerrar B10.0 |
