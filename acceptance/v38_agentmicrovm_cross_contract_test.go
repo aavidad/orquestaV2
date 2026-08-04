@@ -72,6 +72,9 @@ func TestV38B04CrossRepositoryContract(t *testing.T) {
 	if err := v38B04RequireDigest(binary, manifest.AgentMicroVM.BinarySHA256); err != nil {
 		t.Fatal(err)
 	}
+	if version, err := exec.Command(binary, "--version").CombinedOutput(); err != nil || !bytes.Contains(version, []byte("protocolo="+v38B04Protocol)) {
+		t.Fatalf("versión hermana incompatible: %v: %s", err, bytes.TrimSpace(version))
+	}
 	if err := v38B04RequireDigest(binary, strings.Repeat("0", 64)); err == nil {
 		t.Fatal("un resumen de binario distinto fue aceptado")
 	}
@@ -132,6 +135,9 @@ func TestV38B04CrossRepositoryContract(t *testing.T) {
 	if _, err := os.Lstat(socket); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("socket no retirado: %v", err)
 	}
+	if entries, err := os.ReadDir(runtimeRoot); err != nil || len(entries) != 1 || entries[0].Name() != "agentmicrovm.toml" {
+		t.Fatalf("inventario runtime inesperado: %v: %v", entries, err)
+	}
 }
 
 func v38B04ReadManifest(t *testing.T, path string) v38B04ManifestV1 {
@@ -179,7 +185,7 @@ func v38B04ValidateSubjects(t *testing.T, manifest v38B04ManifestV1, orquestaRoo
 	if got := strings.TrimSpace(v38B04Git(t, siblingRoot, "rev-parse", "HEAD")); got != manifest.AgentMicroVM.SubjectCommit {
 		t.Fatalf("revisión hermana=%s, esperada=%s", got, manifest.AgentMicroVM.SubjectCommit)
 	}
-	if status := v38B04Git(t, siblingRoot, "status", "--porcelain", "--untracked-files=no"); status != "" {
+	if status := v38B04Git(t, siblingRoot, "status", "--porcelain", "--untracked-files=all"); status != "" {
 		t.Fatalf("checkout hermano modificado: %q", status)
 	}
 	if got := strings.TrimSpace(v38B04Git(t, orquestaRoot, "show", manifest.Orquesta.SubjectCommit+":"+manifest.Orquesta.ContractPath)); v38B04Digest([]byte(got)) != manifest.Orquesta.ContractSHA256 {
@@ -189,9 +195,9 @@ func v38B04ValidateSubjects(t *testing.T, manifest v38B04ManifestV1, orquestaRoo
 	if err != nil || v38B04Digest(bytes.TrimSpace(current)) != manifest.Orquesta.ContractSHA256 {
 		t.Fatalf("el contrato activo difiere del sujeto: %v", err)
 	}
-	productModule := v38B04Git(t, orquestaRoot, "show", manifest.Orquesta.SubjectCommit+":go.mod")
-	siblingCargo := v38B04Git(t, siblingRoot, "show", manifest.AgentMicroVM.SubjectCommit+":Cargo.toml")
-	if strings.Contains(productModule, "agente_microvm") || strings.Contains(siblingCargo, "orquesta") {
+	productModules := v38B04Git(t, orquestaRoot, "show", manifest.Orquesta.SubjectCommit+":go.mod") + v38B04Git(t, orquestaRoot, "show", manifest.Orquesta.SubjectCommit+":vendor/modules.txt")
+	siblingModules := v38B04Git(t, siblingRoot, "show", manifest.AgentMicroVM.SubjectCommit+":Cargo.toml") + v38B04Git(t, siblingRoot, "show", manifest.AgentMicroVM.SubjectCommit+":Cargo.lock")
+	if strings.Contains(productModules, "agente_microvm") || strings.Contains(siblingModules, "orquesta") {
 		t.Fatal("los sujetos introducen importación cruzada")
 	}
 }
