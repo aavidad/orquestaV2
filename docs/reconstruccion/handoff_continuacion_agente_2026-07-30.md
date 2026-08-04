@@ -331,7 +331,9 @@ documento.
 - Orquesta solo lo consumirá mediante `agentmicrovm.local.v1` sobre socket Unix.
   No compartirán base de datos, sistema de archivos, rutas, secretos ni
   importaciones.
-- El presupuesto V38 auditado es `P=7.200,V=10.083`. A02 queda
+- El presupuesto V38 regularizado es `P=9.283,V=10.712`; B09 sustituyó su
+  estimación por el corte reproducible exacto mediante el ADR del 2026-08-04.
+  A02 queda
   `170/238`, A03 `334/537`, A05 `682/508` y A07 `165/695`.
 - La compuerta completa de agentes autónomos, microVM y Firecracker sigue
   incompleta y no acreditada.

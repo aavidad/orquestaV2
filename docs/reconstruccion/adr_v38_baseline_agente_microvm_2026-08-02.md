@@ -56,8 +56,9 @@ cuadrar una estimación destruiría evidencia sin reducir autoridades.
 
 - B03 deja de fingir que una aplicación ya publicada puede reconstruirse en
   550 líneas y conserva un write-set pequeño de caracterización y contrato.
-- El total prospectivo `P=7.200,V=10.083` sigue midiendo el cambio V38 desde el
-  corte de planificación; el ledger debe mostrar además este baseline externo
+- El total prospectivo original `P=7.200,V=10.083` fue sustituido por
+  `P=9.283,V=10.712` al regularizar el corte reproducible B09 en su ADR del
+  2026-08-04; el ledger debe mostrar además este baseline externo
   para que la medida no se interprete como tamaño total del producto compuesto.
 - La existencia de una ruta documentada no equivale a capacidad. El servidor,
   la CLI y los clientes deben negociar la operación antes de usarla.
