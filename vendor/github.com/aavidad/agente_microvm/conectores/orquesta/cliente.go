@@ -154,6 +154,60 @@ func (c *Cliente) EnviarEntradaSesion(
 	return respuesta, nil
 }
 
+// ReconciliarEntradaSesion consulta una entrada exacta sin reenviar su cuerpo.
+func (c *Cliente) ReconciliarEntradaSesion(
+	ctx context.Context,
+	clave string,
+	referencia string,
+	sesionRef string,
+	cerca uint64,
+) (RespuestaReconciliacionEntradaSesionTrabajoV1, error) {
+	if clave == "" || strings.ContainsAny(clave, "\r\n") {
+		return RespuestaReconciliacionEntradaSesionTrabajoV1{}, &ErrorConfiguracion{Causa: "clave_idempotencia_invalida"}
+	}
+	if !referenciaSesionValida(referencia) || !referenciaSesionValida(sesionRef) {
+		return RespuestaReconciliacionEntradaSesionTrabajoV1{}, errorSesion("sesion_trabajo.referencia_invalida")
+	}
+	if !cercaSesionValida(cerca) {
+		return RespuestaReconciliacionEntradaSesionTrabajoV1{}, errorSesion("sesion_trabajo.cerca_invalida")
+	}
+	parametros := url.Values{}
+	parametros.Set("cerca", strconv.FormatUint(cerca, 10))
+	respuesta, err := solicitarEstricto[RespuestaReconciliacionEntradaSesionTrabajoV1](
+		ctx,
+		c,
+		http.MethodGet,
+		rutaSesion(referencia, sesionRef, "/entradas/reconciliacion")+"?"+parametros.Encode(),
+		clave,
+		nil,
+	)
+	if err != nil {
+		return RespuestaReconciliacionEntradaSesionTrabajoV1{}, err
+	}
+	if respuesta.EjecucionRef != referencia || respuesta.SesionRef != sesionRef || respuesta.Cerca != cerca {
+		return RespuestaReconciliacionEntradaSesionTrabajoV1{}, errorSesion("sesion_trabajo.referencia_invalida")
+	}
+	switch respuesta.Estado {
+	case EstadoReconciliacionEntradaPendiente:
+		if respuesta.Comprobante != nil {
+			return RespuestaReconciliacionEntradaSesionTrabajoV1{}, errorSesion("sesion_trabajo.estado_terminal_incoherente")
+		}
+	case EstadoReconciliacionEntradaResuelta:
+		if respuesta.Comprobante == nil {
+			return RespuestaReconciliacionEntradaSesionTrabajoV1{}, errorSesion("sesion_trabajo.estado_terminal_incoherente")
+		}
+		if err := validarRespuestaSesion(referencia, sesionRef, cerca, *respuesta.Comprobante); err != nil {
+			return RespuestaReconciliacionEntradaSesionTrabajoV1{}, err
+		}
+		if respuesta.Comprobante.Estado != EstadoSesionActiva || respuesta.Comprobante.Terminal || respuesta.Comprobante.Resultado != nil {
+			return RespuestaReconciliacionEntradaSesionTrabajoV1{}, errorSesion("sesion_trabajo.evento_incoherente")
+		}
+	default:
+		return RespuestaReconciliacionEntradaSesionTrabajoV1{}, errorSesion("sesion_trabajo.estado_terminal_incoherente")
+	}
+	return respuesta, nil
+}
+
 // LeerEventosSesion obtiene una página durable sin alterar la sesión.
 func (c *Cliente) LeerEventosSesion(
 	ctx context.Context,
@@ -701,6 +755,17 @@ func errorSesion(codigo string) error { return &ErrorSesionTrabajoV1{Codigo: cod
 func validarEstructuraJSONSesion[T any](datos []byte) error {
 	var cero T
 	switch any(cero).(type) {
+	case RespuestaReconciliacionEntradaSesionTrabajoV1:
+		objeto, err := objetoJSONConCampos(datos, []string{
+			"ejecucion_ref", "sesion_ref", "cerca", "estado", "comprobante",
+		})
+		if err != nil {
+			return err
+		}
+		if bytes.Equal(objeto["comprobante"], []byte("null")) {
+			return nil
+		}
+		return validarEstructuraJSONSesion[RespuestaSesionTrabajoV1](objeto["comprobante"])
 	case RespuestaSesionTrabajoV1:
 		objeto, err := objetoJSONConCampos(datos, []string{
 			"ejecucion_ref", "sesion_ref", "estado", "revision", "revision_trabajo",

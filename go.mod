@@ -5,7 +5,7 @@ go 1.25.0
 toolchain go1.25.11
 
 require (
-	github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260805040409-18f803734342
+	github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260805043645-c1161cc5a57c
 	golang.org/x/text v0.38.0
 )
 

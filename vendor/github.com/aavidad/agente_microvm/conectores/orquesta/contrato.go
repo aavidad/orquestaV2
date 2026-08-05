@@ -214,6 +214,23 @@ type RespuestaSesionTrabajoV1 struct {
 	Resultado       *ResultadoTerminalSesionTrabajoV1 `json:"resultado"`
 }
 
+// EstadoReconciliacionEntradaSesionTrabajoV1 distingue espera de receipt durable.
+type EstadoReconciliacionEntradaSesionTrabajoV1 string
+
+const (
+	EstadoReconciliacionEntradaPendiente EstadoReconciliacionEntradaSesionTrabajoV1 = "pendiente"
+	EstadoReconciliacionEntradaResuelta  EstadoReconciliacionEntradaSesionTrabajoV1 = "resuelta"
+)
+
+// RespuestaReconciliacionEntradaSesionTrabajoV1 nunca contiene entrada ni secretos.
+type RespuestaReconciliacionEntradaSesionTrabajoV1 struct {
+	EjecucionRef string                                     `json:"ejecucion_ref"`
+	SesionRef    string                                     `json:"sesion_ref"`
+	Cerca        uint64                                     `json:"cerca"`
+	Estado       EstadoReconciliacionEntradaSesionTrabajoV1 `json:"estado"`
+	Comprobante  *RespuestaSesionTrabajoV1                  `json:"comprobante"`
+}
+
 type EventoSesionTrabajoV1 struct {
 	SesionRef       string                            `json:"sesion_ref"`
 	Secuencia       uint64                            `json:"secuencia"`
