@@ -322,6 +322,9 @@ func TestRunnerDrainsButNeverExposesChildStderr(t *testing.T) {
 
 func TestRunnerChildReceivesOnlySealedEnvironment(t *testing.T) {
 	t.Setenv("ORQUESTA_EXECUTOR_SECRET_MARKER", "NO_FILTRAR")
+	t.Setenv("HTTP_PROXY", "http://192.168.1.1:8080")
+	t.Setenv("HTTPS_PROXY", "https://proxy-ambient.invalid")
+	t.Setenv("NO_PROXY", "*")
 	runner, capture := helperRunner(t, "environment", "env-ok", protocol.MaxPacketBytesV1)
 	var output bytes.Buffer
 	if err := runner.Run(context.Background(), packetReader(t, 2*time.Second), &output); err != nil {
@@ -331,8 +334,8 @@ func TestRunnerChildReceivesOnlySealedEnvironment(t *testing.T) {
 		t.Fatalf("artefacto=%q", output.String())
 	}
 	command := capture.command()
-	if command == nil || !slices.Equal(command.Env, sealedEnvironment()) {
-		t.Fatalf("env=%q want=%q", command.Env, sealedEnvironment())
+	if command == nil || !slices.Equal(command.Env, sealedEnvironment("")) {
+		t.Fatalf("env=%q want=%q", command.Env, sealedEnvironment(""))
 	}
 	for _, variable := range command.Env {
 		if strings.Contains(variable, "NO_FILTRAR") || strings.HasPrefix(variable, "ORQUESTA_EXECUTOR_SECRET_MARKER=") {
@@ -340,6 +343,64 @@ func TestRunnerChildReceivesOnlySealedEnvironment(t *testing.T) {
 		}
 	}
 	assertReaped(t, command)
+}
+
+func TestRunnerProjectsOnlyPacketAuthorizedControlledEgress(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "http://10.0.0.1:8080")
+	t.Setenv("HTTPS_PROXY", "https://proxy-ambient.invalid")
+	t.Setenv("ALL_PROXY", "socks5://127.0.0.1:9999")
+	t.Setenv("NO_PROXY", "*")
+	runner, capture := helperRunner(t, "environment-egress", "env-egress-ok", protocol.MaxPacketBytesV1)
+	var output bytes.Buffer
+	if err := runner.Run(
+		context.Background(),
+		bytes.NewReader(packetBytesWithProxy(t, 2*time.Second, protocol.ControlledEgressProxyURLV1)),
+		&output,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if output.String() != "env-egress-ok" {
+		t.Fatalf("artefacto=%q", output.String())
+	}
+	command := capture.command()
+	want := sealedEnvironment(protocol.ControlledEgressProxyURLV1)
+	if command == nil || !slices.Equal(command.Env, want) {
+		t.Fatalf("env=%q want=%q", command.Env, want)
+	}
+	for _, variable := range command.Env {
+		if strings.HasPrefix(variable, "http_proxy=") || strings.HasPrefix(variable, "https_proxy=") ||
+			strings.HasPrefix(variable, "ALL_PROXY=") || strings.HasPrefix(variable, "all_proxy=") ||
+			strings.HasPrefix(variable, "NO_PROXY=") || strings.HasPrefix(variable, "no_proxy=") {
+			t.Fatalf("ambient or bypass proxy reached child: %q", variable)
+		}
+	}
+	assertReaped(t, command)
+}
+
+func TestRunnerRejectsMutatedControlledEgressBeforeStartingChild(t *testing.T) {
+	started := false
+	runner, err := New(Config{
+		Command: "unused", MaxPacketBytes: protocol.MaxPacketBytesV1,
+		MaxFrameBytes: protocol.MaxPacketBytesV1, MaxDiagnosticBytes: 64,
+		CleanupTimeout: time.Second,
+		CommandFactory: func(context.Context, string, ...string) *exec.Cmd {
+			started = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet := packetValue(2 * time.Second)
+	packet.ControlledEgressProxy = "http://127.0.0.1:18081"
+	raw, err := json.Marshal(packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runner.Run(context.Background(), bytes.NewReader(raw), io.Discard)
+	if protocol.ErrorCode(err) != protocol.CodePacketField || started {
+		t.Fatalf("code=%q started=%v error=%v", protocol.ErrorCode(err), started, err)
+	}
 }
 
 func TestRunnerRejectsConfigurationThatExpandsCanonicalLimits(t *testing.T) {
@@ -445,17 +506,27 @@ func packetReader(t *testing.T, timeout time.Duration) io.Reader {
 
 func packetBytes(t *testing.T, timeout time.Duration) []byte {
 	t.Helper()
-	packet := protocol.WorkPacketV1{
-		Schema: protocol.WorkPacketSchemaV1, Prompt: "prompt secreto exacto",
-		Model: "gpt-5.6", Effort: "high", TokenBudget: 4096,
-		MaxOutputBytes: 64 << 10, TimeBudgetMS: uint64(timeout.Milliseconds()),
-		GoalRef: "goal", WorkItemRef: "work", ExecutionRef: "execution", EffectAttemptRef: "attempt",
-	}
+	return packetBytesWithProxy(t, timeout, "")
+}
+
+func packetBytesWithProxy(t *testing.T, timeout time.Duration, proxy string) []byte {
+	t.Helper()
+	packet := packetValue(timeout)
+	packet.ControlledEgressProxy = proxy
 	encoded, err := json.Marshal(packet)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return encoded
+}
+
+func packetValue(timeout time.Duration) protocol.WorkPacketV1 {
+	return protocol.WorkPacketV1{
+		Schema: protocol.WorkPacketSchemaV1, Prompt: "prompt secreto exacto",
+		Model: "gpt-5.6", Effort: "high", TokenBudget: 4096,
+		MaxOutputBytes: 64 << 10, TimeBudgetMS: uint64(timeout.Milliseconds()),
+		GoalRef: "goal", WorkItemRef: "work", ExecutionRef: "execution", EffectAttemptRef: "attempt",
+	}
 }
 
 func assertReaped(t *testing.T, command *exec.Cmd) {
@@ -530,10 +601,9 @@ func TestCodexWorkExecutorHelperProcess(t *testing.T) {
 		artifact = "descendant-artifact"
 	case "stderr-success":
 		_, _ = fmt.Fprintln(os.Stderr, strings.Repeat("CHILD_SECRET", 1024))
-	case "environment":
-		if !slices.Equal(os.Environ(), sealedEnvironment()) || os.Getenv("ORQUESTA_EXECUTOR_SECRET_MARKER") != "" {
-			os.Exit(84)
-		}
+	case "environment", "environment-egress":
+		// The parent test asserts exec.Cmd.Env exactly. The helper deliberately
+		// avoids reading ambient environment, preserving the product config guard.
 	}
 	serveSuccessfulProtocol(reader, initial, artifact)
 }

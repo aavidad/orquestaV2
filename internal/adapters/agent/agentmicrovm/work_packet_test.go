@@ -50,6 +50,9 @@ func TestBuildWorkPacketV1ExactDeterministicAndAllowlisted(t *testing.T) {
 	if packet != want {
 		t.Fatalf("packet = %+v, want %+v", packet, want)
 	}
+	if strings.Contains(string(raw), "controlled_egress_proxy") {
+		t.Fatalf("packet without grant exposed egress: %s", raw)
+	}
 	if renderer.calls != 1 || !reflect.DeepEqual(renderer.prompt, ports.AgentPromptFromLaunchRequest(request)) {
 		t.Fatalf("renderer calls/prompt = %d/%+v", renderer.calls, renderer.prompt)
 	}
@@ -72,6 +75,47 @@ func TestBuildWorkPacketV1ExactDeterministicAndAllowlisted(t *testing.T) {
 	secondRaw[0] = '!'
 	if raw[0] == '!' {
 		t.Fatal("returned encodings alias storage")
+	}
+}
+
+func TestBuildWorkPacketV1ProjectsOnlySignedControlledEgress(t *testing.T) {
+	request := withEgressAuthority(t, validLaunchRequest(t), validEgressGrant())
+	binding := profileBinding(request, validDescriptor(t, true))
+	compiled, err := Compile(request, binding, request.EffectAuthority.ActionFence)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	packet, raw, err := BuildWorkPacketV1(
+		request, binding, compiled, "gpt-5.6", &recordingWorkPacketRenderer{output: "work"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packet.ControlledEgressProxy != codexwork.ControlledEgressProxyURLV1 ||
+		!bytes.Contains(raw, []byte(`"controlled_egress_proxy":"`+codexwork.ControlledEgressProxyURLV1+`"`)) {
+		t.Fatalf("controlled egress was not projected exactly: packet=%+v raw=%s", packet, raw)
+	}
+	for _, forbidden := range []string{
+		request.EgressAuthority.PolicyRef,
+		request.EgressAuthority.PayloadSHA256,
+		string(request.EgressAuthority.CanonicalPayload),
+		"api.openai.com",
+		"chatgpt.com",
+	} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("egress authority leaked into work packet: %q", forbidden)
+		}
+	}
+
+	crossedGrant := validEgressGrant()
+	crossedGrant.Destinos[0].Puertos[0] = 8443
+	crossed := withEgressAuthority(t, request, crossedGrant)
+	_, _, err = BuildWorkPacketV1(
+		crossed, binding, compiled, "gpt-5.6", &recordingWorkPacketRenderer{output: "work"},
+	)
+	if code := ErrorCode(err); code != CodeWorkPacketCompilationMismatch {
+		t.Fatalf("crossed egress authority code=%q error=%v", code, err)
 	}
 }
 
@@ -436,6 +480,16 @@ func cloneCompilationForPacketTest(value Compilation) Compilation {
 	if value.Plan.PerfilSHA256 != nil {
 		profileSHA := *value.Plan.PerfilSHA256
 		value.Plan.PerfilSHA256 = &profileSHA
+	}
+	if value.Plan.Egreso != nil {
+		egress := *value.Plan.Egreso
+		egress.Destinos = append([]microvm.DestinoEgreso(nil), value.Plan.Egreso.Destinos...)
+		for index := range egress.Destinos {
+			egress.Destinos[index].Puertos = append(
+				[]uint16(nil), value.Plan.Egreso.Destinos[index].Puertos...,
+			)
+		}
+		value.Plan.Egreso = &egress
 	}
 	return value
 }

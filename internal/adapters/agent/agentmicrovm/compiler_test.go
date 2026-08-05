@@ -2,6 +2,9 @@ package agentmicrovm
 
 import (
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"math"
 	"reflect"
 	"strings"
@@ -143,6 +146,36 @@ func TestCompileSourceFingerprintIsDeterministicAndBindsPromptFacts(t *testing.T
 	}
 }
 
+func TestCompileSourceFingerprintWithoutEgressPreservesLegacyV1Bytes(t *testing.T) {
+	request := validLaunchRequest(t)
+	compiled := mustCompile(t, request, validDescriptor(t, false))
+	const wantLegacyV1 = "063b6f091cd7b2377606a25b62b5495bef4eb67791bc600fbe606ba24c9e3121"
+	if got := hex.EncodeToString(compiled.sourceFingerprint[:]); got != wantLegacyV1 {
+		t.Fatalf("legacy source fingerprint=%s", got)
+	}
+}
+
+func TestCompileSourceFingerprintBindsExactDurableEgressAuthority(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, true)
+	request = withEgressAuthority(t, request, validEgressGrant())
+	first, err := Compile(request, profileBinding(request, descriptor), request.EffectAuthority.ActionFence)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	changedGrant := validEgressGrant()
+	changedGrant.Destinos[0].Puertos[0] = 8443
+	changedRequest := withEgressAuthority(t, request, changedGrant)
+	second, err := Compile(changedRequest, profileBinding(changedRequest, descriptor), changedRequest.EffectAuthority.ActionFence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.sourceFingerprint == second.sourceFingerprint {
+		t.Fatal("durable egress authority mutation preserved source fingerprint")
+	}
+}
+
 func TestCompileRejectsMissingAuthorityFenceAndLimits(t *testing.T) {
 	validRequest := validLaunchRequest(t)
 	validProfile := validDescriptor(t, false)
@@ -257,7 +290,8 @@ func TestCompileRejectsDescriptorMutationAndUnauthorizedEgress(t *testing.T) {
 func TestCompileUsesOnlyControlBrokerUntilEgressIsAuthorized(t *testing.T) {
 	request := validLaunchRequest(t)
 	descriptor := validDescriptor(t, true)
-	compiled, err := Compile(request, profileBinding(request, descriptor), request.EffectAuthority.ActionFence)
+	binding := profileBinding(request, descriptor)
+	compiled, err := Compile(request, binding, request.EffectAuthority.ActionFence)
 	if err != nil {
 		t.Fatalf("Compile() with available proxy = %v", err)
 	}
@@ -266,11 +300,74 @@ func TestCompileUsesOnlyControlBrokerUntilEgressIsAuthorized(t *testing.T) {
 		t.Fatalf("unauthorized egress entered plan: %+v", compiled.Plan)
 	}
 
+	grant := validEgressGrant()
+	request = withEgressAuthority(t, request, grant)
+	approved, err := Compile(request, binding, request.EffectAuthority.ActionFence)
+	if err != nil {
+		t.Fatalf("Compile() with approved egress = %v", err)
+	}
+	if !reflect.DeepEqual(approved.Plan.Servicios, descriptor.ServiciosDisponibles) ||
+		!reflect.DeepEqual(approved.Plan.Egreso, grant) {
+		t.Fatalf("approved egress not bound to plan: %+v", approved.Plan)
+	}
+	approved.Plan.Egreso.Destinos[0].Puertos[0] = 8443
+	if grant.Destinos[0].Puertos[0] == 8443 {
+		t.Fatal("compiled egress aliases source grant storage")
+	}
+
+	withoutProxy := validDescriptor(t, false)
+	bindingWithoutProxy := profileBinding(request, withoutProxy)
+	_, err = Compile(request, bindingWithoutProxy, request.EffectAuthority.ActionFence)
+	if code := ErrorCode(err); code != CodeEgressProxyRequired {
+		t.Fatalf("grant without proxy code = %q; err=%v", code, err)
+	}
+
+	invalidGrant := validEgressGrant()
+	invalidGrant.Referencia = "egreso:INVALID"
+	request = withEgressAuthority(t, request, invalidGrant)
+	_, err = Compile(request, binding, request.EffectAuthority.ActionFence)
+	if code := ErrorCode(err); code != CodePlanInvalid {
+		t.Fatalf("invalid grant code = %q; err=%v", code, err)
+	}
+
 	descriptor.ServiciosDisponibles = descriptor.ServiciosDisponibles[1:]
 	descriptor = sealDescriptor(t, descriptor)
 	_, err = Compile(request, profileBinding(request, descriptor), request.EffectAuthority.ActionFence)
 	if code := ErrorCode(err); code != CodeControlBrokerRequired {
 		t.Fatalf("missing broker code = %q; err=%v", code, err)
+	}
+}
+
+func TestCompileRejectsMalformedOrCrossedDurableEgressAuthority(t *testing.T) {
+	descriptor := validDescriptor(t, true)
+	validRaw, err := json.Marshal(validEgressGrant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name      string
+		policyRef string
+		raw       string
+		code      string
+	}{
+		{"unknown field", "egreso:codex", strings.TrimSuffix(string(validRaw), "}") + `,"extra":true}`, CodeEgressAuthorityInvalid},
+		{"case variant root field", "egreso:codex", strings.Replace(string(validRaw), `"esquema":`, `"Esquema":`, 1), CodeEgressAuthorityInvalid},
+		{"case variant nested field", "egreso:codex", strings.Replace(string(validRaw), `"host":"api.openai.com"`, `"Host":"api.openai.com"`, 1), CodeEgressAuthorityInvalid},
+		{"null", "egreso:codex", `null`, CodeEgressAuthorityInvalid},
+		{"duplicate root field", "egreso:codex", strings.Replace(string(validRaw), `"esquema":`, `"esquema":"agentmicrovm.concesion-egreso.v1","esquema":`, 1), CodeEgressAuthorityInvalid},
+		{"duplicate nested field", "egreso:codex", strings.Replace(string(validRaw), `"host":"api.openai.com"`, `"host":"api.openai.com","host":"other.example"`, 1), CodeEgressAuthorityInvalid},
+		{"concatenated", "egreso:codex", string(validRaw) + `{}`, CodeEgressAuthorityInvalid},
+		{"reference crossed", "egreso:other", string(validRaw), CodeEgressAuthorityMismatch},
+		{"wrong schema", "egreso:codex", strings.Replace(string(validRaw), microvm.EsquemaConcesionEgreso, "agentmicrovm.concesion-egreso.v0", 1), CodePlanInvalid},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			request := withRawEgressAuthority(validLaunchRequest(t), test.policyRef, test.raw)
+			_, compileErr := Compile(request, profileBinding(request, descriptor), request.EffectAuthority.ActionFence)
+			if code := ErrorCode(compileErr); code != test.code {
+				t.Fatalf("ErrorCode()=%q want=%q err=%v", code, test.code, compileErr)
+			}
+		})
 	}
 }
 
@@ -297,6 +394,43 @@ func profileBinding(
 	descriptor microvm.DescriptorPerfilLanzamientoV1,
 ) ProfileBinding {
 	return ProfileBinding{PlacementRef: request.ReferenciaColocacion, Descriptor: descriptor}
+}
+
+func validEgressGrant() *microvm.ConcesionEgreso {
+	return &microvm.ConcesionEgreso{
+		Esquema: microvm.EsquemaConcesionEgreso, Referencia: "egreso:codex",
+		Destinos: []microvm.DestinoEgreso{
+			{Host: "api.openai.com", Puertos: []uint16{443}},
+			{Host: "chatgpt.com", Puertos: []uint16{443}},
+		},
+		MaximoConexiones: 16, LimiteTiempoMS: 60_000,
+		LimiteSubidaBytes: 1 << 20, LimiteBajadaBytes: 8 << 20,
+	}
+}
+
+func withEgressAuthority(
+	t *testing.T,
+	request ports.AgentLaunchRequest,
+	grant *microvm.ConcesionEgreso,
+) ports.AgentLaunchRequest {
+	t.Helper()
+	raw, err := json.Marshal(grant)
+	if err != nil {
+		t.Fatalf("json.Marshal(egress grant) = %v", err)
+	}
+	return withRawEgressAuthority(request, grant.Referencia, string(raw))
+}
+
+func withRawEgressAuthority(
+	request ports.AgentLaunchRequest,
+	policyRef string,
+	raw string,
+) ports.AgentLaunchRequest {
+	digest := sha256.Sum256([]byte(raw))
+	request.EgressAuthority = ports.AgentLaunchEgressAuthority{
+		PolicyRef: policyRef, PayloadSHA256: hex.EncodeToString(digest[:]), CanonicalPayload: []byte(raw),
+	}
+	return request
 }
 
 func validLaunchRequest(t *testing.T) ports.AgentLaunchRequest {

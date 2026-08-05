@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"hash"
 	"io"
 	"math"
@@ -27,6 +28,9 @@ const (
 	CodeProfileBindingInvalid   = "agentmicrovm.profile_binding_invalid"
 	CodeDescriptorInvalid       = "agentmicrovm.profile_descriptor_invalid"
 	CodeControlBrokerRequired   = "agentmicrovm.control_broker_required"
+	CodeEgressAuthorityInvalid  = "agentmicrovm.egress_authority_invalid"
+	CodeEgressAuthorityMismatch = "agentmicrovm.egress_authority_mismatch"
+	CodeEgressProxyRequired     = "agentmicrovm.egress_proxy_required"
 	CodeGrantWindowInvalid      = "agentmicrovm.grant_window_invalid"
 	CodeLimitsInvalid           = "agentmicrovm.limits_invalid"
 	CodeLimitOverflow           = "agentmicrovm.limit_overflow"
@@ -119,8 +123,15 @@ func Compile(
 	if err := microvm.ValidarDescriptorPerfilLanzamientoV1(descriptor); err != nil {
 		return Compilation{}, fail(CodeDescriptorInvalid, err)
 	}
-	services, ok := servicesWithoutEgress(descriptor)
-	if !ok {
+	egress, egressCode, err := decodeEgressAuthority(request.EgressAuthority)
+	if err != nil {
+		return Compilation{}, fail(egressCode, err)
+	}
+	services, serviceCode := authorizedServices(descriptor, egress != nil)
+	if serviceCode != "" {
+		return Compilation{}, fail(serviceCode, nil)
+	}
+	if len(services) == 0 {
 		return Compilation{}, fail(CodeControlBrokerRequired, nil)
 	}
 	issuedAt, validity, ok := grantWindow(request.EffectAuthority)
@@ -154,6 +165,7 @@ func Compile(
 		LimiteDiscoPicoBytes: uint64(request.BudgetDemand.Resources.DiskBytes),
 		LimiteTokensAgente:   uint64(request.BudgetDemand.Resources.Tokens),
 		Servicios:            services,
+		Egreso:               egress,
 	}
 	if err := microvm.ValidarPlanConDescriptorPerfilLanzamientoV1(descriptor, plan); err != nil {
 		return Compilation{}, fail(CodePlanInvalid, err)
@@ -237,6 +249,15 @@ func compilationSourceFingerprint(request ports.AgentLaunchRequest, binding Prof
 	fingerprintTime(digest, request.EffectAuthority.StartedAt)
 	fingerprintTime(digest, request.EffectAuthority.ClaimLeaseUntil)
 	fingerprintTime(digest, request.EffectAuthority.ApprovalExpiresAt)
+	// Empty authority deliberately writes no byte: launches without egress keep
+	// the exact pre-egress v1 fingerprint. A present tuple gets its own domain
+	// and seals the byte-exact durable authority, not only its parsed semantics.
+	if !request.EgressAuthority.IsEmpty() {
+		fingerprintString(digest, compilationEgressFingerprintDomain)
+		fingerprintString(digest, request.EgressAuthority.PolicyRef)
+		fingerprintString(digest, request.EgressAuthority.PayloadSHA256)
+		fingerprintString(digest, string(request.EgressAuthority.CanonicalPayload))
+	}
 
 	// ProfileBinding preserves declared service order. The sibling descriptor
 	// digest sorts services for identity; this seal must still detect aliasing or
@@ -259,7 +280,6 @@ func compilationSourceFingerprint(request ports.AgentLaunchRequest, binding Prof
 		fingerprintString(digest, service.IdentidadRef)
 		fingerprintString(digest, service.IdentidadSHA256)
 	}
-
 	var result [sha256.Size]byte
 	copy(result[:], digest.Sum(nil))
 	return result
@@ -329,13 +349,53 @@ func completeAccessAuthority(authority ports.AgentLaunchAccessAuthority) bool {
 		authority.MailboxEndpointRef.String() != ""
 }
 
-func servicesWithoutEgress(descriptor microvm.DescriptorPerfilLanzamientoV1) ([]microvm.ServicioVsock, bool) {
+func authorizedServices(
+	descriptor microvm.DescriptorPerfilLanzamientoV1,
+	egressAuthorized bool,
+) ([]microvm.ServicioVsock, string) {
+	services := make([]microvm.ServicioVsock, 0, len(descriptor.ServiciosDisponibles))
+	hasBroker := false
+	hasProxy := false
 	for _, service := range descriptor.ServiciosDisponibles {
-		if service.Papel == "control_broker" {
-			return []microvm.ServicioVsock{service}, true
+		switch service.Papel {
+		case "control_broker":
+			hasBroker = true
+			services = append(services, service)
+		case "controlled_egress_proxy":
+			hasProxy = true
+			if egressAuthorized {
+				services = append(services, service)
+			}
 		}
 	}
-	return nil, false
+	if !hasBroker {
+		return nil, CodeControlBrokerRequired
+	}
+	if !egressAuthorized {
+		return services, ""
+	}
+	if !hasProxy {
+		return nil, CodeEgressProxyRequired
+	}
+	return services, ""
+}
+
+const compilationEgressFingerprintDomain = "orquesta.agentmicrovm.egress-authority.v1\x00"
+
+func decodeEgressAuthority(
+	authority ports.AgentLaunchEgressAuthority,
+) (*microvm.ConcesionEgreso, string, error) {
+	if authority.IsEmpty() {
+		return nil, "", nil
+	}
+	grant, err := microvm.DecodificarConcesionEgresoV1(authority.CanonicalPayload)
+	if err != nil {
+		return nil, CodeEgressAuthorityInvalid, err
+	}
+	if grant.Referencia != authority.PolicyRef {
+		return nil, CodeEgressAuthorityMismatch, fmt.Errorf("egress policy reference mismatch")
+	}
+	return &grant, "", nil
 }
 
 func checkedMultiply(left, right uint64) (uint64, bool) {

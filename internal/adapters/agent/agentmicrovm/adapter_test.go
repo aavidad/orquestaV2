@@ -229,6 +229,48 @@ func TestAdapterLaunchAndReconcileSignAndReplayExactPhysicalRequest(t *testing.T
 	}
 }
 
+func TestAdapterDurableEgressAuthorityCrossesOnlyTheSignedPlan(t *testing.T) {
+	grant := validEgressGrant()
+	grant.Referencia = "egreso:private_marker"
+	grant.Destinos[0].Host = "private-marker.example"
+	request := withEgressAuthority(t, validLaunchRequest(t), grant)
+	descriptor := validDescriptor(t, true)
+	client := &launchClientStub{
+		capabilities: validRemoteCapabilities(),
+		response:     validPhysicalResponse(t, request, descriptor),
+	}
+	config := validAdapterConfig(client, validSigner(), request, descriptor)
+	adapter, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := adapter.Launch(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(client.launchRequests) != 1 ||
+		!strings.Contains(string(client.launchRequests[0].Plan), "private-marker.example") {
+		t.Fatalf("grant did not cross its required signed-plan boundary: %+v", client.launchRequests)
+	}
+	receiptJSON, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, private := range []string{"egreso:private_marker", "private-marker.example"} {
+		if strings.Contains(string(receiptJSON), private) {
+			t.Fatalf("egress grant leaked into receipt: %s", receiptJSON)
+		}
+	}
+
+	invalidGrant := validEgressGrant()
+	invalidGrant.Destinos[0].Host = "PRIVATE-MARKER.INVALID"
+	invalidRequest := withEgressAuthority(t, request, invalidGrant)
+	_, err = Compile(invalidRequest, config.ModelBinding.Profile, invalidRequest.EffectAuthority.ActionFence)
+	if ErrorCode(err) != CodePlanInvalid || strings.Contains(err.Error(), "PRIVATE-MARKER") {
+		t.Fatalf("invalid grant error leaked detail: code=%q error=%v", ErrorCode(err), err)
+	}
+}
+
 func TestAdapterRejectsSignerPlanMutationBeforeSocket(t *testing.T) {
 	request := validLaunchRequest(t)
 	descriptor := validDescriptor(t, false)
@@ -346,6 +388,17 @@ func TestCloneLaunchPlanOwnsEveryMutableLevel(t *testing.T) {
 	if *original.PerfilSHA256 != strings.Repeat("a", 64) || original.Servicios[0].Puerto != 10_001 ||
 		original.Egreso.Destinos[0].Host != "example.com" || original.Egreso.Destinos[0].Puertos[0] != 80 {
 		t.Fatalf("clone retained mutable aliases: original=%+v clone=%+v", original, cloned)
+	}
+}
+
+func TestCloneProfileBindingOwnsDescriptorServices(t *testing.T) {
+	request := validLaunchRequest(t)
+	original := profileBinding(request, validDescriptor(t, true))
+	cloned := cloneProfileBinding(original)
+
+	cloned.Descriptor.ServiciosDisponibles[0].Puerto++
+	if original.Descriptor.ServiciosDisponibles[0].Puerto != 10_001 {
+		t.Fatalf("profile clone retained mutable aliases: original=%+v clone=%+v", original, cloned)
 	}
 }
 

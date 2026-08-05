@@ -88,6 +88,9 @@ func BuildWorkPacketV1(
 		ExecutionRef:     request.ExecutionRef.String(),
 		EffectAttemptRef: request.EffectAuthority.EffectAttemptRef,
 	}
+	if compiled.Plan.Egreso != nil {
+		packet.ControlledEgressProxy = codexwork.ControlledEgressProxyURLV1
+	}
 	// Marshal a prompt-free packet first. The final JSON cannot be smaller than
 	// this encoding plus len(prompt), even when the prompt needs no escaping.
 	// This avoids allocating a second multi-megabyte buffer for impossible input.

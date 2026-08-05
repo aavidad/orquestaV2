@@ -15,6 +15,11 @@ const (
 	MaxOutputBytesV1   = 1 << 20
 	MaxTokenBudgetV1   = 1_000_000_000
 	MaxTimeBudgetMSV1  = 24 * 60 * 60 * 1000
+
+	// ControlledEgressProxyURLV1 is the only proxy endpoint the sealed guest
+	// executor may project. It is a protocol fact backed by the signed launch
+	// plan, never caller-provided configuration or ambient environment.
+	ControlledEgressProxyURLV1 = "http://127.0.0.1:18080"
 )
 
 type Code string
@@ -78,6 +83,9 @@ type WorkPacketV1 struct {
 	WorkItemRef      string `json:"work_item_ref"`
 	ExecutionRef     string `json:"execution_ref"`
 	EffectAttemptRef string `json:"effect_attempt_ref"`
+	// ControlledEgressProxy is omitted unless the matching signed launch plan
+	// contains both the proxy service and its explicit egress grant.
+	ControlledEgressProxy string `json:"controlled_egress_proxy,omitempty"`
 }
 
 func DecodeWorkPacketV1(raw []byte) (WorkPacketV1, error) {
@@ -87,7 +95,7 @@ func DecodeWorkPacketV1(raw []byte) (WorkPacketV1, error) {
 	if len(raw) == 0 || !utf8.Valid(raw) {
 		return WorkPacketV1{}, protocolError(CodePacketMalformed)
 	}
-	if !uniqueJSONObject(raw) {
+	if !exactWorkPacketJSONObject(raw) {
 		return WorkPacketV1{}, protocolError(CodePacketMalformed)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -107,11 +115,55 @@ func DecodeWorkPacketV1(raw []byte) (WorkPacketV1, error) {
 }
 
 func uniqueJSONObject(raw []byte) bool {
+	return strictRootJSONObject(raw, nil)
+}
+
+var workPacketJSONFields = map[string]bool{
+	"schema": true, "prompt": true, "model": true, "effort": true,
+	"token_budget": true, "max_output_bytes": true, "time_budget_ms": true,
+	"goal_ref": true, "work_item_ref": true, "execution_ref": true,
+	"effect_attempt_ref": true, "controlled_egress_proxy": false,
+}
+
+func exactWorkPacketJSONObject(raw []byte) bool {
+	return strictRootJSONObject(raw, workPacketJSONFields)
+}
+
+func strictRootJSONObject(raw []byte, fields map[string]bool) bool {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.UseNumber()
-	token, err := decoder.Token()
-	if err != nil || token != json.Delim('{') || !uniqueJSONObjectBody(decoder) {
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
 		return false
+	}
+	seen := make(map[string]struct{})
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, ok := token.(string)
+		if err != nil || !ok {
+			return false
+		}
+		if fields != nil {
+			if _, allowed := fields[key]; !allowed {
+				return false
+			}
+		}
+		if _, duplicate := seen[key]; duplicate {
+			return false
+		}
+		seen[key] = struct{}{}
+		if !uniqueJSONValue(decoder) {
+			return false
+		}
+	}
+	closing, err := decoder.Token()
+	if err != nil || closing != json.Delim('}') {
+		return false
+	}
+	for field, required := range fields {
+		if _, exists := seen[field]; required && !exists {
+			return false
+		}
 	}
 	_, err = decoder.Token()
 	return errors.Is(err, io.EOF)
@@ -173,6 +225,10 @@ func (packet WorkPacketV1) Validate() error {
 		packet.TimeBudgetMS == 0 || packet.TimeBudgetMS > MaxTimeBudgetMSV1 ||
 		!validOpaqueRef(packet.GoalRef) || !validOpaqueRef(packet.WorkItemRef) ||
 		!validOpaqueRef(packet.ExecutionRef) || !validOpaqueRef(packet.EffectAttemptRef) {
+		return protocolError(CodePacketField)
+	}
+	if packet.ControlledEgressProxy != "" &&
+		packet.ControlledEgressProxy != ControlledEgressProxyURLV1 {
 		return protocolError(CodePacketField)
 	}
 	return nil

@@ -155,8 +155,9 @@ func (runner Runner) Run(ctx context.Context, input io.Reader, output io.Writer)
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	command.WaitDelay = postKillWait
 	// El app-server no hereda proxy, token, HOME ni ninguna otra variable del
-	// ejecutor. Credenciales y egress pertenecen a fronteras selladas distintas.
-	command.Env = sealedEnvironment()
+	// ejecutor. Solo se proyecta el endpoint local constante cuando el paquete
+	// causal acredita que el plan firmado contiene la concesion de egreso.
+	command.Env = sealedEnvironment(packet.ControlledEgressProxy)
 
 	stdin, err := command.StdinPipe()
 	if err != nil {
@@ -438,14 +439,21 @@ func readInitialPacketFile(ctx context.Context, input *os.File, maximum int) ([]
 	}
 }
 
-func sealedEnvironment() []string {
-	return []string{
+func sealedEnvironment(controlledEgressProxy string) []string {
+	environment := []string{
 		"HOME=" + sealedHome,
 		"CODEX_HOME=" + sealedCodexHome,
 		"PATH=" + sealedPath,
 		"LANG=" + sealedLocale,
 		"LC_ALL=" + sealedLocale,
 	}
+	if controlledEgressProxy == protocol.ControlledEgressProxyURLV1 {
+		environment = append(environment,
+			"HTTP_PROXY="+protocol.ControlledEgressProxyURLV1,
+			"HTTPS_PROXY="+protocol.ControlledEgressProxyURLV1,
+		)
+	}
+	return environment
 }
 
 func contextFailure(ctx context.Context) error {
