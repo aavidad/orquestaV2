@@ -87,7 +87,8 @@ UPDATE executions SET environment_preservation_required=0 WHERE ref=?`, claim.Ac
 func TestV29MigrationChangesOnlyTheEnvironmentPreservationRatchet(t *testing.T) {
 	migrations, err := loadMigrations()
 	sqliteTestNoError(t, err)
-	if len(migrations) != recoverySchemaLatest || migrations[recoverySchemaLatest-1].name != "029_execution_environment_preservation_ratchet.sql" {
+	if len(migrations) != recoverySchemaLatest ||
+		migrations[recoverySchemaV38PreservationRatchet-1].name != "029_execution_environment_preservation_ratchet.sql" {
 		t.Fatalf("migration chain count=%d latest=%q", len(migrations), migrations[len(migrations)-1].name)
 	}
 

@@ -245,11 +245,33 @@ WHERE action_ref=? AND action_fence>=?`, candidate.action.Ref, int64(reservation
 	if err != nil {
 		return invalid(err)
 	}
+	// An already unclaimed recovery retry must not rewrite claim columns: the
+	// recovery-ref trigger distinguishes the original claimed -> unclaimed
+	// release from later scheduling-only parks.
 	result, err := tx.ExecContext(ctx, `UPDATE outbox
+SET available_at=?,last_error_code='governance.effect_approval_required'
+WHERE ref=? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL
+	AND claim_token IS NULL AND claimed_by IS NULL AND claimed_until IS NULL`,
+		requiredTime(availableAt), candidate.action.Ref)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if changed == 1 {
+		return nil
+	}
+	if changed != 0 {
+		return conflict(errors.New("sqlite.outbox_park_conflict"))
+	}
+	result, err = tx.ExecContext(ctx, `UPDATE outbox
 SET available_at=?,claim_token=NULL,claimed_by=NULL,claimed_until=NULL,
     last_error_code='governance.effect_approval_required'
 WHERE ref=? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL
- AND (claim_token IS NULL OR claimed_until<=?)`, requiredTime(availableAt), candidate.action.Ref, requiredTime(now))
+ AND claim_token IS NOT NULL AND claimed_by IS NOT NULL AND claimed_until<=?`,
+		requiredTime(availableAt), candidate.action.Ref, requiredTime(now))
 	if err != nil {
 		return mapDatabaseError(err)
 	}

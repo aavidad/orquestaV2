@@ -1183,6 +1183,20 @@ func validateRequeued(state application.ActionRequeuedState) error {
 		state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef || state.AvailableAt.IsZero() {
 		return errors.New("sqlite.requeue_scope_invalid")
 	}
+	if state.Claim.Disposition == application.ActionClaimDispositionRecoverEffect {
+		intent := state.Claim.Action.EffectIntent
+		if state.Claim.Action.Kind != application.ActionLaunchAgent ||
+			state.Execution.State != application.ExecutionDispatching ||
+			!validText(state.Claim.RecoveryEffectAttemptRef) ||
+			state.Claim.Action.EffectIntentRef == "" || state.Claim.Action.EffectIntentRef != intent.Ref ||
+			state.Execution.BudgetReservationRef == "" ||
+			state.Execution.BudgetReservationRef != state.Claim.BudgetReservationRef ||
+			state.Execution.EffectIntentRef == "" ||
+			state.Execution.EffectIntentRef != state.Claim.Action.EffectIntentRef ||
+			state.BudgetSettlement != nil || state.ClearEffectBinding {
+			return errors.New("sqlite.requeue_recovery_effect_invalid")
+		}
+	}
 	switch state.Claim.Action.Kind {
 	case application.ActionLaunchAgent:
 		if state.Execution.State != application.ExecutionQueued && state.Execution.State != application.ExecutionDispatching {

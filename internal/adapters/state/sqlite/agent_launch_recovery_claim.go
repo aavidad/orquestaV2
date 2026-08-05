@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
 	"orquesta/internal/application"
@@ -21,6 +22,29 @@ func (repository *Repository) ValidateAgentLaunchRecoveryClaim(
 	if err := requireClaim(ctx, transaction, claim); err != nil {
 		return err
 	}
+	if err := requireAgentLaunchRecoveryCurrentBindings(ctx, transaction, claim); err != nil {
+		return err
+	}
+	now, err := repository.transactionTime()
+	if err != nil {
+		return err
+	}
+	if !now.Before(claim.LeaseUntil) {
+		return conflict(errors.New("sqlite.claim_lease_expired"))
+	}
+	return commit(transaction)
+}
+
+// requireAgentLaunchRecoveryCurrentBindings runs inside the writer's
+// transaction as well as the pre-provider read fence. The exact reservation
+// revisions are authority: a concurrent capacity transition or budget
+// settlement must win with StateConflict instead of being overwritten by a
+// later retry release.
+func requireAgentLaunchRecoveryCurrentBindings(
+	ctx context.Context,
+	transaction *sql.Tx,
+	claim application.ActionClaim,
+) error {
 	capacityReservation, placement, found, err := leerReservaCapacidadAccion(
 		ctx, transaction, claim.Action.Ref,
 	)
@@ -52,12 +76,5 @@ func (repository *Repository) ValidateAgentLaunchRecoveryClaim(
 	if effectIntentRef != claim.Action.EffectIntentRef {
 		return conflict(errors.New("sqlite.claim_effect_intent_conflict"))
 	}
-	now, err := repository.transactionTime()
-	if err != nil {
-		return err
-	}
-	if !now.Before(claim.LeaseUntil) {
-		return conflict(errors.New("sqlite.claim_lease_expired"))
-	}
-	return commit(transaction)
+	return nil
 }

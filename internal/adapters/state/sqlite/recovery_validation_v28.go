@@ -6,6 +6,21 @@ import (
 )
 
 func validateRecoveryV28EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, false)
+}
+
+func validateRecoveryV30EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true)
+}
+
+func validateRecoveryEffectRecoveryClaim(ctx context.Context, tx *sql.Tx, allowUnclaimedRetry bool) error {
+	pendingClaim := `(action.claim_token IS NOT NULL AND action.claimed_by IS NOT NULL
+           AND action.claimed_until IS NOT NULL)`
+	if allowUnclaimedRetry {
+		pendingClaim = `(` + pendingClaim + `
+       OR (action.claim_token IS NULL AND action.claimed_by IS NULL
+           AND action.claimed_until IS NULL AND length(trim(action.last_error_code))>0))`
+	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{
 			"sqlite.recovery_v28_effect_recovery_claim_invalid",
@@ -24,8 +39,7 @@ WHERE action.recovery_effect_attempt_ref IS NOT NULL AND
              WHERE settlement.causal_attempt_ref=attempt.ref)
   OR NOT (
     (action.completed_at IS NULL AND action.quarantined_at IS NULL
-     AND action.claim_token IS NOT NULL AND action.claimed_by IS NOT NULL
-     AND action.claimed_until IS NOT NULL
+     AND ` + pendingClaim + `
      AND NOT EXISTS (SELECT 1 FROM effect_receipts receipt
                      WHERE receipt.action_ref=action.ref
                         OR receipt.intent_ref=action.effect_intent_ref)

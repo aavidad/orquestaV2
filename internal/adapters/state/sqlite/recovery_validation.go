@@ -132,7 +132,11 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 			validators = append(validators, validateRecoveryV27EffectAttemptClaimLease)
 		}
 		if version >= recoverySchemaV38RecoveryClaim {
-			validators = append(validators, validateRecoveryV28EffectRecoveryClaim)
+			recoveryClaimValidator := validateRecoveryV28EffectRecoveryClaim
+			if version >= recoverySchemaV38RecoveryRequeue {
+				recoveryClaimValidator = validateRecoveryV30EffectRecoveryClaim
+			}
+			validators = append(validators, recoveryClaimValidator)
 		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {
