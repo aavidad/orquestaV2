@@ -219,11 +219,11 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	if err != nil || !proceed {
 		return err
 	}
-	sessionRef, proceed, err := orchestrator.ensureExecutionSession(ctx, claim, record, execution)
+	sessionAuthority, proceed, err := orchestrator.ensureExecutionSession(ctx, claim, record, execution)
 	if err != nil || !proceed {
 		return err
 	}
-	execution.ExecutionSessionRef = sessionRef
+	execution.ExecutionSessionRef = sessionAuthority.SessionRef
 	record, item, execution, proceed, err = orchestrator.prepareLaunchDispatch(ctx, claim, record, item, execution)
 	if err != nil || !proceed {
 		return err
@@ -241,7 +241,11 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		}
 	}
 	request.SessionRef, request.ReferenciaColocacion, request.RequierePreservacionEntorno =
-		sessionRef, claim.ReferenciaColocacion, orchestrator.agentCapabilities.RequierePreservacionEntorno
+		sessionAuthority.SessionRef, claim.ReferenciaColocacion, orchestrator.agentCapabilities.RequierePreservacionEntorno
+	request.AccessAuthority = ports.AgentLaunchAccessAuthority{
+		ArtifactAccessRef: sessionAuthority.ArtifactAccessRef, MCPAccessRef: sessionAuthority.MCPAccessRef,
+		MailboxEndpointRef: sessionAuthority.MailboxEndpointRef,
+	}
 	targetDigest := authorLaunchTargetDigest(request)
 	if isReviewerExecution(execution) || isCouncilExecution(execution) {
 		targetDigest = reviewerLaunchTargetDigest(request)
@@ -330,9 +334,9 @@ func (orchestrator *Orchestrator) ensureExecutionSession(
 	claim ActionClaim,
 	record GoalRecord,
 	execution ExecutionRecord,
-) (ports.ExecutionSessionRef, bool, error) {
+) (ports.ExecutionSessionAuthority, bool, error) {
 	if orchestrator.executionSessions == nil {
-		return "", true, nil
+		return ports.ExecutionSessionAuthority{}, true, nil
 	}
 	request := ExecutionSessionRequest(record.Goal, execution)
 	receipt, err := orchestrator.executionSessions.Ensure(ctx, request)
@@ -340,16 +344,16 @@ func (orchestrator *Orchestrator) ensureExecutionSession(
 		requeueErr := orchestrator.requeueUnappliedEffect(
 			ctx, claim, execution, "", "application.execution_session_unavailable",
 		)
-		return "", false, requeueErr
+		return ports.ExecutionSessionAuthority{}, false, requeueErr
 	}
 	method := receipt.Authority.ServicePrincipal.Method
 	expected, deriveErr := DeriveExecutionSessionAuthority(request, method)
 	if deriveErr != nil || expected != receipt.Authority ||
 		receipt.EnsuredAt.IsZero() {
 		err = orchestrator.quarantineUnapplied(ctx, claim, "application.execution_session_invalid")
-		return "", false, err
+		return ports.ExecutionSessionAuthority{}, false, err
 	}
-	return receipt.Authority.SessionRef, true, nil
+	return receipt.Authority, true, nil
 }
 
 func (orchestrator *Orchestrator) loadClaimedLaunch(

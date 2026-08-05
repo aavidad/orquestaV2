@@ -44,11 +44,18 @@ func DeriveExecutionSessionAuthority(
 	writeFingerprintField(digest, request.SpecHash)
 	writeFingerprintField(digest, authenticationMethod)
 	suffix := fingerprintHex(digest)
+	artifactSuffix := executionSessionAccessSuffix("artifact-access", suffix)
+	mcpSuffix := executionSessionAccessSuffix("mcp-access", suffix)
+	mailboxSuffix := executionSessionAccessSuffix("mailbox-endpoint", suffix)
 
 	sessionRef, sessionErr := ports.NewExecutionSessionRef("execution-session:sha256:" + suffix)
+	artifactAccessRef, artifactErr := ports.NewExecutionArtifactAccessRef("artifact-access:execution:sha256:" + artifactSuffix)
+	mcpAccessRef, mcpErr := ports.NewExecutionMCPAccessRef("mcp-access:execution:sha256:" + mcpSuffix)
+	mailboxEndpointRef, mailboxErr := ports.NewExecutionMailboxEndpointRef("mailbox-endpoint:execution:sha256:" + mailboxSuffix)
 	principalRef, principalErr := identity.NewPrincipalRef("principal:execution:sha256:" + suffix)
 	actorRef, actorErr := goal.NewActorRef("actor:execution:sha256:" + suffix)
-	if sessionErr != nil || principalErr != nil || actorErr != nil {
+	if sessionErr != nil || artifactErr != nil || mcpErr != nil || mailboxErr != nil ||
+		principalErr != nil || actorErr != nil {
 		return ports.ExecutionSessionAuthority{}, errExecutionSessionInvalid
 	}
 	principal, err := identity.NewPrincipal(
@@ -57,7 +64,16 @@ func DeriveExecutionSessionAuthority(
 	if err != nil {
 		return ports.ExecutionSessionAuthority{}, errExecutionSessionInvalid
 	}
-	return ports.ExecutionSessionAuthority{SessionRef: sessionRef, ServicePrincipal: principal, Request: request}, nil
+	return ports.ExecutionSessionAuthority{
+		SessionRef: sessionRef, ArtifactAccessRef: artifactAccessRef, MCPAccessRef: mcpAccessRef,
+		MailboxEndpointRef: mailboxEndpointRef, ServicePrincipal: principal, Request: request,
+	}, nil
+}
+
+func executionSessionAccessSuffix(domain, authoritySuffix string) string {
+	return fingerprintHex(fingerprintDigest(
+		"orquesta.execution-session-access.v1", domain, authoritySuffix,
+	))
 }
 
 func ExecutionSessionRequest(

@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -110,6 +111,37 @@ func TestAgentLaunchEffectAuthorityRequiresEveryDurableFact(t *testing.T) {
 	automatic.ApprovalExpiresAt = time.Time{}
 	if err := ValidateAgentLaunchEffectAuthority(automatic); err != nil {
 		t.Fatalf("durable automatic approval rejected: %v", err)
+	}
+}
+
+func TestAgentLaunchAccessAuthorityRequiresExactSessionBoundSet(t *testing.T) {
+	sessionRef, _ := NewExecutionSessionRef("execution-session:sha256:" + strings.Repeat("a", 64))
+	artifactRef, _ := NewExecutionArtifactAccessRef("artifact-access:execution:sha256:" + strings.Repeat("a", 64))
+	mcpRef, _ := NewExecutionMCPAccessRef("mcp-access:execution:sha256:" + strings.Repeat("a", 64))
+	mailboxRef, _ := NewExecutionMailboxEndpointRef("mailbox-endpoint:execution:sha256:" + strings.Repeat("a", 64))
+	valid := AgentLaunchAccessAuthority{
+		ArtifactAccessRef: artifactRef, MCPAccessRef: mcpRef, MailboxEndpointRef: mailboxRef,
+	}
+	if err := ValidateAgentLaunchAccessAuthority(sessionRef, valid); err != nil {
+		t.Fatalf("valid access authority rejected: %v", err)
+	}
+	if err := ValidateAgentLaunchAccessAuthority("", AgentLaunchAccessAuthority{}); err != nil {
+		t.Fatalf("legacy empty authority rejected: %v", err)
+	}
+	tests := map[string]func(*ExecutionSessionRef, *AgentLaunchAccessAuthority){
+		"session":  func(session *ExecutionSessionRef, _ *AgentLaunchAccessAuthority) { *session = "" },
+		"artifact": func(_ *ExecutionSessionRef, value *AgentLaunchAccessAuthority) { value.ArtifactAccessRef = "" },
+		"mcp":      func(_ *ExecutionSessionRef, value *AgentLaunchAccessAuthority) { value.MCPAccessRef = "" },
+		"mailbox":  func(_ *ExecutionSessionRef, value *AgentLaunchAccessAuthority) { value.MailboxEndpointRef = "" },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidateSession, candidate := sessionRef, valid
+			mutate(&candidateSession, &candidate)
+			if AgentContractErrorCode(ValidateAgentLaunchAccessAuthority(candidateSession, candidate)) == "" {
+				t.Fatalf("invalid access authority accepted: %+v", candidate)
+			}
+		})
 	}
 }
 

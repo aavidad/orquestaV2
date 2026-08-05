@@ -66,6 +66,9 @@ type AgentLaunchRequest struct {
 	// SessionRef binds a child runtime to the exact durable execution tuple.
 	// Empty preserves compositions that do not expose execution-bound APIs.
 	SessionRef ExecutionSessionRef
+	// AccessAuthority carries opaque capabilities deterministically bound to
+	// SessionRef. Empty preserves adapters without an execution session broker.
+	AccessAuthority AgentLaunchAccessAuthority
 	// ExecutionWorkspaceRef is an opaque, optional execution workspace binding.
 	// When empty the adapter preserves the non-code path.  A physical path is
 	// deliberately never carried through this provider-neutral request.
@@ -101,6 +104,42 @@ type AgentLaunchRequest struct {
 	// launch. Process adapters may ignore it; adapters crossing a stronger
 	// isolation boundary can require ValidateAgentLaunchEffectAuthority.
 	EffectAuthority AgentLaunchEffectAuthority
+}
+
+// AgentLaunchAccessAuthority contains no credential material or physical
+// endpoints. Session-aware isolation adapters resolve these opaque refs through
+// their own composition ports.
+type AgentLaunchAccessAuthority struct {
+	ArtifactAccessRef  ExecutionArtifactAccessRef
+	MCPAccessRef       ExecutionMCPAccessRef
+	MailboxEndpointRef ExecutionMailboxEndpointRef
+}
+
+func ValidateAgentLaunchAccessAuthority(
+	sessionRef ExecutionSessionRef,
+	authority AgentLaunchAccessAuthority,
+) error {
+	empty := authority.ArtifactAccessRef.String() == "" && authority.MCPAccessRef.String() == "" &&
+		authority.MailboxEndpointRef.String() == ""
+	if empty {
+		return nil
+	}
+	if sessionRef.String() == "" {
+		return &AgentContractError{Code: "agent.access_authority_session_required"}
+	}
+	if _, err := NewExecutionSessionRef(sessionRef.String()); err != nil {
+		return &AgentContractError{Code: "agent.execution_session_ref_invalid"}
+	}
+	if _, err := NewExecutionArtifactAccessRef(authority.ArtifactAccessRef.String()); err != nil {
+		return &AgentContractError{Code: "agent.artifact_access_ref_invalid"}
+	}
+	if _, err := NewExecutionMCPAccessRef(authority.MCPAccessRef.String()); err != nil {
+		return &AgentContractError{Code: "agent.mcp_access_ref_invalid"}
+	}
+	if _, err := NewExecutionMailboxEndpointRef(authority.MailboxEndpointRef.String()); err != nil {
+		return &AgentContractError{Code: "agent.mailbox_endpoint_ref_invalid"}
+	}
+	return nil
 }
 
 // AgentLaunchEffectAuthority is provider-neutral and contains no credential
@@ -232,6 +271,9 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 		if _, err := NewExecutionSessionRef(request.SessionRef.String()); err != nil {
 			return &AgentContractError{Code: "agent.execution_session_ref_invalid"}
 		}
+	}
+	if err := ValidateAgentLaunchAccessAuthority(request.SessionRef, request.AccessAuthority); err != nil {
+		return err
 	}
 	switch {
 	case request.ReferenciaColocacion.String() == "":

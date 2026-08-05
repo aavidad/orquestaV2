@@ -4,6 +4,7 @@ import (
 	"context"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
+	"strings"
 	"testing"
 	"time"
 )
@@ -53,14 +54,21 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 		t.Fatalf("Ensure request=%+v want=%+v", broker.requests[0], want)
 	}
 	agent.mu.Lock()
-	if len(agent.launchRequests) != 1 || agent.launchRequests[0].SessionRef.String() == "" {
+	if len(agent.launchRequests) != 1 || agent.launchRequests[0].SessionRef.String() == "" ||
+		agent.launchRequests[0].AccessAuthority.ArtifactAccessRef.String() == "" ||
+		agent.launchRequests[0].AccessAuthority.MCPAccessRef.String() == "" ||
+		agent.launchRequests[0].AccessAuthority.MailboxEndpointRef.String() == "" {
 		agent.mu.Unlock()
 		t.Fatalf("launch requests=%+v", agent.launchRequests)
 	}
 	sessionRef := agent.launchRequests[0].SessionRef
+	accessAuthority := agent.launchRequests[0].AccessAuthority
 	agent.mu.Unlock()
 	authority, err := DeriveExecutionSessionAuthority(want, "execution_token")
-	if err != nil || sessionRef != authority.SessionRef || execution.ExecutionSessionRef != sessionRef {
+	if err != nil || sessionRef != authority.SessionRef || execution.ExecutionSessionRef != sessionRef ||
+		accessAuthority.ArtifactAccessRef != authority.ArtifactAccessRef ||
+		accessAuthority.MCPAccessRef != authority.MCPAccessRef ||
+		accessAuthority.MailboxEndpointRef != authority.MailboxEndpointRef {
 		t.Fatalf("SessionRef=%s durable=%s authority=%+v err=%v",
 			sessionRef, execution.ExecutionSessionRef, authority, err)
 	}
@@ -93,5 +101,16 @@ func TestExecutionSessionDerivationBindsAttemptGenerationAndSuccessor(t *testing
 	if successor.Request.ReplacesExecutionRef != authority.Request.ExecutionRef ||
 		successor.Request.ExecutionAttempt != authority.Request.ExecutionAttempt+1 {
 		t.Fatalf("successor lineage=%+v authority=%+v", successor, authority)
+	}
+	if authority.ArtifactAccessRef.String() == authority.MCPAccessRef.String() ||
+		authority.ArtifactAccessRef.String() == authority.MailboxEndpointRef.String() ||
+		authority.MCPAccessRef.String() == authority.MailboxEndpointRef.String() {
+		t.Fatalf("access refs not domain-separated: %+v", authority)
+	}
+	artifactSuffix := strings.TrimPrefix(authority.ArtifactAccessRef.String(), "artifact-access:execution:sha256:")
+	mcpSuffix := strings.TrimPrefix(authority.MCPAccessRef.String(), "mcp-access:execution:sha256:")
+	mailboxSuffix := strings.TrimPrefix(authority.MailboxEndpointRef.String(), "mailbox-endpoint:execution:sha256:")
+	if artifactSuffix == mcpSuffix || artifactSuffix == mailboxSuffix || mcpSuffix == mailboxSuffix {
+		t.Fatalf("access digests not domain-separated: %+v", authority)
 	}
 }
