@@ -1145,7 +1145,7 @@ func validateLaunchEffectReceipt(state application.LaunchAcceptedState) error {
 		receipt.IdempotencyKey != intent.IdempotencyKey || !validText(receipt.AttemptRef) ||
 		!validText(receipt.Ref) || !validText(receipt.ExternalRef) ||
 		!receipt.ConfirmedAt.Equal(state.OperationAt) || !receipt.ConfirmedAt.Equal(state.Event.OccurredAt) ||
-		receipt.ConfirmedAt.After(state.Claim.LeaseUntil) ||
+		!receipt.ConfirmedAt.Before(state.Claim.LeaseUntil) ||
 		governance.ValidateResourceUsage(receipt.Usage) != nil {
 		return errors.New("sqlite.launch_effect_receipt_invalid")
 	}

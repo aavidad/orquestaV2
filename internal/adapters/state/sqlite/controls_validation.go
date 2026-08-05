@@ -188,7 +188,7 @@ func validateControlStopReceipt(state application.ApplyControlState, current app
 		!receipt.ConfirmedAt.Equal(state.OperationAt) {
 		return errors.New("sqlite.control_stop_receipt_invalid")
 	}
-	if receipt.ConfirmedAt.After(state.Claim.LeaseUntil) {
+	if !receipt.ConfirmedAt.Before(state.Claim.LeaseUntil) {
 		return errors.New("sqlite.control_stop_receipt_after_lease")
 	}
 	if receipt.Status != application.EffectStatusStopped &&

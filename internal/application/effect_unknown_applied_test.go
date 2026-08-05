@@ -355,6 +355,50 @@ func TestEffectAttemptPreservesExactClaimLeaseAcrossReplay(t *testing.T) {
 	}
 }
 
+func TestEveryPhysicalEffectReceiptRejectsExclusiveAttemptLeaseBoundary(t *testing.T) {
+	boundary := time.Date(2026, 8, 5, 20, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		kind   EffectKind
+		status EffectStatus
+	}{
+		{EffectKindAgentLaunch, EffectStatusAccepted},
+		{EffectKindAgentStop, EffectStatusStopped},
+		{EffectKindPrepareWorkspace, EffectStatusPrepared},
+		{EffectKindCommitChange, EffectStatusCommitted},
+		{EffectKindAttestTest, EffectStatusAttestedPassed},
+		{EffectKindIntegrateChange, EffectStatusIntegrated},
+	} {
+		t.Run(string(test.kind), func(t *testing.T) {
+			intent := EffectIntent{
+				Ref: "effect-intent:lease-boundary:" + string(test.kind), Digest: "digest:lease-boundary",
+				ActionRef: "action:lease-boundary:" + string(test.kind), Kind: test.kind,
+				IdempotencyKey: "idempotency:lease-boundary:" + string(test.kind),
+			}
+			approval := EffectApproval{Ref: "effect-approval:lease-boundary:" + string(test.kind)}
+			claim := ActionClaim{
+				Action:         ActionRecord{Ref: intent.ActionRef, EffectIntentRef: intent.Ref, EffectIntent: intent},
+				EffectApproval: approval, Fence: 1, LeaseUntil: boundary,
+			}
+			attempt := EffectAttempt{
+				Ref: "effect-attempt:lease-boundary:" + string(test.kind), IntentRef: intent.Ref,
+				IntentDigest: intent.Digest, ApprovalRef: approval.Ref, ActionRef: intent.ActionRef,
+				ActionFence: 1, IdempotencyKey: intent.IdempotencyKey,
+				StartedAt: boundary.Add(-time.Second), ClaimLeaseUntil: boundary,
+			}
+			if _, err := effectReceipt(
+				claim, attempt, "provider-receipt:lease-boundary", test.status, unknownUsage(), boundary,
+			); err == nil || err.Error() != "application.effect_receipt_invalid" {
+				t.Fatalf("receipt accepted exclusive lease boundary: %v", err)
+			}
+			if _, err := effectReceipt(
+				claim, attempt, "provider-receipt:lease-boundary", test.status, unknownUsage(), boundary.Add(-time.Nanosecond),
+			); err != nil {
+				t.Fatalf("receipt rejected final live instant: %v", err)
+			}
+		})
+	}
+}
+
 func budgetSettlementCount(repository *memoryRepository) int {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()

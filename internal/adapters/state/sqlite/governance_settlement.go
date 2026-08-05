@@ -36,7 +36,8 @@ func insertEffectReceipt(
 	if !found || attempt.Ref != receipt.AttemptRef || attempt.IntentRef != receipt.IntentRef ||
 		attempt.IntentDigest != receipt.IntentDigest || attempt.ApprovalRef != receipt.ApprovalRef ||
 		attempt.Subject != receipt.Subject || attempt.IdempotencyKey != receipt.IdempotencyKey ||
-		receipt.ConfirmedAt.Before(attempt.StartedAt) {
+		receipt.ConfirmedAt.Before(attempt.StartedAt) ||
+		!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil) {
 		return conflict(errors.New("sqlite.effect_receipt_attempt_conflict"))
 	}
 	var claimedUntil int64
@@ -46,7 +47,7 @@ SELECT claimed_until FROM outbox WHERE ref=? AND fence=?`,
 	).Scan(&claimedUntil); err != nil {
 		return mapDatabaseError(err)
 	}
-	if receipt.ConfirmedAt.After(time.Unix(0, claimedUntil).UTC()) {
+	if !receipt.ConfirmedAt.Before(time.Unix(0, claimedUntil).UTC()) {
 		return invalid(errors.New("sqlite.effect_receipt_after_lease"))
 	}
 	intent, err := readEffectIntent(ctx, transaction, receipt.IntentRef)

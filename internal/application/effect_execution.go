@@ -255,6 +255,7 @@ func validateEffectReceipt(claim ActionClaim, attempt EffectAttempt, receipt Eff
 		receipt.AttemptRef != attempt.Ref || receipt.Subject != intent.Subject ||
 		receipt.ActionRef != claim.Action.Ref || receipt.ActionFence != claim.Fence ||
 		receipt.IdempotencyKey != intent.IdempotencyKey || receipt.ConfirmedAt.Before(attempt.StartedAt) ||
+		!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil) ||
 		governance.ValidateResourceUsage(receipt.Usage) != nil {
 		return errors.New("application.effect_receipt_invalid")
 	}

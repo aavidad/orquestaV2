@@ -3,10 +3,12 @@ package sqlite
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
@@ -268,6 +270,114 @@ func sqliteV15EffectReceipt(
 		ActionRef: claim.Action.Ref, ActionFence: claim.Fence, IdempotencyKey: intent.IdempotencyKey,
 		ExternalRef: "provider-receipt:" + claim.Action.Ref, Status: status,
 		Usage: governance.ResourceUsage{Quality: governance.UsageQualityUnknown}, ConfirmedAt: at.UTC(),
+	}
+}
+
+func TestEffectReceiptLeaseBoundaryIsRejectedBeforeInsert(t *testing.T) {
+	system := newSQLiteV15System(t, 2)
+	system.submit(t, "request:v27-receipt-lease-boundary")
+	claim := claimSQLiteV15(t, system, "claim:v27-receipt-lease-boundary")
+	prepareSQLiteV15Launch(t, system, claim)
+	attempt := sqliteV15Attempt(claim, system.clock.Now())
+	if _, _, err := system.repository.RecordEffectAttempt(context.Background(), application.RecordEffectAttemptState{
+		Claim: claim, Attempt: attempt, OperationAt: system.clock.Now(),
+	}); err != nil {
+		t.Fatal(sqliteTestErrorChain(err))
+	}
+	if _, err := system.repository.db.Exec(`
+CREATE TRIGGER test_effect_receipt_lease_boundary_insert
+BEFORE INSERT ON effect_receipts
+BEGIN SELECT RAISE(ABORT, 'test.effect_receipt_insert_reached'); END`); err != nil {
+		t.Fatal(err)
+	}
+	receipt := sqliteV15EffectReceipt(
+		claim, attempt, application.EffectStatusAccepted, attempt.ClaimLeaseUntil,
+	)
+	transaction, err := beginTransaction(context.Background(), system.repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = insertEffectReceipt(context.Background(), transaction, receipt)
+	_ = transaction.Rollback()
+	if !application.IsStateError(err, application.StateConflict) ||
+		strings.Contains(sqliteTestErrorChain(err), "test.effect_receipt_insert_reached") {
+		t.Fatalf("exclusive lease boundary reached INSERT: %s", sqliteTestErrorChain(err))
+	}
+	var receiptCount, consumptionCount int
+	if err := system.repository.db.QueryRow(`SELECT COUNT(*) FROM effect_receipts WHERE action_ref=?`, claim.Action.Ref).Scan(&receiptCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := system.repository.db.QueryRow(`SELECT COUNT(*) FROM action_consumption_receipts WHERE action_ref=?`, claim.Action.Ref).Scan(&consumptionCount); err != nil {
+		t.Fatal(err)
+	}
+	if receiptCount != 0 || consumptionCount != 0 {
+		t.Fatalf("lease boundary mutated receipts: effect=%d consumption=%d", receiptCount, consumptionCount)
+	}
+}
+
+func TestPhysicalReceiptGoGuardsRejectExclusiveLeaseBoundary(t *testing.T) {
+	boundary := time.Date(2026, 8, 5, 20, 30, 0, 0, time.UTC)
+	subject := application.EffectSubject{
+		GoalRef:      mustRef(t, "goal:receipt-boundary", goal.NewGoalRef),
+		WorkItemRef:  mustRef(t, "work-item:receipt-boundary", goal.NewWorkItemRef),
+		ExecutionRef: mustRef(t, "execution:receipt-boundary", goal.NewExecutionRef),
+	}
+	intent := application.EffectIntent{
+		Ref: "effect-intent:receipt-boundary", Digest: "digest:receipt-boundary",
+		Subject: subject, IdempotencyKey: "idempotency:receipt-boundary",
+	}
+	approval := application.EffectApproval{Ref: "effect-approval:receipt-boundary"}
+	receipt := application.EffectReceipt{
+		Ref: "effect-receipt:receipt-boundary", IntentRef: intent.Ref, IntentDigest: intent.Digest,
+		ApprovalRef: approval.Ref, AttemptRef: "effect-attempt:receipt-boundary", Subject: subject,
+		ActionFence: 1, IdempotencyKey: intent.IdempotencyKey,
+		ExternalRef: "provider-receipt:receipt-boundary", Usage: governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
+		ConfirmedAt: boundary,
+	}
+
+	launchIntent := intent
+	launchIntent.Kind = application.EffectKindAgentLaunch
+	launchClaim := application.ActionClaim{
+		Action: application.ActionRecord{
+			Ref: "action:launch:receipt-boundary", Kind: application.ActionLaunchAgent,
+			EffectIntentRef: launchIntent.Ref, EffectIntent: launchIntent,
+		},
+		EffectApproval: approval, Fence: 1, LeaseUntil: boundary,
+	}
+	launchReceipt := receipt
+	launchReceipt.ActionRef, launchReceipt.Status = launchClaim.Action.Ref, application.EffectStatusAccepted
+	launch := application.LaunchAcceptedState{
+		Claim: launchClaim, EffectReceipt: launchReceipt, OperationAt: boundary,
+		Event: application.EventRecord{OccurredAt: boundary},
+	}
+	if err := validateLaunchEffectReceipt(launch); err == nil {
+		t.Fatal("launch guard accepted receipt at exclusive lease boundary")
+	}
+	launch.OperationAt, launch.Event.OccurredAt = boundary.Add(-time.Nanosecond), boundary.Add(-time.Nanosecond)
+	launch.EffectReceipt.ConfirmedAt = boundary.Add(-time.Nanosecond)
+	if err := validateLaunchEffectReceipt(launch); err != nil {
+		t.Fatalf("launch guard rejected final live instant: %v", err)
+	}
+
+	stopClaim := application.ActionClaim{
+		Action: application.ActionRecord{Ref: "action:stop:receipt-boundary", Kind: application.ActionStopAgent},
+		Fence:  1, LeaseUntil: boundary,
+	}
+	stopReceipt := receipt
+	stopReceipt.ActionRef, stopReceipt.Status = stopClaim.Action.Ref, application.EffectStatusStopped
+	stop := application.ApplyControlState{
+		Claim: stopClaim, EffectReceipt: &stopReceipt, OperationAt: boundary,
+	}
+	current := application.GoalRecord{Executions: []application.ExecutionRecord{{
+		Ref: subject.ExecutionRef, GoalRef: subject.GoalRef, WorkItemRef: subject.WorkItemRef,
+	}}}
+	if err := validateControlStopReceipt(stop, current); err == nil {
+		t.Fatal("stop guard accepted receipt at exclusive lease boundary")
+	}
+	stop.OperationAt = boundary.Add(-time.Nanosecond)
+	stop.EffectReceipt.ConfirmedAt = boundary.Add(-time.Nanosecond)
+	if err := validateControlStopReceipt(stop, current); err != nil {
+		t.Fatalf("stop guard rejected final live instant: %v", err)
 	}
 }
 
