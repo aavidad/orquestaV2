@@ -491,7 +491,8 @@ UPDATE executions
 SET state = ?, deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
     provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?,
     governance_version = CASE WHEN ? IS NULL AND ? IS NULL AND ? IS NULL THEN 0 ELSE 1 END,
-    budget_reservation_ref = ?, effect_intent_ref = ?, launch_receipt_ref = ?
+    budget_reservation_ref = ?, effect_intent_ref = ?, launch_receipt_ref = ?,
+    environment_preservation_required = ?
 WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
   AND provider_ref = ? AND model_ref = ? AND agent_ref = ? AND external_ref = ?
   AND attempt_no = ? AND max_execution_attempts = ?
@@ -499,7 +500,9 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
   AND plan_generation = ? AND app_spec_generation = ? AND spec_hash = ?
   AND artifact_media_type = ? AND idempotency_key = ?
   AND max_output_bytes = ? AND created_at = ?
-  AND environment_preservation_required = ?
+  AND (environment_preservation_required = ? OR
+       (state = 'queued' AND ? = 'dispatching' AND
+        environment_preservation_required = 0 AND ? = 1))
   AND (budget_reservation_ref IS NULL OR budget_reservation_ref IS ?)
   AND (effect_intent_ref IS NULL OR effect_intent_ref IS ?)
   AND (launch_receipt_ref IS NULL OR launch_receipt_ref IS ?)`,
@@ -515,6 +518,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 		nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef),
 		nullableString(execution.LaunchReceiptRef), nullableString(execution.BudgetReservationRef),
 		nullableString(execution.EffectIntentRef), nullableString(execution.LaunchReceiptRef),
+		storedBool(execution.RequierePreservacionEntorno),
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
@@ -534,6 +538,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 		execution.MaxOutputBytes,
 		requiredTime(execution.CreatedAt),
 		storedBool(execution.RequierePreservacionEntorno),
+		string(execution.State), storedBool(execution.RequierePreservacionEntorno),
 		nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef),
 		nullableString(execution.LaunchReceiptRef),
 	)

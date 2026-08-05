@@ -15,7 +15,7 @@ func TestV28MigrationSeparatesRecoveryClaimRefFromPhysicalReceiptFence(t *testin
 	sqliteTestNoError(t, system.repository.db.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, system.repository.db.QueryRow(`
 SELECT COUNT(*) FROM pragma_table_info('outbox') WHERE name='recovery_effect_attempt_ref'`).Scan(&recoveryColumn))
-	if version != recoverySchemaV38RecoveryClaim || recoveryColumn != 1 {
+	if version != recoverySchemaLatest || recoveryColumn != 1 {
 		t.Fatalf("schema=%d recovery_column=%d", version, recoveryColumn)
 	}
 
