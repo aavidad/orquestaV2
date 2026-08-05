@@ -22,7 +22,8 @@ import (
 
 const (
 	documentType                     = "orquesta.credential_store"
-	documentSchema                   = 1
+	documentSchemaLegacy             = 1
+	documentSchema                   = 2
 	requestFingerprintSchema         = "orquesta.credential_request.v1"
 	FailpointAfterReplacementSync    = "after_replacement_sync"
 	FailpointAfterStoreRename        = "after_store_rename"
@@ -225,22 +226,100 @@ func (store *Store) Use(ctx context.Context, request credentials.UseRequest, con
 	if err != nil {
 		return credentials.Receipt{}, mapFileError("use", err)
 	}
+	if err := consumeSecret(secret, consume); err != nil {
+		return receipt, err
+	}
+	return receipt, nil
+}
+
+// UseOnce claims one causal request durably before exposing material to its
+// callback. Distinct actor/request pairs remain independent even when they use
+// the same credential version.
+func (store *Store) UseOnce(ctx context.Context, request credentials.OneShotUseRequest, consume func(credentials.Secret) error) (credentials.OneShotUseResult, error) {
+	if err := credentials.ValidateOneShotUseRequest(request); err != nil {
+		return credentials.OneShotUseResult{}, err
+	}
+	if store == nil || store.files == nil || ctx == nil || consume == nil {
+		return credentials.OneShotUseResult{}, credentials.NewError(credentials.ErrorInvalidRequest, "consumer")
+	}
+	useRequest := credentials.UseRequest(request)
+	fingerprint := requestFingerprint(credentials.OperationUseOnce, request.CredentialRef.String(),
+		request.OwnerRef.String(), request.ScopeRef.String(), request.PurposeRef.String(), strconv.FormatUint(uint64(request.Version), 10))
+	var result credentials.OneShotUseResult
+	var secret credentials.Secret
+	err := store.files.withLock(ctx, func() error {
+		doc, content, err := store.load()
+		if err != nil {
+			return err
+		}
+		defer clearDocument(&doc)
+		defer clear(content)
+		key := ledgerKey(request.ActorRef, request.RequestRef)
+		if replay, found := doc.Ledger[key]; found {
+			if replay.Fingerprint != fingerprint {
+				return credentials.NewError(credentials.ErrorIdempotencyConflict, "request_ref")
+			}
+			result = credentials.OneShotUseResult{Receipt: replay.Receipt, Replayed: true}
+			if err := credentials.ValidateOneShotUseResult(request, result); err != nil {
+				return errUnsafeFile
+			}
+			return credentials.NewError(credentials.ErrorAlreadyConsumed, "request_ref")
+		}
+		current, found := doc.Records[request.CredentialRef]
+		if !found {
+			return credentials.NewError(credentials.ErrorNotFound, "credential_ref")
+		}
+		if err := authorizeUse(current.Metadata, useRequest); err != nil {
+			return err
+		}
+		at, err := store.operationTime()
+		if err != nil {
+			return err
+		}
+		result = credentials.OneShotUseResult{Receipt: newReceipt(request.ActorRef, request.RequestRef,
+			credentials.OperationUseOnce, current.Metadata, request.ScopeRef, at)}
+		doc.SchemaVersion = documentSchema
+		doc.Ledger[key] = ledger{Fingerprint: fingerprint, Result: cloneMetadata(current.Metadata), Receipt: result.Receipt}
+		gate, err := newDurableProjectionGate(doc)
+		if err != nil {
+			return err
+		}
+		defer gate.Destroy()
+		if err := store.persist(doc, content, gate); err != nil {
+			return err
+		}
+		secret, err = credentials.NewSecret(current.Material)
+		return err
+	})
+	if err != nil {
+		if credentials.HasErrorCode(err, credentials.ErrorAlreadyConsumed) {
+			return result, err
+		}
+		return credentials.OneShotUseResult{}, mapFileError("use_once", err)
+	}
+	if err := consumeSecret(secret, consume); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func consumeSecret(secret credentials.Secret, consume func(credentials.Secret) error) error {
 	defer secret.Destroy()
 	guard, err := credentials.NewLeakGuard(secret)
 	if err != nil {
-		return receipt, err
+		return err
 	}
 	defer guard.Destroy()
 	consumeErr := consume(secret)
 	if consumeErr == nil {
-		return receipt, nil
+		return nil
 	}
 	projection := []byte(consumeErr.Error())
 	defer clear(projection)
 	if err := guard.Scan([]credentials.LeakSurface{{Name: "consumer_error", Content: projection}}); err != nil {
-		return receipt, credentials.NewError(credentials.ErrorSecretLeak, "consumer")
+		return credentials.NewError(credentials.ErrorSecretLeak, "consumer")
 	}
-	return receipt, safeConsumerError(consumeErr)
+	return safeConsumerError(consumeErr)
 }
 
 func safeConsumerError(err error) error {
@@ -415,7 +494,8 @@ func decodeDocument(content []byte) (document, error) {
 }
 
 func validateDocument(doc document) error {
-	if doc.SchemaVersion != documentSchema || doc.DocumentType != documentType || doc.Revision == 0 || !validDigest(doc.ParentDigest) || doc.Records == nil || doc.Ledger == nil {
+	if doc.SchemaVersion != documentSchemaLegacy && doc.SchemaVersion != documentSchema || doc.DocumentType != documentType ||
+		doc.Revision == 0 || !validDigest(doc.ParentDigest) || doc.Records == nil || doc.Ledger == nil {
 		return errUnsafeFile
 	}
 	for ref, item := range doc.Records {
@@ -425,7 +505,7 @@ func validateDocument(doc document) error {
 		}
 	}
 	for key, item := range doc.Ledger {
-		if key != ledgerKey(item.Receipt.ActorRef, item.Receipt.RequestRef) || !validLedger(item) {
+		if key != ledgerKey(item.Receipt.ActorRef, item.Receipt.RequestRef) || !validLedger(doc.SchemaVersion, item) {
 			return errUnsafeFile
 		}
 	}
@@ -446,7 +526,7 @@ func validMetadata(value credentials.Metadata) bool {
 		(value.Version > 1) == !value.RotatedAt.IsZero() && value.Revoked == !value.RevokedAt.IsZero()
 }
 
-func validLedger(item ledger) bool {
+func validLedger(schema int, item ledger) bool {
 	result, receipt := item.Result, item.Receipt
 	scope := receipt.ScopeRef
 	if scope == "" && len(result.ScopeRefs) > 0 {
@@ -467,13 +547,22 @@ func validLedger(item ledger) bool {
 		return receipt.ScopeRef == "" && result.Revoked
 	case "use":
 		return !result.Revoked && hasScope(result.ScopeRefs, receipt.ScopeRef)
+	case credentials.OperationUseOnce:
+		oneShot := credentials.OneShotUseRequest{
+			ActorRef: receipt.ActorRef, RequestRef: receipt.RequestRef, CredentialRef: receipt.CredentialRef,
+			OwnerRef: receipt.OwnerRef, ScopeRef: receipt.ScopeRef, PurposeRef: receipt.PurposeRef, Version: receipt.Version,
+		}
+		fingerprint := requestFingerprint(credentials.OperationUseOnce, receipt.CredentialRef.String(), receipt.OwnerRef.String(),
+			receipt.ScopeRef.String(), receipt.PurposeRef.String(), strconv.FormatUint(uint64(receipt.Version), 10))
+		return schema == documentSchema && !result.Revoked && hasScope(result.ScopeRefs, receipt.ScopeRef) &&
+			credentials.ValidateOneShotUseRequest(oneShot) == nil && item.Fingerprint == fingerprint
 	default:
 		return false
 	}
 }
 
 func emptyDocument() document {
-	return document{SchemaVersion: documentSchema, DocumentType: documentType,
+	return document{SchemaVersion: documentSchemaLegacy, DocumentType: documentType,
 		Records: map[credentials.CredentialRef]record{}, Ledger: map[string]ledger{}}
 }
 
@@ -591,3 +680,4 @@ func mapFileError(field string, err error) error {
 }
 
 var _ credentials.Store = (*Store)(nil)
+var _ credentials.OneShotStore = (*Store)(nil)
