@@ -138,6 +138,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 			}
 			validators = append(validators, recoveryClaimValidator)
 		}
+		if version >= recoverySchemaV38MicroVMHostLaunch {
+			validators = append(validators, validateRecoveryV38MicroVMHostLaunchAuthority)
+		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {
 			if err := validate(ctx, tx); err != nil {
