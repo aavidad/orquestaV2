@@ -17,14 +17,23 @@ const (
 )
 
 type esquemaValorJSONEstricto struct {
-	clase    claseValorJSONEstricto
-	objeto   esquemaObjetoJSONEstricto
-	elemento *esquemaValorJSONEstricto
+	clase      claseValorJSONEstricto
+	objeto     esquemaObjetoJSONEstricto
+	elemento   *esquemaValorJSONEstricto
+	admiteNulo bool
 }
 
 type esquemaObjetoJSONEstricto map[string]esquemaValorJSONEstricto
 
 var esquemaEscalarJSONEstricto = esquemaValorJSONEstricto{clase: valorJSONEscalar}
+
+// esquemaEscalarJSONEstrictoOpcional representa un campo obligatorio cuya
+// forma de red admite explícitamente `null`, como un Option de Serde. No se
+// usa para campos omitibles: la completitud del objeto sigue siendo estricta.
+var esquemaEscalarJSONEstrictoOpcional = esquemaValorJSONEstricto{
+	clase:      valorJSONEscalar,
+	admiteNulo: true,
+}
 
 func esquemaObjetoEstricto(campos esquemaObjetoJSONEstricto) esquemaValorJSONEstricto {
 	return esquemaValorJSONEstricto{clase: valorJSONObject, objeto: campos}
@@ -102,11 +111,11 @@ func validarValorJSONEstricto(decoder *json.Decoder, esquema esquemaValorJSONEst
 	if err != nil {
 		return false
 	}
+	if token == nil {
+		return esquema.clase == valorJSONEscalar && esquema.admiteNulo
+	}
 	switch esquema.clase {
 	case valorJSONEscalar:
-		if token == nil {
-			return false
-		}
 		_, compuesto := token.(json.Delim)
 		return !compuesto
 	case valorJSONObject:
