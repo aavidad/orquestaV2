@@ -238,7 +238,7 @@ func effectReceipt(
 	receipt := EffectReceipt{
 		Ref: "effect-receipt:" + intent.Ref, IntentRef: intent.Ref, IntentDigest: intent.Digest,
 		ApprovalRef: claim.EffectApproval.Ref, AttemptRef: attempt.Ref, Subject: intent.Subject,
-		ActionRef: claim.Action.Ref, ActionFence: claim.Fence, IdempotencyKey: intent.IdempotencyKey,
+		ActionRef: claim.Action.Ref, ActionFence: attempt.ActionFence, IdempotencyKey: intent.IdempotencyKey,
 		ExternalRef: externalRef, Status: status, Usage: usage, ConfirmedAt: at.UTC(),
 	}
 	if err := validateEffectReceipt(claim, attempt, receipt); err != nil {
@@ -249,11 +249,17 @@ func effectReceipt(
 
 func validateEffectReceipt(claim ActionClaim, attempt EffectAttempt, receipt EffectReceipt) error {
 	intent := claim.Action.EffectIntent
-	if !validApplicationRef(receipt.Ref) || !validApplicationRef(receipt.ExternalRef) ||
+	confirmationClaimValid := claim.Fence == attempt.ActionFence
+	if claim.Disposition == ActionClaimDispositionRecoverEffect {
+		confirmationClaimValid = claim.Action.Kind == ActionLaunchAgent &&
+			claim.Fence > attempt.ActionFence && claim.RecoveryEffectAttemptRef == attempt.Ref
+	}
+	if attempt.ActionFence == 0 || !validApplicationRef(receipt.Ref) || !validApplicationRef(receipt.ExternalRef) ||
 		!validEffectStatus(intent.Kind, receipt.Status) || receipt.IntentRef != intent.Ref ||
 		receipt.IntentDigest != intent.Digest || receipt.ApprovalRef != claim.EffectApproval.Ref ||
 		receipt.AttemptRef != attempt.Ref || receipt.Subject != intent.Subject ||
-		receipt.ActionRef != claim.Action.Ref || receipt.ActionFence != claim.Fence ||
+		receipt.ActionRef != claim.Action.Ref || receipt.ActionFence != attempt.ActionFence ||
+		!confirmationClaimValid ||
 		receipt.IdempotencyKey != intent.IdempotencyKey || receipt.ConfirmedAt.Before(attempt.StartedAt) ||
 		!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil) ||
 		governance.ValidateResourceUsage(receipt.Usage) != nil {

@@ -390,10 +390,99 @@ func TestEveryPhysicalEffectReceiptRejectsExclusiveAttemptLeaseBoundary(t *testi
 			); err == nil || err.Error() != "application.effect_receipt_invalid" {
 				t.Fatalf("receipt accepted exclusive lease boundary: %v", err)
 			}
-			if _, err := effectReceipt(
+			finalLiveReceipt, err := effectReceipt(
 				claim, attempt, "provider-receipt:lease-boundary", test.status, unknownUsage(), boundary.Add(-time.Nanosecond),
-			); err != nil {
+			)
+			if err != nil {
 				t.Fatalf("receipt rejected final live instant: %v", err)
+			}
+			if finalLiveReceipt.ActionFence != claim.Fence {
+				t.Fatalf("normal path receipt fence=%d want claim fence=%d",
+					finalLiveReceipt.ActionFence, claim.Fence)
+			}
+		})
+	}
+}
+
+func TestEffectReceiptKeepsHistoricalFenceUnderAuthorizedRecoveryClaim(t *testing.T) {
+	startedAt := time.Date(2026, 8, 5, 20, 0, 0, 0, time.UTC)
+	intent := EffectIntent{
+		Ref: "effect-intent:recovered-confirmation", Digest: "digest:recovered-confirmation",
+		ActionRef: "action:recovered-confirmation", Kind: EffectKindAgentLaunch,
+		IdempotencyKey: "idempotency:recovered-confirmation",
+	}
+	approval := EffectApproval{Ref: "effect-approval:recovered-confirmation"}
+	claim := ActionClaim{
+		Action: ActionRecord{
+			Ref: intent.ActionRef, Kind: ActionLaunchAgent, EffectIntentRef: intent.Ref, EffectIntent: intent,
+		},
+		EffectApproval: approval, Fence: 7, LeaseUntil: startedAt.Add(2 * time.Minute),
+	}
+	attempt := EffectAttempt{
+		Ref: "effect-attempt:recovered-confirmation", IntentRef: intent.Ref,
+		IntentDigest: intent.Digest, ApprovalRef: approval.Ref, ActionRef: intent.ActionRef,
+		ActionFence: 7, IdempotencyKey: intent.IdempotencyKey,
+		StartedAt: startedAt, ClaimLeaseUntil: startedAt.Add(time.Minute),
+	}
+
+	normalReceipt, err := effectReceipt(
+		claim, attempt, "provider-receipt:recovered-confirmation", EffectStatusAccepted,
+		unknownUsage(), attempt.ClaimLeaseUntil.Add(-time.Nanosecond),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalReceipt.ActionFence != claim.Fence {
+		t.Fatalf("normal receipt fence=%d want claim fence=%d", normalReceipt.ActionFence, claim.Fence)
+	}
+
+	recoveryClaim := claim
+	recoveryClaim.Fence = attempt.ActionFence + 1
+	recoveryClaim.Disposition = ActionClaimDispositionRecoverEffect
+	recoveryClaim.RecoveryEffectAttemptRef = attempt.Ref
+	receipt, err := effectReceipt(
+		recoveryClaim, attempt, "provider-receipt:recovered-confirmation", EffectStatusAccepted,
+		unknownUsage(), attempt.ClaimLeaseUntil.Add(-time.Nanosecond),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.ActionFence != attempt.ActionFence || recoveryClaim.Fence <= receipt.ActionFence {
+		t.Fatalf("receipt historical fence=%d want=%d recovery claim fence=%d",
+			receipt.ActionFence, attempt.ActionFence, recoveryClaim.Fence)
+	}
+
+	for name, mutate := range map[string]func(*EffectReceipt){
+		"physical fence crossed":    func(candidate *EffectReceipt) { candidate.ActionFence++ },
+		"historical lease boundary": func(candidate *EffectReceipt) { candidate.ConfirmedAt = attempt.ClaimLeaseUntil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := receipt
+			mutate(&candidate)
+			if err := validateEffectReceipt(recoveryClaim, attempt, candidate); err == nil ||
+				err.Error() != "application.effect_receipt_invalid" {
+				t.Fatalf("invalid receipt accepted: %+v err=%v", candidate, err)
+			}
+		})
+	}
+
+	for name, mutate := range map[string]func(*ActionClaim){
+		"normal divergent": func(candidate *ActionClaim) {
+			candidate.Disposition = ""
+			candidate.RecoveryEffectAttemptRef = ""
+		},
+		"recovery without ref":        func(candidate *ActionClaim) { candidate.RecoveryEffectAttemptRef = "" },
+		"recovery other action":       func(candidate *ActionClaim) { candidate.Action.Kind = ActionStopAgent },
+		"recovery fence not superior": func(candidate *ActionClaim) { candidate.Fence = attempt.ActionFence },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := recoveryClaim
+			mutate(&candidate)
+			if _, err := effectReceipt(
+				candidate, attempt, "provider-receipt:invalid-confirmation", EffectStatusAccepted,
+				unknownUsage(), attempt.StartedAt,
+			); err == nil || err.Error() != "application.effect_receipt_invalid" {
+				t.Fatalf("invalid confirmation claim accepted: %+v err=%v", candidate, err)
 			}
 		})
 	}
