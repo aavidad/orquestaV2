@@ -66,6 +66,8 @@ type Client interface {
 // composition and never enters the adapter configuration as bytes.
 type Signer interface {
 	Preparar(
+		context.Context,
+		ports.AgentLaunchRequest,
 		microvm.ContextoAutorizado,
 		microvm.PlanLanzamiento,
 		time.Time,
@@ -141,8 +143,11 @@ func (adapter *Adapter) Launch(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
 ) (ports.AgentLaunchReceipt, error) {
-	if adapter == nil || adapter.client == nil || adapter.signer == nil {
+	if adapter == nil || nilInterface(adapter.client) || nilInterface(adapter.signer) || nilInterface(ctx) {
 		return ports.AgentLaunchReceipt{}, fail(CodeConfigurationInvalid, nil)
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.AgentLaunchReceipt{}, err
 	}
 	if err := adapter.validateRequirements(request); err != nil {
 		return ports.AgentLaunchReceipt{}, err
@@ -155,16 +160,27 @@ func (adapter *Adapter) Launch(
 		return ports.AgentLaunchReceipt{}, err
 	}
 	signed, err := adapter.signer.Preparar(
+		ctx,
+		request,
 		compiled.Context,
-		compiled.Plan,
+		cloneLaunchPlan(compiled.Plan),
 		compiled.IssuedAt,
 		compiled.Validity,
 	)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return ports.AgentLaunchReceipt{}, err
+		}
+		if contextErr := ctx.Err(); contextErr != nil {
+			return ports.AgentLaunchReceipt{}, contextErr
+		}
 		return ports.AgentLaunchReceipt{}, fail(CodeSigningFailed, err)
 	}
 	if !validSignedPlan(compiled, signed.Plan) {
 		return ports.AgentLaunchReceipt{}, fail(CodeSigningFailed, nil)
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.AgentLaunchReceipt{}, err
 	}
 	signed, ok := cloneSignedRequest(signed)
 	if !ok {
@@ -173,6 +189,9 @@ func (adapter *Adapter) Launch(
 	receiptRef := launchReceiptRef(signed)
 	response, err := adapter.client.Lanzar(ctx, request.IdempotencyKey, cloneSignedRequestUnchecked(signed))
 	if err != nil {
+		if contextErr := preserveContextError(ctx, err); contextErr != nil {
+			return ports.AgentLaunchReceipt{}, contextErr
+		}
 		return ports.AgentLaunchReceipt{}, classifyLaunchError(err)
 	}
 	if !validLaunchResponse(response, compiled.Plan) {
@@ -235,9 +254,21 @@ func (adapter *Adapter) validateRequirements(request ports.AgentLaunchRequest) e
 }
 
 func (adapter *Adapter) negotiate(ctx context.Context) error {
+	if nilInterface(ctx) {
+		return fail(CodeConfigurationInvalid, nil)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	response, err := adapter.client.Capacidades(ctx)
 	if err != nil {
+		if contextErr := preserveContextError(ctx, err); contextErr != nil {
+			return contextErr
+		}
 		return classifyCapabilitiesError(err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if response.Protocolo != microvm.ProtocoloLocal {
 		return fail(CodeProtocolIncompatible, nil)
@@ -331,6 +362,23 @@ func cloneProfileBinding(binding ProfileBinding) ProfileBinding {
 	return binding
 }
 
+func cloneLaunchPlan(plan microvm.PlanLanzamiento) microvm.PlanLanzamiento {
+	if plan.PerfilSHA256 != nil {
+		profileSHA256 := *plan.PerfilSHA256
+		plan.PerfilSHA256 = &profileSHA256
+	}
+	plan.Servicios = append([]microvm.ServicioVsock(nil), plan.Servicios...)
+	if plan.Egreso != nil {
+		egress := *plan.Egreso
+		egress.Destinos = append([]microvm.DestinoEgreso(nil), plan.Egreso.Destinos...)
+		for index := range egress.Destinos {
+			egress.Destinos[index].Puertos = append([]uint16(nil), egress.Destinos[index].Puertos...)
+		}
+		plan.Egreso = &egress
+	}
+	return plan
+}
+
 func cloneCapabilities(capabilities ports.AgentCapabilities) ports.AgentCapabilities {
 	capabilities.RoleKeys = append([]string(nil), capabilities.RoleKeys...)
 	capabilities.SkillRefs = append([]string(nil), capabilities.SkillRefs...)
@@ -350,6 +398,16 @@ func nilInterface(value any) bool {
 	default:
 		return false
 	}
+}
+
+func preserveContextError(ctx context.Context, err error) error {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	if !nilInterface(ctx) {
+		return ctx.Err()
+	}
+	return nil
 }
 
 func classifyCapabilitiesError(err error) error {

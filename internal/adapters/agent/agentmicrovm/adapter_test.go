@@ -23,10 +23,15 @@ type launchClientStub struct {
 	capabilitiesCall int
 	launchKeys       []string
 	launchRequests   []microvm.SolicitudLanzamiento
+	onCapabilities   func()
+	onLaunch         func()
 }
 
 func (client *launchClientStub) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
 	client.capabilitiesCall++
+	if client.onCapabilities != nil {
+		client.onCapabilities()
+	}
 	return client.capabilities, client.capabilitiesErr
 }
 
@@ -37,6 +42,9 @@ func (client *launchClientStub) Lanzar(
 ) (microvm.RespuestaEjecucion, error) {
 	client.launchKeys = append(client.launchKeys, key)
 	client.launchRequests = append(client.launchRequests, cloneSignedRequestUnchecked(request))
+	if client.onLaunch != nil {
+		client.onLaunch()
+	}
 	return client.response, client.launchErr
 }
 
@@ -71,38 +79,61 @@ func (*launchOnlyClientStub) Lanzar(
 }
 
 type signerCall struct {
+	ctx      context.Context
+	request  ports.AgentLaunchRequest
 	context  microvm.ContextoAutorizado
 	plan     microvm.PlanLanzamiento
 	issuedAt time.Time
 	validity time.Duration
 }
 
+type launchGrantPreparer interface {
+	Preparar(
+		microvm.ContextoAutorizado,
+		microvm.PlanLanzamiento,
+		time.Time,
+		time.Duration,
+	) (microvm.SolicitudLanzamiento, error)
+}
+
 type launchSignerStub struct {
-	delegate Signer
-	err      error
-	mutate   func(microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento
-	calls    []signerCall
+	delegate    launchGrantPreparer
+	err         error
+	cancel      func()
+	mutatePlan  func(*microvm.PlanLanzamiento)
+	mutate      func(microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento
+	calls       []signerCall
+	delegateErr error
 }
 
 func (signer *launchSignerStub) Preparar(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
 	context microvm.ContextoAutorizado,
 	plan microvm.PlanLanzamiento,
 	issuedAt time.Time,
 	validity time.Duration,
 ) (microvm.SolicitudLanzamiento, error) {
+	if signer.mutatePlan != nil {
+		signer.mutatePlan(&plan)
+	}
 	plan.Servicios = append([]microvm.ServicioVsock(nil), plan.Servicios...)
-	signer.calls = append(signer.calls, signerCall{context, plan, issuedAt, validity})
+	signer.calls = append(signer.calls, signerCall{ctx, request, context, plan, issuedAt, validity})
+	if signer.cancel != nil {
+		signer.cancel()
+	}
 	if signer.err != nil {
 		return microvm.SolicitudLanzamiento{}, signer.err
 	}
-	request, err := signer.delegate.Preparar(context, plan, issuedAt, validity)
+	prepared, err := signer.delegate.Preparar(context, plan, issuedAt, validity)
+	signer.delegateErr = err
 	if err != nil {
 		return microvm.SolicitudLanzamiento{}, err
 	}
 	if signer.mutate != nil {
-		request = signer.mutate(cloneSignedRequestUnchecked(request))
+		prepared = signer.mutate(cloneSignedRequestUnchecked(prepared))
 	}
-	return cloneSignedRequestUnchecked(request), nil
+	return cloneSignedRequestUnchecked(prepared), nil
 }
 
 func TestAdapterLaunchSignsAndReplaysExactPhysicalRequest(t *testing.T) {
@@ -112,11 +143,12 @@ func TestAdapterLaunchSignsAndReplaysExactPhysicalRequest(t *testing.T) {
 	signer := validSigner()
 	adapter := mustNewAdapter(t, client, signer, request, descriptor)
 
-	first, err := adapter.Launch(context.Background(), request)
+	ctx := context.Background()
+	first, err := adapter.Launch(ctx, request)
 	if err != nil {
 		t.Fatalf("Launch() first error = %v", err)
 	}
-	second, err := adapter.Launch(context.Background(), request)
+	second, err := adapter.Launch(ctx, request)
 	if err != nil {
 		t.Fatalf("Launch() replay error = %v", err)
 	}
@@ -132,7 +164,7 @@ func TestAdapterLaunchSignsAndReplaysExactPhysicalRequest(t *testing.T) {
 		t.Fatalf("signing material changed: %+v", signer.calls)
 	}
 	compiled := mustCompile(t, request, descriptor)
-	wantCall := signerCall{compiled.Context, compiled.Plan, compiled.IssuedAt, compiled.Validity}
+	wantCall := signerCall{ctx, request, compiled.Context, compiled.Plan, compiled.IssuedAt, compiled.Validity}
 	if !reflect.DeepEqual(signer.calls[0], wantCall) {
 		t.Fatalf("signing call = %+v, want %+v", signer.calls[0], wantCall)
 	}
@@ -210,6 +242,60 @@ func TestAdapterRejectsSignerPlanMutationBeforeSocket(t *testing.T) {
 				t.Fatalf("Launch() error=%v code=%q definite=%v launches=%d", err, ErrorCode(err), isDefinitelyNotApplied(err), len(client.launchRequests))
 			}
 		})
+	}
+}
+
+func TestAdapterRejectsInPlaceSignerMutationWithoutAliasingCompiledPlan(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &launchClientStub{
+		capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor),
+	}
+	signer := validSigner()
+	signer.mutatePlan = func(plan *microvm.PlanLanzamiento) {
+		plan.Servicios[0].Puerto++
+		plan.Servicios = append(plan.Servicios, microvm.ServicioVsock{
+			Papel: "controlled_egress_proxy", ServicioRef: "servicio:egreso", Puerto: 10_003,
+			IdentidadRef: "identidad-servicio:egreso", IdentidadSHA256: strings.Repeat("8", 64),
+		})
+		plan.Egreso = &microvm.ConcesionEgreso{
+			Esquema: microvm.EsquemaConcesionEgreso, Referencia: "egreso:test",
+			Destinos:         []microvm.DestinoEgreso{{Host: "example.com", Puertos: []uint16{80}}},
+			MaximoConexiones: 1, LimiteTiempoMS: plan.LimiteTiempoMS,
+			LimiteSubidaBytes: 1, LimiteBajadaBytes: 1,
+		}
+		plan.Egreso.Destinos[0].Puertos[0] = 443
+	}
+	adapter := mustNewAdapter(t, client, signer, request, descriptor)
+
+	_, err := adapter.Launch(context.Background(), request)
+	if ErrorCode(err) != CodeSigningFailed || signer.delegateErr != nil || len(client.launchRequests) != 0 {
+		t.Fatalf("Launch() error=%v code=%q signer=%v launches=%d", err, ErrorCode(err), signer.delegateErr, len(client.launchRequests))
+	}
+	compiled := mustCompile(t, request, descriptor)
+	if compiled.Plan.Servicios[0].Puerto != 10_001 || len(compiled.Plan.Servicios) != 1 || compiled.Plan.Egreso != nil {
+		t.Fatalf("canonical compilation was changed: %+v", compiled.Plan)
+	}
+}
+
+func TestCloneLaunchPlanOwnsEveryMutableLevel(t *testing.T) {
+	profileSHA := strings.Repeat("a", 64)
+	original := microvm.PlanLanzamiento{
+		PerfilSHA256: &profileSHA,
+		Servicios:    []microvm.ServicioVsock{{Puerto: 10_001}},
+		Egreso: &microvm.ConcesionEgreso{Destinos: []microvm.DestinoEgreso{
+			{Host: "example.com", Puertos: []uint16{80, 443}},
+		}},
+	}
+	cloned := cloneLaunchPlan(original)
+	*cloned.PerfilSHA256 = strings.Repeat("b", 64)
+	cloned.Servicios[0].Puerto++
+	cloned.Egreso.Destinos[0].Host = "other.example"
+	cloned.Egreso.Destinos[0].Puertos[0] = 8080
+
+	if *original.PerfilSHA256 != strings.Repeat("a", 64) || original.Servicios[0].Puerto != 10_001 ||
+		original.Egreso.Destinos[0].Host != "example.com" || original.Egreso.Destinos[0].Puertos[0] != 80 {
+		t.Fatalf("clone retained mutable aliases: original=%+v clone=%+v", original, cloned)
 	}
 }
 
@@ -364,6 +450,103 @@ func TestAdapterRejectsInvalidConfigurationAndSigningBeforeSocketMutation(t *tes
 	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeSigningFailed ||
 		!isDefinitelyNotApplied(err) || len(client.launchRequests) != 0 {
 		t.Fatalf("signing error=%v launches=%d", err, len(client.launchRequests))
+	}
+}
+
+func TestAdapterPreservesContextCanceledDuringSigningBeforeSocketMutation(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &launchClientStub{
+		capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor),
+	}
+	signer := validSigner()
+	ctx, cancel := context.WithCancel(context.Background())
+	signer.cancel = cancel
+	adapter := mustNewAdapter(t, client, signer, request, descriptor)
+
+	_, err := adapter.Launch(ctx, request)
+	if !errors.Is(err, context.Canceled) || ErrorCode(err) != "" || len(client.launchRequests) != 0 {
+		t.Fatalf("Launch() error=%v code=%q launches=%d", err, ErrorCode(err), len(client.launchRequests))
+	}
+}
+
+func TestAdapterRejectsNilAndPreCanceledContextsBeforeTransport(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &launchClientStub{
+		capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor),
+	}
+	adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+	var nilContext context.Context
+	if _, err := adapter.Launch(nilContext, request); ErrorCode(err) != CodeConfigurationInvalid {
+		t.Fatalf("nil context error=%v code=%q", err, ErrorCode(err))
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := adapter.Launch(ctx, request); !errors.Is(err, context.Canceled) || ErrorCode(err) != "" {
+		t.Fatalf("canceled context error=%v code=%q", err, ErrorCode(err))
+	}
+	if client.capabilitiesCall != 0 || len(client.launchRequests) != 0 {
+		t.Fatalf("context rejection touched transport: capabilities=%d launches=%d", client.capabilitiesCall, len(client.launchRequests))
+	}
+}
+
+func TestAdapterPreservesContextErrorsFromBothTransports(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	tests := []struct {
+		name      string
+		build     func(context.CancelFunc) *launchClientStub
+		wantError error
+	}{
+		{
+			name: "capabilities deadline",
+			build: func(context.CancelFunc) *launchClientStub {
+				return &launchClientStub{capabilitiesErr: context.DeadlineExceeded}
+			},
+			wantError: context.DeadlineExceeded,
+		},
+		{
+			name: "capabilities canceled with generic transport error",
+			build: func(cancel context.CancelFunc) *launchClientStub {
+				return &launchClientStub{onCapabilities: cancel, capabilitiesErr: errors.New("transport stopped")}
+			},
+			wantError: context.Canceled,
+		},
+		{
+			name: "launch canceled",
+			build: func(context.CancelFunc) *launchClientStub {
+				return &launchClientStub{
+					capabilities: validRemoteCapabilities(), launchErr: context.Canceled,
+				}
+			},
+			wantError: context.Canceled,
+		},
+		{
+			name: "launch canceled with generic transport error",
+			build: func(cancel context.CancelFunc) *launchClientStub {
+				return &launchClientStub{
+					capabilities: validRemoteCapabilities(), onLaunch: cancel,
+					launchErr: errors.New("socket stopped"),
+				}
+			},
+			wantError: context.Canceled,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			client := test.build(cancel)
+			if client.response.Referencia == "" {
+				client.response = validPhysicalResponse(t, request, descriptor)
+			}
+			adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+			_, err := adapter.Launch(ctx, request)
+			if !errors.Is(err, test.wantError) || ErrorCode(err) != "" {
+				t.Fatalf("Launch() error=%v code=%q, want %v", err, ErrorCode(err), test.wantError)
+			}
+		})
 	}
 }
 
