@@ -616,17 +616,18 @@ sobre estados físicos aproximados.
 | B10.0d | Repositorio hermano: API Unix y cliente Go para iniciar sesión, enviar entrada y observar eventos por cursor. | Tras B10.0a–c; fija revisión pública. | Se mide al cerrar B10.0 |
 | B10.1 | `60bf4646` + `6262dc43`: `AgentLaunchRequest` transporta autorización, aprobación, intento, cerca, tiempo, vencimiento del claim y vencimiento de la aprobación durables; la liquidación defensiva conserva el enlace causal al intento. | Cerrada con revisión premium y pruebas normal/race; no usa reloj vivo, no cambia el fingerprint histórico ni obliga al adaptador de proceso. | Delta real al regularizar |
 | B10.2 | Guarda de dependencia: fija la revisión B10.0 del módulo Go público; prohíbe `replace` local, segundo HTTP, tipos físicos o acceso al registro hermano. | Tras B10.0d; no añade producto. | Estimación histórica `P=0,V=20` |
-| B10.3 | `internal/adapters/agent/agentmicrovm/`: negociación, lanzamiento firmado y observación por eventos de sesión; estados físicos y de trabajo permanecen separados. | Tras B10.1/B10.2. | Se mide al cerrar |
-| B10.4 | Registro canónico y bootstrap componen socket, secreto por referencia y adaptador; retira A05.1b solo al completar negociación. | Tras B10.3; serial en composición. | Se mide al cerrar |
-| B10.5 | Reinicio, concesión byte a byte, cerca, duplicado, receipt/socket perdidos, cursor durable, concurrencia y `-race`. | Último; sin KVM. | Se mide al cerrar |
+| B10.3 | `internal/adapters/agent/agentmicrovm/`: negociación, lanzamiento firmado, `WorkPacket` sellado, inicio/entrega de sesión y observación por eventos; estados físicos y de trabajo permanecen separados. Cierre de código/offline en `3838dbe0`, `2b21911e`, `4ea504cc`, `7926397a`, `ade7e323`, `b770cac6`, `806b4d78` y `8e1d865d`, con revisión premium. | Cerrada tras B10.1/B10.2; sin KVM. `TestAdapterLaunchBuildsPacketBeforeMutationAndDeliversExactInput`, `TestObserveAgentKeepsMissingAndAmbiguousSessionNonterminal`, `TestAdapterLaunchMapsOnlyTypedExactRemotePending`, `TestAdapterLaunchRejectsStaleOrCrossReconciliationReceipt`, `TestRunnerInitialDeadlineInterruptsRealFIFO`, `TestRunnerChildReceivesOnlySealedEnvironment` y `TestBuildWorkPacketV1RejectsForeignOrMutatedCompilation` cubren el corte offline. | Se mide al regularizar; no acredita microVM física ni Codex real. |
+| B10.4 | Registro canónico y bootstrap componen socket, secreto por referencia y adaptador; retira A05.1b solo al completar negociación. | Abierta tras B10.3; serial en composición. | Se mide al cerrar. |
+| B10.5 | Reinicio del host, concesión byte a byte, cerca, duplicado, receipt/socket perdidos, cursor durable, concurrencia y `-race`. | Abierta; último tramo offline y sin KVM. En particular, `EffectAttempt` no es aún recuperable tras reinicio del host. | Se mide al cerrar. |
 
-B10.0 sigue abierto: B10.0a, B10.0a2 y B10.0b1 aportan contrato, descriptor y
-modelo, pero faltan puertos, persistencia, casos de uso, recuperación, puente y
-cliente público. B10.1 está cerrado; B10 completo no está `wired` ni
-`exercised_without_kvm`. B11 conserva parada exacta y B12 conserva
-preservación, sello y el primer Codex físico real. Una microVM `disponible`,
-una orden síncrona o un evento físico no acreditan trabajo de agente iniciado o
-completado.
+El desglose B10.0 anterior conserva el plan histórico, no la fotografía vigente:
+la revisión pública fijada por B10.2 ya expone el cliente de sesión, persistencia
+y reconciliación que consume B10.3. Esto no acredita por sí solo el puente
+físico del huésped. B10.1 y B10.3 están cerradas en código/offline; B10 completo
+no está `wired` ni `exercised_without_kvm` mientras B10.4/B10.5 sigan abiertas.
+B11 conserva parada exacta y B12 preservación, sello y el primer Codex físico
+real. Una microVM `disponible`, una orden síncrona o un evento físico no
+acreditan trabajo de agente iniciado o completado.
 
 ### B12 — `P=400, V=500`
 

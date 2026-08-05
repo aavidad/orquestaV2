@@ -2,6 +2,15 @@
 
 ## Avance operativo del 2026-08-05
 
+- B10.3 queda cerrado en código/offline, con revisión premium y sin KVM, por
+  `3838dbe0` (launch), `2b21911e` (observe), `4ea504cc` (protocolo),
+  `7926397a`/`ade7e323` (firmante y credencial), `b770cac6` (executor),
+  `806b4d78` (WorkPacket) y `8e1d865d` (sesión). El receipt solo nace después
+  de iniciar/entregar la sesión; la observación no muta, el executor aísla el
+  entorno y el protocolo mantiene separados compilación, request y perfil.
+  B10.4/B10.5 siguen abiertas: falta el wiring canónico y, sobre todo, recovery
+  del reinicio del host; `EffectAttempt` aún no es recuperable. No se arrancó
+  KVM ni se acredita Codex real o una microVM física.
 - Agente MicroVM cierra `B10.0b3b` en `cbfc672` y documenta el corte en
   `59b32bd`. SQLite v15 implementa todo `RepositorioSesionesTrabajo`: inicio,
   entrada, observación, terminal y recovery causal, con CAS, idempotencia,
