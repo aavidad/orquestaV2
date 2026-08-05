@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-08-05.0",
+  "revision": "2026-08-05.1",
   "precedence": [
     "default",
     "file",
@@ -41,7 +41,10 @@
     {
       "id": "runtime_microvm_requirements",
       "keys": [
+        "runtime.provider",
         "runtime.isolation",
+        "runtime.codex.model",
+        "runtime.microvm.placement_ref",
         "runtime.microvm.socket_path",
         "runtime.microvm.profile_descriptor_path",
         "runtime.microvm.expected_profile_descriptor_sha256",
@@ -384,6 +387,20 @@
       "env_alias": "ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TIMEOUT",
       "validator_ids": [
         "positive_duration"
+      ]
+    },
+    {
+      "key": "runtime.microvm.placement_ref",
+      "go_name": "RuntimeMicroVMPlacementRef",
+      "semantic_ref": "orquesta.config.runtime.microvm.placement_ref",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_MICROVM_PLACEMENT_REF",
+      "validator_ids": [
+        "trimmed_optional_string"
       ]
     },
     {

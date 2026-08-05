@@ -102,6 +102,7 @@ observation_ttl = "45s"
 observation_timeout = "750ms"
 
 [runtime.microvm]
+placement_ref = "placement:codex:account-1"
 socket_path = "/run/orquesta/agente-microvm.sock"
 profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"
 expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -109,9 +110,12 @@ launch_grant_key_id = "clave-publica:orquesta-01"
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
 
 [runtime.codex]
+model = "gpt-5.6"
 app_server_max_frame_bytes = 131072
 `, nil)
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" ||
+		snapshot.RuntimeCodexModel() != "gpt-5.6" ||
+		snapshot.RuntimeMicroVMPlacementRef() != "placement:codex:account-1" ||
 		snapshot.RuntimeCapacityObservationTTL() != 45*time.Second ||
 		snapshot.RuntimeCapacityObservationTimeout() != 750*time.Millisecond ||
 		snapshot.RuntimeCodexAppServerMaxFrameBytes() != 131072 {

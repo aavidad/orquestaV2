@@ -449,7 +449,10 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeCodexMaxConcurrentExecutions, KeyRuntimeCodexCredentialRef,
 		},
 		"runtime_microvm_requirements": {
+			KeyRuntimeProvider,
 			KeyRuntimeIsolation,
+			KeyRuntimeCodexModel,
+			KeyRuntimeMicroVMPlacementRef,
 			KeyRuntimeMicroVMSocketPath,
 			KeyRuntimeMicroVMProfileDescriptorPath,
 			KeyRuntimeMicroVMExpectedProfileDescriptorSHA256,

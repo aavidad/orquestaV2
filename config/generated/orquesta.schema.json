@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-08-05.0",
+  "$id": "urn:orquesta:config:2026-08-05.1",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -940,6 +940,18 @@
                 "credential_ref"
               ]
             },
+            "placement_ref": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_PLACEMENT_REF",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.placement_ref",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
             "profile_descriptor_path": {
               "default": "",
               "type": "string",
@@ -1458,8 +1470,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-08-05.0",
-  "x-registry-hash": "sha256:baf227133e95eb589faa6bbe249515a50cdcd2325c7281bc57954f100df725f5",
+  "x-registry-revision": "2026-08-05.1",
+  "x-registry-hash": "sha256:b1ef972427ce9765d0c9963739992e14f56390927580da2b0ae7f4290b00a0a5",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1492,7 +1504,10 @@
     {
       "id": "runtime_microvm_requirements",
       "keys": [
+        "runtime.provider",
         "runtime.isolation",
+        "runtime.codex.model",
+        "runtime.microvm.placement_ref",
         "runtime.microvm.socket_path",
         "runtime.microvm.profile_descriptor_path",
         "runtime.microvm.expected_profile_descriptor_sha256",

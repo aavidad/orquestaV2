@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"orquesta/internal/identity"
 )
@@ -194,26 +195,50 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 }
 
 func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
+	provider, providerOK := values[KeyRuntimeProvider].value.(string)
 	isolation, isolationOK := values[KeyRuntimeIsolation].value.(string)
+	providerModel, modelOK := values[KeyRuntimeCodexModel].value.(string)
+	placementRef, placementOK := values[KeyRuntimeMicroVMPlacementRef].value.(string)
 	socketPath, socketOK := values[KeyRuntimeMicroVMSocketPath].value.(string)
 	profilePath, profileOK := values[KeyRuntimeMicroVMProfileDescriptorPath].value.(string)
 	profileDigest, digestOK := values[KeyRuntimeMicroVMExpectedProfileDescriptorSHA256].value.(string)
 	keyID, keyIDOK := values[KeyRuntimeMicroVMLaunchGrantKeyID].value.(string)
 	credentialRef, credentialOK := values[KeyRuntimeMicroVMLaunchGrantSigningCredentialRef].value.(CredentialRef)
-	if !isolationOK || !socketOK || !profileOK || !digestOK || !keyIDOK || !credentialOK {
+	if !providerOK || !isolationOK || !modelOK || !placementOK || !socketOK ||
+		!profileOK || !digestOK || !keyIDOK || !credentialOK {
 		return false
 	}
-	configured := socketPath != "" || profilePath != "" || profileDigest != "" ||
+	configured := placementRef != "" || socketPath != "" || profilePath != "" || profileDigest != "" ||
 		keyID != "" || credentialRef != ""
 	if isolation == "process" {
 		return !configured
 	}
-	return isolation == "microvm" &&
+	return isolation == "microvm" && provider == "codex" &&
+		validProviderModel(providerModel) &&
+		validRuntimeMicroVMPlacementRef(placementRef) &&
 		canonicalAbsolutePath(socketPath) &&
 		canonicalAbsolutePath(profilePath) &&
 		validBareSHA256(profileDigest) &&
 		validLaunchGrantKeyID(keyID) &&
 		credentialRef != ""
+}
+
+func validProviderModel(value string) bool {
+	if value == "" || len(value) > 128 || value != strings.TrimSpace(value) || !utf8.ValidString(value) {
+		return false
+	}
+	for _, character := range value {
+		if character < 0x20 || character == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func validRuntimeMicroVMPlacementRef(value string) bool {
+	const prefix = "placement:"
+	return strings.HasPrefix(value, prefix) && len(value) > len(prefix) &&
+		strings.TrimSpace(value) == value && !strings.ContainsRune(value, '\x00')
 }
 
 func validLaunchGrantKeyID(value string) bool {

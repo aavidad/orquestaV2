@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-08-05.0",
-  "registry_hash": "sha256:baf227133e95eb589faa6bbe249515a50cdcd2325c7281bc57954f100df725f5",
+  "registry_revision": "2026-08-05.1",
+  "registry_hash": "sha256:b1ef972427ce9765d0c9963739992e14f56390927580da2b0ae7f4290b00a0a5",
   "aliases": [],
   "cross_validators": [
     {
@@ -34,7 +34,10 @@
     {
       "id": "runtime_microvm_requirements",
       "keys": [
+        "runtime.provider",
         "runtime.isolation",
+        "runtime.codex.model",
+        "runtime.microvm.placement_ref",
         "runtime.microvm.socket_path",
         "runtime.microvm.profile_descriptor_path",
         "runtime.microvm.expected_profile_descriptor_sha256",
@@ -341,6 +344,18 @@
       "restart_required": true,
       "validator_ids": [
         "positive_duration"
+      ]
+    },
+    {
+      "key": "runtime.microvm.placement_ref",
+      "semantic_ref": "orquesta.config.runtime.microvm.placement_ref",
+      "label_key": "config.field.runtime.microvm.placement_ref",
+      "type": "string",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
       ]
     },
     {

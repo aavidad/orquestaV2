@@ -29,6 +29,7 @@ observation_ttl = "30s"
 observation_timeout = "1s"
 
 [runtime.microvm]
+placement_ref = ""
 socket_path = ""
 profile_descriptor_path = ""
 expected_profile_descriptor_sha256 = ""
