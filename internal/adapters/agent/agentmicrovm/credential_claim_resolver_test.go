@@ -67,10 +67,11 @@ func TestCredentialClaimResolverSelectsExactPlacementAccounts(t *testing.T) {
 		{placementB, credentialB, 7},
 	} {
 		request := credentialClaimLaunchRequest(t, test.placement)
-		claim, err := resolver.Resolve(context.Background(), request)
+		resolved, err := resolver.Resolve(context.Background(), request)
 		if err != nil {
 			t.Fatal(err)
 		}
+		claim := resolved.OneShotUseRequest()
 		wantRequestRef, err := ports.BuildMicroVMHostLaunchOneShotRequestRefV1(
 			ports.MicroVMHostLaunchAuthorityKey{RunRef: request.ExecutionRef, ActionFence: request.EffectAuthority.ActionFence},
 			request.EffectAuthority.EffectAttemptRef, request.SessionRef,
@@ -134,24 +135,24 @@ func TestCredentialClaimResolverRejectsUnknownPlacementAndReaderFailures(t *test
 	reader := &credentialClaimReaderStub{versions: map[credentials.CredentialRef]credentials.Version{"credential:account-a": 1}}
 	resolver := mustCredentialClaimResolver(t, reader, []CredentialClaimBinding{{placement, "credential:account-a"}})
 	unknown := credentialClaimLaunchRequest(t, mustCredentialClaimPlacement(t, "placement:unknown"))
-	if claim, err := resolver.Resolve(context.Background(), unknown); claim != (credentials.OneShotUseRequest{}) ||
+	if resolved, err := resolver.Resolve(context.Background(), unknown); resolved != (ResolvedCredentialClaim{}) ||
 		ErrorCode(err) != CodeCredentialClaimPlacementUnknown {
-		t.Fatalf("unknown claim=%+v err=%v", claim, err)
+		t.Fatalf("unknown resolved=%+v err=%v", resolved, err)
 	}
 
 	sentinel := errors.New("reader unavailable")
 	reader.err = sentinel
 	request := credentialClaimLaunchRequest(t, placement)
-	if claim, err := resolver.Resolve(context.Background(), request); claim != (credentials.OneShotUseRequest{}) ||
+	if resolved, err := resolver.Resolve(context.Background(), request); resolved != (ResolvedCredentialClaim{}) ||
 		ErrorCode(err) != CodeCredentialClaimDescriptionUnavailable || !errors.Is(err, sentinel) ||
 		strings.Contains(err.Error(), sentinel.Error()) {
-		t.Fatalf("reader error claim=%+v err=%v", claim, err)
+		t.Fatalf("reader error resolved=%+v err=%v", resolved, err)
 	}
 	reader.err = nil
 	reader.mutate = func(result *credentials.DescribedUseAuthority) { result.OwnerRef = "owner:crossed" }
-	if claim, err := resolver.Resolve(context.Background(), request); claim != (credentials.OneShotUseRequest{}) ||
+	if resolved, err := resolver.Resolve(context.Background(), request); resolved != (ResolvedCredentialClaim{}) ||
 		ErrorCode(err) != CodeCredentialClaimDescriptionInvalid {
-		t.Fatalf("crossed reader claim=%+v err=%v", claim, err)
+		t.Fatalf("crossed reader resolved=%+v err=%v", resolved, err)
 	}
 }
 
@@ -176,9 +177,9 @@ func TestCredentialClaimResolverRejectsInvalidDurableLaunchAuthorityBeforeDescri
 		t.Run(test.name, func(t *testing.T) {
 			request := credentialClaimLaunchRequest(t, placement)
 			test.mutate(&request)
-			claim, err := resolver.Resolve(context.Background(), request)
-			if claim != (credentials.OneShotUseRequest{}) || ErrorCode(err) != CodeCredentialClaimRequestInvalid {
-				t.Fatalf("claim=%+v err=%v", claim, err)
+			resolved, err := resolver.Resolve(context.Background(), request)
+			if resolved != (ResolvedCredentialClaim{}) || ErrorCode(err) != CodeCredentialClaimRequestInvalid {
+				t.Fatalf("resolved=%+v err=%v", resolved, err)
 			}
 		})
 	}
@@ -194,9 +195,9 @@ func TestCredentialClaimResolverRejectsTypedNilContext(t *testing.T) {
 	reader := &credentialClaimReaderStub{versions: map[credentials.CredentialRef]credentials.Version{"credential:account-a": 1}}
 	resolver := mustCredentialClaimResolver(t, reader, []CredentialClaimBinding{{placement, "credential:account-a"}})
 	var typedNil *credentialClaimTypedNilContext
-	claim, err := resolver.Resolve(typedNil, credentialClaimLaunchRequest(t, placement))
-	if claim != (credentials.OneShotUseRequest{}) || ErrorCode(err) != CodeCredentialClaimResolverInvalid {
-		t.Fatalf("claim=%+v err=%v", claim, err)
+	resolved, err := resolver.Resolve(typedNil, credentialClaimLaunchRequest(t, placement))
+	if resolved != (ResolvedCredentialClaim{}) || ErrorCode(err) != CodeCredentialClaimResolverInvalid {
+		t.Fatalf("resolved=%+v err=%v", resolved, err)
 	}
 }
 
@@ -205,10 +206,11 @@ func TestCredentialClaimResolverSealsRunFenceAttemptAndSession(t *testing.T) {
 	reader := &credentialClaimReaderStub{versions: map[credentials.CredentialRef]credentials.Version{"credential:account-a": 1}}
 	resolver := mustCredentialClaimResolver(t, reader, []CredentialClaimBinding{{placement, "credential:account-a"}})
 	base := credentialClaimLaunchRequest(t, placement)
-	baseClaim, err := resolver.Resolve(context.Background(), base)
+	baseResolved, err := resolver.Resolve(context.Background(), base)
 	if err != nil {
 		t.Fatal(err)
 	}
+	baseClaim := baseResolved.OneShotUseRequest()
 	reader.mu.Lock()
 	baseDescribeRef := reader.requests[len(reader.requests)-1].RequestRef
 	reader.mu.Unlock()
@@ -224,10 +226,11 @@ func TestCredentialClaimResolverSealsRunFenceAttemptAndSession(t *testing.T) {
 	for index, mutate := range mutations {
 		candidate := base
 		mutate(&candidate)
-		claim, err := resolver.Resolve(context.Background(), candidate)
+		resolved, err := resolver.Resolve(context.Background(), candidate)
 		if err != nil {
 			t.Fatalf("mutation %d: %v", index, err)
 		}
+		claim := resolved.OneShotUseRequest()
 		reader.mu.Lock()
 		describeRef := reader.requests[len(reader.requests)-1].RequestRef
 		reader.mu.Unlock()
@@ -245,14 +248,16 @@ func TestCredentialClaimResolverPinsDescribedRotationWithoutChangingClaimIdentit
 	resolver := mustCredentialClaimResolver(t, reader, bindings)
 	bindings[0].CredentialRef = "credential:mutated-after-construction"
 	request := credentialClaimLaunchRequest(t, placement)
-	first, err := resolver.Resolve(context.Background(), request)
+	firstResolved, err := resolver.Resolve(context.Background(), request)
+	first := firstResolved.OneShotUseRequest()
 	if err != nil || first.CredentialRef != credentialRef || first.Version != 1 {
 		t.Fatalf("first=%+v err=%v", first, err)
 	}
 	reader.mu.Lock()
 	reader.versions[credentialRef] = 2
 	reader.mu.Unlock()
-	second, err := resolver.Resolve(context.Background(), request)
+	secondResolved, err := resolver.Resolve(context.Background(), request)
+	second := secondResolved.OneShotUseRequest()
 	if err != nil || second.CredentialRef != credentialRef || second.Version != 2 || second.RequestRef != first.RequestRef {
 		t.Fatalf("second=%+v first=%+v err=%v", second, first, err)
 	}
@@ -260,13 +265,35 @@ func TestCredentialClaimResolverPinsDescribedRotationWithoutChangingClaimIdentit
 
 func TestCredentialClaimResolverSurfaceIsMaterialFree(t *testing.T) {
 	for _, contract := range []reflect.Type{
-		reflect.TypeOf(CredentialClaimBinding{}), reflect.TypeOf(CredentialClaimResolver{}),
+		reflect.TypeOf(CredentialClaimBinding{}), reflect.TypeOf(ResolvedCredentialClaim{}),
+		reflect.TypeOf(CredentialClaimResolver{}),
 	} {
 		assertCredentialClaimMaterialFreeType(t, contract, map[reflect.Type]bool{})
 	}
 	method, found := reflect.TypeOf((*CredentialClaimResolver)(nil)).MethodByName("Resolve")
-	if !found || method.Type.NumOut() != 2 || method.Type.Out(0) != reflect.TypeOf(credentials.OneShotUseRequest{}) {
+	if !found || method.Type.NumOut() != 2 || method.Type.Out(0) != reflect.TypeOf(ResolvedCredentialClaim{}) {
 		t.Fatalf("unexpected resolver surface: %v", method.Type)
+	}
+	resolvedType := reflect.TypeOf(ResolvedCredentialClaim{})
+	for index := 0; index < resolvedType.NumField(); index++ {
+		if resolvedType.Field(index).PkgPath == "" {
+			t.Fatalf("resolved claim field is forgeable outside package: %s", resolvedType.Field(index).Name)
+		}
+	}
+}
+
+func TestResolvedCredentialClaimAccessorReturnsValueCopy(t *testing.T) {
+	request := credentialClaimLaunchRequest(t, mustCredentialClaimPlacement(t, "placement:account-a"))
+	reader := &credentialClaimReaderStub{versions: map[credentials.CredentialRef]credentials.Version{"credential:account-a": 3}}
+	resolver := mustCredentialClaimResolver(t, reader, []CredentialClaimBinding{{request.ReferenciaColocacion, "credential:account-a"}})
+	resolved, err := resolver.Resolve(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy := resolved.OneShotUseRequest()
+	copy.CredentialRef = "credential:mutated"
+	if resolved.OneShotUseRequest().CredentialRef != "credential:account-a" {
+		t.Fatal("OneShotUseRequest accessor aliases resolved authority")
 	}
 }
 

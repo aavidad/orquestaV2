@@ -30,6 +30,19 @@ type CredentialClaimBinding struct {
 	CredentialRef credentials.CredentialRef
 }
 
+// ResolvedCredentialClaim carries one resolver-authorized placement binding.
+// Its private fields prevent callers outside this package from crossing an
+// otherwise valid OneShot claim with another account placement.
+type ResolvedCredentialClaim struct {
+	placement ports.AgentPlacementRef
+	claim     credentials.OneShotUseRequest
+}
+
+// OneShotUseRequest returns a material-free value copy for durable authority.
+func (resolved ResolvedCredentialClaim) OneShotUseRequest() credentials.OneShotUseRequest {
+	return resolved.claim
+}
+
 // CredentialClaimResolver pins the currently authorized credential version
 // before a physical launch can claim it through UseOnce.
 type CredentialClaimResolver struct {
@@ -64,39 +77,39 @@ func NewCredentialClaimResolver(
 func (resolver *CredentialClaimResolver) Resolve(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
-) (credentials.OneShotUseRequest, error) {
+) (ResolvedCredentialClaim, error) {
 	if resolver == nil || nilInterface(resolver.reader) || nilInterface(ctx) {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimResolverInvalid, nil)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimResolverInvalid, nil)
 	}
 	if err := ctx.Err(); err != nil {
-		return credentials.OneShotUseRequest{}, err
+		return ResolvedCredentialClaim{}, err
 	}
 	if err := ports.ValidateAgentLaunchRequest(request); err != nil {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, err)
 	}
 	if err := ports.ValidateAgentLaunchEffectAuthority(request.EffectAuthority); err != nil {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, err)
 	}
 	placement, err := ports.NewAgentPlacementRef(request.ReferenciaColocacion.String())
 	if err != nil || placement != request.ReferenciaColocacion {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, err)
 	}
 	credentialRef, found := resolver.bindings[placement]
 	if !found {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimPlacementUnknown, nil)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimPlacementUnknown, nil)
 	}
 	actor, err := goal.NewActorRef(request.ActorRef.String())
 	if err != nil || actor != request.ActorRef {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, err)
 	}
 	project, err := goal.NewProjectRef(request.ProjectRef.String())
 	if err != nil || project != request.ProjectRef {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, err)
 	}
 	ownerRef := credentials.OwnerRef(actor.String())
 	scopeRef := credentials.ScopeRef(project.String())
 	if credentials.ValidateOwnerRef(ownerRef) != nil || credentials.ValidateScopeRef(scopeRef) != nil {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, nil)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, nil)
 	}
 	oneShotRequestRef, err := ports.BuildMicroVMHostLaunchOneShotRequestRefV1(
 		ports.MicroVMHostLaunchAuthorityKey{
@@ -106,7 +119,7 @@ func (resolver *CredentialClaimResolver) Resolve(
 		request.SessionRef,
 	)
 	if err != nil {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, err)
 	}
 	describeRequest := credentials.DescribeUseAuthorityRequest{
 		ActorRef: actor.String(),
@@ -120,23 +133,23 @@ func (resolver *CredentialClaimResolver) Resolve(
 		PurposeRef:    resolver.purpose,
 	}
 	if err := credentials.ValidateDescribeUseAuthorityRequest(describeRequest); err != nil {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimRequestInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimRequestInvalid, err)
 	}
 	described, err := resolver.reader.DescribeUseAuthority(ctx, describeRequest)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return credentials.OneShotUseRequest{}, err
+			return ResolvedCredentialClaim{}, err
 		}
 		if contextErr := ctx.Err(); contextErr != nil {
-			return credentials.OneShotUseRequest{}, contextErr
+			return ResolvedCredentialClaim{}, contextErr
 		}
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimDescriptionUnavailable, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimDescriptionUnavailable, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return credentials.OneShotUseRequest{}, err
+		return ResolvedCredentialClaim{}, err
 	}
 	if err := credentials.ValidateDescribedUseAuthority(describeRequest, described); err != nil {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimDescriptionInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimDescriptionInvalid, err)
 	}
 	claim := credentials.OneShotUseRequest{
 		ActorRef: actor.String(), RequestRef: oneShotRequestRef,
@@ -144,9 +157,9 @@ func (resolver *CredentialClaimResolver) Resolve(
 		ScopeRef: described.ScopeRef, PurposeRef: described.PurposeRef, Version: described.Version,
 	}
 	if err := credentials.ValidateOneShotUseRequest(claim); err != nil {
-		return credentials.OneShotUseRequest{}, fail(CodeCredentialClaimDescriptionInvalid, err)
+		return ResolvedCredentialClaim{}, fail(CodeCredentialClaimDescriptionInvalid, err)
 	}
-	return claim, nil
+	return ResolvedCredentialClaim{placement: placement, claim: claim}, nil
 }
 
 func buildCredentialClaimDescribeRequestRef(fields ...string) string {
