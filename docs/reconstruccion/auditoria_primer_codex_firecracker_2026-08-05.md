@@ -20,9 +20,11 @@ y deben reconstruirse; no se reutilizan como evidencia nueva.
 
 ## Fronteras abiertas
 
-1. El daemon/Jailer necesita privilegios, pero su UDS queda `0600` para el
-   propietario del daemon. Orquesta no-root no tiene todavía una delegación por
-   grupo y `peercred` que rechace a terceros.
+1. **Cerrada en código y arnés (PFC-02).** El daemon/Jailer puede publicar el
+   UDS para un GID efectivo exacto con directorio `0750`, socket `0660`,
+   `SO_PEERCRED`, PID vivo y publicación atómica; el modo por defecto conserva
+   `0700`/`0600`. `agente_microvm@989272d` pasó 354 pruebas y revisión xhigh.
+   La instalación root y su E2E físico pertenecen a PFC-07/PFC-06.
 2. La compilación del perfil omite `controlled_egress_proxy` y el executor
    Codex elimina las variables de proxy. El huésped no tiene una salida web
    gobernada reproducible.
@@ -41,7 +43,7 @@ a instalar el servicio root, usuario/grupo, directorios y delegación cgroup.
 | ID | Trabajo | Criterio de cierre | Estimación |
 | --- | --- | --- | ---: |
 | PFC-01 | Reconstruir kernel/initramfs/perfil/executor desde candidatos actuales | manifiesto, digests y build reproducible; cero `.tmp` antiguos como evidencia | 1–2 h |
-| PFC-02 | Frontera root/no-root del UDS | daemon root; Orquesta por grupo+`peercred`; tercero rechazado; socket no público | 2–3 h |
+| PFC-02 | **Cerrado en código/arnés**: frontera root/no-root del UDS (`agente_microvm@989272d`) | daemon root; Orquesta por grupo+`peercred`; tercero rechazado; socket no público | PFC-06/PFC-07 para evidencia física |
 | PFC-03 | Broker host mínimo | sesión exacta por `RunRef`+fence+atestación; control/MCP/mailbox/artefactos por refs opacas | 2–4 h |
 | PFC-04 | Credencial Codex sellada | secreto solo en memoria/tmpfs `0600`, principal exacto y borrado terminal verificable | 2–4 h |
 | PFC-05 | Egress controlado | proxy explícito funciona; Internet directo, LAN, RFC1918, inbound y east-west quedan denegados | 2–4 h |
