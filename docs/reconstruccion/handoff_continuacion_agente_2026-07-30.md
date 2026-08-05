@@ -1,5 +1,26 @@
 # Documento de continuidad de Orquesta — 2026-07-30
 
+## Avance operativo del 2026-08-05
+
+- Agente MicroVM cierra `B10.0b3b` en `cbfc672` y documenta el corte en
+  `59b32bd`. SQLite v15 implementa todo `RepositorioSesionesTrabajo`: inicio,
+  entrada, observación, terminal y recovery causal, con CAS, idempotencia,
+  rollback, efecto físico y revisión de trabajo atómicos.
+- Recovery reproduce todos los receipts con el agregado y falla cerrado ante
+  eventos ausentes, contadores sin ledger, fases contradictorias o cadenas que
+  revierten historia. `BUG-ORQ-20260805-626` conserva los falsos verdes
+  encontrados y sus negativos.
+- Pasaron Clippy estricto, 257 pruebas Rust de librería, 38 de
+  binarios/integración, build musl del huésped y dos smokes KVM quedaron
+  omitidos explícitamente. No se arrancaron Firecracker, Jailer, KVM ni daemon.
+- El pool multi-HOME no se reimplementa: el futuro conector Orquesta consume el
+  adapter Codex existente, con `HOME=CODEX_HOME`, binding, lock vitalicio y
+  perfil opaco. Agente MicroVM solo añade aislamiento físico y ledger de
+  sesión.
+- Siguiente dependencia estrecha: caso de uso/puente/API que reconcilia una
+  entrada pendiente y reintenta el mismo evento retenido por el huésped. Luego
+  se ejecuta el primer Codex físico B12; no abrir nuevas capas antes del smoke.
+
 ## Avance operativo del 2026-08-04
 
 Este apartado prevalece sobre los cortes anteriores.
