@@ -13,7 +13,9 @@ import (
 func insertEffectReceipt(
 	ctx context.Context,
 	transaction *sql.Tx,
+	claim application.ActionClaim,
 	receipt application.EffectReceipt,
+	consumedAt time.Time,
 ) error {
 	if !validText(receipt.Ref) || !validText(receipt.IntentRef) || !validText(receipt.IntentDigest) ||
 		!validText(receipt.ApprovalRef) || !validText(receipt.AttemptRef) ||
@@ -26,6 +28,18 @@ func insertEffectReceipt(
 		!validSQLiteEffectStatus(receipt.Status) || receipt.ConfirmedAt.IsZero() ||
 		governance.ValidateResourceUsage(receipt.Usage) != nil {
 		return invalid(errors.New("sqlite.effect_receipt_invalid"))
+	}
+	confirmationClaimValid := claim.Disposition == application.ActionClaimDispositionNormal &&
+		claim.Action.Ref == receipt.ActionRef && claim.Action.EffectIntentRef == receipt.IntentRef &&
+		claim.Fence == receipt.ActionFence && receipt.ConfirmedAt.Equal(consumedAt)
+	if claim.Disposition == application.ActionClaimDispositionRecoverEffect {
+		confirmationClaimValid = claim.Action.Kind == application.ActionLaunchAgent &&
+			claim.Action.Ref == receipt.ActionRef && claim.Action.EffectIntentRef == receipt.IntentRef &&
+			claim.RecoveryEffectAttemptRef == receipt.AttemptRef && receipt.ActionFence < claim.Fence &&
+			receipt.ConfirmedAt.Before(consumedAt)
+	}
+	if !confirmationClaimValid {
+		return conflict(errors.New("sqlite.effect_receipt_claim_conflict"))
 	}
 	attempt, found, err := readEffectAttemptByFence(
 		ctx, transaction, receipt.ActionRef, receipt.ActionFence,
@@ -40,14 +54,22 @@ func insertEffectReceipt(
 		!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil) {
 		return conflict(errors.New("sqlite.effect_receipt_attempt_conflict"))
 	}
-	var claimedUntil int64
+	var outboxFence, claimedUntil int64
+	var recoveryAttemptRef sql.NullString
 	if err := transaction.QueryRowContext(ctx, `
-SELECT claimed_until FROM outbox WHERE ref=? AND fence=?`,
-		receipt.ActionRef, int64(receipt.ActionFence),
-	).Scan(&claimedUntil); err != nil {
+SELECT fence,claimed_until,recovery_effect_attempt_ref FROM outbox WHERE ref=?`,
+		claim.Action.Ref,
+	).Scan(&outboxFence, &claimedUntil, &recoveryAttemptRef); err != nil {
 		return mapDatabaseError(err)
 	}
-	if !receipt.ConfirmedAt.Before(time.Unix(0, claimedUntil).UTC()) {
+	if outboxFence != int64(claim.Fence) || claimedUntil != requiredTime(claim.LeaseUntil) ||
+		(claim.Disposition == application.ActionClaimDispositionNormal && recoveryAttemptRef.Valid) ||
+		(claim.Disposition == application.ActionClaimDispositionRecoverEffect &&
+			(!recoveryAttemptRef.Valid || recoveryAttemptRef.String != receipt.AttemptRef)) {
+		return conflict(errors.New("sqlite.effect_receipt_outbox_conflict"))
+	}
+	if claim.Disposition == application.ActionClaimDispositionNormal &&
+		!receipt.ConfirmedAt.Before(time.Unix(0, claimedUntil).UTC()) {
 		return invalid(errors.New("sqlite.effect_receipt_after_lease"))
 	}
 	intent, err := readEffectIntent(ctx, transaction, receipt.IntentRef)

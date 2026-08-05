@@ -244,7 +244,7 @@ func TestV15RejectsCrossKindEffectReceiptsBeforeAtomicCommit(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		err = insertEffectReceipt(context.Background(), tx, receipt)
+		err = insertEffectReceipt(context.Background(), tx, claim, receipt, receipt.ConfirmedAt)
 		_ = tx.Rollback()
 		if !application.IsStateError(err, application.StateInvalid) {
 			t.Fatalf("stop accepted launch receipt: %v", err)
@@ -267,7 +267,7 @@ func sqliteV15EffectReceipt(
 	return application.EffectReceipt{
 		Ref: "effect-receipt:" + intent.Ref, IntentRef: intent.Ref, IntentDigest: intent.Digest,
 		ApprovalRef: claim.EffectApproval.Ref, AttemptRef: attempt.Ref, Subject: intent.Subject,
-		ActionRef: claim.Action.Ref, ActionFence: claim.Fence, IdempotencyKey: intent.IdempotencyKey,
+		ActionRef: claim.Action.Ref, ActionFence: attempt.ActionFence, IdempotencyKey: intent.IdempotencyKey,
 		ExternalRef: "provider-receipt:" + claim.Action.Ref, Status: status,
 		Usage: governance.ResourceUsage{Quality: governance.UsageQualityUnknown}, ConfirmedAt: at.UTC(),
 	}
@@ -297,7 +297,7 @@ BEGIN SELECT RAISE(ABORT, 'test.effect_receipt_insert_reached'); END`); err != n
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = insertEffectReceipt(context.Background(), transaction, receipt)
+	err = insertEffectReceipt(context.Background(), transaction, claim, receipt, receipt.ConfirmedAt)
 	_ = transaction.Rollback()
 	if !application.IsStateError(err, application.StateConflict) ||
 		strings.Contains(sqliteTestErrorChain(err), "test.effect_receipt_insert_reached") {

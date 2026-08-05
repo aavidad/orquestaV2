@@ -1145,14 +1145,26 @@ func validateLaunchEffectReceipt(state application.LaunchAcceptedState) error {
 		return nil
 	}
 	intent := state.Claim.Action.EffectIntent
+	claimFenceValid := receipt.ActionFence == state.Claim.Fence
+	timelineValid := receipt.ConfirmedAt.Equal(state.OperationAt) &&
+		receipt.ConfirmedAt.Equal(state.Event.OccurredAt) &&
+		receipt.ConfirmedAt.Before(state.Claim.LeaseUntil)
+	if state.Claim.Disposition == application.ActionClaimDispositionRecoverEffect {
+		claimFenceValid = state.Claim.Action.Kind == application.ActionLaunchAgent &&
+			state.Claim.RecoveryEffectAttemptRef == receipt.AttemptRef &&
+			receipt.ActionFence < state.Claim.Fence
+		timelineValid = !receipt.ConfirmedAt.IsZero() &&
+			!receipt.ConfirmedAt.After(state.OperationAt) &&
+			state.OperationAt.Equal(state.Event.OccurredAt) &&
+			state.OperationAt.Before(state.Claim.LeaseUntil)
+	}
 	if receipt.Status != application.EffectStatusAccepted ||
 		receipt.IntentRef != intent.Ref || receipt.IntentDigest != intent.Digest ||
 		receipt.ApprovalRef != state.Claim.EffectApproval.Ref || receipt.Subject != intent.Subject ||
-		receipt.ActionRef != state.Claim.Action.Ref || receipt.ActionFence != state.Claim.Fence ||
+		receipt.ActionRef != state.Claim.Action.Ref || !claimFenceValid ||
 		receipt.IdempotencyKey != intent.IdempotencyKey || !validText(receipt.AttemptRef) ||
 		!validText(receipt.Ref) || !validText(receipt.ExternalRef) ||
-		!receipt.ConfirmedAt.Equal(state.OperationAt) || !receipt.ConfirmedAt.Equal(state.Event.OccurredAt) ||
-		!receipt.ConfirmedAt.Before(state.Claim.LeaseUntil) ||
+		!timelineValid ||
 		governance.ValidateResourceUsage(receipt.Usage) != nil {
 		return errors.New("sqlite.launch_effect_receipt_invalid")
 	}

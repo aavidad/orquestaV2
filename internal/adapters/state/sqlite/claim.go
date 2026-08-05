@@ -915,7 +915,7 @@ WHERE ref = ? AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
 		return err
 	}
 	if effect != nil {
-		if err := insertEffectReceipt(ctx, transaction, *effect); err != nil {
+		if err := insertEffectReceipt(ctx, transaction, claim, *effect, at); err != nil {
 			return err
 		}
 	}
