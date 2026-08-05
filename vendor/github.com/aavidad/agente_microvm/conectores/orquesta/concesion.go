@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -102,6 +103,11 @@ func (e *ErrorConcesion) Error() string { return e.Codigo }
 
 type FirmanteConcesiones struct {
 	claveID string
+	estado  *estadoFirmanteConcesiones
+}
+
+type estadoFirmanteConcesiones struct {
+	mu      sync.RWMutex
 	privada ed25519.PrivateKey
 }
 
@@ -110,10 +116,35 @@ func NuevoFirmanteConcesiones(claveID string, privada ed25519.PrivateKey) (*Firm
 		return nil, &ErrorConcesion{Codigo: "concesion.configuracion_invalida"}
 	}
 	copia := append(ed25519.PrivateKey(nil), privada...)
-	return &FirmanteConcesiones{claveID: claveID, privada: copia}, nil
+	return &FirmanteConcesiones{
+		claveID: claveID,
+		estado:  &estadoFirmanteConcesiones{privada: copia},
+	}, nil
+}
+
+// Destruir borra la clave privada retenida por el firmante. Es idempotente y,
+// cuando retorna, ninguna preparación concurrente conserva acceso a la clave.
+func (f *FirmanteConcesiones) Destruir() {
+	if f == nil || f.estado == nil {
+		return
+	}
+	f.estado.mu.Lock()
+	defer f.estado.mu.Unlock()
+	for indice := range f.estado.privada {
+		f.estado.privada[indice] = 0
+	}
+	f.estado.privada = nil
 }
 
 func (f *FirmanteConcesiones) Preparar(contexto ContextoAutorizado, plan PlanLanzamiento, emitida time.Time, vigencia time.Duration) (SolicitudLanzamiento, error) {
+	if f == nil || f.estado == nil {
+		return SolicitudLanzamiento{}, &ErrorConcesion{Codigo: "concesion.firmante_destruido"}
+	}
+	f.estado.mu.RLock()
+	defer f.estado.mu.RUnlock()
+	if len(f.estado.privada) != ed25519.PrivateKeySize {
+		return SolicitudLanzamiento{}, &ErrorConcesion{Codigo: "concesion.firmante_destruido"}
+	}
 	contextoJSON, err := json.Marshal(contexto)
 	if err != nil || !contextoValido(contexto) || emitida.UnixMilli() <= 0 || vigencia <= 0 || vigencia > VigenciaMaximaConcesion {
 		return SolicitudLanzamiento{}, &ErrorConcesion{Codigo: "concesion.alcance_invalido"}
@@ -139,7 +170,7 @@ func (f *FirmanteConcesiones) Preparar(contexto ContextoAutorizado, plan PlanLan
 		NoAntesUnixMS: emitida.UnixMilli(), ExpiraUnixMS: emitida.Add(vigencia).UnixMilli(),
 		ClaveID: f.claveID, Algoritmo: AlgoritmoConcesion,
 	}
-	firma := ed25519.Sign(f.privada, mensajeConcesion(contenido))
+	firma := ed25519.Sign(f.estado.privada, mensajeConcesion(contenido))
 	planJSON, err := json.Marshal(plan)
 	if err != nil {
 		return SolicitudLanzamiento{}, &ErrorConcesion{Codigo: "concesion.codificacion_fallida"}
