@@ -34,6 +34,17 @@ type ServicioVsock struct {
 	IdentidadSHA256 string `json:"identidad_sha256"`
 }
 
+// AutoridadServiciosHostLanzamientoV1 es el subconjunto firmado que Agente
+// MicroVM proyecta después en cada AperturaServicioHostV1. No contiene rutas,
+// identidad física ni material criptográfico.
+type AutoridadServiciosHostLanzamientoV1 struct {
+	RunRef          string
+	Cerca           uint64
+	PlanSHA256      string
+	ConcesionSHA256 string
+	Servicios       []ServicioVsock
+}
+
 type DestinoEgreso struct {
 	Host    string   `json:"host"`
 	Puertos []uint16 `json:"puertos"`
@@ -97,9 +108,135 @@ type contenidoConcesion struct {
 	Algoritmo     string `json:"algoritmo"`
 }
 
+type concesionLanzamientoFirmadaV1 struct {
+	Contenido   contenidoConcesion `json:"contenido"`
+	FirmaBase64 string             `json:"firma_base64"`
+}
+
+var esquemaServicioVsockLanzamientoV1 = esquemaObjetoJSONEstricto{
+	"papel": esquemaEscalarJSONEstricto, "servicio_ref": esquemaEscalarJSONEstricto,
+	"puerto": esquemaEscalarJSONEstricto, "identidad_ref": esquemaEscalarJSONEstricto,
+	"identidad_sha256": esquemaEscalarJSONEstricto,
+}
+
+var esquemaPlanLanzamientoSinEgresoV1 = esquemaObjetoJSONEstricto{
+	"esquema": esquemaEscalarJSONEstricto, "plan_ref": esquemaEscalarJSONEstricto,
+	"run_ref": esquemaEscalarJSONEstricto, "cerca": esquemaEscalarJSONEstricto,
+	"vcpu": esquemaEscalarJSONEstricto, "memoria_mib": esquemaEscalarJSONEstricto,
+	"kernel_sha256": esquemaEscalarJSONEstricto, "initramfs_sha256": esquemaEscalarJSONEstricto,
+	"perfil_sha256":    esquemaEscalarJSONEstrictoOpcional,
+	"limite_tiempo_ms": esquemaEscalarJSONEstricto, "limite_ram_pico_bytes": esquemaEscalarJSONEstricto,
+	"limite_disco_pico_bytes": esquemaEscalarJSONEstricto, "limite_tokens_agente": esquemaEscalarJSONEstricto,
+	"servicios": esquemaArrayEstricto(esquemaObjetoEstricto(esquemaServicioVsockLanzamientoV1)),
+}
+
+var esquemaPlanLanzamientoConEgresoV1 = func() esquemaObjetoJSONEstricto {
+	esquema := make(esquemaObjetoJSONEstricto, len(esquemaPlanLanzamientoSinEgresoV1)+1)
+	for nombre, campo := range esquemaPlanLanzamientoSinEgresoV1 {
+		esquema[nombre] = campo
+	}
+	esquema["egreso"] = esquemaObjetoEstricto(esquemaConcesionEgresoV1)
+	return esquema
+}()
+
+var esquemaContenidoConcesionLanzamientoV1 = esquemaObjetoJSONEstricto{
+	"esquema": esquemaEscalarJSONEstricto, "audiencia": esquemaEscalarJSONEstricto,
+	"concesion_ref": esquemaEscalarJSONEstricto, "run_ref": esquemaEscalarJSONEstricto,
+	"cerca": esquemaEscalarJSONEstricto, "plan_sha256": esquemaEscalarJSONEstricto,
+	"emitida_unix_ms": esquemaEscalarJSONEstricto, "no_antes_unix_ms": esquemaEscalarJSONEstricto,
+	"expira_unix_ms": esquemaEscalarJSONEstricto, "clave_id": esquemaEscalarJSONEstricto,
+	"algoritmo": esquemaEscalarJSONEstricto,
+}
+
+var esquemaConcesionLanzamientoFirmadaV1 = esquemaObjetoJSONEstricto{
+	"contenido":    esquemaObjetoEstricto(esquemaContenidoConcesionLanzamientoV1),
+	"firma_base64": esquemaEscalarJSONEstricto,
+}
+
 type ErrorConcesion struct{ Codigo string }
 
 func (e *ErrorConcesion) Error() string { return e.Codigo }
+
+// ExtraerAutoridadServiciosHostLanzamientoV1 deriva únicamente la autoridad
+// canónica de una SolicitudLanzamiento producida por FirmanteConcesiones. No
+// autentica la firma Ed25519 ni decide vigencia; esas decisiones pertenecen al
+// verificador Rust antes del lanzamiento físico.
+func ExtraerAutoridadServiciosHostLanzamientoV1(
+	solicitud SolicitudLanzamiento,
+) (AutoridadServiciosHostLanzamientoV1, error) {
+	var plan PlanLanzamiento
+	if !decodificarObjetoJSONEstricto(solicitud.Plan, esquemaPlanLanzamientoSinEgresoV1, &plan) &&
+		!decodificarObjetoJSONEstricto(solicitud.Plan, esquemaPlanLanzamientoConEgresoV1, &plan) {
+		return AutoridadServiciosHostLanzamientoV1{}, errorAutoridadServiciosHost("solicitud_invalida")
+	}
+	mensajePlanCanonico, err := mensajePlan(plan)
+	if err != nil {
+		return AutoridadServiciosHostLanzamientoV1{}, err
+	}
+	planDigest := sha256.Sum256(mensajePlanCanonico)
+	planSHA256 := hex.EncodeToString(planDigest[:])
+
+	var firmada concesionLanzamientoFirmadaV1
+	if !decodificarObjetoJSONEstricto(
+		solicitud.Concesion,
+		esquemaConcesionLanzamientoFirmadaV1,
+		&firmada,
+	) || !contenidoConcesionValido(firmada.Contenido) {
+		return AutoridadServiciosHostLanzamientoV1{}, errorAutoridadServiciosHost("concesion_invalida")
+	}
+	firma, err := base64.StdEncoding.DecodeString(firmada.FirmaBase64)
+	if err != nil || len(firma) != ed25519.SignatureSize || base64.StdEncoding.EncodeToString(firma) != firmada.FirmaBase64 {
+		return AutoridadServiciosHostLanzamientoV1{}, errorAutoridadServiciosHost("concesion_invalida")
+	}
+	contenido := firmada.Contenido
+	if contenido.RunRef != plan.RunRef || contenido.Cerca != plan.Cerca || contenido.PlanSHA256 != planSHA256 {
+		return AutoridadServiciosHostLanzamientoV1{}, errorAutoridadServiciosHost("vinculo_invalido")
+	}
+	mensajeConcesionCanonico := mensajeConcesion(contenido)
+	concesionDigest := sha256.Sum256(mensajeConcesionCanonico)
+	servicios := append([]ServicioVsock(nil), plan.Servicios...)
+	sort.Slice(servicios, func(i, j int) bool { return servicios[i].Papel < servicios[j].Papel })
+	if !serviciosAutoridadHostValidos(servicios) {
+		return AutoridadServiciosHostLanzamientoV1{}, errorAutoridadServiciosHost("servicios_invalidos")
+	}
+	return AutoridadServiciosHostLanzamientoV1{
+		RunRef: plan.RunRef, Cerca: plan.Cerca,
+		PlanSHA256: planSHA256, ConcesionSHA256: hex.EncodeToString(concesionDigest[:]),
+		Servicios: servicios,
+	}, nil
+}
+
+func serviciosAutoridadHostValidos(servicios []ServicioVsock) bool {
+	if len(servicios) < 1 || len(servicios) > 2 || servicios[0].Papel != "control_broker" ||
+		(len(servicios) == 2 && servicios[1].Papel != "controlled_egress_proxy") {
+		return false
+	}
+	vistos := make(map[string]struct{}, len(servicios))
+	for _, servicio := range servicios {
+		if _, duplicado := vistos[servicio.ServicioRef]; duplicado {
+			return false
+		}
+		vistos[servicio.ServicioRef] = struct{}{}
+	}
+	return true
+}
+
+func contenidoConcesionValido(contenido contenidoConcesion) bool {
+	return contenido.Esquema == EsquemaConcesionLanzamiento &&
+		contenido.Audiencia == AudienciaLanzamiento &&
+		referenciaValida(contenido.ConcesionRef, "concesion:", 160) &&
+		referenciaExternaValida(contenido.RunRef) && contenido.Cerca != 0 &&
+		sha256Valido(contenido.PlanSHA256) && contenido.EmitidaUnixMS > 0 &&
+		contenido.NoAntesUnixMS >= contenido.EmitidaUnixMS &&
+		contenido.ExpiraUnixMS > contenido.NoAntesUnixMS &&
+		contenido.ExpiraUnixMS-contenido.EmitidaUnixMS <= VigenciaMaximaConcesion.Milliseconds() &&
+		referenciaValida(contenido.ClaveID, "clave-publica:", 160) &&
+		contenido.Algoritmo == AlgoritmoConcesion
+}
+
+func errorAutoridadServiciosHost(sufijo string) error {
+	return &ErrorConcesion{Codigo: "concesion.autoridad_servicios_host_" + sufijo}
+}
 
 type FirmanteConcesiones struct {
 	claveID string
