@@ -111,6 +111,38 @@ func TestCompileMapsEveryContextBinding(t *testing.T) {
 	}
 }
 
+func TestCompileSourceFingerprintIsDeterministicAndBindsPromptFacts(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	first := mustCompile(t, request, descriptor)
+	second := mustCompile(t, request, descriptor)
+	if first.sourceFingerprint == ([32]byte{}) || first.sourceFingerprint != second.sourceFingerprint {
+		t.Fatalf("source fingerprint is zero or nondeterministic: %x/%x", first.sourceFingerprint, second.sourceFingerprint)
+	}
+
+	mutations := []struct {
+		name   string
+		mutate func(*ports.AgentLaunchRequest)
+	}{
+		{"objective", func(value *ports.AgentLaunchRequest) { value.Objective = "other objective" }},
+		{"generation", func(value *ports.AgentLaunchRequest) { value.PlanGeneration++ }},
+		{"role", func(value *ports.AgentLaunchRequest) { value.RoleKey = "role:other" }},
+		{"write set", func(value *ports.AgentLaunchRequest) { value.WriteSet = []string{"other/path"} }},
+		{"output", func(value *ports.AgentLaunchRequest) { value.ArtifactMediaType = "text/plain" }},
+		{"effort", func(value *ports.AgentLaunchRequest) { value.ReasoningEffort = governance.ReasoningEffortHigh }},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			changedRequest := request
+			mutation.mutate(&changedRequest)
+			changed := mustCompile(t, changedRequest, descriptor)
+			if changed.sourceFingerprint == first.sourceFingerprint {
+				t.Fatal("source mutation preserved fingerprint")
+			}
+		})
+	}
+}
+
 func TestCompileRejectsMissingAuthorityFenceAndLimits(t *testing.T) {
 	validRequest := validLaunchRequest(t)
 	validProfile := validDescriptor(t, false)

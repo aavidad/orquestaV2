@@ -3,7 +3,11 @@
 package agentmicrovm
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
+	"hash"
+	"io"
 	"math"
 	"strings"
 	"time"
@@ -39,6 +43,11 @@ type Compilation struct {
 	Context  microvm.ContextoAutorizado
 	IssuedAt time.Time
 	Validity time.Duration
+
+	// sourceFingerprint seals every request and profile fact consumed by this
+	// package. Being unexported prevents another package from manufacturing a
+	// Compilation that can be crossed with a different request.
+	sourceFingerprint [sha256.Size]byte
 }
 
 // ProfileBinding is the composition-owned mapping from an opaque placement to
@@ -168,7 +177,133 @@ func Compile(
 	if !validContextBindings(context) {
 		return Compilation{}, fail(CodeContextInvalid, nil)
 	}
-	return Compilation{Plan: plan, Context: context, IssuedAt: issuedAt, Validity: validity}, nil
+	return Compilation{
+		Plan: plan, Context: context, IssuedAt: issuedAt, Validity: validity,
+		sourceFingerprint: compilationSourceFingerprint(request, binding),
+	}, nil
+}
+
+const compilationFingerprintDomain = "orquesta.agentmicrovm.compilation-source.v1\x00"
+
+func compilationSourceFingerprint(request ports.AgentLaunchRequest, binding ProfileBinding) [sha256.Size]byte {
+	digest := sha256.New()
+	fingerprintString(digest, compilationFingerprintDomain)
+
+	// AgentLaunchRequest: fixed field order is the v1 canonical encoding.
+	fingerprintString(digest, request.ExecutionRef.String())
+	fingerprintString(digest, request.ReferenciaColocacion.String())
+	fingerprintString(digest, request.SessionRef.String())
+	fingerprintString(digest, request.AccessAuthority.ArtifactAccessRef.String())
+	fingerprintString(digest, request.AccessAuthority.MCPAccessRef.String())
+	fingerprintString(digest, request.AccessAuthority.MailboxEndpointRef.String())
+	fingerprintString(digest, request.ExecutionWorkspaceRef.String())
+	fingerprintString(digest, request.GoalRef.String())
+	fingerprintString(digest, request.WorkItemRef.String())
+	fingerprintUint64(digest, uint64(request.PlanGeneration))
+	fingerprintUint64(digest, uint64(request.AppSpecGeneration))
+	fingerprintUint64(digest, request.ExecutionAttempt)
+	fingerprintString(digest, request.SpecHash)
+	fingerprintString(digest, request.ActorRef.String())
+	fingerprintString(digest, request.ProjectRef.String())
+	fingerprintString(digest, request.Objective)
+	fingerprintString(digest, request.PhaseRef)
+	fingerprintString(digest, request.PhaseKey)
+	fingerprintString(digest, request.PhaseTemplateRef)
+	fingerprintStrings(digest, request.PhaseInputRefs)
+	fingerprintStrings(digest, request.PhaseCriterionRefs)
+	fingerprintString(digest, request.RoleKey)
+	fingerprintStrings(digest, request.SkillRefs)
+	fingerprintStrings(digest, request.ToolRefs)
+	fingerprintStrings(digest, request.CapabilityRefs)
+	fingerprintStrings(digest, request.WriteSet)
+	fingerprintString(digest, request.OutputContract)
+	fingerprintString(digest, request.ArtifactMediaType)
+	fingerprintString(digest, request.IdempotencyKey)
+	fingerprintInt64(digest, request.MaxOutputBytes)
+	fingerprintString(digest, request.BudgetDemand.Ref)
+	fingerprintInt64(digest, request.BudgetDemand.Resources.Tokens)
+	fingerprintInt64(digest, request.BudgetDemand.Resources.MoneyMicros)
+	fingerprintString(digest, string(request.BudgetDemand.Resources.Currency))
+	fingerprintInt64(digest, request.BudgetDemand.Resources.ActiveTimeNS)
+	fingerprintInt64(digest, request.BudgetDemand.Resources.ProcessSlots)
+	fingerprintInt64(digest, request.BudgetDemand.Resources.DiskBytes)
+	fingerprintString(digest, string(request.SecurityCriticality))
+	fingerprintString(digest, string(request.ReasoningEffort))
+	fingerprintBool(digest, request.RequierePreservacionEntorno)
+	fingerprintString(digest, request.EffectAuthority.AuthorizationReceiptRef)
+	fingerprintString(digest, request.EffectAuthority.EffectApprovalRef)
+	fingerprintString(digest, request.EffectAuthority.EffectAttemptRef)
+	fingerprintUint64(digest, request.EffectAuthority.ActionFence)
+	fingerprintTime(digest, request.EffectAuthority.StartedAt)
+	fingerprintTime(digest, request.EffectAuthority.ClaimLeaseUntil)
+	fingerprintTime(digest, request.EffectAuthority.ApprovalExpiresAt)
+
+	// ProfileBinding preserves declared service order. The sibling descriptor
+	// digest sorts services for identity; this seal must still detect aliasing or
+	// a crossed composition binding byte-for-byte at the semantic field level.
+	descriptor := binding.Descriptor
+	fingerprintString(digest, binding.PlacementRef.String())
+	fingerprintString(digest, descriptor.Esquema)
+	fingerprintString(digest, descriptor.DescriptorRef)
+	fingerprintString(digest, descriptor.EjecutorRef)
+	fingerprintUint64(digest, uint64(descriptor.VCPU))
+	fingerprintUint64(digest, uint64(descriptor.MemoriaMiB))
+	fingerprintString(digest, descriptor.KernelSHA256)
+	fingerprintString(digest, descriptor.InitramfsSHA256)
+	fingerprintString(digest, descriptor.PerfilSHA256)
+	fingerprintUint64(digest, uint64(len(descriptor.ServiciosDisponibles)))
+	for _, service := range descriptor.ServiciosDisponibles {
+		fingerprintString(digest, service.Papel)
+		fingerprintString(digest, service.ServicioRef)
+		fingerprintUint64(digest, uint64(service.Puerto))
+		fingerprintString(digest, service.IdentidadRef)
+		fingerprintString(digest, service.IdentidadSHA256)
+	}
+
+	var result [sha256.Size]byte
+	copy(result[:], digest.Sum(nil))
+	return result
+}
+
+func fingerprintString(digest hash.Hash, value string) {
+	fingerprintUint64(digest, uint64(len(value)))
+	_, _ = io.WriteString(digest, value)
+}
+
+func fingerprintStrings(digest hash.Hash, values []string) {
+	fingerprintUint64(digest, uint64(len(values)))
+	for _, value := range values {
+		fingerprintString(digest, value)
+	}
+}
+
+func fingerprintUint64(digest hash.Hash, value uint64) {
+	var encoded [8]byte
+	binary.BigEndian.PutUint64(encoded[:], value)
+	_, _ = digest.Write(encoded[:])
+}
+
+func fingerprintInt64(digest hash.Hash, value int64) {
+	fingerprintUint64(digest, uint64(value))
+}
+
+func fingerprintBool(digest hash.Hash, value bool) {
+	encoded := byte(0)
+	if value {
+		encoded = 1
+	}
+	_, _ = digest.Write([]byte{encoded})
+}
+
+func fingerprintTime(digest hash.Hash, value time.Time) {
+	if value.IsZero() {
+		fingerprintBool(digest, false)
+		return
+	}
+	fingerprintBool(digest, true)
+	utc := value.UTC()
+	fingerprintInt64(digest, utc.Unix())
+	fingerprintUint64(digest, uint64(utc.Nanosecond()))
 }
 
 func grantWindow(authority ports.AgentLaunchEffectAuthority) (time.Time, time.Duration, bool) {
