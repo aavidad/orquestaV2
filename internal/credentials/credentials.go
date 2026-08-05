@@ -122,6 +122,28 @@ type UseRequest struct {
 	Version       Version
 }
 
+// DescribeUseAuthorityRequest asks for the concrete current version of one
+// already-authorized use tuple. It carries references only and never selects or
+// exposes credential material.
+type DescribeUseAuthorityRequest struct {
+	ActorRef      string
+	RequestRef    string
+	CredentialRef CredentialRef
+	OwnerRef      OwnerRef
+	ScopeRef      ScopeRef
+	PurposeRef    PurposeRef
+}
+
+// DescribedUseAuthority is the exact material-free tuple that a caller can pin
+// durably before crossing an external effect boundary.
+type DescribedUseAuthority struct {
+	CredentialRef CredentialRef
+	OwnerRef      OwnerRef
+	ScopeRef      ScopeRef
+	PurposeRef    PurposeRef
+	Version       Version
+}
+
 // OneShotUseRequest binds one irreversible consumption claim to the complete
 // credential authority tuple. Version must identify one concrete version;
 // floating current-version selection is forbidden.
@@ -208,6 +230,12 @@ type OneShotStore interface {
 	UseOnce(context.Context, OneShotUseRequest, func(Secret) error) (OneShotUseResult, error)
 }
 
+// UseAuthorityReader describes an authorized concrete version without
+// materializing a Secret, recording a use or changing Store's legacy contract.
+type UseAuthorityReader interface {
+	DescribeUseAuthority(context.Context, DescribeUseAuthorityRequest) (DescribedUseAuthority, error)
+}
+
 func ValidateCreateRequest(request CreateRequest) error {
 	if err := firstError(validateCommon(request.ActorRef, request.RequestRef, request.CredentialRef, request.OwnerRef), ValidatePurposeRef(request.PurposeRef)); err != nil {
 		return err
@@ -231,6 +259,33 @@ func ValidateCreateRequest(request CreateRequest) error {
 func ValidateUseRequest(request UseRequest) error {
 	return firstError(validateCommon(request.ActorRef, request.RequestRef, request.CredentialRef, request.OwnerRef),
 		ValidateScopeRef(request.ScopeRef), ValidatePurposeRef(request.PurposeRef))
+}
+
+func ValidateDescribeUseAuthorityRequest(request DescribeUseAuthorityRequest) error {
+	return ValidateUseRequest(UseRequest{
+		ActorRef: request.ActorRef, RequestRef: request.RequestRef,
+		CredentialRef: request.CredentialRef, OwnerRef: request.OwnerRef,
+		ScopeRef: request.ScopeRef, PurposeRef: request.PurposeRef,
+	})
+}
+
+// ValidateDescribedUseAuthority verifies that a material-free description is
+// exact for its request and pins one concrete, non-floating version.
+func ValidateDescribedUseAuthority(
+	request DescribeUseAuthorityRequest,
+	result DescribedUseAuthority,
+) error {
+	if err := ValidateDescribeUseAuthorityRequest(request); err != nil {
+		return err
+	}
+	if result.CredentialRef != request.CredentialRef || result.OwnerRef != request.OwnerRef ||
+		result.ScopeRef != request.ScopeRef || result.PurposeRef != request.PurposeRef {
+		return NewError(ErrorInvalidRequest, "described_use_authority")
+	}
+	if result.Version == 0 {
+		return NewError(ErrorInvalidRequest, "version")
+	}
+	return nil
 }
 
 func ValidateOneShotUseRequest(request OneShotUseRequest) error {
