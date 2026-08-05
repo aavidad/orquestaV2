@@ -500,6 +500,7 @@ No acredita B10, B12, `ORC-28` ni V38. La siguiente dependencia es B01.
 | B05.3 | El perfil sellado conserva Codex 0.146.0 como ejecutor sustituible; el supervisor solo conoce un programa interno y puede alojar Claude, Gemini u otro perfil. B08/B10 traducen después la sesión pública. | `exercised` sin KVM; no importa el códec interno de Orquesta. | Baseline caracterizado, sin reatribuirlo |
 | B05.4 | `0970fee`: el manifiesto embebido incorpora SPDX 2.3 con huésped, Linux, Codex y BusyBox. Dos initramfs y dos perfiles ext4 independientes resultaron idénticos, privados y modo `0400`. | `exercised`; activos temporales retirados exactamente. | Datos SPDX informados aparte como `A=70` |
 | B05.5 | `ce8ae2b` y `0970fee`: incompatibilidad estricta, sesión distinta, turno conflictivo, cursor inválido, truncamiento, timeout, descendientes, rutas host ausentes y veinte/cien repeticiones focales. | Último; mismo candidato `1aec635`. | Total `P=480,V=319` |
+| B05.6 | `agente_microvm@db23566`: integra `/bin/ejecutor` Codex sellado en el perfil estático. La construcción vuelve a verificar los mismos bytes staged, rechaza ELF con `PT_INTERP` o `DT_NEEDED`, evita seguir enlaces en `.parcial` y limpia ante señal. | Cierre offline de perfil; no sustituye los smokes físicos. | Revisión premium GO y arnés reproducible; sin KVM. |
 
 El huésped musl queda sellado por
 `dd0c0e8b94382603487b691d7ae775947a50b19439b5a1242c1d6392302d0ace`;
@@ -511,6 +512,10 @@ B05 queda `exercised`, no `accredited`: sus eventos viven aún en la frontera
 huésped y B08/B10 deben exponerlos sin duplicar el supervisor; B07/B12 prueban
 el mismo candidato físicamente. B06 cerró después la transferencia sellada y,
 junto con B05, abrió B07.
+
+El perfil con executor de `db23566` tampoco acredita arranque KVM, socket Unix
+físico ni una sesión Codex real: acredita solo la imagen reproducible y sus
+negativos offline.
 
 ### B06 — `P=400, V=350`
 
@@ -617,8 +622,9 @@ sobre estados físicos aproximados.
 | B10.1 | `60bf4646` + `6262dc43`: `AgentLaunchRequest` transporta autorización, aprobación, intento, cerca, tiempo, vencimiento del claim y vencimiento de la aprobación durables; la liquidación defensiva conserva el enlace causal al intento. | Cerrada con revisión premium y pruebas normal/race; no usa reloj vivo, no cambia el fingerprint histórico ni obliga al adaptador de proceso. | Delta real al regularizar |
 | B10.2 | Guarda de dependencia: fija la revisión B10.0 del módulo Go público; prohíbe `replace` local, segundo HTTP, tipos físicos o acceso al registro hermano. | Tras B10.0d; no añade producto. | Estimación histórica `P=0,V=20` |
 | B10.3 | `internal/adapters/agent/agentmicrovm/`: negociación, lanzamiento firmado, `WorkPacket` sellado, inicio/entrega de sesión y observación por eventos; estados físicos y de trabajo permanecen separados. Cierre de código/offline en `3838dbe0`, `2b21911e`, `4ea504cc`, `7926397a`, `ade7e323`, `b770cac6`, `806b4d78` y `8e1d865d`, con revisión premium. | Cerrada tras B10.1/B10.2; sin KVM. `TestAdapterLaunchBuildsPacketBeforeMutationAndDeliversExactInput`, `TestObserveAgentKeepsMissingAndAmbiguousSessionNonterminal`, `TestAdapterLaunchMapsOnlyTypedExactRemotePending`, `TestAdapterLaunchRejectsStaleOrCrossReconciliationReceipt`, `TestRunnerInitialDeadlineInterruptsRealFIFO`, `TestRunnerChildReceivesOnlySealedEnvironment` y `TestBuildWorkPacketV1RejectsForeignOrMutatedCompilation` cubren el corte offline. | Se mide al regularizar; no acredita microVM física ni Codex real. |
-| B10.4 | Registro canónico y bootstrap componen socket, secreto por referencia y adaptador; retira A05.1b solo al completar negociación. | Abierta tras B10.3; serial en composición. | Se mide al cerrar. |
-| B10.5 | Reinicio del host, concesión byte a byte, cerca, duplicado, receipt/socket perdidos, cursor durable, concurrencia y `-race`. | Abierta; último tramo offline y sin KVM. En particular, `EffectAttempt` no es aún recuperable tras reinicio del host. | Se mide al cerrar. |
+| B10.4 | `5ea6d240`, `962051a0` y `5ed1a1d4`: capacidad negociada, wrapper local y factoría sellada componen la selección microVM. El wiring está activo, pero B10.4 sigue parcial: falta cerrar su composición/evidencia completa y no retira A05.1b. | Abierta tras B10.3; serial en composición. | Se mide al cerrar. |
+| B10.5a | `agente_microvm@b0d09eb`: replay exacto de `Lanzar` tras reapertura SQLite y concesión expirada; rechaza divergencias `409` y garantiza que el motor se invoca una sola vez. | Cierra este subtramo durable offline. | No acredita reinicio del host ni KVM. |
+| B10.5 | Reinicio del host, concesión byte a byte, cerca, duplicado, receipt/socket perdidos, cursor durable, concurrencia y `-race`. | Sigue abierta: `EffectAttempt` no es aún recuperable tras reinicio del host, aunque B10.5a cerró replay SQLite/concesión expirada. | Se mide al cerrar. |
 
 El desglose B10.0 anterior conserva el plan histórico, no la fotografía vigente:
 la revisión pública fijada por B10.2 ya expone el cliente de sesión, persistencia
@@ -628,6 +634,11 @@ no está `wired` ni `exercised_without_kvm` mientras B10.4/B10.5 sigan abiertas.
 B11 conserva parada exacta y B12 preservación, sello y el primer Codex físico
 real. Una microVM `disponible`, una orden síncrona o un evento físico no
 acreditan trabajo de agente iniciado o completado.
+
+Las incidencias de perfil `BUG-ORQ-20260805-635` a `-638` están cerradas en el
+[ledger canónico](../inventario_bugs_orquesta_2026-06-30.md): son negativos de
+construcción/arnés de `agente_microvm@db23566`, no evidencia KVM, socket físico
+ni sesión Codex real.
 
 ### B12 — `P=400, V=500`
 
