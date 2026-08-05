@@ -1,6 +1,8 @@
 package ports
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,6 +16,15 @@ func TestAgentPromptProjectionIsExactAllowlist(t *testing.T) {
 	request.IdempotencyKey = "idempotency:private"
 	request.PhaseInputRefs = []string{"input:first", "input:second"}
 	request.WriteSet = []string{"internal/ports", "internal/application"}
+	egressPayload := `{"private-egress-marker":"do-not-project"}`
+	request.EgressAuthority = AgentLaunchEgressAuthority{
+		PolicyRef:        "egress-policy:private-marker",
+		PayloadSHA256:    fmt.Sprintf("%x", sha256.Sum256([]byte(egressPayload))),
+		CanonicalPayload: egressPayload,
+	}
+	if err := ValidateAgentLaunchRequest(request); err != nil {
+		t.Fatalf("prompt fixture must start from a valid launch request: %v", err)
+	}
 
 	prompt := AgentPromptFromLaunchRequest(request)
 	want := AgentPrompt{
@@ -32,7 +43,7 @@ func TestAgentPromptProjectionIsExactAllowlist(t *testing.T) {
 
 	promptType := reflect.TypeOf(prompt)
 	for _, forbiddenField := range []string{
-		"SpecHash", "IdempotencyKey", "SessionRef", "AccessAuthority", "EffectAuthority",
+		"SpecHash", "IdempotencyKey", "SessionRef", "AccessAuthority", "EffectAuthority", "EgressAuthority",
 		"ExecutionWorkspaceRef", "ReferenciaColocacion",
 	} {
 		if _, exists := promptType.FieldByName(forbiddenField); exists {
@@ -46,7 +57,10 @@ func TestAgentPromptProjectionIsExactAllowlist(t *testing.T) {
 		prompt.RoleKey, prompt.SkillRefs, prompt.ToolRefs, prompt.CapabilityRefs,
 		prompt.WriteSet, prompt.OutputContract, prompt.ArtifactMediaType,
 	}, "\x00")
-	for _, forbidden := range []string{request.SpecHash, request.IdempotencyKey, request.SessionRef.String()} {
+	for _, forbidden := range []string{
+		request.SpecHash, request.IdempotencyKey, request.SessionRef.String(),
+		request.EgressAuthority.PolicyRef, request.EgressAuthority.PayloadSHA256, egressPayload,
+	} {
 		if strings.Contains(encoded, forbidden) {
 			t.Fatalf("private launch field leaked into prompt: %q", forbidden)
 		}

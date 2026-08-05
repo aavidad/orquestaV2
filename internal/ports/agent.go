@@ -1,10 +1,12 @@
 package ports
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
@@ -69,6 +71,11 @@ type AgentLaunchRequest struct {
 	// AccessAuthority carries opaque capabilities deterministically bound to
 	// SessionRef. Empty preserves adapters without an execution session broker.
 	AccessAuthority AgentLaunchAccessAuthority
+	// EgressAuthority carries the exact durable, non-secret egress policy
+	// authority. Empty preserves launches that do not request egress. It is
+	// deliberately excluded from AgentPrompt and interpreted only by an
+	// isolation adapter in a later compilation boundary.
+	EgressAuthority AgentLaunchEgressAuthority
 	// ExecutionWorkspaceRef is an opaque, optional execution workspace binding.
 	// When empty the adapter preserves the non-code path.  A physical path is
 	// deliberately never carried through this provider-neutral request.
@@ -104,6 +111,45 @@ type AgentLaunchRequest struct {
 	// launch. Process adapters may ignore it; adapters crossing a stronger
 	// isolation boundary can require ValidateAgentLaunchEffectAuthority.
 	EffectAuthority AgentLaunchEffectAuthority
+}
+
+const (
+	maxAgentLaunchEgressPolicyRefBytes        = 512
+	maxAgentLaunchEgressCanonicalPayloadBytes = 64 << 10
+)
+
+// AgentLaunchEgressAuthority is an opaque, provider-neutral copy of authority
+// already admitted and persisted by application. The three fields form one
+// indivisible tuple; CanonicalPayload is validated as exact bytes, not parsed.
+type AgentLaunchEgressAuthority struct {
+	PolicyRef        string
+	PayloadSHA256    string
+	CanonicalPayload string
+}
+
+func ValidateAgentLaunchEgressAuthority(authority AgentLaunchEgressAuthority) error {
+	if authority == (AgentLaunchEgressAuthority{}) {
+		return nil
+	}
+	if authority.PolicyRef == "" || authority.PayloadSHA256 == "" || authority.CanonicalPayload == "" {
+		return &AgentContractError{Code: "agent.egress_authority_partial"}
+	}
+	if len(authority.PolicyRef) > maxAgentLaunchEgressPolicyRefBytes ||
+		strings.TrimSpace(authority.PolicyRef) != authority.PolicyRef ||
+		strings.ContainsRune(authority.PolicyRef, '\x00') || !utf8.ValidString(authority.PolicyRef) {
+		return &AgentContractError{Code: "agent.egress_policy_ref_invalid"}
+	}
+	if len(authority.CanonicalPayload) > maxAgentLaunchEgressCanonicalPayloadBytes {
+		return &AgentContractError{Code: "agent.egress_payload_too_large"}
+	}
+	if !utf8.ValidString(authority.CanonicalPayload) {
+		return &AgentContractError{Code: "agent.egress_payload_utf8_invalid"}
+	}
+	digest := sha256.Sum256([]byte(authority.CanonicalPayload))
+	if authority.PayloadSHA256 != fmt.Sprintf("%x", digest) {
+		return &AgentContractError{Code: "agent.egress_payload_digest_invalid"}
+	}
+	return nil
 }
 
 // AgentLaunchAccessAuthority contains no credential material or physical
@@ -369,6 +415,9 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 		}
 	}
 	if err := ValidateAgentLaunchAccessAuthority(request.SessionRef, request.AccessAuthority); err != nil {
+		return err
+	}
+	if err := ValidateAgentLaunchEgressAuthority(request.EgressAuthority); err != nil {
 		return err
 	}
 	switch {
