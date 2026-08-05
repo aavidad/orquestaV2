@@ -28,6 +28,13 @@ max_output_bytes = 1048576
 observation_ttl = "30s"
 observation_timeout = "1s"
 
+[runtime.microvm]
+socket_path = ""
+profile_descriptor_path = ""
+expected_profile_descriptor_sha256 = ""
+launch_grant_key_id = ""
+launch_grant_signing_credential_ref = ""
+
 [runtime.codex]
 command = "codex"
 model = ""

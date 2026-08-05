@@ -156,6 +156,10 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 				(hasProfile || hasProfiles) && credentialRef != "" {
 				return fail(validator.ID)
 			}
+		case "runtime_microvm_requirements":
+			if !validRuntimeMicroVMValues(values) {
+				return fail(validator.ID)
+			}
 		case "agent_firecracker_vsock_cid_lease_bounds":
 			minimum, minimumOK := values[KeyAgentFirecrackerVsockCIDMinimumLeaseDuration].value.(time.Duration)
 			maximum, maximumOK := values[KeyAgentFirecrackerVsockCIDMaximumLeaseDuration].value.(time.Duration)
@@ -187,6 +191,48 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 		}
 	}
 	return nil
+}
+
+func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
+	isolation, isolationOK := values[KeyRuntimeIsolation].value.(string)
+	socketPath, socketOK := values[KeyRuntimeMicroVMSocketPath].value.(string)
+	profilePath, profileOK := values[KeyRuntimeMicroVMProfileDescriptorPath].value.(string)
+	profileDigest, digestOK := values[KeyRuntimeMicroVMExpectedProfileDescriptorSHA256].value.(string)
+	keyID, keyIDOK := values[KeyRuntimeMicroVMLaunchGrantKeyID].value.(string)
+	credentialRef, credentialOK := values[KeyRuntimeMicroVMLaunchGrantSigningCredentialRef].value.(CredentialRef)
+	if !isolationOK || !socketOK || !profileOK || !digestOK || !keyIDOK || !credentialOK {
+		return false
+	}
+	configured := socketPath != "" || profilePath != "" || profileDigest != "" ||
+		keyID != "" || credentialRef != ""
+	if isolation == "process" {
+		return !configured
+	}
+	return isolation == "microvm" &&
+		canonicalAbsolutePath(socketPath) &&
+		canonicalAbsolutePath(profilePath) &&
+		validBareSHA256(profileDigest) &&
+		validLaunchGrantKeyID(keyID) &&
+		credentialRef != ""
+}
+
+func validLaunchGrantKeyID(value string) bool {
+	const prefix = "clave-publica:"
+	if !strings.HasPrefix(value, prefix) || len(value) > 160 {
+		return false
+	}
+	suffix := strings.TrimPrefix(value, prefix)
+	if suffix == "" {
+		return false
+	}
+	for _, character := range []byte(suffix) {
+		if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' ||
+			character == '-' || character == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validTestAttestorValues(

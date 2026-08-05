@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-30.2`
+Registry revision: `2026-08-05.0`
 
-Registry hash: `sha256:c2d6489e4eb1c942778ae8f19d43b682fb8d01747528dc5c2f129a78403b3b2f`
+Registry hash: `sha256:baf227133e95eb589faa6bbe249515a50cdcd2325c7281bc57954f100df725f5`
 
 Precedence: `default < file < env`
 
@@ -30,6 +30,11 @@ Source limit: `1048576` bytes
 | `runtime.max_output_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES` | `true` | `integer_bounds` |
 | `runtime.capacity.observation_ttl` | `duration` | `"30s"` | `ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TTL` | `true` | `positive_duration` |
 | `runtime.capacity.observation_timeout` | `duration` | `"1s"` | `ORQUESTA_RUNTIME_CAPACITY_OBSERVATION_TIMEOUT` | `true` | `positive_duration` |
+| `runtime.microvm.socket_path` | `optional_path` | `""` | `ORQUESTA_RUNTIME_MICROVM_SOCKET_PATH` | `true` | `optional_path` |
+| `runtime.microvm.profile_descriptor_path` | `optional_path` | `""` | `ORQUESTA_RUNTIME_MICROVM_PROFILE_DESCRIPTOR_PATH` | `true` | `optional_path` |
+| `runtime.microvm.expected_profile_descriptor_sha256` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_EXPECTED_PROFILE_DESCRIPTOR_SHA256` | `true` | `trimmed_optional_string` |
+| `runtime.microvm.launch_grant_key_id` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_LAUNCH_GRANT_KEY_ID` | `true` | `trimmed_optional_string` |
+| `runtime.microvm.launch_grant_signing_credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_MICROVM_LAUNCH_GRANT_SIGNING_CREDENTIAL_REF` | `true` | `credential_ref` |
 | `runtime.codex.command` | `string` | `"codex"` | `ORQUESTA_RUNTIME_CODEX_COMMAND` | `true` | `trimmed_non_empty_string` |
 | `runtime.codex.model` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_MODEL` | `true` | `trimmed_optional_string` |
 | `runtime.codex.reasoning` | `string` | `"medium"` | `ORQUESTA_RUNTIME_CODEX_REASONING` | `true` | `allowed_values` |
@@ -111,6 +116,7 @@ Source limit: `1048576` bytes
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`; maximum duration `30s`
 - `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.account_profiles`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
+- `runtime_microvm_requirements`: `runtime.isolation`, `runtime.microvm.socket_path`, `runtime.microvm.profile_descriptor_path`, `runtime.microvm.expected_profile_descriptor_sha256`, `runtime.microvm.launch_grant_key_id`, `runtime.microvm.launch_grant_signing_credential_ref`
 - `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`; maximum duration `24h`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`

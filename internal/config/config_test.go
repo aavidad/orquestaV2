@@ -101,6 +101,13 @@ isolation = "microvm"
 observation_ttl = "45s"
 observation_timeout = "750ms"
 
+[runtime.microvm]
+socket_path = "/run/orquesta/agente-microvm.sock"
+profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"
+expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+launch_grant_key_id = "clave-publica:orquesta-01"
+launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
+
 [runtime.codex]
 app_server_max_frame_bytes = 131072
 `, nil)

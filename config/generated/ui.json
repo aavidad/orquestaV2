@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-30.2",
-  "registry_hash": "sha256:c2d6489e4eb1c942778ae8f19d43b682fb8d01747528dc5c2f129a78403b3b2f",
+  "registry_revision": "2026-08-05.0",
+  "registry_hash": "sha256:baf227133e95eb589faa6bbe249515a50cdcd2325c7281bc57954f100df725f5",
   "aliases": [],
   "cross_validators": [
     {
@@ -29,6 +29,17 @@
         "runtime.codex.account_profiles",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
+      ]
+    },
+    {
+      "id": "runtime_microvm_requirements",
+      "keys": [
+        "runtime.isolation",
+        "runtime.microvm.socket_path",
+        "runtime.microvm.profile_descriptor_path",
+        "runtime.microvm.expected_profile_descriptor_sha256",
+        "runtime.microvm.launch_grant_key_id",
+        "runtime.microvm.launch_grant_signing_credential_ref"
       ]
     },
     {
@@ -330,6 +341,66 @@
       "restart_required": true,
       "validator_ids": [
         "positive_duration"
+      ]
+    },
+    {
+      "key": "runtime.microvm.socket_path",
+      "semantic_ref": "orquesta.config.runtime.microvm.socket_path",
+      "label_key": "config.field.runtime.microvm.socket_path",
+      "type": "optional_path",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "runtime.microvm.profile_descriptor_path",
+      "semantic_ref": "orquesta.config.runtime.microvm.profile_descriptor_path",
+      "label_key": "config.field.runtime.microvm.profile_descriptor_path",
+      "type": "optional_path",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "runtime.microvm.expected_profile_descriptor_sha256",
+      "semantic_ref": "orquesta.config.runtime.microvm.expected_profile_descriptor_sha256",
+      "label_key": "config.field.runtime.microvm.expected_profile_descriptor_sha256",
+      "type": "string",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.microvm.launch_grant_key_id",
+      "semantic_ref": "orquesta.config.runtime.microvm.launch_grant_key_id",
+      "label_key": "config.field.runtime.microvm.launch_grant_key_id",
+      "type": "string",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.microvm.launch_grant_signing_credential_ref",
+      "semantic_ref": "orquesta.config.runtime.microvm.launch_grant_signing_credential_ref",
+      "label_key": "config.field.runtime.microvm.launch_grant_signing_credential_ref",
+      "type": "credential_ref",
+      "sensitive": true,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "credential_ref"
       ]
     },
     {

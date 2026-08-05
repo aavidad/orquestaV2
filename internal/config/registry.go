@@ -448,6 +448,14 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeCodexAccountHomeRoot, KeyRuntimeCodexAccountProfile, KeyRuntimeCodexAccountProfiles,
 			KeyRuntimeCodexMaxConcurrentExecutions, KeyRuntimeCodexCredentialRef,
 		},
+		"runtime_microvm_requirements": {
+			KeyRuntimeIsolation,
+			KeyRuntimeMicroVMSocketPath,
+			KeyRuntimeMicroVMProfileDescriptorPath,
+			KeyRuntimeMicroVMExpectedProfileDescriptorSHA256,
+			KeyRuntimeMicroVMLaunchGrantKeyID,
+			KeyRuntimeMicroVMLaunchGrantSigningCredentialRef,
+		},
 		"agent_firecracker_vsock_cid_lease_bounds": {
 			KeyAgentFirecrackerVsockCIDMinimumLeaseDuration,
 			KeyAgentFirecrackerVsockCIDMaximumLeaseDuration,

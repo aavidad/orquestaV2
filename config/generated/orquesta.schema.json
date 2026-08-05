@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-30.2",
+  "$id": "urn:orquesta:config:2026-08-05.0",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -901,6 +901,72 @@
             "integer_bounds"
           ]
         },
+        "microvm": {
+          "additionalProperties": false,
+          "properties": {
+            "expected_profile_descriptor_sha256": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_EXPECTED_PROFILE_DESCRIPTOR_SHA256",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.expected_profile_descriptor_sha256",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
+            "launch_grant_key_id": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_LAUNCH_GRANT_KEY_ID",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.launch_grant_key_id",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
+            "launch_grant_signing_credential_ref": {
+              "pattern": "^(|credential:[a-z0-9][a-z0-9._-]{0,127})$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_LAUNCH_GRANT_SIGNING_CREDENTIAL_REF",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.launch_grant_signing_credential_ref",
+              "x-sensitive": true,
+              "x-validator-ids": [
+                "credential_ref"
+              ]
+            },
+            "profile_descriptor_path": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_PROFILE_DESCRIPTOR_PATH",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.profile_descriptor_path",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "optional_path"
+              ]
+            },
+            "socket_path": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_SOCKET_PATH",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.socket_path",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "optional_path"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "provider": {
           "default": "codex",
           "enum": [
@@ -1392,8 +1458,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-30.2",
-  "x-registry-hash": "sha256:c2d6489e4eb1c942778ae8f19d43b682fb8d01747528dc5c2f129a78403b3b2f",
+  "x-registry-revision": "2026-08-05.0",
+  "x-registry-hash": "sha256:baf227133e95eb589faa6bbe249515a50cdcd2325c7281bc57954f100df725f5",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1421,6 +1487,17 @@
         "runtime.codex.account_profiles",
         "runtime.codex.max_concurrent_executions",
         "runtime.codex.credential_ref"
+      ]
+    },
+    {
+      "id": "runtime_microvm_requirements",
+      "keys": [
+        "runtime.isolation",
+        "runtime.microvm.socket_path",
+        "runtime.microvm.profile_descriptor_path",
+        "runtime.microvm.expected_profile_descriptor_sha256",
+        "runtime.microvm.launch_grant_key_id",
+        "runtime.microvm.launch_grant_signing_credential_ref"
       ]
     },
     {
