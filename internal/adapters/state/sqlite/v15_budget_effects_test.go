@@ -1075,5 +1075,6 @@ func sqliteV15Attempt(claim application.ActionClaim, at time.Time) application.E
 		IntentRef: intent.Ref, IntentDigest: intent.Digest, ApprovalRef: claim.EffectApproval.Ref,
 		Subject: intent.Subject, ActionRef: claim.Action.Ref, ActionFence: claim.Fence,
 		WorkerRef: claim.WorkerRef, IdempotencyKey: intent.IdempotencyKey, StartedAt: at.UTC(),
+		ClaimLeaseUntil: claim.LeaseUntil.UTC(),
 	}
 }

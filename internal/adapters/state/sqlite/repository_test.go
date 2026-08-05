@@ -1682,6 +1682,7 @@ func prepareLegacyWorkspaceClaim(
 		ApprovalRef: claim.EffectApproval.Ref, Subject: claim.Action.EffectIntent.Subject,
 		ActionRef: claim.Action.Ref, ActionFence: claim.Fence, WorkerRef: claim.WorkerRef,
 		IdempotencyKey: claim.Action.EffectIntent.IdempotencyKey, StartedAt: at,
+		ClaimLeaseUntil: claim.LeaseUntil.UTC(),
 	}
 	persistedAttempt, _, err := repository.RecordEffectAttempt(context.Background(), application.RecordEffectAttemptState{
 		Claim: claim, Attempt: attempt, OperationAt: at,
