@@ -74,6 +74,9 @@ func agentLaunchEgressAuthorityFromWorkItemAuthority(
 		return ports.AgentLaunchEgressAuthority{}, errors.New("application.agent_launch_egress_authority_invalid")
 	}
 	policy := authority.EgressPolicy
+	if policy == (EgressPolicyAuthority{}) {
+		return ports.AgentLaunchEgressAuthority{}, nil
+	}
 	result := ports.AgentLaunchEgressAuthority{
 		PolicyRef: policy.PolicyRef.String(), PayloadSHA256: policy.PayloadSHA256,
 		CanonicalPayload: []byte(policy.CanonicalPayload),
