@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
@@ -12,6 +13,8 @@ var (
 	ErrAgentLaunchRecoveryInvalid     = errors.New("application.agent_launch_recovery_invalid")
 	ErrAgentLaunchRecoveryUnsupported = errors.New("application.agent_launch_recovery_unsupported")
 )
+
+const agentLaunchRecoveryApprovalRequiredCode = "governance.effect_approval_required"
 
 // AgentLaunchReconciler is an optional, read-only recovery capability. Launch
 // adapters that do not implement it can never receive a recovery request.
@@ -27,6 +30,227 @@ func AgentLaunchReconcilerFrom(launcher AgentLauncher) (AgentLaunchReconciler, e
 		return nil, ErrAgentLaunchRecoveryUnsupported
 	}
 	return reconciler, nil
+}
+
+func (orchestrator *Orchestrator) processAgentLaunchRecovery(
+	ctx context.Context,
+	claim ActionClaim,
+) error {
+	if ctx == nil {
+		return errors.New("application.context_required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := orchestrator.state.ValidateAgentLaunchRecoveryClaim(ctx, claim); err != nil {
+		return err
+	}
+	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
+	if err != nil {
+		return err
+	}
+	attempt, err := SelectAgentLaunchRecoveryAttempt(record, claim)
+	if err != nil {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	item, itemFound := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	execution, executionFound := executionForAction(record, claim.Action)
+	if !itemFound || !executionFound || execution.State != ExecutionDispatching {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	phase, phaseFound := phaseForWorkItem(record.Goal, item)
+	if !phaseFound {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+
+	request, err := orchestrator.reconstructAgentLaunchRecoveryRequest(record, item, execution, phase)
+	if err != nil {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	request.ReferenciaColocacion = claim.ReferenciaColocacion
+	request.RequierePreservacionEntorno = execution.RequierePreservacionEntorno
+	request.SessionRef = execution.ExecutionSessionRef
+	request, attempt, err = BuildAgentLaunchRecoveryRequest(record, claim, request)
+	if err != nil {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
+		return orchestrator.requeueAgentLaunchRecovery(
+			ctx, claim, execution, agentLaunchRecoveryApprovalRequiredCode,
+		)
+	}
+	reconciler, err := AgentLaunchReconcilerFrom(orchestrator.launcher)
+	if err != nil {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	request.SessionRef, request.AccessAuthority, err = orchestrator.replayAgentLaunchRecoverySession(
+		ctx, record, execution,
+	)
+	if err != nil {
+		if cancellationErr := agentLaunchRecoveryCancellation(ctx, err); cancellationErr != nil {
+			return cancellationErr
+		}
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	request, rebuiltAttempt, err := BuildAgentLaunchRecoveryRequest(record, claim, request)
+	if err != nil || rebuiltAttempt != attempt {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	receipt, err := reconciler.ReconcileLaunch(ctx, request)
+	if err != nil {
+		if cancellationErr := agentLaunchRecoveryCancellation(ctx, err); cancellationErr != nil {
+			return cancellationErr
+		}
+		// Temporary reconciliation retry remains a later cut. Until then every
+		// indeterminate provider result stays quarantined with the historical
+		// effect binding intact and can never fall back to Launch.
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil ||
+		receipt.ProviderRef != orchestrator.agentCapabilities.ProviderRef ||
+		receipt.ModelRef != orchestrator.agentCapabilities.ModelRef ||
+		receipt.AgentRef != orchestrator.agentCapabilities.AgentRef {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	latest, latestItem, latestExecution, err := orchestrator.reloadPreparedLaunch(ctx, claim)
+	if err != nil {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	latestAttempt, err := SelectAgentLaunchRecoveryAttempt(latest, claim)
+	if err != nil || latestAttempt != attempt {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	if _, rebuiltAttempt, buildErr := BuildAgentLaunchRecoveryRequest(latest, claim, request); buildErr != nil || rebuiltAttempt != attempt {
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	record, item, execution = latest, latestItem, latestExecution
+	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
+	return orchestrator.completeAcceptedLaunch(
+		ctx, claim, record, item, execution, attempt, receipt,
+		transitionAt, receipt.AcceptedAt, false,
+	)
+}
+
+func (orchestrator *Orchestrator) reconstructAgentLaunchRecoveryRequest(
+	record GoalRecord,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	phase goal.PhaseInstance,
+) (ports.AgentLaunchRequest, error) {
+	switch {
+	case isReviewerExecution(execution):
+		if err := validateReviewerLaunch(record, item, execution, orchestrator.testAttestationPolicy); err != nil {
+			return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
+		}
+		return reviewerAgentLaunchRequest(record, item, execution, phase, orchestrator.testAttestationPolicy)
+	case isCouncilExecution(execution):
+		if err := validateCouncilLaunch(record, item, execution); err != nil {
+			return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
+		}
+		return councilAgentLaunchRequest(record, item, execution, phase)
+	case execution.Purpose == ExecutionPurposeWork || execution.Purpose == ExecutionPurposeAuthor:
+		bound, found := item.Execution()
+		if item.State() != goal.WorkItemStateRunning || !found || bound != execution.Ref {
+			return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
+		}
+		return agentLaunchRequest(record.Goal, item, execution, phase), nil
+	default:
+		return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
+	}
+}
+
+func (orchestrator *Orchestrator) replayAgentLaunchRecoverySession(
+	ctx context.Context,
+	record GoalRecord,
+	execution ExecutionRecord,
+) (ports.ExecutionSessionRef, ports.AgentLaunchAccessAuthority, error) {
+	if execution.ExecutionSessionRef.String() == "" {
+		if orchestrator.executionSessions != nil {
+			return "", ports.AgentLaunchAccessAuthority{}, ErrAgentLaunchRecoveryInvalid
+		}
+		return "", ports.AgentLaunchAccessAuthority{}, nil
+	}
+	if orchestrator.executionSessions == nil {
+		return "", ports.AgentLaunchAccessAuthority{}, ErrAgentLaunchRecoveryInvalid
+	}
+	request := ExecutionSessionRequest(record.Goal, execution)
+	receipt, err := orchestrator.executionSessions.Ensure(ctx, request)
+	if err != nil {
+		return "", ports.AgentLaunchAccessAuthority{}, err
+	}
+	method := receipt.Authority.ServicePrincipal.Method
+	expected, deriveErr := DeriveExecutionSessionAuthority(request, method)
+	if deriveErr != nil || receipt.EnsuredAt.IsZero() || receipt.Authority != expected ||
+		receipt.Authority.Request != request ||
+		receipt.Authority.SessionRef != execution.ExecutionSessionRef {
+		return "", ports.AgentLaunchAccessAuthority{}, ErrAgentLaunchRecoveryInvalid
+	}
+	return receipt.Authority.SessionRef, ports.AgentLaunchAccessAuthority{
+		ArtifactAccessRef:  receipt.Authority.ArtifactAccessRef,
+		MCPAccessRef:       receipt.Authority.MCPAccessRef,
+		MailboxEndpointRef: receipt.Authority.MailboxEndpointRef,
+	}, nil
+}
+
+func (orchestrator *Orchestrator) failAgentLaunchRecoveryUnknownApplied(
+	ctx context.Context,
+	claim ActionClaim,
+) error {
+	if ctx == nil {
+		return errors.New("application.context_required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return orchestrator.quarantineUnknownApplied(ctx, claim)
+}
+
+func (orchestrator *Orchestrator) requeueAgentLaunchRecovery(
+	ctx context.Context,
+	claim ActionClaim,
+	execution ExecutionRecord,
+	code string,
+) error {
+	if ctx == nil {
+		return errors.New("application.context_required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	intent := claim.Action.EffectIntent
+	if claim.Disposition != ActionClaimDispositionRecoverEffect ||
+		claim.Action.Kind != ActionLaunchAgent ||
+		!validApplicationRef(claim.RecoveryEffectAttemptRef) ||
+		claim.Action.EffectIntentRef != intent.Ref || intent.QuotaRetryDelay <= 0 ||
+		execution.State != ExecutionDispatching || execution.Ref != claim.Action.ExecutionRef ||
+		execution.GoalRef != claim.Action.GoalRef || execution.WorkItemRef != claim.Action.WorkItemRef ||
+		execution.PlanGeneration != claim.Action.PlanGeneration ||
+		execution.BudgetReservationRef == "" || execution.BudgetReservationRef != claim.BudgetReservationRef ||
+		execution.EffectIntentRef == "" || execution.EffectIntentRef != claim.Action.EffectIntentRef {
+		return &StateError{Code: StateConflict}
+	}
+	now := orchestrator.clock.Now().UTC()
+	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
+		Claim: claim, Execution: execution, ErrorCode: code,
+		AvailableAt: now.Add(intent.QuotaRetryDelay), OperationAt: now,
+		BudgetSettlement: nil, ClearEffectBinding: false,
+	})
+}
+
+func agentLaunchRecoveryCancellation(ctx context.Context, err error) error {
+	if ctx != nil && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
+	}
+	return nil
 }
 
 // SelectAgentLaunchRecoveryAttempt returns the sole ambiguous physical launch

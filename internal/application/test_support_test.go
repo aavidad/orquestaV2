@@ -1456,6 +1456,58 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 	return ActionClaim{}, false, nil
 }
 
+func (repository *memoryRepository) ValidateAgentLaunchRecoveryClaim(
+	ctx context.Context,
+	claim ActionClaim,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	action, found := repository.actions[claim.Action.Ref]
+	now := repository.now().Round(0).UTC()
+	if !found || now.IsZero() || claim.Disposition != ActionClaimDispositionRecoverEffect ||
+		!memoryClaimMatches(action, claim, now) || !reflect.DeepEqual(action.record, claim.Action) {
+		return &StateError{Code: StateConflict}
+	}
+	record, found := repository.records[claim.Action.GoalRef]
+	if !found {
+		return &StateError{Code: StateConflict}
+	}
+	attempt, err := SelectAgentLaunchRecoveryAttempt(record, claim)
+	if err != nil || attempt.Ref != claim.RecoveryEffectAttemptRef {
+		return &StateError{Code: StateConflict}
+	}
+	activeReservations := 0
+	for _, reservation := range record.BudgetReservations {
+		if reservation.ActionRef != claim.Action.Ref {
+			continue
+		}
+		settled := false
+		for _, settlement := range record.BudgetSettlements {
+			if settlement.ReservationRef == reservation.Ref {
+				settled = true
+				break
+			}
+		}
+		if !settled {
+			activeReservations++
+			if reservation != claim.BudgetReservation {
+				return &StateError{Code: StateConflict}
+			}
+		}
+	}
+	capacity, capacityFound := repository.reservasCapacidad[claim.Action.Ref]
+	placement, placementFound := repository.colocaciones[claim.Action.Ref]
+	if activeReservations != 1 || claim.BudgetReservationRef != claim.BudgetReservation.Ref ||
+		!capacityFound || capacity != claim.CapacityReservation ||
+		!placementFound || placement != claim.ReferenciaColocacion {
+		return &StateError{Code: StateConflict}
+	}
+	return nil
+}
+
 func reservaCapacidadMemoria(accion ActionRecord, candidato AgentCapacityPlacementCandidate, cerca uint64, ahora time.Time) AgentCapacityReservation {
 	demanda, _ := AgentCapacityDemandFromBudget(accion.EffectIntent.Demand)
 	return AgentCapacityReservation{Ref: "capacity-reservation:" + accion.Ref, ObservationRef: candidato.Physical.Ref, ObservationRevision: 1,

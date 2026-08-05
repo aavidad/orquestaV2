@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -14,18 +15,38 @@ import (
 )
 
 type agentLaunchRecoveryFixture struct {
-	record  GoalRecord
-	claim   ActionClaim
-	request ports.AgentLaunchRequest
-	attempt EffectAttempt
+	repository       *memoryRepository
+	accessRepository *memoryAccessRepository
+	orchestrator     *Orchestrator
+	clock            *mutableClock
+	record           GoalRecord
+	claim            ActionClaim
+	request          ports.AgentLaunchRequest
+	attempt          EffectAttempt
 }
 
 func newAgentLaunchRecoveryFixture(t *testing.T) agentLaunchRecoveryFixture {
+	return newAgentLaunchRecoveryFixtureWithPreservation(t, false)
+}
+
+func newAgentLaunchRecoveryFixtureWithPreservation(
+	t *testing.T,
+	requiresPreservation bool,
+) agentLaunchRecoveryFixture {
 	t.Helper()
 	clock := &mutableClock{now: time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
-	orchestrator, _ := newTestOrchestrator(t, repository, clock, &scriptedAgent{now: clock.Now})
 	actor, project := testScope(t)
+	principalRef, err := identity.NewPrincipalRef(actor.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	accessRepository := newMemoryAccessRepository()
+	accessRepository.setRole(principalRef, project, identity.RoleProjectOwner)
+	orchestrator, _ := newTestOrchestratorWithAccess(
+		t, repository, accessRepository, clock, &scriptedAgent{now: clock.Now},
+	)
+	orchestrator.agentCapabilities.RequierePreservacionEntorno = requiresPreservation
 	submitted, err := orchestrator.Submit(context.Background(), accessForScope(t, actor, project), SubmitRequest{
 		RequestRef: "request:agent-launch-recovery", Statement: "recover exact launch", Confirm: true,
 	})
@@ -75,7 +96,460 @@ func newAgentLaunchRecoveryFixture(t *testing.T) agentLaunchRecoveryFixture {
 	claim.Disposition = ActionClaimDispositionRecoverEffect
 	claim.RecoveryEffectAttemptRef = attempt.Ref
 	claim.LeaseUntil = attempt.ClaimLeaseUntil.Add(time.Minute)
-	return agentLaunchRecoveryFixture{record: record, claim: claim, request: request, attempt: attempt}
+	return agentLaunchRecoveryFixture{
+		repository: repository, accessRepository: accessRepository,
+		orchestrator: orchestrator, clock: clock,
+		record: record, claim: claim, request: request, attempt: attempt,
+	}
+}
+
+func TestProcessClaimRecoversExactHistoricalAgentLaunch(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixture(t)
+	launcher := &recoveryCapableLauncher{scriptedAgent: &scriptedAgent{now: fixture.clock.Now}}
+	fixture.orchestrator.launcher = launcher
+	fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+	recoveryAcceptedAt := fixture.attempt.StartedAt.Add(time.Second)
+	launcher.reconcileAcceptedAt = recoveryAcceptedAt
+	fixture.persistRecoveryClaim()
+
+	result, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+	if err != nil || !result.Processed || result.Action != ActionLaunchAgent {
+		t.Fatalf("ProcessClaim result=%+v err=%v", result, err)
+	}
+	if got := len(launcher.reconcileRequests); got != 1 {
+		t.Fatalf("ReconcileLaunch calls=%d want=1", got)
+	}
+	launcher.scriptedAgent.mu.Lock()
+	launchCalls := len(launcher.scriptedAgent.launchRequests)
+	launcher.scriptedAgent.mu.Unlock()
+	if launchCalls != 0 {
+		t.Fatalf("Launch calls=%d want=0", launchCalls)
+	}
+	record, err := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, found := executionForAction(record, fixture.claim.Action)
+	if !found || execution.State != ExecutionRunning ||
+		!execution.ProviderAcceptedAt.Equal(recoveryAcceptedAt) {
+		t.Fatalf("execution=%+v found=%t", execution, found)
+	}
+	if len(record.EffectAttempts) != 1 || len(record.EffectReceipts) != 1 ||
+		len(record.ConsumptionReceipts) != 1 {
+		t.Fatalf("attempts=%d effect_receipts=%d consumption_receipts=%d",
+			len(record.EffectAttempts), len(record.EffectReceipts), len(record.ConsumptionReceipts))
+	}
+	effectReceipt := record.EffectReceipts[0]
+	consumption := record.ConsumptionReceipts[0]
+	if effectReceipt.AttemptRef != fixture.attempt.Ref ||
+		effectReceipt.ActionFence != fixture.attempt.ActionFence ||
+		!effectReceipt.ConfirmedAt.Equal(recoveryAcceptedAt) ||
+		consumption.Fence != fixture.claim.Fence {
+		t.Fatalf("effect_receipt=%+v consumption=%+v", effectReceipt, consumption)
+	}
+}
+
+func TestProcessClaimRecoveryReplaysExactExecutionSession(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixture(t)
+	execution, found := executionForAction(fixture.record, fixture.claim.Action)
+	if !found {
+		t.Fatal("execution missing")
+	}
+	sessionRequest := ExecutionSessionRequest(fixture.record.Goal, execution)
+	authority, err := DeriveExecutionSessionAuthority(sessionRequest, "execution_token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.ExecutionSessionRef = authority.SessionRef
+	fixture.record.Executions = replaceExecution(fixture.record.Executions, execution)
+	broker := &testExecutionSessionBroker{at: fixture.attempt.StartedAt}
+	fixture.orchestrator.executionSessions = broker
+	launcher := &recoveryCapableLauncher{
+		scriptedAgent:       &scriptedAgent{now: fixture.clock.Now},
+		reconcileAcceptedAt: fixture.attempt.StartedAt.Add(time.Second),
+	}
+	fixture.orchestrator.launcher = launcher
+	fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+	fixture.persistRecoveryClaim()
+
+	if _, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim); err != nil {
+		record, _ := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+		t.Fatalf("ProcessClaim err=%v reconciles=%d receipts=%d consumption=%+v",
+			err, len(launcher.reconcileRequests), len(record.EffectReceipts), record.ConsumptionReceipts)
+	}
+	if len(broker.requests) != 1 || broker.requests[0] != sessionRequest ||
+		len(launcher.reconcileRequests) != 1 {
+		t.Fatalf("ensure=%+v reconcile=%d", broker.requests, len(launcher.reconcileRequests))
+	}
+	request := launcher.reconcileRequests[0]
+	if request.SessionRef != authority.SessionRef ||
+		request.AccessAuthority.ArtifactAccessRef != authority.ArtifactAccessRef ||
+		request.AccessAuthority.MCPAccessRef != authority.MCPAccessRef ||
+		request.AccessAuthority.MailboxEndpointRef != authority.MailboxEndpointRef {
+		t.Fatalf("recovery request authority=%+v want=%+v", request, authority)
+	}
+}
+
+func TestProcessClaimRecoveryKeepsDurableEnvironmentRequirementAcrossRestart(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixtureWithPreservation(t, true)
+	execution, found := executionForAction(fixture.record, fixture.claim.Action)
+	if !found || execution.State != ExecutionDispatching || !execution.RequierePreservacionEntorno {
+		t.Fatalf("prepared execution lost durable preservation: execution=%+v found=%t", execution, found)
+	}
+	launcher := &recoveryCapableLauncher{
+		scriptedAgent:       &scriptedAgent{now: fixture.clock.Now},
+		reconcileAcceptedAt: fixture.attempt.StartedAt.Add(time.Second),
+	}
+	fixture.orchestrator.launcher = launcher
+	fixture.orchestrator.agentCapabilities.RequierePreservacionEntorno = false
+	fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+	fixture.persistRecoveryClaim()
+
+	if _, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim); err != nil {
+		record, _ := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+		t.Fatalf("ProcessClaim err=%v reconciles=%d receipts=%d consumption=%+v",
+			err, len(launcher.reconcileRequests), len(record.EffectReceipts), record.ConsumptionReceipts)
+	}
+	if len(launcher.reconcileRequests) != 1 ||
+		!launcher.reconcileRequests[0].RequierePreservacionEntorno {
+		t.Fatalf("reconcile request used current capabilities: %+v", launcher.reconcileRequests)
+	}
+	launcher.scriptedAgent.mu.Lock()
+	launches := len(launcher.scriptedAgent.launchRequests)
+	launcher.scriptedAgent.mu.Unlock()
+	record, err := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+	if err != nil || len(record.EffectAttempts) != 1 {
+		t.Fatalf("attempts=%d err=%v", len(record.EffectAttempts), err)
+	}
+	execution, found = executionForAction(record, fixture.claim.Action)
+	if launches != 0 || !found || !execution.RequierePreservacionEntorno {
+		t.Fatalf("Launch=%d execution=%+v found=%t", launches, execution, found)
+	}
+}
+
+func TestProcessClaimRecoveryNeverFallsBackToLaunch(t *testing.T) {
+	t.Run("reconciler unavailable", func(t *testing.T) {
+		fixture := newAgentLaunchRecoveryFixture(t)
+		execution, found := executionForAction(fixture.record, fixture.claim.Action)
+		if !found {
+			t.Fatal("execution missing")
+		}
+		sessionRequest := ExecutionSessionRequest(fixture.record.Goal, execution)
+		authority, deriveErr := DeriveExecutionSessionAuthority(sessionRequest, "execution_token")
+		if deriveErr != nil {
+			t.Fatal(deriveErr)
+		}
+		execution.ExecutionSessionRef = authority.SessionRef
+		fixture.record.Executions = replaceExecution(fixture.record.Executions, execution)
+		broker := &testExecutionSessionBroker{at: fixture.attempt.StartedAt}
+		fixture.orchestrator.executionSessions = broker
+		fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+		fixture.persistRecoveryClaim()
+
+		_, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+		if err == nil || err.Error() != effectUnknownAppliedCode {
+			t.Fatalf("error=%v", err)
+		}
+		fixture.orchestrator.launcher.(*scriptedAgent).mu.Lock()
+		launches := len(fixture.orchestrator.launcher.(*scriptedAgent).launchRequests)
+		fixture.orchestrator.launcher.(*scriptedAgent).mu.Unlock()
+		if launches != 0 || len(broker.requests) != 0 {
+			t.Fatalf("Launch calls=%d Ensure calls=%d want=0", launches, len(broker.requests))
+		}
+		record, getErr := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+		if getErr != nil || len(record.EffectAttempts) != 1 || len(record.EffectReceipts) != 0 ||
+			len(record.ConsumptionReceipts) != 1 ||
+			record.ConsumptionReceipts[0].Outcome != ActionConsumedQuarantined ||
+			record.ConsumptionReceipts[0].Fence != fixture.claim.Fence {
+			t.Fatalf("record=%+v get_err=%v", record, getErr)
+		}
+		execution, found = executionForAction(record, fixture.claim.Action)
+		if !found || execution.BudgetReservationRef != fixture.claim.BudgetReservationRef ||
+			execution.EffectIntentRef != fixture.claim.Action.EffectIntentRef {
+			t.Fatalf("unknown-applied binding lost: execution=%+v found=%t", execution, found)
+		}
+	})
+
+	t.Run("invalid receipt", func(t *testing.T) {
+		fixture := newAgentLaunchRecoveryFixture(t)
+		fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+		launcher := &recoveryCapableLauncher{
+			scriptedAgent: &scriptedAgent{now: fixture.clock.Now},
+			reconcileOverride: func(request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
+				receipt := launchReceiptForRequest(request, fixture.attempt.StartedAt.Add(time.Second))
+				receipt.ExternalRef = ""
+				return receipt, nil
+			},
+		}
+		fixture.orchestrator.launcher = launcher
+		fixture.persistRecoveryClaim()
+
+		_, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+		if err == nil || err.Error() != effectUnknownAppliedCode || len(launcher.reconcileRequests) != 1 {
+			t.Fatalf("reconciles=%d err=%v", len(launcher.reconcileRequests), err)
+		}
+		launcher.scriptedAgent.mu.Lock()
+		launches := len(launcher.scriptedAgent.launchRequests)
+		launcher.scriptedAgent.mu.Unlock()
+		if launches != 0 {
+			t.Fatalf("Launch calls=%d want=0", launches)
+		}
+	})
+}
+
+func TestProcessClaimRecoveryRejectsCrossedDisposition(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixture(t)
+	fixture.persistRecoveryClaim()
+
+	tests := map[string]ActionClaim{
+		"recovery on observe": func() ActionClaim {
+			claim := fixture.claim
+			claim.Action.Kind = ActionObserveAgent
+			return claim
+		}(),
+		"recovery ref on normal": func() ActionClaim {
+			claim := fixture.claim
+			claim.Disposition = ActionClaimDispositionNormal
+			return claim
+		}(),
+	}
+	for name, claim := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := fixture.orchestrator.ProcessClaim(context.Background(), claim)
+			if !IsStateError(err, StateConflict) {
+				t.Fatalf("error=%v", err)
+			}
+		})
+	}
+	record, err := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+	if err != nil || len(record.ConsumptionReceipts) != 0 || len(record.EffectAttempts) != 1 {
+		t.Fatalf("record mutated: receipts=%d attempts=%d err=%v",
+			len(record.ConsumptionReceipts), len(record.EffectAttempts), err)
+	}
+}
+
+func TestProcessClaimRecoveryCancellationDoesNotMutateState(t *testing.T) {
+	for name, beforeCall := range map[string]bool{"before reconcile": true, "during reconcile": false} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newAgentLaunchRecoveryFixture(t)
+			fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+			launcher := &recoveryCapableLauncher{scriptedAgent: &scriptedAgent{now: fixture.clock.Now}}
+			fixture.orchestrator.launcher = launcher
+			fixture.persistRecoveryClaim()
+			ctx, cancel := context.WithCancel(context.Background())
+			if beforeCall {
+				cancel()
+			} else {
+				launcher.reconcileErr = context.Canceled
+			}
+			defer cancel()
+
+			_, err := fixture.orchestrator.ProcessClaim(ctx, fixture.claim)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("error=%v", err)
+			}
+			record, getErr := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+			if getErr != nil || len(record.ConsumptionReceipts) != 0 || len(record.EffectAttempts) != 1 {
+				t.Fatalf("record mutated: receipts=%d attempts=%d get_err=%v",
+					len(record.ConsumptionReceipts), len(record.EffectAttempts), getErr)
+			}
+			if beforeCall && len(launcher.reconcileRequests) != 0 ||
+				!beforeCall && len(launcher.reconcileRequests) != 1 {
+				t.Fatalf("reconcile calls=%d before=%t", len(launcher.reconcileRequests), beforeCall)
+			}
+		})
+	}
+}
+
+func TestProcessClaimRecoveryValidatesLiveClaimBeforeAnyEffect(t *testing.T) {
+	tests := map[string]func(*testing.T, *agentLaunchRecoveryFixture){
+		"expired": func(_ *testing.T, fixture *agentLaunchRecoveryFixture) {
+			fixture.clock.now = fixture.claim.LeaseUntil
+		},
+		"reclaimed token and fence": func(_ *testing.T, fixture *agentLaunchRecoveryFixture) {
+			fixture.repository.mu.Lock()
+			action := fixture.repository.actions[fixture.claim.Action.Ref]
+			action.token, action.workerRef = "claim:later", "worker:later"
+			action.deliveryAttempt, action.fence = fixture.claim.DeliveryAttempt+1, fixture.claim.Fence+1
+			action.lease = fixture.claim.LeaseUntil.Add(time.Minute)
+			fixture.repository.actions[fixture.claim.Action.Ref] = action
+			fixture.repository.mu.Unlock()
+		},
+		"crossed recovery ref": func(_ *testing.T, fixture *agentLaunchRecoveryFixture) {
+			fixture.claim.RecoveryEffectAttemptRef = "effect-attempt:crossed"
+		},
+		"crossed placement": func(t *testing.T, fixture *agentLaunchRecoveryFixture) {
+			var err error
+			fixture.claim.ReferenciaColocacion, err = ports.NewAgentPlacementRef("placement:crossed")
+			if err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	for name, invalidate := range tests {
+		t.Run(name, func(t *testing.T) {
+			fixture := newAgentLaunchRecoveryFixture(t)
+			execution, found := executionForAction(fixture.record, fixture.claim.Action)
+			if !found {
+				t.Fatal("execution missing")
+			}
+			sessionRequest := ExecutionSessionRequest(fixture.record.Goal, execution)
+			authority, err := DeriveExecutionSessionAuthority(sessionRequest, "execution_token")
+			if err != nil {
+				t.Fatal(err)
+			}
+			execution.ExecutionSessionRef = authority.SessionRef
+			fixture.record.Executions = replaceExecution(fixture.record.Executions, execution)
+			broker := &testExecutionSessionBroker{at: fixture.attempt.StartedAt}
+			fixture.orchestrator.executionSessions = broker
+			launcher := &recoveryCapableLauncher{scriptedAgent: &scriptedAgent{now: fixture.clock.Now}}
+			fixture.orchestrator.launcher = launcher
+			fixture.persistRecoveryClaim()
+			invalidate(t, &fixture)
+			before, getErr := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+			if getErr != nil {
+				t.Fatal(getErr)
+			}
+
+			_, err = fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+			if !IsStateError(err, StateConflict) {
+				t.Fatalf("error=%v", err)
+			}
+			launcher.scriptedAgent.mu.Lock()
+			launches := len(launcher.scriptedAgent.launchRequests)
+			launcher.scriptedAgent.mu.Unlock()
+			after, getErr := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+			if getErr != nil || len(broker.requests) != 0 || len(launcher.reconcileRequests) != 0 || launches != 0 ||
+				!reflect.DeepEqual(after, before) {
+				t.Fatalf("Ensure=%d Reconcile=%d Launch=%d state_changed=%t err=%v",
+					len(broker.requests), len(launcher.reconcileRequests), launches,
+					!reflect.DeepEqual(after, before), getErr)
+			}
+		})
+	}
+}
+
+func TestProcessClaimRecoveryRevokedAuthorityStopsBeforeSessionAndProvider(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixture(t)
+	execution, found := executionForAction(fixture.record, fixture.claim.Action)
+	if !found {
+		t.Fatal("execution missing")
+	}
+	sessionRequest := ExecutionSessionRequest(fixture.record.Goal, execution)
+	authority, err := DeriveExecutionSessionAuthority(sessionRequest, "execution_token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.ExecutionSessionRef = authority.SessionRef
+	fixture.record.Executions = replaceExecution(fixture.record.Executions, execution)
+	broker := &testExecutionSessionBroker{at: fixture.attempt.StartedAt}
+	fixture.orchestrator.executionSessions = broker
+	launcher := &recoveryCapableLauncher{scriptedAgent: &scriptedAgent{now: fixture.clock.Now}}
+	fixture.orchestrator.launcher = launcher
+	state := &agentLaunchRecoveryRequeueCapture{StateRepository: fixture.repository}
+	fixture.orchestrator.state = state
+	fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+	fixture.persistRecoveryClaim()
+	revokeAgentLaunchRecoveryAuthority(t, fixture)
+
+	_, err = fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+	if err != nil || len(broker.requests) != 0 || len(launcher.reconcileRequests) != 0 ||
+		len(state.requeues) != 1 || state.requeues[0].ErrorCode != agentLaunchRecoveryApprovalRequiredCode ||
+		state.requeues[0].ClearEffectBinding || state.requeues[0].BudgetSettlement != nil {
+		t.Fatalf("Ensure=%d Reconcile=%d err=%v",
+			len(broker.requests), len(launcher.reconcileRequests), err)
+	}
+	launcher.scriptedAgent.mu.Lock()
+	launches := len(launcher.scriptedAgent.launchRequests)
+	launcher.scriptedAgent.mu.Unlock()
+	record, getErr := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+	execution, found = executionForAction(record, fixture.claim.Action)
+	fixture.repository.mu.Lock()
+	capacity := fixture.repository.reservasCapacidad[fixture.claim.Action.Ref]
+	action, actionFound := fixture.repository.actions[fixture.claim.Action.Ref]
+	fixture.repository.mu.Unlock()
+	if launches != 0 || getErr != nil || len(record.EffectAttempts) != 1 ||
+		len(record.EffectReceipts) != 0 || len(record.ConsumptionReceipts) != 0 ||
+		len(record.BudgetSettlements) != 0 || !actionFound || action.token != "" ||
+		action.workerRef != "" || !action.lease.IsZero() ||
+		!action.record.AvailableAt.Equal(fixture.clock.Now().Add(fixture.claim.Action.EffectIntent.QuotaRetryDelay)) ||
+		!found || execution.BudgetReservationRef != fixture.claim.BudgetReservationRef ||
+		execution.EffectIntentRef != fixture.claim.Action.EffectIntentRef ||
+		capacity.State != AgentCapacityReserved {
+		t.Fatalf("Launch=%d execution=%+v capacity=%+v attempts=%d receipts=%d settlements=%d err=%v",
+			launches, execution, capacity, len(record.EffectAttempts), len(record.EffectReceipts),
+			len(record.BudgetSettlements), getErr)
+	}
+}
+
+type agentLaunchRecoveryRequeueCapture struct {
+	StateRepository
+	requeues []ActionRequeuedState
+}
+
+func (state *agentLaunchRecoveryRequeueCapture) RequeueAction(
+	ctx context.Context,
+	requeue ActionRequeuedState,
+) error {
+	state.requeues = append(state.requeues, requeue)
+	return state.StateRepository.RequeueAction(ctx, requeue)
+}
+
+func TestProcessClaimRecoveryKeepsReceiptWhenAuthorityChangesAfterReconcileStarts(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixture(t)
+	fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+	launcher := &recoveryCapableLauncher{
+		scriptedAgent:       &scriptedAgent{now: fixture.clock.Now},
+		reconcileAcceptedAt: fixture.attempt.StartedAt.Add(time.Second),
+		reconcileHook: func() {
+			revokeAgentLaunchRecoveryAuthority(t, fixture)
+		},
+	}
+	fixture.orchestrator.launcher = launcher
+	fixture.persistRecoveryClaim()
+
+	if _, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim); err != nil {
+		t.Fatal(err)
+	}
+	record, err := fixture.repository.GetGoal(context.Background(), fixture.record.Goal.Ref())
+	if err != nil || len(launcher.reconcileRequests) != 1 || len(record.EffectAttempts) != 1 ||
+		len(record.EffectReceipts) != 1 || len(record.ConsumptionReceipts) != 1 ||
+		record.ConsumptionReceipts[0].Outcome != ActionConsumedCompleted {
+		t.Fatalf("reconciles=%d attempts=%d receipts=%d consumption=%+v err=%v",
+			len(launcher.reconcileRequests), len(record.EffectAttempts), len(record.EffectReceipts),
+			record.ConsumptionReceipts, err)
+	}
+}
+
+func (fixture agentLaunchRecoveryFixture) persistRecoveryClaim() {
+	fixture.repository.mu.Lock()
+	defer fixture.repository.mu.Unlock()
+	fixture.repository.records[fixture.record.Goal.Ref()] = fixture.record
+	action := fixture.repository.actions[fixture.claim.Action.Ref]
+	action.token, action.workerRef = fixture.claim.Token, fixture.claim.WorkerRef
+	action.deliveryAttempt, action.fence, action.lease =
+		fixture.claim.DeliveryAttempt, fixture.claim.Fence, fixture.claim.LeaseUntil
+	fixture.repository.actions[fixture.claim.Action.Ref] = action
+}
+
+func revokeAgentLaunchRecoveryAuthority(t *testing.T, fixture agentLaunchRecoveryFixture) {
+	t.Helper()
+	principalRef := fixture.claim.Action.EffectIntent.ProposedBy
+	projectRef := fixture.claim.Action.EffectIntent.Subject.ProjectRef
+	active, err := fixture.accessRepository.Membership(context.Background(), principalRef, projectRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoked, err := identity.NewMembership(identity.MembershipInput{
+		PrincipalRef: principalRef, ProjectRef: projectRef, Role: active.Role(),
+		Revision: active.Revision() + 1, Status: identity.MembershipRevoked,
+		GrantedBy: active.GrantedBy(), GrantedAt: active.GrantedAt(),
+		RevokedBy: principalRef, RevokedAt: fixture.clock.Now(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture.accessRepository.seedMembership(revoked)
 }
 
 func TestAgentLaunchRecoveryBuildsHistoricalAuthorityUnderNewFence(t *testing.T) {
@@ -282,7 +756,14 @@ func TestAgentLaunchRecoveryRequiresReconcilerCapability(t *testing.T) {
 	}
 }
 
-type recoveryCapableLauncher struct{ scriptedAgent *scriptedAgent }
+type recoveryCapableLauncher struct {
+	scriptedAgent       *scriptedAgent
+	reconcileRequests   []ports.AgentLaunchRequest
+	reconcileAcceptedAt time.Time
+	reconcileErr        error
+	reconcileOverride   func(ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error)
+	reconcileHook       func()
+}
 
 func (launcher *recoveryCapableLauncher) Capabilities(ctx context.Context) (ports.AgentCapabilities, error) {
 	return launcher.scriptedAgent.Capabilities(ctx)
@@ -291,7 +772,23 @@ func (launcher *recoveryCapableLauncher) Launch(ctx context.Context, request por
 	return launcher.scriptedAgent.Launch(ctx, request)
 }
 func (launcher *recoveryCapableLauncher) ReconcileLaunch(_ context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
-	return launchReceiptForRequest(request, request.EffectAuthority.StartedAt), nil
+	launcher.reconcileRequests = append(launcher.reconcileRequests, request)
+	if launcher.reconcileErr != nil {
+		return ports.AgentLaunchReceipt{}, launcher.reconcileErr
+	}
+	if launcher.reconcileHook != nil {
+		launcher.reconcileHook()
+	}
+	if launcher.reconcileOverride != nil {
+		return launcher.reconcileOverride(request)
+	}
+	at := launcher.reconcileAcceptedAt
+	if at.IsZero() {
+		at = request.EffectAuthority.StartedAt
+	}
+	receipt := launchReceiptForRequest(request, at)
+	receipt.RequierePreservacionEntorno = request.RequierePreservacionEntorno
+	return receipt, nil
 }
 
 func recoveryEffectReceipt(attempt EffectAttempt) EffectReceipt {

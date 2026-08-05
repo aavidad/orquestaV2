@@ -249,6 +249,11 @@ func TestProviderClockSkewCannotDriveLifecycle(t *testing.T) {
 	if !onlyExecution(t, record).ProviderAcceptedAt.Equal(providerNow()) || !onlyExecution(t, record).StartedAt.Equal(logicalNow) {
 		t.Fatalf("provider and lifecycle clocks were not separated: %+v", onlyExecution(t, record))
 	}
+	if len(record.EffectReceipts) != 1 || !record.EffectReceipts[0].ConfirmedAt.Equal(logicalNow) ||
+		record.EffectReceipts[0].ConfirmedAt.Equal(onlyExecution(t, record).ProviderAcceptedAt) {
+		t.Fatalf("normal launch confirmation stopped using lifecycle clock: receipt=%+v execution=%+v",
+			record.EffectReceipts, onlyExecution(t, record))
+	}
 }
 
 func TestCompletedObservationWithUnexpectedMediaTypeFailsWithoutEvidence(t *testing.T) {

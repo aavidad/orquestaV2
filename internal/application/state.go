@@ -699,6 +699,7 @@ type StateRepository interface {
 	GetMailbox(context.Context, goal.ProjectRef, goal.GoalRef, MailboxMessageRef, MailboxEndpoint) (MailboxRecord, error)
 	ListMailbox(context.Context, goal.ProjectRef, goal.GoalRef, MailboxEndpoint, int) ([]MailboxRecord, error)
 	ClaimNextAction(context.Context, ClaimRequest) (ActionClaim, bool, error)
+	ValidateAgentLaunchRecoveryClaim(context.Context, ActionClaim) error
 	RecordLaunchPrepared(context.Context, LaunchPreparedState) error
 	RecordLaunchAccepted(context.Context, LaunchAcceptedState) error
 	RequeueAction(context.Context, ActionRequeuedState) error

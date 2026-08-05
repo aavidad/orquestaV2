@@ -75,6 +75,15 @@ func (orchestrator *Orchestrator) processClaim(
 	claim ActionClaim,
 ) (ProcessResult, error) {
 	result := ProcessResult{Processed: true, GoalRef: claim.Action.GoalRef, Action: claim.Action.Kind}
+	if claim.Disposition == ActionClaimDispositionRecoverEffect {
+		if claim.Action.Kind != ActionLaunchAgent {
+			return result, &StateError{Code: StateConflict}
+		}
+		return result, orchestrator.processAgentLaunchRecovery(ctx, claim)
+	}
+	if claim.RecoveryEffectAttemptRef != "" {
+		return result, &StateError{Code: StateConflict}
+	}
 	if claim.Disposition == ActionClaimDispositionRetryBudgetIrreversible {
 		return result, orchestrator.processIrreversibleRetryBudget(ctx, claim)
 	}
@@ -241,7 +250,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		}
 	}
 	request.SessionRef, request.ReferenciaColocacion, request.RequierePreservacionEntorno =
-		sessionAuthority.SessionRef, claim.ReferenciaColocacion, orchestrator.agentCapabilities.RequierePreservacionEntorno
+		sessionAuthority.SessionRef, claim.ReferenciaColocacion, execution.RequierePreservacionEntorno
 	request.AccessAuthority = ports.AgentLaunchAccessAuthority{
 		ArtifactAccessRef: sessionAuthority.ArtifactAccessRef, MCPAccessRef: sessionAuthority.MCPAccessRef,
 		MailboxEndpointRef: sessionAuthority.MailboxEndpointRef,
@@ -262,26 +271,46 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	record, item, execution = latest, latestItem, latestExecution
+	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
+	return orchestrator.completeAcceptedLaunch(
+		ctx, claim, record, item, execution, attempt, receipt, transitionAt, transitionAt, true,
+	)
+}
+
+func (orchestrator *Orchestrator) completeAcceptedLaunch(
+	ctx context.Context,
+	claim ActionClaim,
+	record GoalRecord,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	attempt EffectAttempt,
+	receipt ports.AgentLaunchReceipt,
+	transitionAt time.Time,
+	effectConfirmedAt time.Time,
+	abortDuplicateReviewer bool,
+) error {
 	if isReviewerExecution(execution) && !reviewExternalRefAvailable(record, execution, receipt.ExternalRef) {
-		return orchestrator.abortReviewerLaunch(ctx, claim, record, execution, attempt, receipt)
+		if abortDuplicateReviewer {
+			return orchestrator.abortReviewerLaunch(ctx, claim, record, execution, attempt, receipt)
+		}
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	if isCouncilExecution(execution) && !councilExternalRefAvailable(record, execution, receipt.ExternalRef) {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
-	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State = ExecutionRunning
 	execution.ProviderRef, execution.ModelRef = receipt.ProviderRef, receipt.ModelRef
 	execution.AgentRef, execution.ExternalRef, execution.RequierePreservacionEntorno =
 		receipt.AgentRef, receipt.ExternalRef, receipt.RequierePreservacionEntorno
 	execution.StartedAt = transitionAt
 	execution.DeadlineAt = transitionAt.Add(orchestrator.executionTimeout)
-	execution.ProviderAcceptedAt = receipt.AcceptedAt.UTC()
 	externalReceipt, err := effectReceipt(
-		claim, attempt, receipt.ReceiptRef, EffectStatusAccepted, unknownUsage(), transitionAt,
+		claim, attempt, receipt.ReceiptRef, EffectStatusAccepted, unknownUsage(), effectConfirmedAt,
 	)
 	if err != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
+	execution.ProviderAcceptedAt = receipt.AcceptedAt.UTC()
 	execution.LaunchReceiptRef = externalReceipt.Ref
 	next := ActionRecord{
 		Ref: "action:observe:" + execution.Ref.String(), Kind: ActionObserveAgent,
@@ -318,7 +347,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		OperationAt: transitionAt,
 	})
 	if err != nil {
-		if isReviewerExecution(execution) {
+		if abortDuplicateReviewer && isReviewerExecution(execution) {
 			latest, _, latestExecution, reloadErr := orchestrator.reloadPreparedLaunch(ctx, claim)
 			if reloadErr == nil && !reviewExternalRefAvailable(latest, latestExecution, receipt.ExternalRef) {
 				return orchestrator.abortReviewerLaunch(ctx, claim, latest, latestExecution, attempt, receipt)
@@ -413,6 +442,7 @@ func (orchestrator *Orchestrator) prepareLaunchDispatch(
 	if execution.State != ExecutionQueued {
 		return record, item, execution, true, nil
 	}
+	execution.RequierePreservacionEntorno = orchestrator.agentCapabilities.RequierePreservacionEntorno
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	aggregate := record.Goal
 	if isReviewerExecution(execution) {
