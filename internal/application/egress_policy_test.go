@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/ports"
 )
 
 type egressPolicyResolverStub struct {
@@ -347,6 +348,9 @@ func TestResolvePlanEgressPoliciesFailsClosedWithoutExactBoundedResolution(t *te
 		"requested ref invalid": {
 			resolver: &egressPolicyResolverStub{authority: valid}, ref: " egress-policy:bounded",
 		},
+		"requested ref invalid UTF-8": {
+			resolver: &egressPolicyResolverStub{authority: valid}, ref: string([]byte{0xff}),
+		},
 		"resolution error": {
 			resolver: &egressPolicyResolverStub{err: errors.New("sensitive remote detail")}, ref: requested.String(),
 		},
@@ -364,6 +368,13 @@ func TestResolvePlanEgressPoliciesFailsClosedWithoutExactBoundedResolution(t *te
 			resolver: &egressPolicyResolverStub{authority: EgressPolicyAuthority{
 				PolicyRef: requested, CanonicalPayload: strings.Repeat("x", maxEgressPolicyCanonicalPayloadBytes+1),
 				PayloadSHA256: egressPolicyPayloadSHA256(strings.Repeat("x", maxEgressPolicyCanonicalPayloadBytes+1)),
+			}},
+			ref: requested.String(),
+		},
+		"payload invalid UTF-8": {
+			resolver: &egressPolicyResolverStub{authority: EgressPolicyAuthority{
+				PolicyRef: requested, CanonicalPayload: string([]byte{0xff}),
+				PayloadSHA256: egressPolicyPayloadSHA256(string([]byte{0xff})),
 			}},
 			ref: requested.String(),
 		},
@@ -405,6 +416,87 @@ func TestAbsentEgressPolicyNeedsNoResolver(t *testing.T) {
 	})
 	if err != nil || len(resolved) != 1 || resolved[0] != (EgressPolicyAuthority{}) {
 		t.Fatalf("absent egress policy resolution=%+v err=%v", resolved, err)
+	}
+}
+
+func TestAuthorLaunchBindsDurableEgressAndRejectsMutationBeforeProvider(t *testing.T) {
+	tests := map[string]struct {
+		mutate      func(*GoalRecord, EgressPolicyAuthority)
+		wantLaunch  bool
+		wantErrCode string
+	}{
+		"exact durable authority": {wantLaunch: true},
+		"valid authority substituted": {
+			mutate: func(record *GoalRecord, _ EgressPolicyAuthority) {
+				record.WorkItemAuthorities[0].EgressPolicy = testEgressPolicyAuthority(
+					t, "egress-policy:substituted", `{"destinations":["other.example"]}`,
+				)
+			},
+			wantErrCode: "application.effect_target_mismatch",
+		},
+		"payload tampered": {
+			mutate: func(record *GoalRecord, _ EgressPolicyAuthority) {
+				record.WorkItemAuthorities[0].EgressPolicy.CanonicalPayload += " "
+			},
+			wantErrCode: "application.agent_launch_egress_authority_invalid",
+		},
+	}
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			clock := &mutableClock{now: time.Date(2026, 8, 5, 13, 0, 0, 0, time.UTC)}
+			repository := newMemoryRepository()
+			agent := &scriptedAgent{now: clock.Now}
+			orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
+			policy := testEgressPolicyAuthority(t, "egress-policy:dispatch", `{"destinations":["example.org"]}`)
+			resolver := &egressPolicyResolverStub{authority: policy}
+			orchestrator.egressPolicies = resolver
+			actor, project := testScope(t)
+			submitted, err := orchestrator.Submit(context.Background(), accessForScope(t, actor, project), SubmitRequest{
+				RequestRef: "request:egress-dispatch:" + strings.ReplaceAll(name, " ", "-"),
+				Statement:  "dispatch with exact durable egress authority", Confirm: true,
+				Plan: &PlanSpec{
+					Phases: []PhaseSpec{{
+						Ref: "phase-instance:egress-dispatch", Key: goal.DefaultPhaseKey().String(),
+						TemplateRef: "phase-template:egress-dispatch",
+					}},
+					WorkItems: []WorkItemSpec{{
+						Key: "work", Objective: "use governed network", Phase: goal.DefaultPhaseKey().String(),
+						Role: goal.DefaultRoleKey().String(), OutputContract: goal.OutputContractEvidenceBundle,
+						EgressPolicyRef: policy.PolicyRef.String(),
+					}},
+				},
+			})
+			if err != nil {
+				t.Fatalf("submit egress launch: %v", err)
+			}
+			if testCase.mutate != nil {
+				repository.mu.Lock()
+				record := repository.records[submitted.Record.Goal.Ref()]
+				testCase.mutate(&record, policy)
+				repository.records[submitted.Record.Goal.Ref()] = record
+				repository.mu.Unlock()
+			}
+			unavailable := &egressPolicyResolverStub{err: errors.New("catalog must not be read during dispatch")}
+			orchestrator.egressPolicies = unavailable
+			processed, processErr := orchestrator.ProcessNext(context.Background(), "worker:egress-dispatch")
+			if !processed.Processed || processed.Action != ActionLaunchAgent || len(unavailable.refs) != 0 {
+				t.Fatalf("dispatch result=%+v catalog refs=%v err=%v", processed, unavailable.refs, processErr)
+			}
+			if testCase.wantLaunch {
+				if processErr != nil || agent.launches != 1 || len(agent.launchRequests) != 1 {
+					t.Fatalf("launches=%d requests=%d err=%v", agent.launches, len(agent.launchRequests), processErr)
+				}
+				want := ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
+					PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}
+				if agent.launchRequests[0].EgressAuthority != want {
+					t.Fatalf("launch egress=%+v want=%+v", agent.launchRequests[0].EgressAuthority, want)
+				}
+				return
+			}
+			if processErr == nil || processErr.Error() != testCase.wantErrCode || agent.launches != 0 {
+				t.Fatalf("mutation crossed provider: launches=%d err=%v", agent.launches, processErr)
+			}
+		})
 	}
 }
 

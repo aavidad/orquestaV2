@@ -61,6 +61,61 @@ func workItemAuthorityFor(authorities []WorkItemAuthority, ref goal.WorkItemRef)
 	return WorkItemAuthority{}, false
 }
 
+func agentLaunchEgressAuthorityFromWorkItemAuthority(
+	aggregate goal.Goal,
+	workItemRef goal.WorkItemRef,
+	authority WorkItemAuthority,
+) (ports.AgentLaunchEgressAuthority, error) {
+	if authority.WorkItemRef != workItemRef {
+		return ports.AgentLaunchEgressAuthority{}, errors.New("application.agent_launch_egress_authority_invalid")
+	}
+	if _, found := aggregate.WorkItem(workItemRef); !found ||
+		validateWorkItemAuthority(aggregate, authority) != nil {
+		return ports.AgentLaunchEgressAuthority{}, errors.New("application.agent_launch_egress_authority_invalid")
+	}
+	policy := authority.EgressPolicy
+	result := ports.AgentLaunchEgressAuthority{
+		PolicyRef: policy.PolicyRef.String(), PayloadSHA256: policy.PayloadSHA256,
+		CanonicalPayload: policy.CanonicalPayload,
+	}
+	if err := ports.ValidateAgentLaunchEgressAuthority(result); err != nil {
+		return ports.AgentLaunchEgressAuthority{}, errors.New("application.agent_launch_egress_authority_invalid")
+	}
+	return result, nil
+}
+
+func durableAgentLaunchEgressAuthority(
+	record GoalRecord,
+	workItemRef goal.WorkItemRef,
+) (ports.AgentLaunchEgressAuthority, error) {
+	var authority WorkItemAuthority
+	matches := 0
+	for _, candidate := range record.WorkItemAuthorities {
+		if candidate.WorkItemRef == workItemRef {
+			authority, matches = candidate, matches+1
+		}
+	}
+	if matches != 1 {
+		return ports.AgentLaunchEgressAuthority{}, errors.New("application.agent_launch_egress_authority_invalid")
+	}
+	return agentLaunchEgressAuthorityFromWorkItemAuthority(record.Goal, workItemRef, authority)
+}
+
+func bindDurableAgentLaunchEgressAuthority(
+	record GoalRecord,
+	request *ports.AgentLaunchRequest,
+) error {
+	if request == nil {
+		return errors.New("application.agent_launch_egress_authority_invalid")
+	}
+	authority, err := durableAgentLaunchEgressAuthority(record, request.WorkItemRef)
+	if err != nil {
+		return err
+	}
+	request.EgressAuthority = authority
+	return nil
+}
+
 func validatePersistedWorkItemAuthorities(
 	expected []WorkItemAuthority,
 	observed []WorkItemAuthority,
@@ -94,6 +149,11 @@ func (orchestrator *Orchestrator) launchAction(
 		return ActionRecord{}, errors.New("application.phase_missing")
 	}
 	launchRequest := agentLaunchRequest(aggregate, item, execution, phase)
+	egressAuthority, err := agentLaunchEgressAuthorityFromWorkItemAuthority(aggregate, item.Ref(), authority)
+	if err != nil {
+		return ActionRecord{}, err
+	}
+	launchRequest.EgressAuthority = egressAuthority
 	actionRef := "action:launch:" + execution.Ref.String()
 	intent := EffectIntent{
 		Ref: "effect-intent:" + actionRef, RequestRef: authority.AuthorizationReceipt.Decision().Request().RequestRef(),
@@ -364,12 +424,13 @@ func authorLaunchTargetDigest(request ports.AgentLaunchRequest) string {
 	// deliberately not ratcheted into the persisted V15 effect fingerprint:
 	// doing so would invalidate pre-V22 pending actions without adding authority
 	// or entropy. The launch contract still carries and validates the opaque ref.
-	return effectAdmissionFingerprint(
+	fields := []string{
 		"target:launch:v1", request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
 		request.ExecutionRef.String(), strconv.FormatUint(uint64(request.PlanGeneration), 10),
 		strconv.FormatUint(uint64(request.AppSpecGeneration), 10), strconv.FormatUint(request.ExecutionAttempt, 10),
 		request.SpecHash, request.ActorRef.String(), request.ExecutionWorkspaceRef.String(), request.IdempotencyKey,
-	)
+	}
+	return launchTargetDigestWithEgress(fields, request.EgressAuthority)
 }
 
 func reviewerLaunchTargetDigest(request ports.AgentLaunchRequest) string {
@@ -388,7 +449,17 @@ func reviewerLaunchTargetDigest(request ports.AgentLaunchRequest) string {
 	fields = append(fields, request.ToolRefs...)
 	fields = append(fields, request.CapabilityRefs...)
 	fields = append(fields, request.WriteSet...)
-	return effectAdmissionFingerprint(fields...)
+	return launchTargetDigestWithEgress(fields, request.EgressAuthority)
+}
+
+func launchTargetDigestWithEgress(fields []string, authority ports.AgentLaunchEgressAuthority) string {
+	if authority == (ports.AgentLaunchEgressAuthority{}) {
+		return effectAdmissionFingerprint(fields...)
+	}
+	fields = append(append([]string(nil), fields...),
+		authority.PolicyRef, authority.PayloadSHA256, authority.CanonicalPayload,
+	)
+	return fingerprintFields("orquesta.effect.agent-launch-egress.v1", fields...)
 }
 
 func stopTargetDigest(control ControlRecord, request ports.AgentStopRequest) string {

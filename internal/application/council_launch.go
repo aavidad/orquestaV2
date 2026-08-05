@@ -48,6 +48,9 @@ func councilAgentLaunchRequestForSubject(record GoalRecord, item goal.WorkItem, 
 	request.ArtifactMediaType, request.WriteSet = council.ContributionMediaType, nil
 	request.MaxOutputBytes, request.BudgetDemand = execution.MaxOutputBytes, item.BudgetDemand()
 	request.SecurityCriticality, request.ReasoningEffort = item.SecurityCriticality(), item.ReasoningEffort()
+	if err := bindDurableAgentLaunchEgressAuthority(record, &request); err != nil {
+		return ports.AgentLaunchRequest{}, err
+	}
 	return request, nil
 }
 

@@ -153,26 +153,32 @@ func (orchestrator *Orchestrator) reconstructAgentLaunchRecoveryRequest(
 	execution ExecutionRecord,
 	phase goal.PhaseInstance,
 ) (ports.AgentLaunchRequest, error) {
+	var request ports.AgentLaunchRequest
+	var err error
 	switch {
 	case isReviewerExecution(execution):
 		if err := validateReviewerLaunch(record, item, execution, orchestrator.testAttestationPolicy); err != nil {
 			return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
 		}
-		return reviewerAgentLaunchRequest(record, item, execution, phase, orchestrator.testAttestationPolicy)
+		request, err = reviewerAgentLaunchRequest(record, item, execution, phase, orchestrator.testAttestationPolicy)
 	case isCouncilExecution(execution):
 		if err := validateCouncilLaunch(record, item, execution); err != nil {
 			return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
 		}
-		return councilAgentLaunchRequest(record, item, execution, phase)
+		request, err = councilAgentLaunchRequest(record, item, execution, phase)
 	case execution.Purpose == ExecutionPurposeWork || execution.Purpose == ExecutionPurposeAuthor:
 		bound, found := item.Execution()
 		if item.State() != goal.WorkItemStateRunning || !found || bound != execution.Ref {
 			return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
 		}
-		return agentLaunchRequest(record.Goal, item, execution, phase), nil
+		request = agentLaunchRequest(record.Goal, item, execution, phase)
 	default:
 		return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
 	}
+	if err != nil || bindDurableAgentLaunchEgressAuthority(record, &request) != nil {
+		return ports.AgentLaunchRequest{}, ErrAgentLaunchRecoveryInvalid
+	}
+	return request, nil
 }
 
 func (orchestrator *Orchestrator) replayAgentLaunchRecoverySession(
@@ -426,6 +432,7 @@ func validateAgentLaunchRecoveryBindings(
 	request ports.AgentLaunchRequest,
 ) error {
 	intent := claim.Action.EffectIntent
+	durableEgress, egressErr := durableAgentLaunchEgressAuthority(record, request.WorkItemRef)
 	if execution.State != ExecutionDispatching || request.ExecutionRef != execution.Ref ||
 		request.GoalRef != execution.GoalRef || request.WorkItemRef != execution.WorkItemRef ||
 		request.PlanGeneration != execution.PlanGeneration ||
@@ -439,6 +446,7 @@ func validateAgentLaunchRecoveryBindings(
 		request.BudgetDemand != intent.Demand || request.RequierePreservacionEntorno != execution.RequierePreservacionEntorno ||
 		record.Goal.Ref() != intent.Subject.GoalRef || record.Goal.Project() != intent.Subject.ProjectRef ||
 		record.Goal.Actor() != intent.Subject.ActorRef || record.Goal.SpecHash() != intent.Subject.SpecHash ||
+		egressErr != nil || request.EgressAuthority != durableEgress ||
 		record.Goal.AppSpec().Generation() != intent.Subject.AppSpecGeneration {
 		return ErrAgentLaunchRecoveryInvalid
 	}

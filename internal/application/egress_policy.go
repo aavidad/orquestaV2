@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"orquesta/internal/goal"
 )
@@ -21,7 +22,7 @@ type EgressPolicyRef string
 
 func NewEgressPolicyRef(value string) (EgressPolicyRef, error) {
 	if value == "" || len(value) > maxEgressPolicyRefBytes || strings.TrimSpace(value) != value ||
-		strings.ContainsRune(value, '\x00') {
+		strings.ContainsRune(value, '\x00') || !utf8.ValidString(value) {
 		return "", errors.New("application.egress_policy_ref_invalid")
 	}
 	return EgressPolicyRef(value), nil
@@ -51,6 +52,7 @@ func ValidateEgressPolicyAuthority(authority EgressPolicyAuthority) error {
 	ref, err := NewEgressPolicyRef(authority.PolicyRef.String())
 	if err != nil || ref != authority.PolicyRef || len(authority.CanonicalPayload) == 0 ||
 		len(authority.CanonicalPayload) > maxEgressPolicyCanonicalPayloadBytes ||
+		!utf8.ValidString(authority.CanonicalPayload) ||
 		authority.PayloadSHA256 != egressPolicyPayloadSHA256(authority.CanonicalPayload) {
 		return errors.New("application.egress_policy_authority_invalid")
 	}

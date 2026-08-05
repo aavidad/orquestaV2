@@ -249,6 +249,9 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 			return orchestrator.quarantineUnapplied(ctx, claim, err.Error())
 		}
 	}
+	if err := bindDurableAgentLaunchEgressAuthority(record, &request); err != nil {
+		return orchestrator.quarantineUnapplied(ctx, claim, err.Error())
+	}
 	request.SessionRef, request.ReferenciaColocacion, request.RequierePreservacionEntorno =
 		sessionAuthority.SessionRef, claim.ReferenciaColocacion, execution.RequierePreservacionEntorno
 	request.AccessAuthority = ports.AgentLaunchAccessAuthority{

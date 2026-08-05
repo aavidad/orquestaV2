@@ -34,6 +34,21 @@ func newAgentLaunchRecoveryFixtureWithPreservation(
 	t *testing.T,
 	requiresPreservation bool,
 ) agentLaunchRecoveryFixture {
+	return newAgentLaunchRecoveryFixtureConfigured(t, requiresPreservation, EgressPolicyAuthority{})
+}
+
+func newAgentLaunchRecoveryFixtureWithEgress(
+	t *testing.T,
+	policy EgressPolicyAuthority,
+) agentLaunchRecoveryFixture {
+	return newAgentLaunchRecoveryFixtureConfigured(t, false, policy)
+}
+
+func newAgentLaunchRecoveryFixtureConfigured(
+	t *testing.T,
+	requiresPreservation bool,
+	policy EgressPolicyAuthority,
+) agentLaunchRecoveryFixture {
 	t.Helper()
 	clock := &mutableClock{now: time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
@@ -48,9 +63,20 @@ func newAgentLaunchRecoveryFixtureWithPreservation(
 		t, repository, accessRepository, clock, &scriptedAgent{now: clock.Now},
 	)
 	orchestrator.agentCapabilities.RequierePreservacionEntorno = requiresPreservation
-	submitted, err := orchestrator.Submit(context.Background(), accessForScope(t, actor, project), SubmitRequest{
+	submitRequest := SubmitRequest{
 		RequestRef: "request:agent-launch-recovery", Statement: "recover exact launch", Confirm: true,
-	})
+	}
+	if policy != (EgressPolicyAuthority{}) {
+		orchestrator.egressPolicies = &egressPolicyResolverStub{authority: policy}
+		submitRequest.Plan = &PlanSpec{
+			Phases: []PhaseSpec{{Ref: "phase-instance:recovery-egress", Key: goal.DefaultPhaseKey().String(),
+				TemplateRef: "phase-template:recovery-egress"}},
+			WorkItems: []WorkItemSpec{{Key: "work", Objective: "recover exact governed launch",
+				Phase: goal.DefaultPhaseKey().String(), Role: goal.DefaultRoleKey().String(),
+				OutputContract: goal.OutputContractEvidenceBundle, EgressPolicyRef: policy.PolicyRef.String()}},
+		}
+	}
+	submitted, err := orchestrator.Submit(context.Background(), accessForScope(t, actor, project), submitRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +105,9 @@ func newAgentLaunchRecoveryFixtureWithPreservation(
 		t.Fatalf("prepare proceed=%t err=%v", proceed, err)
 	}
 	request := agentLaunchRequest(record.Goal, item, execution, phase)
+	if err := bindDurableAgentLaunchEgressAuthority(record, &request); err != nil {
+		t.Fatal(err)
+	}
 	request.ReferenciaColocacion = claim.ReferenciaColocacion
 	request.RequierePreservacionEntorno = execution.RequierePreservacionEntorno
 	attempt := EffectAttempt{
@@ -101,6 +130,46 @@ func newAgentLaunchRecoveryFixtureWithPreservation(
 		repository: repository, accessRepository: accessRepository,
 		orchestrator: orchestrator, clock: clock,
 		record: record, claim: claim, request: request, attempt: attempt,
+	}
+}
+
+func TestProcessClaimRecoveryRebuildsDurableEgressWithoutCatalog(t *testing.T) {
+	policy := testEgressPolicyAuthority(t, "egress-policy:recovery", `{"destinations":["example.org"]}`)
+	fixture := newAgentLaunchRecoveryFixtureWithEgress(t, policy)
+	launcher := &recoveryCapableLauncher{scriptedAgent: &scriptedAgent{now: fixture.clock.Now}}
+	fixture.orchestrator.launcher = launcher
+	fixture.orchestrator.egressPolicies = &egressPolicyResolverStub{err: errors.New("catalog unavailable after admission")}
+	fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+	launcher.reconcileAcceptedAt = fixture.attempt.StartedAt.Add(time.Second)
+	fixture.persistRecoveryClaim()
+
+	if _, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim); err != nil {
+		t.Fatalf("recover exact durable egress: %v", err)
+	}
+	resolver := fixture.orchestrator.egressPolicies.(*egressPolicyResolverStub)
+	want := ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
+		PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}
+	if len(resolver.refs) != 0 || len(launcher.reconcileRequests) != 1 ||
+		launcher.reconcileRequests[0].EgressAuthority != want {
+		t.Fatalf("catalog refs=%v reconcile=%+v want=%+v", resolver.refs, launcher.reconcileRequests, want)
+	}
+}
+
+func TestProcessClaimRecoveryRejectsDurableEgressSwapBeforeReconciler(t *testing.T) {
+	policy := testEgressPolicyAuthority(t, "egress-policy:recovery-original", `{"destinations":["example.org"]}`)
+	fixture := newAgentLaunchRecoveryFixtureWithEgress(t, policy)
+	fixture.record.WorkItemAuthorities[0].EgressPolicy = testEgressPolicyAuthority(
+		t, "egress-policy:recovery-swapped", `{"destinations":["other.example"]}`,
+	)
+	launcher := &recoveryCapableLauncher{scriptedAgent: &scriptedAgent{now: fixture.clock.Now}}
+	fixture.orchestrator.launcher = launcher
+	fixture.orchestrator.egressPolicies = nil
+	fixture.clock.now = fixture.attempt.ClaimLeaseUntil.Add(time.Second)
+	fixture.persistRecoveryClaim()
+
+	_, err := fixture.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+	if err == nil || err.Error() != effectUnknownAppliedCode || len(launcher.reconcileRequests) != 0 {
+		t.Fatalf("swapped egress crossed reconciler: reconciles=%d err=%v", len(launcher.reconcileRequests), err)
 	}
 }
 

@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"strconv"
 	"testing"
 
 	"orquesta/internal/goal"
@@ -74,5 +75,53 @@ func TestDeterministicExecutionSessionRefPreservesPreV22TargetDigest(t *testing.
 	request.SessionRef = session
 	if got := authorLaunchTargetDigest(request); got != legacy {
 		t.Fatalf("deterministic SessionRef invalidated durable target: got=%s want=%s", got, legacy)
+	}
+}
+
+func TestLaunchTargetDigestPreservesLegacyDomainsAndBindsPresentEgressTuple(t *testing.T) {
+	actor, project := testScope(t)
+	goalRef, _ := goal.NewGoalRef("goal:target-egress")
+	itemRef, _ := goal.NewWorkItemRef("work-item:target-egress")
+	executionRef, _ := goal.NewExecutionRef("execution:target-egress")
+	request := ports.AgentLaunchRequest{
+		ExecutionRef: executionRef, GoalRef: goalRef, WorkItemRef: itemRef,
+		PlanGeneration: 2, AppSpecGeneration: 3, ExecutionAttempt: 4,
+		SpecHash: testDigest("target-egress"), ActorRef: actor, ProjectRef: project,
+		IdempotencyKey: "launch:target-egress", Objective: "review exact output",
+		PhaseRef: "phase-instance:review", PhaseKey: "phase:review", PhaseTemplateRef: "phase-template:review",
+		RoleKey: "role:reviewer", OutputContract: string(goal.OutputContractAttestation),
+		ArtifactMediaType: "application/json", MaxOutputBytes: 1024,
+	}
+	wantAuthorLegacy := effectAdmissionFingerprint(
+		"target:launch:v1", project.String(), goalRef.String(), itemRef.String(), executionRef.String(),
+		"2", "3", "4", request.SpecHash, actor.String(), "", request.IdempotencyKey,
+	)
+	if got := authorLaunchTargetDigest(request); got != wantAuthorLegacy {
+		t.Fatalf("author legacy digest=%s want=%s", got, wantAuthorLegacy)
+	}
+	reviewerFields := []string{
+		"target:launch:v2", project.String(), goalRef.String(), itemRef.String(), executionRef.String(),
+		"2", "3", "4", request.SpecHash, actor.String(), "", request.IdempotencyKey,
+		request.Objective, request.PhaseRef, request.PhaseKey, request.PhaseTemplateRef, request.RoleKey,
+		request.OutputContract, request.ArtifactMediaType, strconv.FormatInt(request.MaxOutputBytes, 10),
+		string(request.SecurityCriticality), string(request.ReasoningEffort), request.BudgetDemand.Ref,
+	}
+	wantReviewerLegacy := effectAdmissionFingerprint(reviewerFields...)
+	if got := reviewerLaunchTargetDigest(request); got != wantReviewerLegacy {
+		t.Fatalf("reviewer legacy digest=%s want=%s", got, wantReviewerLegacy)
+	}
+
+	policy := testEgressPolicyAuthority(t, "egress-policy:target", `{"destinations":["example.org"]}`)
+	request.EgressAuthority = ports.AgentLaunchEgressAuthority{
+		PolicyRef: policy.PolicyRef.String(), PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload,
+	}
+	authorWithEgress, reviewerWithEgress := authorLaunchTargetDigest(request), reviewerLaunchTargetDigest(request)
+	if authorWithEgress == wantAuthorLegacy || reviewerWithEgress == wantReviewerLegacy ||
+		authorWithEgress == reviewerWithEgress {
+		t.Fatalf("egress domain not isolated: author=%s reviewer=%s", authorWithEgress, reviewerWithEgress)
+	}
+	request.EgressAuthority.CanonicalPayload += " "
+	if authorLaunchTargetDigest(request) == authorWithEgress || reviewerLaunchTargetDigest(request) == reviewerWithEgress {
+		t.Fatal("canonical payload not bound into egress launch target")
 	}
 }

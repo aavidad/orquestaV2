@@ -52,10 +52,14 @@ func TestReviewerLaunchRequestCarriesCanonicalExactEvidenceAndNoWriteSet(t *test
 	attachment, err := reviewAttached(record, item, participant, system.orchestrator.testAttestationPolicy)
 	appTestNoError(t, err)
 	attachment.Change.ChangedPaths = []string{"internal/path, with space.go"}
+	policy := testEgressPolicyAuthority(t, "egress-policy:review", `{"destinations":["review.example"]}`)
+	record.WorkItemAuthorities[0].EgressPolicy = policy
 	role, _ := reviewerRole(participant)
 	request, err := reviewerAgentLaunchRequestFromAttachment(record, item, participant, phase, role, attachment)
 	appTestNoError(t, err)
 	if len(request.WriteSet) != 0 || request.ExecutionWorkspaceRef != participant.ExecutionWorkspaceRef ||
+		request.EgressAuthority != (ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
+			PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}) ||
 		!strings.Contains(request.Objective, "git diff "+attachment.Change.BaseOID+".."+attachment.Change.HeadOID) {
 		t.Fatalf("review request not exact/read-only: %+v", request)
 	}

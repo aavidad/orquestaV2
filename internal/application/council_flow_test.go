@@ -15,6 +15,14 @@ import (
 )
 
 func newCouncilSystem(t *testing.T, policy council.Policy) *testAttestationSystem {
+	return newCouncilSystemWithEgress(t, policy, EgressPolicyAuthority{})
+}
+
+func newCouncilSystemWithEgress(
+	t *testing.T,
+	policy council.Policy,
+	egress EgressPolicyAuthority,
+) *testAttestationSystem {
 	t.Helper()
 	clock := &mutableClock{now: time.Date(2026, 7, 22, 8, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
@@ -22,6 +30,9 @@ func newCouncilSystem(t *testing.T, policy council.Policy) *testAttestationSyste
 		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("candidate output"),
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
+	if egress != (EgressPolicyAuthority{}) {
+		orchestrator.egressPolicies = &egressPolicyResolverStub{authority: egress}
+	}
 	control := &scriptedVersionControl{}
 	attestor := &scriptedTestAttestor{verdict: ports.TestAttestationPassed}
 	orchestrator.versionControl, orchestrator.testAttestor = control, attestor
@@ -29,6 +40,7 @@ func newCouncilSystem(t *testing.T, policy council.Policy) *testAttestationSyste
 	access := accessForScope(t, actor, project)
 	plan := workspaceWritePlan()
 	plan.WorkItems[0].CouncilPolicy = policy
+	plan.WorkItems[0].EgressPolicyRef = egress.PolicyRef.String()
 	submitted, err := orchestrator.Submit(context.Background(), access, SubmitRequest{
 		RequestRef: "request:council", Statement: "produce council candidate", Confirm: true, Plan: plan,
 	})
@@ -38,9 +50,21 @@ func newCouncilSystem(t *testing.T, policy council.Policy) *testAttestationSyste
 }
 
 func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
-	system := newCouncilSystem(t, council.PolicyAuto)
+	policy := testEgressPolicyAuthority(t, "egress-policy:council", `{"destinations":["council.example"]}`)
+	system := newCouncilSystemWithEgress(t, council.PolicyAuto, policy)
 	system.processCommit(t)
 	system.process(t, ActionAttestTest, ActionLaunchAgent, ActionLaunchAgent)
+	agent := system.orchestrator.observer.(*scriptedAgent)
+	if len(agent.launchRequests) < 3 {
+		t.Fatalf("review dispatches=%d, want author plus two reviewers", len(agent.launchRequests))
+	}
+	wantEgress := ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
+		PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}
+	for _, request := range agent.launchRequests[len(agent.launchRequests)-2:] {
+		if request.EgressAuthority != wantEgress {
+			t.Fatalf("review dispatch egress=%+v want=%+v", request.EgressAuthority, wantEgress)
+		}
+	}
 	system.process(t, ActionObserveAgent)
 	if record := system.record(t); len(record.CouncilRounds) != 0 {
 		t.Fatalf("Council opened before second approval: %+v", record.CouncilRounds)
@@ -65,11 +89,22 @@ func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
 		}
 		request, err := councilAgentLaunchRequestForSubject(record, record.Goal.WorkItems()[0], execution, phase, round.Subject)
 		request.ReferenciaColocacion, _ = ports.NewAgentPlacementRef("placement:application-test")
-		if err != nil || request.OutputContract != string(goal.OutputContractArtifact) || request.ArtifactMediaType != council.ContributionMediaType || ports.ValidateAgentLaunchRequest(request) != nil {
+		if err != nil || request.OutputContract != string(goal.OutputContractArtifact) || request.ArtifactMediaType != council.ContributionMediaType ||
+			request.EgressAuthority != (ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
+				PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}) ||
+			ports.ValidateAgentLaunchRequest(request) != nil {
 			t.Fatalf("Council launch contract request=%+v err=%v", request, err)
 		}
 	}
 	system.process(t, ActionLaunchAgent, ActionLaunchAgent, ActionLaunchAgent)
+	if len(agent.launchRequests) < 6 {
+		t.Fatalf("Council dispatches=%d, want author, reviewers and council", len(agent.launchRequests))
+	}
+	for _, request := range agent.launchRequests[len(agent.launchRequests)-3:] {
+		if request.EgressAuthority != wantEgress {
+			t.Fatalf("Council dispatch egress=%+v want=%+v", request.EgressAuthority, wantEgress)
+		}
+	}
 	observations := make([]ports.AgentObservation, 0, 3)
 	sort.Slice(councilExecutions, func(i, j int) bool { return councilExecutions[i].Ref.String() < councilExecutions[j].Ref.String() })
 	for _, execution := range councilExecutions {
@@ -81,7 +116,6 @@ func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
 		observations = append(observations, ports.AgentObservation{Status: ports.AgentCompleted,
 			MediaType: council.ContributionMediaType, Content: content})
 	}
-	agent := system.orchestrator.observer.(*scriptedAgent)
 	agent.mu.Lock()
 	agent.observations = observations
 	agent.mu.Unlock()
