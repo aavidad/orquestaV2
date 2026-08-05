@@ -32,6 +32,7 @@ var (
 // siendo la unica implementacion aceptada por la factoria productiva.
 type agenteMicroVMDelegado interface {
 	application.AgentLauncher
+	application.AgentLaunchReconciler
 	application.AgentObserver
 	NegotiatedPhysicalCapacity() (agentmicrovm.NegotiatedPhysicalCapacity, error)
 }
@@ -107,6 +108,21 @@ func (agente *agenteMicroVM) Launch(
 		return ports.AgentLaunchReceipt{}, errAgentMicroVMCerrado
 	}
 	return agente.adaptador.Launch(ctx, solicitud)
+}
+
+func (agente *agenteMicroVM) ReconcileLaunch(
+	ctx context.Context,
+	solicitud ports.AgentLaunchRequest,
+) (ports.AgentLaunchReceipt, error) {
+	if agente == nil {
+		return ports.AgentLaunchReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentLaunchReceipt{}, errAgentMicroVMCerrado
+	}
+	return agente.adaptador.ReconcileLaunch(ctx, solicitud)
 }
 
 func (agente *agenteMicroVM) ObserveAgent(
@@ -194,4 +210,5 @@ func interfazNulaAgentMicroVM(valor any) bool {
 
 var _ agenteMicroVMDelegado = (*agentmicrovm.Adapter)(nil)
 var _ AgentAdapter = (*agenteMicroVM)(nil)
+var _ application.AgentLaunchReconciler = (*agenteMicroVM)(nil)
 var _ catalogoCapacidadColocacionAgente = (*agenteMicroVM)(nil)

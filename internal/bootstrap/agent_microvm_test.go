@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,11 +22,14 @@ type agenteMicroVMDelegadoPrueba struct {
 	negociado           bool
 	capabilitiesCalls   int
 	launchCalls         int
+	reconcileCalls      int
 	observeCalls        int
 	catalogoCalls       int
 	capabilitiesEntered chan struct{}
 	capabilitiesRelease chan struct{}
 	stopCalls           int
+	reconcileRequest    ports.AgentLaunchRequest
+	reconcileReceipt    ports.AgentLaunchReceipt
 }
 
 func (adaptador *agenteMicroVMDelegadoPrueba) Capabilities(ctx context.Context) (ports.AgentCapabilities, error) {
@@ -59,6 +63,17 @@ func (adaptador *agenteMicroVMDelegadoPrueba) Launch(context.Context, ports.Agen
 	defer adaptador.mu.Unlock()
 	adaptador.launchCalls++
 	return ports.AgentLaunchReceipt{}, nil
+}
+
+func (adaptador *agenteMicroVMDelegadoPrueba) ReconcileLaunch(
+	_ context.Context,
+	solicitud ports.AgentLaunchRequest,
+) (ports.AgentLaunchReceipt, error) {
+	adaptador.mu.Lock()
+	defer adaptador.mu.Unlock()
+	adaptador.reconcileCalls++
+	adaptador.reconcileRequest = solicitud
+	return adaptador.reconcileReceipt, nil
 }
 
 func (adaptador *agenteMicroVMDelegadoPrueba) ObserveAgent(context.Context, ports.AgentObserveRequest) (ports.AgentObservation, error) {
@@ -164,6 +179,48 @@ func TestAgentMicroVMRechazaDependenciasNulas(t *testing.T) {
 	}
 	if _, err := newAgentMicroVMConDelegado(valido, cierre, nil); !errors.Is(err, errAgentMicroVMCierreCredenciales) {
 		t.Fatalf("cierre credenciales nil error=%v", err)
+	}
+}
+
+func TestAgentMicroVMConservaReconciliacionOptInSinRelanzar(t *testing.T) {
+	solicitud := ports.AgentLaunchRequest{
+		SpecHash:       "sha256:solicitud-exacta",
+		IdempotencyKey: "idempotency:reconcile-launch",
+		SkillRefs:      []string{"skill:uno", "skill:dos"},
+		WriteSet:       []string{"internal/bootstrap/agent_microvm.go"},
+		EffectAuthority: ports.AgentLaunchEffectAuthority{
+			EffectAttemptRef: "effect-attempt:historical",
+			ActionFence:      17,
+		},
+	}
+	reciboEsperado := ports.AgentLaunchReceipt{
+		SpecHash:       solicitud.SpecHash,
+		ExternalRef:    "microvm:reconciliada",
+		IdempotencyKey: solicitud.IdempotencyKey,
+		ReceiptRef:     "receipt:reconcile-launch",
+	}
+	delegado := &agenteMicroVMDelegadoPrueba{reconcileReceipt: reciboEsperado}
+	agente := nuevoAgentMicroVMPrueba(t, delegado, func() error { return nil }, func() error { return nil })
+
+	reconciliador, err := application.AgentLaunchReconcilerFrom(agente)
+	if err != nil {
+		t.Fatalf("AgentLaunchReconcilerFrom() error=%v", err)
+	}
+	recibo, err := reconciliador.ReconcileLaunch(context.Background(), solicitud)
+	if err != nil {
+		t.Fatalf("ReconcileLaunch() error=%v", err)
+	}
+	if !reflect.DeepEqual(recibo, reciboEsperado) {
+		t.Fatalf("recibo=%+v esperado=%+v", recibo, reciboEsperado)
+	}
+
+	delegado.mu.Lock()
+	defer delegado.mu.Unlock()
+	if delegado.reconcileCalls != 1 || delegado.launchCalls != 0 {
+		t.Fatalf("reconcile=%d launch=%d", delegado.reconcileCalls, delegado.launchCalls)
+	}
+	if !reflect.DeepEqual(delegado.reconcileRequest, solicitud) {
+		t.Fatalf("solicitud=%+v esperada=%+v", delegado.reconcileRequest, solicitud)
 	}
 }
 
