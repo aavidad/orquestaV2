@@ -53,10 +53,17 @@ arranque KVM ni de ejecución Codex física.
 6. No existe entrega sellada de OAuth/API key a `/trabajo/.codex`. El runner
    parte de `HOME`/`CODEX_HOME` vacíos; ningún secreto debe entrar en rootfs ni
    quedar durable después del cierre.
-7. El primer candidato PFC-07a del instalador fue rechazado antes de commit por
-   revisión independiente: alias/ruta de slice incorrectos, posible doble
-   daemon en upgrade y temporal root no confiable. Está en corrección; no se ha
-   ejecutado sudo ni se ha tocado systemd/KVM.
+7. **PFC-07a cerrado offline.** `agente_microvm@2acd300` instala una slice
+   estable, conserva un único writer durante upgrade, usa temporales root
+   confiables y liga artefactos, estados y rollback mediante receipts. Dos
+   rondas de revisión y el arnés quedaron verdes. Sigue marcado
+   `launch_ready=false`: no se ha ejecutado sudo ni se ha acreditado
+   systemd/cgroup/KVM real; eso pertenece a PFC-07b.
+8. **PFC-04 parcial, sin falso verde.** C1 fijó el protocolo one-shot público y
+   C3 aisló `CODEX_HOME` en `/credencial-codex`. El primer C2 del huésped pasó
+   sus tests, pero una revisión independiente detectó bloqueo posible de PID 1,
+   ACK de purga fabricable desde `Drop` y lectura de la credencial por la ruta
+   legacy con el mismo UID. C2 sigue en corrección y no se considera cerrado.
 
 KVM y Firecracker 1.16.1 están disponibles. El usuario ya puede acceder a
 `/dev/kvm`; no hace falta sudo para ejecutar KVM. El sudo inevitable se limita
@@ -69,10 +76,10 @@ a instalar el servicio root, usuario/grupo, directorios y delegación cgroup.
 | PFC-01 | **Cerrado en código/arnés** por `5412c70e`: activos Codex actuales reproducibles | construcción doble exacta, manifiesto ligado y cancelación limpia; no acredita KVM | PFC-06 para evidencia física |
 | PFC-02 | **Cerrado en código/arnés**: frontera root/no-root del UDS (`agente_microvm@989272d`) | daemon root; Orquesta por grupo+`peercred`; tercero rechazado; socket no público | PFC-06/PFC-07 para evidencia física |
 | PFC-03 | **PFC-03a cerrado** por `ca78a490`; broker general aplazable | sesión exacta por `RunRef`+fence+atestación; el listener one-shot de credencial queda en PFC-04 | no bloquea por sí solo PFC-06 |
-| PFC-04 | Diseño one-shot cerrado; C1 en corrección tras review | secreto solo en memoria/tmpfs fuera de `/trabajo`, `0600`, principal exacto y borrado terminal verificable | C1–C6 pequeñas |
+| PFC-04 | Diseño one-shot y C1/C3 cerrados; C2 en corrección tras NO-GO independiente | secreto solo en memoria/tmpfs fuera de `/trabajo`, `0600`, principal exacto y borrado terminal verificable | cerrar C2, códec Go, broker host y wiring |
 | PFC-05 | **Cadena durable/transporte/compilación cerrada en código** hasta `b6f0fafd` y gate amplio verde tras `a74bfc26` | proxy explícito; concesión no llega al huésped; solo endpoint loopback | PFC-06 para evidencia física |
 | PFC-06 | E2E físico acotado | una microVM, un Codex real, resultado terminal durable y limpieza exacta | 2–4 h |
-| PFC-07 | Primer candidato offline rechazado; corrección activa | único sudo idempotente para servicio/grupo/directorios/cgroup, con status y rollback exactos | PFC-07a review + PFC-07b físico |
+| PFC-07 | **PFC-07a cerrado offline** por `agente_microvm@2acd300` | único sudo idempotente para servicio/grupo/directorios/cgroup, con status y rollback exactos | PFC-07b físico |
 
 B11 (parada exacta) y B12 (preservación/sello/compuerta B) se mantienen como
 cortes posteriores separados. No se engordan dentro de PFC-06 para fabricar un
