@@ -14,7 +14,10 @@ var (
 	ErrAgentLaunchRecoveryUnsupported = errors.New("application.agent_launch_recovery_unsupported")
 )
 
-const agentLaunchRecoveryApprovalRequiredCode = "governance.effect_approval_required"
+const (
+	agentLaunchRecoveryApprovalRequiredCode = "governance.effect_approval_required"
+	agentLaunchReconciliationPendingCode    = "agent.launch_reconciliation_pending"
+)
 
 // AgentLaunchReconciler is an optional, read-only recovery capability. Launch
 // adapters that do not implement it can never receive a recovery request.
@@ -90,6 +93,11 @@ func (orchestrator *Orchestrator) processAgentLaunchRecovery(
 		if cancellationErr := agentLaunchRecoveryCancellation(ctx, err); cancellationErr != nil {
 			return cancellationErr
 		}
+		if isTemporaryAgentError(err) {
+			return orchestrator.requeueAgentLaunchRecovery(
+				ctx, claim, execution, agentLaunchReconciliationPendingCode,
+			)
+		}
 		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
 	}
 	request, rebuiltAttempt, err := BuildAgentLaunchRecoveryRequest(record, claim, request)
@@ -104,9 +112,11 @@ func (orchestrator *Orchestrator) processAgentLaunchRecovery(
 		if cancellationErr := agentLaunchRecoveryCancellation(ctx, err); cancellationErr != nil {
 			return cancellationErr
 		}
-		// Temporary reconciliation retry remains a later cut. Until then every
-		// indeterminate provider result stays quarantined with the historical
-		// effect binding intact and can never fall back to Launch.
+		if isTemporaryAgentError(err) {
+			return orchestrator.requeueAgentLaunchRecovery(
+				ctx, claim, execution, agentLaunchReconciliationPendingCode,
+			)
+		}
 		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil ||
