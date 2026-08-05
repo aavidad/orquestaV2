@@ -1,0 +1,463 @@
+package agentmicrovm
+
+import (
+	"context"
+	"crypto/ed25519"
+	"encoding/json"
+	"errors"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
+
+	"orquesta/internal/ports"
+)
+
+type launchClientStub struct {
+	capabilities     microvm.RespuestaCapacidades
+	capabilitiesErr  error
+	response         microvm.RespuestaEjecucion
+	launchErr        error
+	capabilitiesCall int
+	launchKeys       []string
+	launchRequests   []microvm.SolicitudLanzamiento
+}
+
+func (client *launchClientStub) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
+	client.capabilitiesCall++
+	return client.capabilities, client.capabilitiesErr
+}
+
+func (client *launchClientStub) Lanzar(
+	_ context.Context,
+	key string,
+	request microvm.SolicitudLanzamiento,
+) (microvm.RespuestaEjecucion, error) {
+	client.launchKeys = append(client.launchKeys, key)
+	client.launchRequests = append(client.launchRequests, cloneSignedRequestUnchecked(request))
+	return client.response, client.launchErr
+}
+
+type signerCall struct {
+	context  microvm.ContextoAutorizado
+	plan     microvm.PlanLanzamiento
+	issuedAt time.Time
+	validity time.Duration
+}
+
+type launchSignerStub struct {
+	delegate Signer
+	err      error
+	mutate   func(microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento
+	calls    []signerCall
+}
+
+func (signer *launchSignerStub) Preparar(
+	context microvm.ContextoAutorizado,
+	plan microvm.PlanLanzamiento,
+	issuedAt time.Time,
+	validity time.Duration,
+) (microvm.SolicitudLanzamiento, error) {
+	plan.Servicios = append([]microvm.ServicioVsock(nil), plan.Servicios...)
+	signer.calls = append(signer.calls, signerCall{context, plan, issuedAt, validity})
+	if signer.err != nil {
+		return microvm.SolicitudLanzamiento{}, signer.err
+	}
+	request, err := signer.delegate.Preparar(context, plan, issuedAt, validity)
+	if err != nil {
+		return microvm.SolicitudLanzamiento{}, err
+	}
+	if signer.mutate != nil {
+		request = signer.mutate(cloneSignedRequestUnchecked(request))
+	}
+	return cloneSignedRequestUnchecked(request), nil
+}
+
+func TestAdapterLaunchSignsAndReplaysExactPhysicalRequest(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &launchClientStub{capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor)}
+	signer := validSigner()
+	adapter := mustNewAdapter(t, client, signer, request, descriptor)
+
+	first, err := adapter.Launch(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Launch() first error = %v", err)
+	}
+	second, err := adapter.Launch(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Launch() replay error = %v", err)
+	}
+	if first != second {
+		t.Fatalf("replay receipt changed: first=%+v second=%+v", first, second)
+	}
+	if client.capabilitiesCall != 2 || len(client.launchKeys) != 2 ||
+		client.launchKeys[0] != request.IdempotencyKey || client.launchKeys[1] != request.IdempotencyKey ||
+		!reflect.DeepEqual(client.launchRequests[0], client.launchRequests[1]) {
+		t.Fatalf("physical replay changed: capability_calls=%d keys=%v requests=%+v", client.capabilitiesCall, client.launchKeys, client.launchRequests)
+	}
+	if len(signer.calls) != 2 || !reflect.DeepEqual(signer.calls[0], signer.calls[1]) {
+		t.Fatalf("signing material changed: %+v", signer.calls)
+	}
+	compiled := mustCompile(t, request, descriptor)
+	wantCall := signerCall{compiled.Context, compiled.Plan, compiled.IssuedAt, compiled.Validity}
+	if !reflect.DeepEqual(signer.calls[0], wantCall) {
+		t.Fatalf("signing call = %+v, want %+v", signer.calls[0], wantCall)
+	}
+	if first.AcceptedAt != compiled.IssuedAt || first.ExternalRef != client.response.Referencia ||
+		first.ReceiptRef != launchReceiptRef(client.launchRequests[0]) ||
+		first.ProviderRef != adapter.capabilities.ProviderRef || first.ModelRef != adapter.capabilities.ModelRef ||
+		first.AgentRef != adapter.capabilities.AgentRef {
+		t.Fatalf("receipt = %+v", first)
+	}
+	if err := ports.ValidateAgentLaunchReceipt(request, first); err != nil {
+		t.Fatalf("ValidateAgentLaunchReceipt() = %v", err)
+	}
+}
+
+func TestAdapterRejectsSignerPlanMutationBeforeSocket(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	mutatedProfile := strings.Repeat("f", 64)
+	tests := map[string]func(microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento{
+		"null": func(value microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento {
+			value.Plan = json.RawMessage("null")
+			return value
+		},
+		"trailing": func(value microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento {
+			value.Plan = append(value.Plan, []byte(` {}`)...)
+			return value
+		},
+		"unknown": func(value microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento {
+			var object map[string]any
+			if err := json.Unmarshal(value.Plan, &object); err != nil {
+				panic(err)
+			}
+			object["campo_desconocido"] = true
+			value.Plan, _ = json.Marshal(object)
+			return value
+		},
+		"schema":   mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.Esquema = "agentmicrovm.plan-lanzamiento.v0" }),
+		"plan ref": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.PlanRef = "plan:" + strings.Repeat("0", 64) }),
+		"run ref":  mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.RunRef = "execution:other" }),
+		"fence":    mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.Cerca++ }),
+		"vcpu":     mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.VCPU++ }),
+		"memory":   mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.MemoriaMiB++ }),
+		"kernel":   mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.KernelSHA256 = strings.Repeat("0", 64) }),
+		"initramfs": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) {
+			plan.InitramfsSHA256 = strings.Repeat("0", 64)
+		}),
+		"profile": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.PerfilSHA256 = &mutatedProfile }),
+		"time limit": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) {
+			plan.LimiteTiempoMS++
+		}),
+		"ram limit": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) {
+			plan.LimiteRAMPicoBytes++
+		}),
+		"disk limit": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) {
+			plan.LimiteDiscoPicoBytes++
+		}),
+		"token limit": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) {
+			plan.LimiteTokensAgente++
+		}),
+		"services": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) { plan.Servicios[0].Puerto++ }),
+		"egress": mutateSignedPlan(func(plan *microvm.PlanLanzamiento) {
+			plan.Egreso = &microvm.ConcesionEgreso{Esquema: microvm.EsquemaConcesionEgreso}
+		}),
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			client := &launchClientStub{
+				capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor),
+			}
+			signer := validSigner()
+			signer.mutate = mutate
+			adapter := mustNewAdapter(t, client, signer, request, descriptor)
+			_, err := adapter.Launch(context.Background(), request)
+			if ErrorCode(err) != CodeSigningFailed || !isDefinitelyNotApplied(err) || len(client.launchRequests) != 0 {
+				t.Fatalf("Launch() error=%v code=%q definite=%v launches=%d", err, ErrorCode(err), isDefinitelyNotApplied(err), len(client.launchRequests))
+			}
+		})
+	}
+}
+
+func TestAdapterCapabilitiesNegotiatesCompleteRuntimeBeforeReturningNeutralFacts(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &launchClientStub{capabilities: validRemoteCapabilities()}
+	adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+
+	first, err := adapter.Capabilities(context.Background())
+	if err != nil {
+		t.Fatalf("Capabilities() error = %v", err)
+	}
+	want := validAdapterCapabilities()
+	if !reflect.DeepEqual(first, want) {
+		t.Fatalf("Capabilities() = %+v, want %+v", first, want)
+	}
+	first.RoleKeys[0] = "role:mutated"
+	second, err := adapter.Capabilities(context.Background())
+	if err != nil || !reflect.DeepEqual(second, want) {
+		t.Fatalf("capability storage was aliased: second=%+v err=%v", second, err)
+	}
+}
+
+func TestAdapterRejectsMutatedPhysicalLaunchResponseAsAmbiguous(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	workRevision := uint64(1)
+	processDead := false
+	wrongMotor := "Stopped"
+	tests := map[string]func(*microvm.RespuestaEjecucion){
+		"state":         func(value *microvm.RespuestaEjecucion) { value.Estado = "iniciando" },
+		"reference":     func(value *microvm.RespuestaEjecucion) { value.Referencia = "execution:foreign" },
+		"fence":         func(value *microvm.RespuestaEjecucion) { value.Cerca++ },
+		"vcpu":          func(value *microvm.RespuestaEjecucion) { value.VCPU++ },
+		"memory":        func(value *microvm.RespuestaEjecucion) { value.MemoriaMiB++ },
+		"revision":      func(value *microvm.RespuestaEjecucion) { value.Revision = 0 },
+		"work revision": func(value *microvm.RespuestaEjecucion) { value.RevisionTrabajo = &workRevision },
+		"identity":      func(value *microvm.RespuestaEjecucion) { value.Identidad = nil },
+		"dead process":  func(value *microvm.RespuestaEjecucion) { value.ProcesoVivo = &processDead },
+		"wrong motor":   func(value *microvm.RespuestaEjecucion) { value.EstadoMotor = &wrongMotor },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			response := validPhysicalResponse(t, request, descriptor)
+			mutate(&response)
+			client := &launchClientStub{capabilities: validRemoteCapabilities(), response: response}
+			adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+			_, err := adapter.Launch(context.Background(), request)
+			if ErrorCode(err) != CodeLaunchResponseInvalid || isDefinitelyNotApplied(err) {
+				t.Fatalf("Launch() error=%v code=%q definitely_not_applied=%v", err, ErrorCode(err), isDefinitelyNotApplied(err))
+			}
+		})
+	}
+}
+
+func TestAdapterRejectsIncompleteRemoteCapabilitiesBeforeLaunch(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	tests := []struct {
+		name      string
+		mutate    func(*microvm.RespuestaCapacidades)
+		code      string
+		temporary bool
+	}{
+		{"protocol", func(value *microvm.RespuestaCapacidades) { value.Protocolo = "agentmicrovm.local.v0" }, CodeProtocolIncompatible, false},
+		{"version", func(value *microvm.RespuestaCapacidades) { value.Version = "" }, CodeProtocolIncompatible, false},
+		{"kvm", func(value *microvm.RespuestaCapacidades) { value.KVMDisponible = false }, CodePhysicalUnavailable, true},
+		{"configuration", func(value *microvm.RespuestaCapacidades) { value.FirecrackerConfigurado = false }, CodePhysicalUnavailable, true},
+		{"executable", func(value *microvm.RespuestaCapacidades) { value.FirecrackerEjecutable = false }, CodePhysicalUnavailable, true},
+		{"capacity", func(value *microvm.RespuestaCapacidades) { value.MaximoEjecuciones = 0 }, CodePhysicalUnavailable, true},
+		{"create", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationCreateExecution) }, CodeOperationUnsupported, false},
+		{"start", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationStartSession) }, CodeOperationUnsupported, false},
+		{"input", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationSendSessionInput) }, CodeOperationUnsupported, false},
+		{"events", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReadSessionEvents) }, CodeOperationUnsupported, false},
+		{"reconcile", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReconcileSessionInput) }, CodeOperationUnsupported, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			remote := validRemoteCapabilities()
+			test.mutate(&remote)
+			client := &launchClientStub{capabilities: remote, response: validPhysicalResponse(t, request, descriptor)}
+			adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+			_, err := adapter.Launch(context.Background(), request)
+			if ErrorCode(err) != test.code || isTemporary(err) != test.temporary || !isDefinitelyNotApplied(err) || len(client.launchRequests) != 0 {
+				t.Fatalf("Launch() error=%v code=%q temporary=%v definite=%v launches=%d", err, ErrorCode(err), isTemporary(err), isDefinitelyNotApplied(err), len(client.launchRequests))
+			}
+		})
+	}
+}
+
+func TestAdapterKeepsClientLaunchErrorsAmbiguous(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	tests := []struct {
+		name      string
+		err       error
+		code      string
+		temporary bool
+	}{
+		{"transport", errors.New("socket closed after write"), CodeLaunchUnavailable, true},
+		{"server rejection", &microvm.ErrorRespuesta{Estado: 422, Codigo: "api.entrada_invalida"}, CodeLaunchRejected, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &launchClientStub{
+				capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor), launchErr: test.err,
+			}
+			adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+			_, err := adapter.Launch(context.Background(), request)
+			if ErrorCode(err) != test.code || isTemporary(err) != test.temporary || isDefinitelyNotApplied(err) {
+				t.Fatalf("Launch() error=%v code=%q temporary=%v definite=%v", err, ErrorCode(err), isTemporary(err), isDefinitelyNotApplied(err))
+			}
+		})
+	}
+}
+
+func TestAdapterDoesNotInventDefinitelyUnappliedForFutureErrors(t *testing.T) {
+	unknown := &Error{Code: "agentmicrovm.future_external_error"}
+	if unknown.DefinitelyNotApplied() {
+		t.Fatal("an unclassified future error was treated as definitely unapplied")
+	}
+}
+
+func TestAdapterRejectsInvalidConfigurationAndSigningBeforeSocketMutation(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	config := validAdapterConfig(&launchClientStub{}, validSigner(), request, descriptor)
+	config.Client = nil
+	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeConfigurationInvalid || !isDefinitelyNotApplied(err) {
+		t.Fatalf("New() adapter=%v error=%v", adapter, err)
+	}
+	var nilSigner *launchSignerStub
+	config = validAdapterConfig(&launchClientStub{}, nilSigner, request, descriptor)
+	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeConfigurationInvalid {
+		t.Fatalf("New() accepted typed nil signer: adapter=%v error=%v", adapter, err)
+	}
+	config = validAdapterConfig(&launchClientStub{}, validSigner(), request, descriptor)
+	config.Capabilities.RequierePreservacionEntorno = false
+	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeConfigurationInvalid {
+		t.Fatalf("New() accepted disposable microVM: adapter=%v error=%v", adapter, err)
+	}
+
+	client := &launchClientStub{capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor)}
+	signer := validSigner()
+	signer.err = errors.New("key unavailable")
+	adapter := mustNewAdapter(t, client, signer, request, descriptor)
+	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeSigningFailed ||
+		!isDefinitelyNotApplied(err) || len(client.launchRequests) != 0 {
+		t.Fatalf("signing error=%v launches=%d", err, len(client.launchRequests))
+	}
+}
+
+func TestAdapterClassifiesCapabilityQueryWithoutInventingLaunchEffect(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	tests := []struct {
+		name      string
+		err       error
+		code      string
+		temporary bool
+	}{
+		{"transport", errors.New("socket unavailable"), CodeCapabilitiesUnavailable, true},
+		{"protocol", &microvm.ErrorProtocolo{Recibido: "agentmicrovm.local.v0"}, CodeProtocolIncompatible, false},
+		{"rejected", &microvm.ErrorRespuesta{Estado: 404, Codigo: "api.ruta_ausente"}, CodeCapabilitiesRejected, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &launchClientStub{capabilitiesErr: test.err}
+			adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+			_, err := adapter.Capabilities(context.Background())
+			if ErrorCode(err) != test.code || isTemporary(err) != test.temporary || !isDefinitelyNotApplied(err) {
+				t.Fatalf("Capabilities() error=%v code=%q temporary=%v definite=%v", err, ErrorCode(err), isTemporary(err), isDefinitelyNotApplied(err))
+			}
+		})
+	}
+}
+
+func validAdapterConfig(
+	client Client,
+	signer Signer,
+	request ports.AgentLaunchRequest,
+	descriptor microvm.DescriptorPerfilLanzamientoV1,
+) Config {
+	return Config{
+		Client: client, Signer: signer, Profile: profileBinding(request, descriptor),
+		Capabilities: validAdapterCapabilities(),
+	}
+}
+
+func mustNewAdapter(
+	t *testing.T,
+	client Client,
+	signer Signer,
+	request ports.AgentLaunchRequest,
+	descriptor microvm.DescriptorPerfilLanzamientoV1,
+) *Adapter {
+	t.Helper()
+	adapter, err := New(validAdapterConfig(client, signer, request, descriptor))
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+	return adapter
+}
+
+func validAdapterCapabilities() ports.AgentCapabilities {
+	return ports.AgentCapabilities{
+		ProviderRef: "provider:codex", ModelRef: "model:codex-microvm", AgentRef: "agent:codex-microvm",
+		RequierePreservacionEntorno: true,
+		RoleKeys:                    []string{"role:worker"}, SkillRefs: []string{"skill:go"},
+		ToolRefs: []string{"tool:test"}, CapabilityRefs: []string{"capability:code"},
+	}
+}
+
+func validRemoteCapabilities() microvm.RespuestaCapacidades {
+	return microvm.RespuestaCapacidades{
+		Protocolo: microvm.ProtocoloLocal, Version: "0.1.0",
+		Operaciones: []string{
+			"salud", "capacidades", operationCreateExecution, operationStartSession,
+			operationSendSessionInput, operationReadSessionEvents, operationReconcileSessionInput,
+		},
+		KVMDisponible: true, FirecrackerConfigurado: true, FirecrackerEjecutable: true,
+		MaximoEjecuciones: 16,
+	}
+}
+
+func validSigner() *launchSignerStub {
+	privateKey := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+	signer, err := microvm.NuevoFirmanteConcesiones("clave-publica:test", privateKey)
+	if err != nil {
+		panic(err)
+	}
+	return &launchSignerStub{delegate: signer}
+}
+
+func mutateSignedPlan(
+	mutate func(*microvm.PlanLanzamiento),
+) func(microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento {
+	return func(request microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento {
+		var plan microvm.PlanLanzamiento
+		if err := json.Unmarshal(request.Plan, &plan); err != nil {
+			panic(err)
+		}
+		mutate(&plan)
+		request.Plan, _ = json.Marshal(plan)
+		return request
+	}
+}
+
+func validPhysicalResponse(
+	t *testing.T,
+	request ports.AgentLaunchRequest,
+	descriptor microvm.DescriptorPerfilLanzamientoV1,
+) microvm.RespuestaEjecucion {
+	t.Helper()
+	return microvm.RespuestaEjecucion{
+		Referencia: "ejecucion:" + strings.Repeat("a", 64), Estado: "disponible", Revision: 3,
+		Cerca: request.EffectAuthority.ActionFence, VCPU: descriptor.VCPU, MemoriaMiB: descriptor.MemoriaMiB,
+		Identidad: &microvm.IdentidadProceso{PID: 1234, InicioTicks: 5678},
+	}
+}
+
+func removeOperation(capabilities *microvm.RespuestaCapacidades, unwanted string) {
+	filtered := capabilities.Operaciones[:0]
+	for _, operation := range capabilities.Operaciones {
+		if operation != unwanted {
+			filtered = append(filtered, operation)
+		}
+	}
+	capabilities.Operaciones = filtered
+}
+
+func isTemporary(err error) bool {
+	var temporary interface{ Temporary() bool }
+	return errors.As(err, &temporary) && temporary.Temporary()
+}
+
+func isDefinitelyNotApplied(err error) bool {
+	var definite interface{ DefinitelyNotApplied() bool }
+	return errors.As(err, &definite) && definite.DefinitelyNotApplied()
+}
