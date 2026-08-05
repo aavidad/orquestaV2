@@ -1,0 +1,239 @@
+package application
+
+import (
+	"context"
+	"errors"
+
+	"orquesta/internal/governance"
+	"orquesta/internal/ports"
+)
+
+var (
+	ErrAgentLaunchRecoveryInvalid     = errors.New("application.agent_launch_recovery_invalid")
+	ErrAgentLaunchRecoveryUnsupported = errors.New("application.agent_launch_recovery_unsupported")
+)
+
+// AgentLaunchReconciler is an optional, read-only recovery capability. Launch
+// adapters that do not implement it can never receive a recovery request.
+type AgentLaunchReconciler interface {
+	ReconcileLaunch(context.Context, ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error)
+}
+
+// AgentLaunchReconcilerFrom rejects ordinary launchers structurally. Recovery
+// never falls back to Launch and never infers support from an error string.
+func AgentLaunchReconcilerFrom(launcher AgentLauncher) (AgentLaunchReconciler, error) {
+	reconciler, ok := launcher.(AgentLaunchReconciler)
+	if launcher == nil || !ok {
+		return nil, ErrAgentLaunchRecoveryUnsupported
+	}
+	return reconciler, nil
+}
+
+// SelectAgentLaunchRecoveryAttempt returns the sole ambiguous physical launch
+// attempt bound to a newly fenced recovery claim. A receipt, exact zero-release
+// or any second blocking attempt makes recovery ineligible.
+func SelectAgentLaunchRecoveryAttempt(record GoalRecord, claim ActionClaim) (EffectAttempt, error) {
+	if err := validateAgentLaunchRecoveryClaim(record, claim); err != nil {
+		return EffectAttempt{}, err
+	}
+	intent := claim.Action.EffectIntent
+	if recoveryReceiptsRelated(record, claim.Action.Ref, intent.Ref) {
+		return EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	blocking := make([]EffectAttempt, 0, 1)
+	for _, attempt := range record.EffectAttempts {
+		if attempt.ActionRef != claim.Action.Ref || attempt.IntentRef != intent.Ref {
+			continue
+		}
+		if err := validateHistoricalLaunchAttemptIdentity(intent, attempt); err != nil {
+			return EffectAttempt{}, err
+		}
+		if effectAttemptDefinitelyUnapplied(record, attempt) {
+			continue
+		}
+		blocking = append(blocking, attempt)
+	}
+	if len(blocking) != 1 || blocking[0].Ref != claim.RecoveryEffectAttemptRef ||
+		claim.Fence <= blocking[0].ActionFence {
+		return EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	if err := validateRecoverableLaunchAttempt(record, claim, blocking[0]); err != nil {
+		return EffectAttempt{}, err
+	}
+	return blocking[0], nil
+}
+
+// BuildAgentLaunchRecoveryRequest preserves the already-derived request and
+// replaces only its effect authority with historical durable bytes.
+func BuildAgentLaunchRecoveryRequest(
+	record GoalRecord,
+	claim ActionClaim,
+	request ports.AgentLaunchRequest,
+) (ports.AgentLaunchRequest, EffectAttempt, error) {
+	attempt, err := SelectAgentLaunchRecoveryAttempt(record, claim)
+	if err != nil {
+		return ports.AgentLaunchRequest{}, EffectAttempt{}, err
+	}
+	execution, found := executionForAction(record, claim.Action)
+	if !found || validateAgentLaunchRecoveryBindings(record, claim, execution, request) != nil {
+		return ports.AgentLaunchRequest{}, EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	approval, found := exactHistoricalApproval(record.EffectApprovals, attempt.ApprovalRef)
+	if !found {
+		return ports.AgentLaunchRequest{}, EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	request.EffectAuthority = ports.AgentLaunchEffectAuthority{
+		AuthorizationReceiptRef: claim.Action.EffectIntent.Authority.Ref(),
+		EffectApprovalRef:       approval.Ref,
+		EffectAttemptRef:        attempt.Ref,
+		ActionFence:             attempt.ActionFence,
+		StartedAt:               attempt.StartedAt,
+		ClaimLeaseUntil:         attempt.ClaimLeaseUntil,
+		ApprovalExpiresAt:       approval.ExpiresAt,
+	}
+	if err := ports.ValidateAgentLaunchRequest(request); err != nil {
+		return ports.AgentLaunchRequest{}, EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	if err := ports.ValidateAgentLaunchEffectAuthority(request.EffectAuthority); err != nil {
+		return ports.AgentLaunchRequest{}, EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	return request, attempt, nil
+}
+
+func validateAgentLaunchRecoveryClaim(record GoalRecord, claim ActionClaim) error {
+	intent := claim.Action.EffectIntent
+	if claim.Disposition != ActionClaimDispositionRecoverEffect ||
+		!validApplicationRef(claim.RecoveryEffectAttemptRef) ||
+		claim.RetryBudgetExhaustion != (RetryBudgetExhaustion{}) ||
+		validateClaimedRecord(claim, record, ActionLaunchAgent) != nil ||
+		ValidateEffectIntent(intent) != nil ||
+		claim.Action.EffectIntentRef != intent.Ref || intent.ActionRef != claim.Action.Ref ||
+		intent.ActionKind != ActionLaunchAgent || intent.Kind != EffectKindAgentLaunch ||
+		intent.Subject.GoalRef != claim.Action.GoalRef ||
+		intent.Subject.WorkItemRef != claim.Action.WorkItemRef ||
+		intent.Subject.ExecutionRef != claim.Action.ExecutionRef ||
+		intent.Subject.PlanGeneration != claim.Action.PlanGeneration {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	execution, found := executionForAction(record, claim.Action)
+	if !found || execution.State != ExecutionDispatching ||
+		execution.BudgetReservationRef != claim.BudgetReservationRef ||
+		execution.EffectIntentRef != intent.Ref {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	return nil
+}
+
+func validateRecoverableLaunchAttempt(record GoalRecord, claim ActionClaim, attempt EffectAttempt) error {
+	intent := claim.Action.EffectIntent
+	approval, found := exactHistoricalApproval(record.EffectApprovals, attempt.ApprovalRef)
+	if !found || ValidateEffectApproval(intent, approval) != nil || approval.Decision != EffectApproved ||
+		approval != claim.EffectApproval || attempt.StartedAt.Before(intent.CreatedAt) ||
+		attempt.StartedAt.Before(approval.DecidedAt) ||
+		(approval.Source == EffectApprovalSourceExplicitDecision && !approval.ExpiresAt.After(attempt.StartedAt)) {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	return validateAgentLaunchRecoveryReservations(claim, attempt)
+}
+
+func validateAgentLaunchRecoveryReservations(claim ActionClaim, attempt EffectAttempt) error {
+	intent, reservation := claim.Action.EffectIntent, claim.BudgetReservation
+	capacity := claim.CapacityReservation
+	if governance.ValidateBudgetReservation(reservation) != nil ||
+		claim.BudgetReservationRef != reservation.Ref || reservation.DemandRef != intent.Demand.Ref ||
+		reservation.ActionRef != claim.Action.Ref || reservation.EffectIntentRef != intent.Ref ||
+		reservation.ProjectRef != intent.Subject.ProjectRef.String() ||
+		reservation.GoalRef != intent.Subject.GoalRef.String() ||
+		reservation.WorkItemRef != intent.Subject.WorkItemRef.String() ||
+		reservation.ExecutionRef != intent.Subject.ExecutionRef.String() ||
+		reservation.PlanGeneration != uint64(intent.Subject.PlanGeneration) ||
+		reservation.AppSpecGeneration != uint64(intent.Subject.AppSpecGeneration) ||
+		reservation.WorkItemGeneration != uint64(claim.Action.WorkItemGeneration) ||
+		reservation.Fence > attempt.ActionFence || reservation.SpecHash != intent.Subject.SpecHash ||
+		reservation.PolicyHash != intent.PolicyHash || reservation.Resources != intent.Demand.Resources ||
+		reservation.ReservedAt.After(attempt.StartedAt) ||
+		ValidateAgentCapacityReservation(capacity) != nil ||
+		(capacity.State != AgentCapacityReserved && capacity.State != AgentCapacityQuarantined) ||
+		capacity.ActionRef != claim.Action.Ref || capacity.EffectIntentRef != intent.Ref ||
+		capacity.ProjectRef != intent.Subject.ProjectRef || capacity.GoalRef != intent.Subject.GoalRef ||
+		capacity.WorkItemRef != intent.Subject.WorkItemRef || capacity.ExecutionRef != intent.Subject.ExecutionRef ||
+		capacity.PlanGeneration != intent.Subject.PlanGeneration ||
+		capacity.WorkItemGeneration != claim.Action.WorkItemGeneration || capacity.Fence > attempt.ActionFence ||
+		claim.ReferenciaColocacion.String() == "" {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	return nil
+}
+
+func validateAgentLaunchRecoveryBindings(
+	record GoalRecord,
+	claim ActionClaim,
+	execution ExecutionRecord,
+	request ports.AgentLaunchRequest,
+) error {
+	intent := claim.Action.EffectIntent
+	if execution.State != ExecutionDispatching || request.ExecutionRef != execution.Ref ||
+		request.GoalRef != execution.GoalRef || request.WorkItemRef != execution.WorkItemRef ||
+		request.PlanGeneration != execution.PlanGeneration ||
+		request.AppSpecGeneration != execution.AppSpecGeneration ||
+		request.ExecutionAttempt != execution.AttemptNo || request.SpecHash != execution.SpecHash ||
+		request.ActorRef != intent.Subject.ActorRef || request.ProjectRef != intent.Subject.ProjectRef ||
+		request.SessionRef != execution.ExecutionSessionRef ||
+		request.ExecutionWorkspaceRef != execution.ExecutionWorkspaceRef ||
+		request.IdempotencyKey != execution.IdempotencyKey || request.IdempotencyKey != intent.IdempotencyKey ||
+		request.ReferenciaColocacion != claim.ReferenciaColocacion ||
+		request.BudgetDemand != intent.Demand || request.RequierePreservacionEntorno != execution.RequierePreservacionEntorno ||
+		record.Goal.Ref() != intent.Subject.GoalRef || record.Goal.Project() != intent.Subject.ProjectRef ||
+		record.Goal.Actor() != intent.Subject.ActorRef || record.Goal.SpecHash() != intent.Subject.SpecHash ||
+		record.Goal.AppSpec().Generation() != intent.Subject.AppSpecGeneration {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	target := authorLaunchTargetDigest(request)
+	if isReviewerExecution(execution) || isCouncilExecution(execution) {
+		target = reviewerLaunchTargetDigest(request)
+	}
+	if target != intent.TargetDigest {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	return nil
+}
+
+func exactHistoricalApproval(approvals []EffectApproval, ref string) (EffectApproval, bool) {
+	var selected EffectApproval
+	matches := 0
+	for _, approval := range approvals {
+		if approval.Ref == ref {
+			selected = approval
+			matches++
+		}
+	}
+	return selected, matches == 1
+}
+
+func validateHistoricalLaunchAttemptIdentity(intent EffectIntent, attempt EffectAttempt) error {
+	if !validApplicationRef(attempt.Ref) || !validApplicationRef(attempt.ApprovalRef) ||
+		attempt.IntentRef != intent.Ref || attempt.IntentDigest != intent.Digest ||
+		attempt.Subject != intent.Subject || attempt.ActionRef != intent.ActionRef ||
+		attempt.IdempotencyKey != intent.IdempotencyKey || attempt.WorkerRef == "" ||
+		attempt.ActionFence == 0 || attempt.StartedAt.IsZero() || attempt.ClaimLeaseUntil.IsZero() ||
+		!attempt.ClaimLeaseUntil.After(attempt.StartedAt) {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	return nil
+}
+
+func recoveryReceiptsRelated(record GoalRecord, actionRef, intentRef string) bool {
+	attemptRefs := make(map[string]struct{})
+	for _, attempt := range record.EffectAttempts {
+		if attempt.ActionRef == actionRef || attempt.IntentRef == intentRef {
+			attemptRefs[attempt.Ref] = struct{}{}
+		}
+	}
+	for _, receipt := range record.EffectReceipts {
+		_, attemptRelated := attemptRefs[receipt.AttemptRef]
+		if receipt.ActionRef == actionRef || receipt.IntentRef == intentRef || attemptRelated {
+			return true
+		}
+	}
+	return false
+}

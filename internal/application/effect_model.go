@@ -123,16 +123,17 @@ type EffectApproval struct {
 }
 
 type EffectAttempt struct {
-	Ref            string
-	IntentRef      string
-	IntentDigest   string
-	ApprovalRef    string
-	Subject        EffectSubject
-	ActionRef      string
-	ActionFence    uint64
-	WorkerRef      string
-	IdempotencyKey string
-	StartedAt      time.Time
+	Ref             string
+	IntentRef       string
+	IntentDigest    string
+	ApprovalRef     string
+	Subject         EffectSubject
+	ActionRef       string
+	ActionFence     uint64
+	WorkerRef       string
+	IdempotencyKey  string
+	StartedAt       time.Time
+	ClaimLeaseUntil time.Time
 }
 
 type EffectReceipt struct {

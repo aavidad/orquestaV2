@@ -279,6 +279,7 @@ type ActionClaimDisposition string
 const (
 	ActionClaimDispositionNormal                  ActionClaimDisposition = ""
 	ActionClaimDispositionRetryBudgetIrreversible ActionClaimDisposition = "retry_budget_irreversible"
+	ActionClaimDispositionRecoverEffect           ActionClaimDisposition = "recover_effect"
 )
 
 // RetryBudgetExhaustion is the typed, replayable projection that proves a
@@ -297,19 +298,20 @@ type RetryBudgetExhaustion struct {
 }
 
 type ActionClaim struct {
-	Action                ActionRecord
-	Token                 string
-	WorkerRef             string
-	DeliveryAttempt       uint64
-	Fence                 uint64
-	Disposition           ActionClaimDisposition
-	RetryBudgetExhaustion RetryBudgetExhaustion
-	BudgetReservationRef  string
-	BudgetReservation     governance.BudgetReservation
-	CapacityReservation   AgentCapacityReservation
-	ReferenciaColocacion  ports.AgentPlacementRef
-	EffectApproval        EffectApproval
-	LeaseUntil            time.Time
+	Action                   ActionRecord
+	Token                    string
+	WorkerRef                string
+	DeliveryAttempt          uint64
+	Fence                    uint64
+	Disposition              ActionClaimDisposition
+	RecoveryEffectAttemptRef string
+	RetryBudgetExhaustion    RetryBudgetExhaustion
+	BudgetReservationRef     string
+	BudgetReservation        governance.BudgetReservation
+	CapacityReservation      AgentCapacityReservation
+	ReferenciaColocacion     ports.AgentPlacementRef
+	EffectApproval           EffectApproval
+	LeaseUntil               time.Time
 }
 
 type ClaimRequest struct {
