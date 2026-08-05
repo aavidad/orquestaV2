@@ -446,7 +446,7 @@ func validateAgentLaunchRecoveryBindings(
 		request.BudgetDemand != intent.Demand || request.RequierePreservacionEntorno != execution.RequierePreservacionEntorno ||
 		record.Goal.Ref() != intent.Subject.GoalRef || record.Goal.Project() != intent.Subject.ProjectRef ||
 		record.Goal.Actor() != intent.Subject.ActorRef || record.Goal.SpecHash() != intent.Subject.SpecHash ||
-		egressErr != nil || request.EgressAuthority != durableEgress ||
+		egressErr != nil || !ports.EqualAgentLaunchEgressAuthority(request.EgressAuthority, durableEgress) ||
 		record.Goal.AppSpec().Generation() != intent.Subject.AppSpecGeneration {
 		return ErrAgentLaunchRecoveryInvalid
 	}

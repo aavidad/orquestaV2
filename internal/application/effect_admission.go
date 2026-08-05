@@ -76,7 +76,7 @@ func agentLaunchEgressAuthorityFromWorkItemAuthority(
 	policy := authority.EgressPolicy
 	result := ports.AgentLaunchEgressAuthority{
 		PolicyRef: policy.PolicyRef.String(), PayloadSHA256: policy.PayloadSHA256,
-		CanonicalPayload: policy.CanonicalPayload,
+		CanonicalPayload: []byte(policy.CanonicalPayload),
 	}
 	if err := ports.ValidateAgentLaunchEgressAuthority(result); err != nil {
 		return ports.AgentLaunchEgressAuthority{}, errors.New("application.agent_launch_egress_authority_invalid")
@@ -453,11 +453,11 @@ func reviewerLaunchTargetDigest(request ports.AgentLaunchRequest) string {
 }
 
 func launchTargetDigestWithEgress(fields []string, authority ports.AgentLaunchEgressAuthority) string {
-	if authority == (ports.AgentLaunchEgressAuthority{}) {
+	if authority.IsEmpty() {
 		return effectAdmissionFingerprint(fields...)
 	}
 	fields = append(append([]string(nil), fields...),
-		authority.PolicyRef, authority.PayloadSHA256, authority.CanonicalPayload,
+		authority.PolicyRef, authority.PayloadSHA256, string(authority.CanonicalPayload),
 	)
 	return fingerprintFields("orquesta.effect.agent-launch-egress.v1", fields...)
 }

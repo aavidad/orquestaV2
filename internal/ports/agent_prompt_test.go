@@ -20,7 +20,7 @@ func TestAgentPromptProjectionIsExactAllowlist(t *testing.T) {
 	request.EgressAuthority = AgentLaunchEgressAuthority{
 		PolicyRef:        "egress-policy:private-marker",
 		PayloadSHA256:    fmt.Sprintf("%x", sha256.Sum256([]byte(egressPayload))),
-		CanonicalPayload: egressPayload,
+		CanonicalPayload: []byte(egressPayload),
 	}
 	if err := ValidateAgentLaunchRequest(request); err != nil {
 		t.Fatalf("prompt fixture must start from a valid launch request: %v", err)

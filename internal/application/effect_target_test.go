@@ -113,14 +113,14 @@ func TestLaunchTargetDigestPreservesLegacyDomainsAndBindsPresentEgressTuple(t *t
 
 	policy := testEgressPolicyAuthority(t, "egress-policy:target", `{"destinations":["example.org"]}`)
 	request.EgressAuthority = ports.AgentLaunchEgressAuthority{
-		PolicyRef: policy.PolicyRef.String(), PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload,
+		PolicyRef: policy.PolicyRef.String(), PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: []byte(policy.CanonicalPayload),
 	}
 	authorWithEgress, reviewerWithEgress := authorLaunchTargetDigest(request), reviewerLaunchTargetDigest(request)
 	if authorWithEgress == wantAuthorLegacy || reviewerWithEgress == wantReviewerLegacy ||
 		authorWithEgress == reviewerWithEgress {
 		t.Fatalf("egress domain not isolated: author=%s reviewer=%s", authorWithEgress, reviewerWithEgress)
 	}
-	request.EgressAuthority.CanonicalPayload += " "
+	request.EgressAuthority.CanonicalPayload = append(request.EgressAuthority.CanonicalPayload, ' ')
 	if authorLaunchTargetDigest(request) == authorWithEgress || reviewerLaunchTargetDigest(request) == reviewerWithEgress {
 		t.Fatal("canonical payload not bound into egress launch target")
 	}

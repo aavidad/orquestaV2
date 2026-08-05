@@ -236,7 +236,7 @@ func TestAgentLaunchEgressAuthorityRequiresExactAllOrNothingTuple(t *testing.T) 
 	valid := AgentLaunchEgressAuthority{
 		PolicyRef:        "egress-policy:public-web:v1",
 		PayloadSHA256:    fmt.Sprintf("%x", sha256.Sum256([]byte(payload))),
-		CanonicalPayload: payload,
+		CanonicalPayload: []byte(payload),
 	}
 	if err := ValidateAgentLaunchEgressAuthority(valid); err != nil {
 		t.Fatalf("valid egress authority rejected: %v", err)
@@ -251,7 +251,7 @@ func TestAgentLaunchEgressAuthorityRequiresExactAllOrNothingTuple(t *testing.T) 
 	}{
 		"policy missing":    {func(value *AgentLaunchEgressAuthority) { value.PolicyRef = "" }, "agent.egress_authority_partial"},
 		"digest missing":    {func(value *AgentLaunchEgressAuthority) { value.PayloadSHA256 = "" }, "agent.egress_authority_partial"},
-		"payload missing":   {func(value *AgentLaunchEgressAuthority) { value.CanonicalPayload = "" }, "agent.egress_authority_partial"},
+		"payload missing":   {func(value *AgentLaunchEgressAuthority) { value.CanonicalPayload = nil }, "agent.egress_authority_partial"},
 		"policy whitespace": {func(value *AgentLaunchEgressAuthority) { value.PolicyRef = " egress-policy:public-web:v1" }, "agent.egress_policy_ref_invalid"},
 		"policy nul":        {func(value *AgentLaunchEgressAuthority) { value.PolicyRef = "egress-policy:\x00public-web" }, "agent.egress_policy_ref_invalid"},
 		"policy invalid UTF-8": {func(value *AgentLaunchEgressAuthority) {
@@ -261,16 +261,12 @@ func TestAgentLaunchEgressAuthorityRequiresExactAllOrNothingTuple(t *testing.T) 
 			value.PolicyRef = strings.Repeat("p", maxAgentLaunchEgressPolicyRefBytes+1)
 		}, "agent.egress_policy_ref_invalid"},
 		"payload oversized": {func(value *AgentLaunchEgressAuthority) {
-			value.CanonicalPayload = strings.Repeat("x", maxAgentLaunchEgressCanonicalPayloadBytes+1)
-			value.PayloadSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(value.CanonicalPayload)))
+			value.CanonicalPayload = []byte(strings.Repeat("x", maxAgentLaunchEgressCanonicalPayloadBytes+1))
+			value.PayloadSHA256 = fmt.Sprintf("%x", sha256.Sum256(value.CanonicalPayload))
 		}, "agent.egress_payload_too_large"},
-		"payload invalid UTF-8": {func(value *AgentLaunchEgressAuthority) {
-			value.CanonicalPayload = string([]byte{0xff})
-			value.PayloadSHA256 = fmt.Sprintf("%x", sha256.Sum256([]byte(value.CanonicalPayload)))
-		}, "agent.egress_payload_utf8_invalid"},
 		"digest malformed":    {func(value *AgentLaunchEgressAuthority) { value.PayloadSHA256 = strings.Repeat("g", 64) }, "agent.egress_payload_digest_invalid"},
 		"digest uppercase":    {func(value *AgentLaunchEgressAuthority) { value.PayloadSHA256 = strings.ToUpper(value.PayloadSHA256) }, "agent.egress_payload_digest_invalid"},
-		"payload substituted": {func(value *AgentLaunchEgressAuthority) { value.CanonicalPayload += " " }, "agent.egress_payload_digest_invalid"},
+		"payload substituted": {func(value *AgentLaunchEgressAuthority) { value.CanonicalPayload = append(value.CanonicalPayload, ' ') }, "agent.egress_payload_digest_invalid"},
 	}
 	for name, testCase := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -293,12 +289,12 @@ func TestAgentLaunchEgressAuthorityAcceptsExactBoundsAndJSONRoundTrip(t *testing
 	authority := AgentLaunchEgressAuthority{
 		PolicyRef:        strings.Repeat("p", maxAgentLaunchEgressPolicyRefBytes),
 		PayloadSHA256:    fmt.Sprintf("%x", sha256.Sum256([]byte(payload))),
-		CanonicalPayload: payload,
+		CanonicalPayload: []byte(payload),
 	}
 	request := validAgentLaunchRequest(t)
 	request.EgressAuthority = authority
 	if len(authority.PolicyRef) != 512 || len(authority.CanonicalPayload) != 64<<10 ||
-		!json.Valid([]byte(authority.CanonicalPayload)) {
+		!json.Valid(authority.CanonicalPayload) {
 		t.Fatalf("invalid exact-bound fixture: ref=%d payload=%d", len(authority.PolicyRef), len(authority.CanonicalPayload))
 	}
 	if err := ValidateAgentLaunchRequest(request); err != nil {
@@ -314,6 +310,23 @@ func TestAgentLaunchEgressAuthorityAcceptsExactBoundsAndJSONRoundTrip(t *testing
 	}
 	if !reflect.DeepEqual(decoded, authority) {
 		t.Fatalf("egress authority JSON round trip changed authority")
+	}
+}
+
+func TestAgentLaunchEgressAuthorityPreservesOpaqueBinaryPayloadThroughJSON(t *testing.T) {
+	payload := []byte{0x00, 0xff, 0x01, 'x'}
+	authority := AgentLaunchEgressAuthority{PolicyRef: "egress-policy:binary",
+		PayloadSHA256: fmt.Sprintf("%x", sha256.Sum256(payload)), CanonicalPayload: payload}
+	if err := ValidateAgentLaunchEgressAuthority(authority); err != nil {
+		t.Fatalf("opaque binary authority rejected: %v", err)
+	}
+	encoded, err := json.Marshal(authority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded AgentLaunchEgressAuthority
+	if err := json.Unmarshal(encoded, &decoded); err != nil || !EqualAgentLaunchEgressAuthority(decoded, authority) {
+		t.Fatalf("binary round trip=%+v err=%v", decoded, err)
 	}
 }
 

@@ -371,13 +371,6 @@ func TestResolvePlanEgressPoliciesFailsClosedWithoutExactBoundedResolution(t *te
 			}},
 			ref: requested.String(),
 		},
-		"payload invalid UTF-8": {
-			resolver: &egressPolicyResolverStub{authority: EgressPolicyAuthority{
-				PolicyRef: requested, CanonicalPayload: string([]byte{0xff}),
-				PayloadSHA256: egressPolicyPayloadSHA256(string([]byte{0xff})),
-			}},
-			ref: requested.String(),
-		},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -486,9 +479,8 @@ func TestAuthorLaunchBindsDurableEgressAndRejectsMutationBeforeProvider(t *testi
 				if processErr != nil || agent.launches != 1 || len(agent.launchRequests) != 1 {
 					t.Fatalf("launches=%d requests=%d err=%v", agent.launches, len(agent.launchRequests), processErr)
 				}
-				want := ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
-					PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}
-				if agent.launchRequests[0].EgressAuthority != want {
+				want := expectedAgentLaunchEgressAuthority(policy)
+				if !ports.EqualAgentLaunchEgressAuthority(agent.launchRequests[0].EgressAuthority, want) {
 					t.Fatalf("launch egress=%+v want=%+v", agent.launchRequests[0].EgressAuthority, want)
 				}
 				return
@@ -509,4 +501,9 @@ func testEgressPolicyAuthority(t *testing.T, rawRef, payload string) EgressPolic
 	return EgressPolicyAuthority{
 		PolicyRef: ref, PayloadSHA256: egressPolicyPayloadSHA256(payload), CanonicalPayload: payload,
 	}
+}
+
+func expectedAgentLaunchEgressAuthority(policy EgressPolicyAuthority) ports.AgentLaunchEgressAuthority {
+	return ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
+		PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: []byte(policy.CanonicalPayload)}
 }

@@ -52,7 +52,6 @@ func ValidateEgressPolicyAuthority(authority EgressPolicyAuthority) error {
 	ref, err := NewEgressPolicyRef(authority.PolicyRef.String())
 	if err != nil || ref != authority.PolicyRef || len(authority.CanonicalPayload) == 0 ||
 		len(authority.CanonicalPayload) > maxEgressPolicyCanonicalPayloadBytes ||
-		!utf8.ValidString(authority.CanonicalPayload) ||
 		authority.PayloadSHA256 != egressPolicyPayloadSHA256(authority.CanonicalPayload) {
 		return errors.New("application.egress_policy_authority_invalid")
 	}

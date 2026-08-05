@@ -147,10 +147,9 @@ func TestProcessClaimRecoveryRebuildsDurableEgressWithoutCatalog(t *testing.T) {
 		t.Fatalf("recover exact durable egress: %v", err)
 	}
 	resolver := fixture.orchestrator.egressPolicies.(*egressPolicyResolverStub)
-	want := ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
-		PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}
+	want := expectedAgentLaunchEgressAuthority(policy)
 	if len(resolver.refs) != 0 || len(launcher.reconcileRequests) != 1 ||
-		launcher.reconcileRequests[0].EgressAuthority != want {
+		!ports.EqualAgentLaunchEgressAuthority(launcher.reconcileRequests[0].EgressAuthority, want) {
 		t.Fatalf("catalog refs=%v reconcile=%+v want=%+v", resolver.refs, launcher.reconcileRequests, want)
 	}
 }

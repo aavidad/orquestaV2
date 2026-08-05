@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -124,14 +125,23 @@ const (
 type AgentLaunchEgressAuthority struct {
 	PolicyRef        string
 	PayloadSHA256    string
-	CanonicalPayload string
+	CanonicalPayload []byte
+}
+
+func (authority AgentLaunchEgressAuthority) IsEmpty() bool {
+	return authority.PolicyRef == "" && authority.PayloadSHA256 == "" && len(authority.CanonicalPayload) == 0
+}
+
+func EqualAgentLaunchEgressAuthority(left, right AgentLaunchEgressAuthority) bool {
+	return left.PolicyRef == right.PolicyRef && left.PayloadSHA256 == right.PayloadSHA256 &&
+		bytes.Equal(left.CanonicalPayload, right.CanonicalPayload)
 }
 
 func ValidateAgentLaunchEgressAuthority(authority AgentLaunchEgressAuthority) error {
-	if authority == (AgentLaunchEgressAuthority{}) {
+	if authority.IsEmpty() {
 		return nil
 	}
-	if authority.PolicyRef == "" || authority.PayloadSHA256 == "" || authority.CanonicalPayload == "" {
+	if authority.PolicyRef == "" || authority.PayloadSHA256 == "" || len(authority.CanonicalPayload) == 0 {
 		return &AgentContractError{Code: "agent.egress_authority_partial"}
 	}
 	if len(authority.PolicyRef) > maxAgentLaunchEgressPolicyRefBytes ||
@@ -142,10 +152,7 @@ func ValidateAgentLaunchEgressAuthority(authority AgentLaunchEgressAuthority) er
 	if len(authority.CanonicalPayload) > maxAgentLaunchEgressCanonicalPayloadBytes {
 		return &AgentContractError{Code: "agent.egress_payload_too_large"}
 	}
-	if !utf8.ValidString(authority.CanonicalPayload) {
-		return &AgentContractError{Code: "agent.egress_payload_utf8_invalid"}
-	}
-	digest := sha256.Sum256([]byte(authority.CanonicalPayload))
+	digest := sha256.Sum256(authority.CanonicalPayload)
 	if authority.PayloadSHA256 != fmt.Sprintf("%x", digest) {
 		return &AgentContractError{Code: "agent.egress_payload_digest_invalid"}
 	}

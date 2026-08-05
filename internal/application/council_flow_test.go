@@ -58,10 +58,9 @@ func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
 	if len(agent.launchRequests) < 3 {
 		t.Fatalf("review dispatches=%d, want author plus two reviewers", len(agent.launchRequests))
 	}
-	wantEgress := ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
-		PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}
+	wantEgress := expectedAgentLaunchEgressAuthority(policy)
 	for _, request := range agent.launchRequests[len(agent.launchRequests)-2:] {
-		if request.EgressAuthority != wantEgress {
+		if !ports.EqualAgentLaunchEgressAuthority(request.EgressAuthority, wantEgress) {
 			t.Fatalf("review dispatch egress=%+v want=%+v", request.EgressAuthority, wantEgress)
 		}
 	}
@@ -90,8 +89,7 @@ func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
 		request, err := councilAgentLaunchRequestForSubject(record, record.Goal.WorkItems()[0], execution, phase, round.Subject)
 		request.ReferenciaColocacion, _ = ports.NewAgentPlacementRef("placement:application-test")
 		if err != nil || request.OutputContract != string(goal.OutputContractArtifact) || request.ArtifactMediaType != council.ContributionMediaType ||
-			request.EgressAuthority != (ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
-				PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}) ||
+			!ports.EqualAgentLaunchEgressAuthority(request.EgressAuthority, wantEgress) ||
 			ports.ValidateAgentLaunchRequest(request) != nil {
 			t.Fatalf("Council launch contract request=%+v err=%v", request, err)
 		}
@@ -101,7 +99,7 @@ func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
 		t.Fatalf("Council dispatches=%d, want author, reviewers and council", len(agent.launchRequests))
 	}
 	for _, request := range agent.launchRequests[len(agent.launchRequests)-3:] {
-		if request.EgressAuthority != wantEgress {
+		if !ports.EqualAgentLaunchEgressAuthority(request.EgressAuthority, wantEgress) {
 			t.Fatalf("Council dispatch egress=%+v want=%+v", request.EgressAuthority, wantEgress)
 		}
 	}

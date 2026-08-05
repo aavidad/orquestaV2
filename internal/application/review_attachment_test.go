@@ -58,8 +58,7 @@ func TestReviewerLaunchRequestCarriesCanonicalExactEvidenceAndNoWriteSet(t *test
 	request, err := reviewerAgentLaunchRequestFromAttachment(record, item, participant, phase, role, attachment)
 	appTestNoError(t, err)
 	if len(request.WriteSet) != 0 || request.ExecutionWorkspaceRef != participant.ExecutionWorkspaceRef ||
-		request.EgressAuthority != (ports.AgentLaunchEgressAuthority{PolicyRef: policy.PolicyRef.String(),
-			PayloadSHA256: policy.PayloadSHA256, CanonicalPayload: policy.CanonicalPayload}) ||
+		!ports.EqualAgentLaunchEgressAuthority(request.EgressAuthority, expectedAgentLaunchEgressAuthority(policy)) ||
 		!strings.Contains(request.Objective, "git diff "+attachment.Change.BaseOID+".."+attachment.Change.HeadOID) {
 		t.Fatalf("review request not exact/read-only: %+v", request)
 	}
