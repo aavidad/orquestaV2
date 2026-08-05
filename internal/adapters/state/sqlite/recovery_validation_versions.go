@@ -33,6 +33,7 @@ const (
 	recoverySchemaV38Claim           = 24
 	recoverySchemaV38Environment     = 25
 	recoverySchemaV38EnvironmentGate = 26
+	recoverySchemaV38AttemptLease    = 27
 )
 
 func migrationSchemaRef(migrations []migration) string {
@@ -53,7 +54,7 @@ func recoveryMigrationPrefix(migrations []migration, version int) ([]migration, 
 		version != recoverySchemaV23Confirmation &&
 		version != recoverySchemaV23WizardGaps &&
 		version != recoverySchemaV23 && version != recoverySchemaV38Physical &&
-		version != recoverySchemaV38Capacity && version != recoverySchemaV38Claim && version != recoverySchemaV38Environment && version != recoverySchemaV38EnvironmentGate {
+		version != recoverySchemaV38Capacity && version != recoverySchemaV38Claim && version != recoverySchemaV38Environment && version != recoverySchemaV38EnvironmentGate && version != recoverySchemaV38AttemptLease {
 		return nil, errors.New("sqlite.recovery_schema_version_invalid")
 	}
 	if version > len(migrations) || migrations[version-1].version != version {
