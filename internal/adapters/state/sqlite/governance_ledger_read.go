@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -69,7 +70,15 @@ WHERE reservation.goal_ref=? ORDER BY settled_at,settlement.ref`, goalRef)
 }
 
 func readWorkItemAuthoritiesForGoal(ctx context.Context, source queryer, goalRef string) ([]application.WorkItemAuthority, error) {
-	rows, err := source.QueryContext(ctx, `SELECT work_item_ref,principal_ref,permission,source,authorization_receipt_ref,recorded_at FROM work_item_authorities WHERE goal_ref=? ORDER BY work_item_ref`, goalRef)
+	egressProjection := "NULL,NULL,NULL"
+	egressPersisted, err := sqliteTableHasColumn(ctx, source, "work_item_authorities", "egress_policy_ref")
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	if egressPersisted {
+		egressProjection = "egress_policy_ref,egress_policy_payload_sha256,egress_policy_canonical_payload"
+	}
+	rows, err := source.QueryContext(ctx, `SELECT work_item_ref,principal_ref,permission,source,authorization_receipt_ref,recorded_at,`+egressProjection+` FROM work_item_authorities WHERE goal_ref=? ORDER BY work_item_ref`, goalRef)
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
@@ -78,8 +87,11 @@ func readWorkItemAuthoritiesForGoal(ctx context.Context, source queryer, goalRef
 	for rows.Next() {
 		var value application.WorkItemAuthority
 		var work, principal, permission, approvalSource, receipt string
+		var policyRef, payloadSHA256 sql.NullString
+		var canonicalPayload []byte
 		var at int64
-		if err := rows.Scan(&work, &principal, &permission, &approvalSource, &receipt, &at); err != nil {
+		if err := rows.Scan(&work, &principal, &permission, &approvalSource, &receipt, &at,
+			&policyRef, &payloadSHA256, &canonicalPayload); err != nil {
 			return nil, mapDatabaseError(err)
 		}
 		var err error
@@ -98,9 +110,58 @@ func readWorkItemAuthoritiesForGoal(ctx context.Context, source queryer, goalRef
 		if err != nil {
 			return nil, err
 		}
+		if policyRef.Valid {
+			value.EgressPolicy.PolicyRef, err = application.NewEgressPolicyRef(policyRef.String)
+			if err != nil {
+				return nil, invalid(err)
+			}
+		}
+		if payloadSHA256.Valid {
+			value.EgressPolicy.PayloadSHA256 = payloadSHA256.String
+		}
+		if canonicalPayload != nil {
+			value.EgressPolicy.CanonicalPayload = string(canonicalPayload)
+		}
+		if (policyRef.Valid != payloadSHA256.Valid) || (policyRef.Valid != (canonicalPayload != nil)) ||
+			application.ValidateEgressPolicyAuthority(value.EgressPolicy) != nil {
+			return nil, invalid(errors.New("sqlite.work_item_egress_authority_invalid"))
+		}
 		result = append(result, value)
 	}
 	return result, mapDatabaseError(rows.Err())
+}
+
+func (repository *Repository) ReplayGoalSubmission(
+	ctx context.Context,
+	request application.GoalSubmissionReplayRequest,
+) (application.GoalRecord, bool, error) {
+	if !validText(request.RequestRef) || !validCanonicalHash(request.RequestFingerprint) ||
+		request.RequestedBy.String() == "" || request.ProjectRef.String() == "" {
+		return application.GoalRecord{}, false, invalid(errors.New("sqlite.goal_submission_replay_request_invalid"))
+	}
+	var goalRef, fingerprint string
+	err := repository.db.QueryRowContext(ctx, `
+SELECT ref,request_fingerprint FROM goals
+WHERE requested_by_ref=? AND project_ref=? AND request_ref=?`,
+		request.RequestedBy.String(), request.ProjectRef.String(), request.RequestRef,
+	).Scan(&goalRef, &fingerprint)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return application.GoalRecord{}, false, nil
+	case err != nil:
+		return application.GoalRecord{}, false, mapDatabaseError(err)
+	case fingerprint != request.RequestFingerprint:
+		return application.GoalRecord{}, false, conflict(errors.New("sqlite.request_fingerprint_conflict"))
+	}
+	record, err := readGoalRecord(ctx, repository.db, goalRef)
+	if err != nil {
+		return application.GoalRecord{}, false, err
+	}
+	if record.RequestRef != request.RequestRef || record.RequestFingerprint != request.RequestFingerprint ||
+		record.RequestedBy != request.RequestedBy || record.Goal.Project() != request.ProjectRef {
+		return application.GoalRecord{}, false, conflict(errors.New("sqlite.goal_submission_replay_conflict"))
+	}
+	return record, true, nil
 }
 
 func readEffectIntentsForGoal(ctx context.Context, source queryer, goalRef string) ([]application.EffectIntent, error) {

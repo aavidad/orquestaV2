@@ -675,6 +675,10 @@ DROP TRIGGER effect_attempts_immutable_update;
 ALTER TABLE effect_attempts DROP COLUMN claim_lease_until;
 CREATE TRIGGER effect_attempts_immutable_update BEFORE UPDATE ON effect_attempts
 BEGIN SELECT RAISE(ABORT, 'sqlite.effect_attempt_immutable'); END;
+DROP TRIGGER work_item_authorities_egress_shape_guard;
+ALTER TABLE work_item_authorities DROP COLUMN egress_policy_canonical_payload;
+ALTER TABLE work_item_authorities DROP COLUMN egress_policy_payload_sha256;
+ALTER TABLE work_item_authorities DROP COLUMN egress_policy_ref;
 DROP TABLE wizard_gaps_input_receipts`,
 	)
 	for _, statement := range legacyTriggers {
@@ -683,8 +687,9 @@ DROP TABLE wizard_gaps_input_receipts`,
 	mustV10Exec(
 		t,
 		system.repository.db,
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?,?,?,?)`,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?,?,?,?,?)`,
 		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim, recoverySchemaV38Environment, recoverySchemaV38EnvironmentGate, recoverySchemaV38AttemptLease, recoverySchemaV38RecoveryClaim, recoverySchemaV38PreservationRatchet, recoverySchemaV38RecoveryRequeue,
+		recoverySchemaV38EgressAuthority,
 	)
 	mustV10Exec(
 		t,

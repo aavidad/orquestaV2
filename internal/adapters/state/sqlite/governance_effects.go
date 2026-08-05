@@ -23,6 +23,10 @@ func insertWorkItemAuthorities(
 	if !persisted {
 		return nil
 	}
+	egressPersisted, err := sqliteTableHasColumn(ctx, transaction, "work_item_authorities", "egress_policy_ref")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
 	for _, authority := range authorities {
 		if authority.WorkItemRef.String() == "" || authority.PrincipalRef.String() == "" ||
 			(authority.Permission != identity.PermissionGoalsCreate && authority.Permission != identity.PermissionGoalsDirect) ||
@@ -30,7 +34,9 @@ func insertWorkItemAuthorities(
 				authority.Source != application.EffectApprovalSourceDirectorDecision) ||
 			(authority.Source == application.EffectApprovalSourceGoalConfirmation) !=
 				(authority.Permission == identity.PermissionGoalsCreate) ||
-			authority.AuthorizationReceipt.Ref() == "" || authority.RecordedAt.IsZero() {
+			authority.AuthorizationReceipt.Ref() == "" || authority.RecordedAt.IsZero() ||
+			application.ValidateEgressPolicyAuthority(authority.EgressPolicy) != nil ||
+			(!egressPersisted && authority.EgressPolicy != (application.EgressPolicyAuthority{})) {
 			return invalid(errors.New("sqlite.work_item_authority_invalid"))
 		}
 		persistedReceipt, err := readAuthorizationReceipt(ctx, transaction, authority.AuthorizationReceipt.Ref())
@@ -40,17 +46,39 @@ func insertWorkItemAuthorities(
 			}
 			return conflict(errors.New("sqlite.work_item_authority_receipt_conflict"))
 		}
-		if _, err := transaction.ExecContext(ctx, `
+		if !egressPersisted {
+			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO work_item_authorities(
     work_item_ref, goal_ref, principal_ref, permission, source,
     authorization_receipt_ref, recorded_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?)`, authority.WorkItemRef.String(), goalRef,
+				authority.PrincipalRef.String(), string(authority.Permission), string(authority.Source),
+				authority.AuthorizationReceipt.Ref(), requiredTime(authority.RecordedAt)); err != nil {
+				return mapDatabaseError(err)
+			}
+			continue
+		}
+		policyRef, payloadSHA256, canonicalPayload := storedEgressPolicyAuthority(authority.EgressPolicy)
+		if _, err := transaction.ExecContext(ctx, `
+INSERT INTO work_item_authorities(
+    work_item_ref, goal_ref, principal_ref, permission, source,
+    authorization_receipt_ref, recorded_at, egress_policy_ref,
+    egress_policy_payload_sha256, egress_policy_canonical_payload
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, authority.WorkItemRef.String(), goalRef,
 			authority.PrincipalRef.String(), string(authority.Permission), string(authority.Source),
-			authority.AuthorizationReceipt.Ref(), requiredTime(authority.RecordedAt)); err != nil {
+			authority.AuthorizationReceipt.Ref(), requiredTime(authority.RecordedAt),
+			policyRef, payloadSHA256, canonicalPayload); err != nil {
 			return mapDatabaseError(err)
 		}
 	}
 	return nil
+}
+
+func storedEgressPolicyAuthority(authority application.EgressPolicyAuthority) (any, any, any) {
+	if authority == (application.EgressPolicyAuthority{}) {
+		return nil, nil, nil
+	}
+	return authority.PolicyRef.String(), authority.PayloadSHA256, []byte(authority.CanonicalPayload)
 }
 
 func insertEffectAdmission(ctx context.Context, transaction *sql.Tx, action application.ActionRecord) error {

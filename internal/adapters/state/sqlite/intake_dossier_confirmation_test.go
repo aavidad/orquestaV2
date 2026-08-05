@@ -15,13 +15,14 @@ import (
 
 type sqliteIntakeDossierConfirmationSystem struct {
 	*sqliteIntakeDossierTestSystem
-	clock        *sqliteMembershipClock
-	external     *sqliteV15External
-	policy       application.BudgetPolicy
-	ids          *sqliteV15IDs
-	orchestrator *application.Orchestrator
-	access       application.Access
-	dossier      application.IntakeDossierRecord
+	clock          *sqliteMembershipClock
+	external       *sqliteV15External
+	policy         application.BudgetPolicy
+	ids            *sqliteV15IDs
+	orchestrator   *application.Orchestrator
+	access         application.Access
+	dossier        application.IntakeDossierRecord
+	egressPolicies application.EgressPolicyResolver
 }
 
 var errCaptureIntakeDossierConfirmation = errors.New(
@@ -45,9 +46,21 @@ func (repository *captureIntakeDossierConfirmationRepository) ConfirmIntakeDossi
 func newSQLiteIntakeDossierConfirmationSystem(
 	t *testing.T,
 ) *sqliteIntakeDossierConfirmationSystem {
+	return newSQLiteIntakeDossierConfirmationSystemWithEgress(
+		t, application.EgressPolicyAuthority{},
+	)
+}
+
+func newSQLiteIntakeDossierConfirmationSystemWithEgress(
+	t *testing.T,
+	egressPolicy application.EgressPolicyAuthority,
+) *sqliteIntakeDossierConfirmationSystem {
 	t.Helper()
 	base := newSQLiteIntakeDossierTestSystem(t)
 	request := base.prepareRequest(t, "request:intake-dossier:confirmation-source")
+	if egressPolicy != (application.EgressPolicyAuthority{}) {
+		request.Plan.WorkItems[0].EgressPolicyRef = egressPolicy.PolicyRef.String()
+	}
 	request.Plan.WorkItems[0].BudgetDemand.Resources.Currency =
 		governance.Currency("USD")
 	prepared, err := base.dossiers.PrepareIntakeDossier(
@@ -72,6 +85,12 @@ func newSQLiteIntakeDossierConfirmationSystem(
 		ids:                           ids,
 		access:                        access,
 		dossier:                       prepared.Record,
+		egressPolicies: func() application.EgressPolicyResolver {
+			if egressPolicy == (application.EgressPolicyAuthority{}) {
+				return nil
+			}
+			return sqliteEgressPolicyResolver{authority: egressPolicy}
+		}(),
 	}
 	system.orchestrator = system.newOrchestrator(t, base.repository)
 	return system
@@ -98,6 +117,7 @@ func (system *sqliteIntakeDossierConfirmationSystem) newOrchestrator(
 		ObservationDelay:  time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
 		CapacitySources:   fuentes, CapacityObservationWait: time.Second,
+		EgressPolicies: system.egressPolicies,
 	})
 	sqliteTestNoError(t, err)
 	return orchestrator
@@ -158,6 +178,32 @@ func TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze(
 	sqliteTestNoError(t, err)
 	assertSameIntakeDossierConfirmation(t, first, afterRestart, false)
 	system.assertFrozen(t)
+}
+
+func TestIntakeDossierConfirmationEgressReplayUsesHistoricalAuthorityWithRetiredResolver(
+	t *testing.T,
+) {
+	authority := sqliteEgressAuthority(
+		t, "egress-policy:dossier-sqlite-replay", `{"revision":1}`,
+	)
+	system := newSQLiteIntakeDossierConfirmationSystemWithEgress(t, authority)
+	const requestRef = "request:intake-dossier:confirm-egress-replay"
+	created, err := system.confirm(requestRef)
+	sqliteTestNoError(t, err)
+	if !created.Created || len(created.Record.WorkItemAuthorities) == 0 ||
+		created.Record.WorkItemAuthorities[0].EgressPolicy != authority {
+		t.Fatalf("created egress confirmation=%+v", created)
+	}
+
+	system.egressPolicies = nil
+	system.orchestrator = system.newOrchestrator(t, system.repository)
+	replayed, err := system.confirm(requestRef)
+	sqliteTestNoError(t, err)
+	if replayed.Created || replayed.Confirmation != created.Confirmation ||
+		len(replayed.Record.WorkItemAuthorities) == 0 ||
+		replayed.Record.WorkItemAuthorities[0].EgressPolicy != authority {
+		t.Fatalf("historical egress confirmation replay=%+v", replayed)
+	}
 }
 
 func TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence(

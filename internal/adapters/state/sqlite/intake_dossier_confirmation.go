@@ -118,6 +118,42 @@ func (repository *Repository) ConfirmIntakeDossierAndCreateGoal(
 	return record, true, nil
 }
 
+func (repository *Repository) ReplayIntakeDossierConfirmation(
+	ctx context.Context,
+	request application.GoalSubmissionReplayRequest,
+) (application.IntakeDossierConfirmationRecord, bool, error) {
+	if !validText(request.RequestRef) || !validCanonicalHash(request.RequestFingerprint) ||
+		request.RequestedBy.String() == "" || request.ProjectRef.String() == "" {
+		return application.IntakeDossierConfirmationRecord{}, false,
+			invalid(errors.New("sqlite.intake_dossier_confirmation_replay_request_invalid"))
+	}
+	var ref string
+	err := repository.db.QueryRowContext(ctx, `
+SELECT ref FROM intake_dossier_confirmations
+WHERE principal_ref=? AND project_ref=? AND request_ref=?`,
+		request.RequestedBy.String(), request.ProjectRef.String(), request.RequestRef,
+	).Scan(&ref)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return application.IntakeDossierConfirmationRecord{}, false, nil
+	case err != nil:
+		return application.IntakeDossierConfirmationRecord{}, false, mapDatabaseError(err)
+	}
+	record, err := readIntakeDossierConfirmationCommit(ctx, repository.db, ref)
+	if err != nil {
+		return application.IntakeDossierConfirmationRecord{}, false, err
+	}
+	confirmation := record.Confirmation
+	if confirmation.RequestRef != request.RequestRef ||
+		confirmation.RequestFingerprint != request.RequestFingerprint ||
+		confirmation.PrincipalRef != request.RequestedBy ||
+		confirmation.ProjectRef != request.ProjectRef {
+		return application.IntakeDossierConfirmationRecord{}, false,
+			conflict(errors.New("sqlite.intake_dossier_confirmation_replay_conflict"))
+	}
+	return record, true, nil
+}
+
 func insertIntakeDossierConfirmation(
 	ctx context.Context,
 	tx *sql.Tx,
