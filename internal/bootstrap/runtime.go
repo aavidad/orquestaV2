@@ -81,14 +81,15 @@ func componerFuentesCapacidadAgente(agente AgentAdapter, vigencia time.Duration,
 type AgentFactory func(config.Snapshot, application.Clock) (AgentAdapter, error)
 
 type Options struct {
-	ConfigPath                    string
-	Version                       string
-	Listener                      net.Listener
-	AgentFactory                  AgentFactory
-	IdentityHTTPClient            *http.Client
-	CommandExecutionResolver      commandcore.ExecutionAuthorityResolver
-	ReportError                   func(error)
-	codexGoToolchainTrustForTests codexGoToolchainTrust
+	ConfigPath                     string
+	Version                        string
+	Listener                       net.Listener
+	AgentFactory                   AgentFactory
+	IdentityHTTPClient             *http.Client
+	CommandExecutionResolver       commandcore.ExecutionAuthorityResolver
+	ReportError                    func(error)
+	codexGoToolchainTrustForTests  codexGoToolchainTrust
+	constructorClienteAgentMicroVM constructorClienteAgentMicroVM
 }
 
 type identityRuntimeComposition struct {
@@ -135,7 +136,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	if options.AgentFactory == nil {
-		if err := validateProductionAgentSelection(setup.snapshot); err != nil {
+		if err := validateBuildAgentSelection(setup.snapshot); err != nil {
 			return nil, err
 		}
 	}
@@ -156,7 +157,9 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		controller          application.AgentController
 		identityComposition identityRuntimeComposition
 		credentialStore     *credentiallocal.Store
+		fuentesCapacidad    []application.FuenteCapacidadColocacionAgente
 	)
+	agenteProduccionMicroVM := options.AgentFactory == nil && setup.snapshot.RuntimeIsolation() == "microvm"
 	openAgent := func() error {
 		agent, capabilities, controller, err = openBuildAgent(
 			ctx,
@@ -166,9 +169,19 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			promptRenderer,
 			credentialStore,
 			options.codexGoToolchainTrustForTests,
+			options.constructorClienteAgentMicroVM,
 		)
-		if err == nil {
-			cleanup.add(func() { shutdownBuildAgent(agent, setup.snapshot.ServerShutdownTimeout()) })
+		if err != nil {
+			return err
+		}
+		cleanup.add(func() { shutdownBuildAgent(agent, setup.snapshot.ServerShutdownTimeout()) })
+		if agenteProduccionMicroVM {
+			fuentesCapacidad, err = componerFuentesCapacidadAgente(
+				agent,
+				setup.snapshot.RuntimeCapacityObservationTTL(),
+				setup.clock.Now,
+				true,
+			)
 		}
 		return err
 	}
@@ -201,8 +214,10 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			return nil, err
 		}
 		cleanup.add(func() { _ = workspace.Close() })
-		if err := bindAgentWorkspaceResolver(agent, workspace); err != nil {
-			return nil, err
+		if options.AgentFactory != nil || setup.snapshot.RuntimeIsolation() == "process" {
+			if err := bindAgentWorkspaceResolver(agent, workspace); err != nil {
+				return nil, err
+			}
 		}
 	}
 	testAttestor, err := openBuildTestAttestor(setup.snapshot, setup.clock, workspace)
@@ -240,7 +255,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	mcpEndpoint := "http://" + listener.Addr().String() + setup.snapshot.ServerMCPPath()
-	if options.AgentFactory == nil {
+	if options.AgentFactory == nil && setup.snapshot.RuntimeIsolation() == "process" {
 		sessionResolver, err := newCodexExecutionSessionResolver(repository, executionBroker, mcpEndpoint)
 		if err != nil {
 			return nil, err
@@ -267,11 +282,16 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanup.add(func() {
 		_ = cerrarControladoresCuota(controladoresCuota, setup.snapshot.ServerShutdownTimeout())
 	})
-	fuentesCapacidad, err := componerFuentesCapacidadAgente(
-		agent, setup.snapshot.RuntimeCapacityObservationTTL(), setup.clock.Now, options.AgentFactory == nil,
-	)
-	if err != nil {
-		return nil, err
+	if !agenteProduccionMicroVM {
+		fuentesCapacidad, err = componerFuentesCapacidadAgente(
+			agent,
+			setup.snapshot.RuntimeCapacityObservationTTL(),
+			setup.clock.Now,
+			options.AgentFactory == nil,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	orchestrator, err := newBuildOrchestrator(
 		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
@@ -371,19 +391,37 @@ func openBuildAgent(
 	promptRenderer codex.PromptRenderer,
 	credentialStore credentials.Store,
 	toolchainTrust codexGoToolchainTrust,
+	constructorMicroVM constructorClienteAgentMicroVM,
 ) (AgentAdapter, ports.AgentCapabilities, application.AgentController, error) {
 	if factory == nil {
-		if toolchainTrust == nil {
-			toolchainTrust = codexGoToolchainOwnerTrusted
-		}
-		factory = func(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
-			return productionAgentAdapterWithGoToolchainTrust(
-				snapshot,
-				clock,
-				promptRenderer,
-				credentialStore,
-				toolchainTrust,
-			)
+		switch snapshot.RuntimeIsolation() {
+		case "process":
+			if toolchainTrust == nil {
+				toolchainTrust = codexGoToolchainOwnerTrusted
+			}
+			factory = func(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
+				return productionAgentAdapterWithGoToolchainTrust(
+					snapshot,
+					clock,
+					promptRenderer,
+					credentialStore,
+					toolchainTrust,
+				)
+			}
+		case "microvm":
+			if constructorMicroVM == nil {
+				constructorMicroVM = nuevoRecursoClienteAgentMicroVM
+			}
+			factory = func(snapshot config.Snapshot, _ application.Clock) (AgentAdapter, error) {
+				return productionAgentMicroVMConConstructor(
+					snapshot,
+					promptRenderer,
+					credentialStore,
+					constructorMicroVM,
+				)
+			}
+		default:
+			return nil, ports.AgentCapabilities{}, nil, errors.New("bootstrap.runtime_isolation_not_composed")
 		}
 	}
 	agent, err := factory(snapshot, clock)
@@ -1226,6 +1264,18 @@ func validateProductionAgentSelection(snapshot config.Snapshot) error {
 		return errors.New("bootstrap.runtime_isolation_not_composed")
 	}
 	return nil
+}
+
+func validateBuildAgentSelection(snapshot config.Snapshot) error {
+	if snapshot.RuntimeProvider() != "codex" {
+		return errors.New("bootstrap.runtime_provider_unsupported")
+	}
+	switch snapshot.RuntimeIsolation() {
+	case "process", "microvm":
+		return nil
+	default:
+		return errors.New("bootstrap.runtime_isolation_not_composed")
+	}
 }
 
 type credentialAgent struct {
