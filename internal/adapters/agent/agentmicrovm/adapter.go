@@ -32,6 +32,7 @@ const (
 	CodeLaunchUnavailable       = "agentmicrovm.launch_unavailable"
 	CodeLaunchRejected          = "agentmicrovm.launch_rejected"
 	CodeLaunchResponseInvalid   = "agentmicrovm.launch_response_invalid"
+	CodeObservationUnavailable  = "agentmicrovm.observation_unavailable"
 )
 
 const (
@@ -86,6 +87,7 @@ type Config struct {
 // the same key and signed bytes.
 type Adapter struct {
 	client       Client
+	observer     observationClient
 	signer       Signer
 	profile      ProfileBinding
 	capabilities ports.AgentCapabilities
@@ -96,6 +98,10 @@ type Adapter struct {
 func New(config Config) (*Adapter, error) {
 	if nilInterface(config.Client) || nilInterface(config.Signer) {
 		return nil, fail(CodeConfigurationInvalid, nil)
+	}
+	observer, ok := config.Client.(observationClient)
+	if !ok || nilInterface(observer) {
+		return nil, fail(CodeObservationClientInvalid, nil)
 	}
 	if config.Profile.PlacementRef.String() == "" {
 		return nil, fail(CodeProfileBindingInvalid, nil)
@@ -109,6 +115,7 @@ func New(config Config) (*Adapter, error) {
 	}
 	return &Adapter{
 		client:       config.Client,
+		observer:     observer,
 		signer:       config.Signer,
 		profile:      cloneProfileBinding(config.Profile),
 		capabilities: cloneCapabilities(config.Capabilities),
@@ -395,7 +402,8 @@ func (err *Error) Temporary() bool {
 		return false
 	}
 	switch err.Code {
-	case CodeCapabilitiesUnavailable, CodePhysicalUnavailable, CodeLaunchUnavailable:
+	case CodeCapabilitiesUnavailable, CodePhysicalUnavailable, CodeLaunchUnavailable,
+		CodeObservationUnavailable:
 		return true
 	default:
 		return false

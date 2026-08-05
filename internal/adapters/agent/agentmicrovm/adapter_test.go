@@ -40,6 +40,36 @@ func (client *launchClientStub) Lanzar(
 	return client.response, client.launchErr
 }
 
+func (client *launchClientStub) Observar(
+	context.Context,
+	string,
+) (microvm.RespuestaEjecucion, error) {
+	return microvm.RespuestaEjecucion{}, errors.New("observation not configured")
+}
+
+func (client *launchClientStub) LeerEventosSesion(
+	context.Context,
+	string,
+	string,
+	microvm.ConsultaEventosSesionTrabajoV1,
+) (microvm.PaginaEventosSesionTrabajoV1, error) {
+	return microvm.PaginaEventosSesionTrabajoV1{}, errors.New("observation not configured")
+}
+
+type launchOnlyClientStub struct{}
+
+func (*launchOnlyClientStub) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
+	return microvm.RespuestaCapacidades{}, nil
+}
+
+func (*launchOnlyClientStub) Lanzar(
+	context.Context,
+	string,
+	microvm.SolicitudLanzamiento,
+) (microvm.RespuestaEjecucion, error) {
+	return microvm.RespuestaEjecucion{}, nil
+}
+
 type signerCall struct {
 	context  microvm.ContextoAutorizado
 	plan     microvm.PlanLanzamiento
@@ -321,6 +351,10 @@ func TestAdapterRejectsInvalidConfigurationAndSigningBeforeSocketMutation(t *tes
 	config.Capabilities.RequierePreservacionEntorno = false
 	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeConfigurationInvalid {
 		t.Fatalf("New() accepted disposable microVM: adapter=%v error=%v", adapter, err)
+	}
+	config = validAdapterConfig(&launchOnlyClientStub{}, validSigner(), request, descriptor)
+	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeObservationClientInvalid {
+		t.Fatalf("New() accepted client without read-only observation: adapter=%v error=%v", adapter, err)
 	}
 
 	client := &launchClientStub{capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor)}
