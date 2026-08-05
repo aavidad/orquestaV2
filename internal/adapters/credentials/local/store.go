@@ -170,6 +170,51 @@ func (store *Store) Revoke(ctx context.Context, request credentials.RevokeReques
 	return result, nil
 }
 
+// DescribeUseAuthority resolves the current authorized credential version
+// without materializing secret material or recording a use.
+func (store *Store) DescribeUseAuthority(
+	ctx context.Context,
+	request credentials.DescribeUseAuthorityRequest,
+) (credentials.DescribedUseAuthority, error) {
+	if err := credentials.ValidateDescribeUseAuthorityRequest(request); err != nil {
+		return credentials.DescribedUseAuthority{}, err
+	}
+	if store == nil || store.files == nil || ctx == nil {
+		return credentials.DescribedUseAuthority{}, credentials.NewError(credentials.ErrorInvalidRequest, "store")
+	}
+	var result credentials.DescribedUseAuthority
+	err := store.files.withLock(ctx, func() error {
+		doc, content, err := store.load()
+		if err != nil {
+			return err
+		}
+		defer clearDocument(&doc)
+		defer clear(content)
+		current, found := doc.Records[request.CredentialRef]
+		if !found {
+			return credentials.NewError(credentials.ErrorNotFound, "credential_ref")
+		}
+		if err := authorizeUse(current.Metadata, credentials.UseRequest{
+			ActorRef: request.ActorRef, RequestRef: request.RequestRef,
+			CredentialRef: request.CredentialRef, OwnerRef: request.OwnerRef,
+			ScopeRef: request.ScopeRef, PurposeRef: request.PurposeRef,
+			Version: 0,
+		}); err != nil {
+			return err
+		}
+		result = credentials.DescribedUseAuthority{
+			CredentialRef: request.CredentialRef, OwnerRef: request.OwnerRef,
+			ScopeRef: request.ScopeRef, PurposeRef: request.PurposeRef,
+			Version: current.Metadata.Version,
+		}
+		return credentials.ValidateDescribedUseAuthority(request, result)
+	})
+	if err != nil {
+		return credentials.DescribedUseAuthority{}, mapFileError("describe_use_authority", err)
+	}
+	return result, nil
+}
+
 func (store *Store) Use(ctx context.Context, request credentials.UseRequest, consume func(credentials.Secret) error) (credentials.Receipt, error) {
 	if err := credentials.ValidateUseRequest(request); err != nil {
 		return credentials.Receipt{}, err
