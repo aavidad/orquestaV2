@@ -230,6 +230,19 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 	if err != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("recover retained launch = %+v err=%v", result, err)
 	}
+	recovered, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
+	if err != nil || len(recovered.EffectAttempts) != 1 || len(recovered.EffectIntents) != 1 {
+		t.Fatalf("recovered durable authority = %+v err=%v", recovered, err)
+	}
+	effectAttempt := recovered.EffectAttempts[0]
+	expectedRequest.EffectAuthority = ports.AgentLaunchEffectAuthority{
+		AuthorizationReceiptRef: recovered.EffectIntents[0].Authority.Ref(),
+		EffectApprovalRef:       effectAttempt.ApprovalRef,
+		EffectAttemptRef:        effectAttempt.Ref,
+		ActionFence:             effectAttempt.ActionFence,
+		StartedAt:               effectAttempt.StartedAt,
+		ClaimLeaseUntil:         effectAttempt.ClaimLeaseUntil,
+	}
 	requests := agent.launchRequests()
 	if len(requests) != 1 || !reflect.DeepEqual(requests[0], expectedRequest) {
 		t.Fatalf("recovered request = %+v want %+v", requests, expectedRequest)

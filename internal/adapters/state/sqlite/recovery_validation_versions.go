@@ -34,6 +34,7 @@ const (
 	recoverySchemaV38Environment     = 25
 	recoverySchemaV38EnvironmentGate = 26
 	recoverySchemaV38AttemptLease    = 27
+	recoverySchemaLatest             = recoverySchemaV38AttemptLease
 )
 
 func migrationSchemaRef(migrations []migration) string {
