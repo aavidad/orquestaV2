@@ -324,7 +324,12 @@ func TestRunnerChildReceivesOnlySealedEnvironment(t *testing.T) {
 	t.Setenv("ORQUESTA_EXECUTOR_SECRET_MARKER", "NO_FILTRAR")
 	t.Setenv("HTTP_PROXY", "http://192.168.1.1:8080")
 	t.Setenv("HTTPS_PROXY", "https://proxy-ambient.invalid")
+	t.Setenv("http_proxy", "http://192.168.1.2:8080")
+	t.Setenv("https_proxy", "https://proxy-ambient-lower.invalid")
+	t.Setenv("ALL_PROXY", "socks5://127.0.0.1:9999")
+	t.Setenv("all_proxy", "socks5://127.0.0.1:9998")
 	t.Setenv("NO_PROXY", "*")
+	t.Setenv("no_proxy", "*")
 	runner, capture := helperRunner(t, "environment", "env-ok", protocol.MaxPacketBytesV1)
 	var output bytes.Buffer
 	if err := runner.Run(context.Background(), packetReader(t, 2*time.Second), &output); err != nil {
@@ -334,8 +339,9 @@ func TestRunnerChildReceivesOnlySealedEnvironment(t *testing.T) {
 		t.Fatalf("artefacto=%q", output.String())
 	}
 	command := capture.command()
-	if command == nil || !slices.Equal(command.Env, sealedEnvironment("")) {
-		t.Fatalf("env=%q want=%q", command.Env, sealedEnvironment(""))
+	want := exactSealedEnvironment(false)
+	if command == nil || !slices.Equal(command.Env, want) {
+		t.Fatalf("env=%q want=%q", command.Env, want)
 	}
 	for _, variable := range command.Env {
 		if strings.Contains(variable, "NO_FILTRAR") || strings.HasPrefix(variable, "ORQUESTA_EXECUTOR_SECRET_MARKER=") {
@@ -346,10 +352,15 @@ func TestRunnerChildReceivesOnlySealedEnvironment(t *testing.T) {
 }
 
 func TestRunnerProjectsOnlyPacketAuthorizedControlledEgress(t *testing.T) {
+	t.Setenv("ORQUESTA_EXECUTOR_SECRET_MARKER", "NO_FILTRAR")
 	t.Setenv("HTTP_PROXY", "http://10.0.0.1:8080")
 	t.Setenv("HTTPS_PROXY", "https://proxy-ambient.invalid")
+	t.Setenv("http_proxy", "http://10.0.0.2:8080")
+	t.Setenv("https_proxy", "https://proxy-ambient-lower.invalid")
 	t.Setenv("ALL_PROXY", "socks5://127.0.0.1:9999")
+	t.Setenv("all_proxy", "socks5://127.0.0.1:9998")
 	t.Setenv("NO_PROXY", "*")
+	t.Setenv("no_proxy", "*")
 	runner, capture := helperRunner(t, "environment-egress", "env-egress-ok", protocol.MaxPacketBytesV1)
 	var output bytes.Buffer
 	if err := runner.Run(
@@ -363,7 +374,7 @@ func TestRunnerProjectsOnlyPacketAuthorizedControlledEgress(t *testing.T) {
 		t.Fatalf("artefacto=%q", output.String())
 	}
 	command := capture.command()
-	want := sealedEnvironment(protocol.ControlledEgressProxyURLV1)
+	want := exactSealedEnvironment(true)
 	if command == nil || !slices.Equal(command.Env, want) {
 		t.Fatalf("env=%q want=%q", command.Env, want)
 	}
@@ -375,6 +386,48 @@ func TestRunnerProjectsOnlyPacketAuthorizedControlledEgress(t *testing.T) {
 		}
 	}
 	assertReaped(t, command)
+}
+
+func TestRunnerSealsCodexHomeOutsideWorkspace(t *testing.T) {
+	if sealedCodexHome != "/credencial-codex" {
+		t.Fatalf("CODEX_HOME=%q", sealedCodexHome)
+	}
+	if sealedCodexHome == sealedHome || strings.HasPrefix(sealedCodexHome, sealedHome+"/") {
+		t.Fatalf("CODEX_HOME=%q comparte arbol con HOME=%q", sealedCodexHome, sealedHome)
+	}
+	for _, withEgress := range []bool{false, true} {
+		proxy := ""
+		if withEgress {
+			proxy = protocol.ControlledEgressProxyURLV1
+		}
+		got := sealedEnvironment(proxy)
+		want := exactSealedEnvironment(withEgress)
+		if !slices.Equal(got, want) {
+			t.Fatalf("with_egress=%v env=%q want=%q", withEgress, got, want)
+		}
+	}
+}
+
+func TestRunnerRejectsPacketSelectedCodexHomeBeforeStartingChild(t *testing.T) {
+	started := false
+	runner, err := New(Config{
+		Command: "unused", MaxPacketBytes: protocol.MaxPacketBytesV1,
+		MaxFrameBytes: protocol.MaxPacketBytesV1, MaxDiagnosticBytes: 64,
+		CleanupTimeout: time.Second,
+		CommandFactory: func(context.Context, string, ...string) *exec.Cmd {
+			started = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := packetBytes(t, 2*time.Second)
+	raw = append(raw[:len(raw)-1], []byte(`,"codex_home":"/trabajo/.codex"}`)...)
+	err = runner.Run(context.Background(), bytes.NewReader(raw), io.Discard)
+	if protocol.ErrorCode(err) != protocol.CodePacketMalformed || started {
+		t.Fatalf("code=%q started=%v error=%v", protocol.ErrorCode(err), started, err)
+	}
 }
 
 func TestRunnerRejectsMutatedControlledEgressBeforeStartingChild(t *testing.T) {
@@ -602,10 +655,29 @@ func TestCodexWorkExecutorHelperProcess(t *testing.T) {
 	case "stderr-success":
 		_, _ = fmt.Fprintln(os.Stderr, strings.Repeat("CHILD_SECRET", 1024))
 	case "environment", "environment-egress":
-		// The parent test asserts exec.Cmd.Env exactly. The helper deliberately
-		// avoids reading ambient environment, preserving the product config guard.
+		want := exactSealedEnvironment(mode == "environment-egress")
+		if !slices.Equal(os.Environ(), want) {
+			os.Exit(84)
+		}
 	}
 	serveSuccessfulProtocol(reader, initial, artifact)
+}
+
+func exactSealedEnvironment(withEgress bool) []string {
+	environment := []string{
+		"HOME=/trabajo",
+		"CODEX_HOME=/credencial-codex",
+		"PATH=/perfil/bin:/bin",
+		"LANG=C.UTF-8",
+		"LC_ALL=C.UTF-8",
+	}
+	if withEgress {
+		environment = append(environment,
+			"HTTP_PROXY=http://127.0.0.1:18080",
+			"HTTPS_PROXY=http://127.0.0.1:18080",
+		)
+	}
+	return environment
 }
 
 func assertPIDGone(t *testing.T, pid int) {

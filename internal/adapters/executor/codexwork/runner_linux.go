@@ -20,7 +20,7 @@ const (
 	SealedCommand   = "/perfil/bin/agente"
 	SealedArgument  = "app-server"
 	sealedHome      = "/trabajo"
-	sealedCodexHome = "/trabajo/.codex"
+	sealedCodexHome = "/credencial-codex"
 	sealedPath      = "/perfil/bin:/bin"
 	sealedLocale    = "C.UTF-8"
 
