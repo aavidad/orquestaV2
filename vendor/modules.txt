@@ -1,4 +1,4 @@
-# github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260805034720-d7addcefa5ce
+# github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260805040409-18f803734342
 ## explicit; go 1.25
 github.com/aavidad/agente_microvm/conectores/orquesta
 # github.com/coreos/go-oidc/v3 v3.20.0

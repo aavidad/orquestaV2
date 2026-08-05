@@ -71,12 +71,14 @@ type ContextoAutorizado struct {
 	GoalRef              string `json:"goal_ref"`
 	WorkItemRef          string `json:"work_item_ref"`
 	EjecucionRef         string `json:"ejecucion_ref"`
-	PermisoRef           string `json:"permiso_ref"`
-	AtestacionRef        string `json:"atestacion_ref"`
+	AutorizacionRef      string `json:"autorizacion_ref"`
+	AprobacionEfectoRef  string `json:"aprobacion_efecto_ref"`
+	IntentoEfectoRef     string `json:"intento_efecto_ref"`
 	SesionRef            string `json:"sesion_ref"`
-	ArtefactosRef        string `json:"artefactos_ref"`
-	MCPRef               string `json:"mcp_ref"`
-	BuzonRef             string `json:"buzon_ref"`
+	AccesoArtefactosRef  string `json:"acceso_artefactos_ref"`
+	AccesoMCPRef         string `json:"acceso_mcp_ref"`
+	EndpointBuzonRef     string `json:"endpoint_buzon_ref"`
+	DescriptorPerfilRef  string `json:"descriptor_perfil_ref"`
 	EspecificacionSHA256 string `json:"especificacion_sha256"`
 }
 
@@ -249,12 +251,18 @@ func referenciaExternaValida(v string) bool {
 	return v != "" && len(v) <= 512 && strings.TrimSpace(v) == v && !strings.ContainsAny(v, "\r\n\x00")
 }
 func contextoValido(c ContextoAutorizado) bool {
-	for _, v := range []string{c.ProyectoRef, c.GoalRef, c.WorkItemRef, c.EjecucionRef, c.PermisoRef, c.AtestacionRef, c.SesionRef, c.ArtefactosRef, c.MCPRef, c.BuzonRef} {
+	for _, v := range []string{
+		c.ProyectoRef, c.GoalRef, c.WorkItemRef, c.EjecucionRef,
+		c.AutorizacionRef, c.AprobacionEfectoRef, c.IntentoEfectoRef,
+		c.SesionRef, c.AccesoArtefactosRef, c.AccesoMCPRef, c.EndpointBuzonRef,
+	} {
 		if v == "" || strings.TrimSpace(v) != v || strings.ContainsAny(v, "\r\n\x00") {
 			return false
 		}
 	}
-	return sha256Valido(c.EspecificacionSHA256)
+	descriptorSHA := strings.TrimPrefix(c.DescriptorPerfilRef, prefijoDescriptorPerfilLanzamientoV1)
+	return descriptorSHA != c.DescriptorPerfilRef && sha256Valido(descriptorSHA) &&
+		sha256Valido(c.EspecificacionSHA256)
 }
 func planValido(p PlanLanzamiento) bool {
 	if p.Esquema != EsquemaPlanLanzamiento || !referenciaValida(p.PlanRef, "plan:", 160) || !referenciaExternaValida(p.RunRef) || p.Cerca == 0 || p.VCPU < 1 || p.VCPU > 32 || p.MemoriaMiB < 64 || p.MemoriaMiB > 32768 || !sha256Valido(p.KernelSHA256) || !sha256Valido(p.InitramfsSHA256) || p.PerfilSHA256 != nil && !sha256Valido(*p.PerfilSHA256) || p.LimiteTiempoMS == 0 || p.LimiteRAMPicoBytes == 0 || p.LimiteDiscoPicoBytes == 0 || p.LimiteTokensAgente == 0 || len(p.Servicios) > 2 {
