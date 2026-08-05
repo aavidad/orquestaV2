@@ -368,6 +368,8 @@ func TestAdapterRejectsIncompleteRemoteCapabilitiesBeforeLaunch(t *testing.T) {
 		{"executable", func(value *microvm.RespuestaCapacidades) { value.FirecrackerEjecutable = false }, CodePhysicalUnavailable, true},
 		{"capacity", func(value *microvm.RespuestaCapacidades) { value.MaximoEjecuciones = 0 }, CodePhysicalUnavailable, true},
 		{"create", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationCreateExecution) }, CodeOperationUnsupported, false},
+		{"observe execution", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationObserveExecution) }, CodeOperationUnsupported, false},
+		{"work revision", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReadWorkRevision) }, CodeOperationUnsupported, false},
 		{"start", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationStartSession) }, CodeOperationUnsupported, false},
 		{"input", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationSendSessionInput) }, CodeOperationUnsupported, false},
 		{"events", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReadSessionEvents) }, CodeOperationUnsupported, false},
@@ -582,8 +584,12 @@ func validAdapterConfig(
 	descriptor microvm.DescriptorPerfilLanzamientoV1,
 ) Config {
 	return Config{
-		Client: client, Signer: signer, Profile: profileBinding(request, descriptor),
-		Capabilities: validAdapterCapabilities(),
+		Client: client, Signer: signer, Capabilities: validAdapterCapabilities(),
+		ModelBinding: ProviderModelBinding{
+			ModelRef: "model:codex-microvm", ProviderModel: "gpt-5.6",
+			Profile: profileBinding(request, descriptor),
+		},
+		PromptRenderer: staticSessionPromptRenderer("work"),
 	}
 }
 
@@ -615,7 +621,8 @@ func validRemoteCapabilities() microvm.RespuestaCapacidades {
 	return microvm.RespuestaCapacidades{
 		Protocolo: microvm.ProtocoloLocal, Version: "0.1.0",
 		Operaciones: []string{
-			"salud", "capacidades", operationCreateExecution, operationStartSession,
+			"salud", "capacidades", operationCreateExecution, operationObserveExecution,
+			operationReadWorkRevision, operationStartSession,
 			operationSendSessionInput, operationReadSessionEvents, operationReconcileSessionInput,
 		},
 		KVMDisponible: true, FirecrackerConfigurado: true, FirecrackerEjecutable: true,

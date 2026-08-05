@@ -37,6 +37,8 @@ const (
 
 const (
 	operationCreateExecution       = "crear_ejecucion"
+	operationObserveExecution      = "consultar_ejecucion"
+	operationReadWorkRevision      = "consultar_revision_trabajo"
 	operationStartSession          = "iniciar_sesion"
 	operationSendSessionInput      = "enviar_entrada_sesion"
 	operationReadSessionEvents     = "leer_eventos_sesion"
@@ -49,17 +51,41 @@ const (
 
 var requiredRemoteOperations = [...]string{
 	operationCreateExecution,
+	operationObserveExecution,
+	operationReadWorkRevision,
 	operationStartSession,
 	operationSendSessionInput,
 	operationReadSessionEvents,
 	operationReconcileSessionInput,
 }
 
-// Client is the narrow public boundary needed by the launch half of B10.3.
-// Session, observation and control methods are deliberately absent here.
+// Client is the public sibling boundary needed to admit physical capacity and
+// deliver one durable agent work packet. Read-only observation remains split
+// in observationClient so ObserveAgent cannot mutate the sibling.
 type Client interface {
 	Capacidades(context.Context) (microvm.RespuestaCapacidades, error)
 	Lanzar(context.Context, string, microvm.SolicitudLanzamiento) (microvm.RespuestaEjecucion, error)
+	RevisionTrabajo(context.Context, string) (microvm.RespuestaRevisionTrabajo, error)
+	IniciarSesion(
+		context.Context,
+		string,
+		string,
+		microvm.SolicitudIniciarSesionTrabajoV1,
+	) (microvm.RespuestaSesionTrabajoV1, error)
+	EnviarEntradaSesion(
+		context.Context,
+		string,
+		string,
+		string,
+		microvm.SolicitudEntradaSesionTrabajoV1,
+	) (microvm.RespuestaSesionTrabajoV1, error)
+	ReconciliarEntradaSesion(
+		context.Context,
+		string,
+		string,
+		string,
+		uint64,
+	) (microvm.RespuestaReconciliacionEntradaSesionTrabajoV1, error)
 }
 
 // Signer receives the exact durable compilation. Key material remains owned by
@@ -75,13 +101,24 @@ type Signer interface {
 	) (microvm.SolicitudLanzamiento, error)
 }
 
+// ProviderModelBinding is one immutable composition choice. ModelRef is the
+// logical scheduler selector; ProviderModel is the exact Codex runtime model;
+// Profile binds both to one published physical image.
+type ProviderModelBinding struct {
+	ModelRef      string
+	ProviderModel string
+	Profile       ProfileBinding
+}
+
 // Config is fully resolved by composition. Capabilities describe the provider
-// hosted inside the microVM; ProfileBinding describes only its physical image.
+// hosted inside the microVM; ModelBinding prevents a logical selector, runtime
+// model and physical executor from drifting independently.
 type Config struct {
-	Client       Client
-	Signer       Signer
-	Profile      ProfileBinding
-	Capabilities ports.AgentCapabilities
+	Client         Client
+	Signer         Signer
+	Capabilities   ports.AgentCapabilities
+	ModelBinding   ProviderModelBinding
+	PromptRenderer PromptRenderer
 }
 
 // Adapter translates launch authority without owning a lifecycle or retaining
@@ -93,22 +130,27 @@ type Adapter struct {
 	signer       Signer
 	profile      ProfileBinding
 	capabilities ports.AgentCapabilities
+	model        string
+	renderer     PromptRenderer
 }
 
 // New validates only local, immutable composition facts. Remote readiness is
 // negotiated by Capabilities and again immediately before every launch.
 func New(config Config) (*Adapter, error) {
-	if nilInterface(config.Client) || nilInterface(config.Signer) {
+	if nilInterface(config.Client) || nilInterface(config.Signer) ||
+		nilInterface(config.PromptRenderer) ||
+		config.ModelBinding.ModelRef != config.Capabilities.ModelRef ||
+		!validWorkPacketToken(config.ModelBinding.ProviderModel, 128) {
 		return nil, fail(CodeConfigurationInvalid, nil)
 	}
 	observer, ok := config.Client.(observationClient)
 	if !ok || nilInterface(observer) {
 		return nil, fail(CodeObservationClientInvalid, nil)
 	}
-	if config.Profile.PlacementRef.String() == "" {
+	if config.ModelBinding.Profile.PlacementRef.String() == "" {
 		return nil, fail(CodeProfileBindingInvalid, nil)
 	}
-	if err := microvm.ValidarDescriptorPerfilLanzamientoV1(config.Profile.Descriptor); err != nil {
+	if err := microvm.ValidarDescriptorPerfilLanzamientoV1(config.ModelBinding.Profile.Descriptor); err != nil {
 		return nil, fail(CodeDescriptorInvalid, err)
 	}
 	if err := ports.ValidateAgentCapabilities(config.Capabilities); err != nil ||
@@ -119,8 +161,10 @@ func New(config Config) (*Adapter, error) {
 		client:       config.Client,
 		observer:     observer,
 		signer:       config.Signer,
-		profile:      cloneProfileBinding(config.Profile),
+		profile:      cloneProfileBinding(config.ModelBinding.Profile),
 		capabilities: cloneCapabilities(config.Capabilities),
+		model:        config.ModelBinding.ProviderModel,
+		renderer:     config.PromptRenderer,
 	}, nil
 }
 
@@ -143,7 +187,8 @@ func (adapter *Adapter) Launch(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
 ) (ports.AgentLaunchReceipt, error) {
-	if adapter == nil || nilInterface(adapter.client) || nilInterface(adapter.signer) || nilInterface(ctx) {
+	if adapter == nil || nilInterface(adapter.client) || nilInterface(adapter.signer) ||
+		nilInterface(adapter.renderer) || nilInterface(ctx) {
 		return ports.AgentLaunchReceipt{}, fail(CodeConfigurationInvalid, nil)
 	}
 	if err := ctx.Err(); err != nil {
@@ -153,6 +198,12 @@ func (adapter *Adapter) Launch(
 		return ports.AgentLaunchReceipt{}, err
 	}
 	compiled, err := Compile(request, adapter.profile, request.EffectAuthority.ActionFence)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	packet, packetJSON, err := BuildWorkPacketV1(
+		request, adapter.profile, compiled, adapter.model, adapter.renderer,
+	)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
@@ -194,8 +245,14 @@ func (adapter *Adapter) Launch(
 		}
 		return ports.AgentLaunchReceipt{}, classifyLaunchError(err)
 	}
+	if err := ctx.Err(); err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
 	if !validLaunchResponse(response, compiled.Plan) {
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchResponseInvalid, nil)
+	}
+	if err := adapter.launchSession(ctx, request, response, packet.TimeBudgetMS, packetJSON); err != nil {
+		return ports.AgentLaunchReceipt{}, err
 	}
 	receipt := ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
@@ -461,7 +518,10 @@ func (err *Error) Temporary() bool {
 	}
 	switch err.Code {
 	case CodeCapabilitiesUnavailable, CodePhysicalUnavailable, CodeLaunchUnavailable,
-		CodeObservationUnavailable:
+		CodeObservationUnavailable, CodeWorkRevisionUnavailable,
+		CodeSessionStartUnavailable, CodeSessionPending,
+		CodeSessionInputUnavailable, CodeSessionInputPending,
+		CodeSessionObserveUnavailable:
 		return true
 	default:
 		return false
@@ -482,7 +542,13 @@ func (err *Error) DefinitelyNotApplied() bool {
 		CodeEffectAuthorityInvalid, CodeFenceInvalid, CodeFenceMismatch,
 		CodeProfileBindingInvalid, CodeDescriptorInvalid, CodeControlBrokerRequired,
 		CodeGrantWindowInvalid, CodeLimitsInvalid, CodeLimitOverflow,
-		CodeContextInvalid, CodePlanInvalid:
+		CodeContextInvalid, CodePlanInvalid,
+		CodeWorkPacketRequestInvalid, CodeWorkPacketCompilationMismatch,
+		CodeWorkPacketModelInvalid, CodeWorkPacketEffortInvalid,
+		CodeWorkPacketBudgetInvalid, CodeWorkPacketOutputInvalid,
+		CodeWorkPacketRendererInvalid, CodeWorkPacketRenderFailed,
+		CodeWorkPacketPromptInvalid, CodeWorkPacketEncodeFailed,
+		CodeWorkPacketTooLarge, CodeWorkPacketRoundTripInvalid:
 		return true
 	default:
 		return false
