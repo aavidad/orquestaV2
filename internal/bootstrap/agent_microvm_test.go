@@ -1,0 +1,271 @@
+package bootstrap
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+
+	"orquesta/internal/adapters/agent/agentmicrovm"
+	"orquesta/internal/application"
+	"orquesta/internal/ports"
+)
+
+type agenteMicroVMDelegadoPrueba struct {
+	mu                  sync.Mutex
+	capacidad           agentmicrovm.NegotiatedPhysicalCapacity
+	capacidadErr        error
+	capabilitiesErr     error
+	negociado           bool
+	capabilitiesCalls   int
+	launchCalls         int
+	observeCalls        int
+	catalogoCalls       int
+	capabilitiesEntered chan struct{}
+	capabilitiesRelease chan struct{}
+	stopCalls           int
+}
+
+func (adaptador *agenteMicroVMDelegadoPrueba) Capabilities(ctx context.Context) (ports.AgentCapabilities, error) {
+	adaptador.mu.Lock()
+	adaptador.capabilitiesCalls++
+	adaptador.negociado = false
+	err := adaptador.capabilitiesErr
+	entrada, salida := adaptador.capabilitiesEntered, adaptador.capabilitiesRelease
+	adaptador.mu.Unlock()
+	if entrada != nil {
+		close(entrada)
+	}
+	if salida != nil {
+		select {
+		case <-salida:
+		case <-ctx.Done():
+			return ports.AgentCapabilities{}, ctx.Err()
+		}
+	}
+	if err != nil {
+		return ports.AgentCapabilities{}, err
+	}
+	adaptador.mu.Lock()
+	adaptador.negociado = true
+	adaptador.mu.Unlock()
+	return ports.AgentCapabilities{ProviderRef: "provider:codex", ModelRef: "model:codex", AgentRef: "agent:microvm"}, nil
+}
+
+func (adaptador *agenteMicroVMDelegadoPrueba) Launch(context.Context, ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
+	adaptador.mu.Lock()
+	defer adaptador.mu.Unlock()
+	adaptador.launchCalls++
+	return ports.AgentLaunchReceipt{}, nil
+}
+
+func (adaptador *agenteMicroVMDelegadoPrueba) ObserveAgent(context.Context, ports.AgentObserveRequest) (ports.AgentObservation, error) {
+	adaptador.mu.Lock()
+	defer adaptador.mu.Unlock()
+	adaptador.observeCalls++
+	return ports.AgentObservation{}, nil
+}
+
+func (adaptador *agenteMicroVMDelegadoPrueba) NegotiatedPhysicalCapacity() (agentmicrovm.NegotiatedPhysicalCapacity, error) {
+	adaptador.mu.Lock()
+	defer adaptador.mu.Unlock()
+	adaptador.catalogoCalls++
+	if !adaptador.negociado {
+		return agentmicrovm.NegotiatedPhysicalCapacity{}, errors.New("capacidad no negociada")
+	}
+	return adaptador.capacidad, adaptador.capacidadErr
+}
+
+// Stop existe para demostrar que Shutdown no descubre ni invoca control
+// fisico por aproximacion estructural.
+func (adaptador *agenteMicroVMDelegadoPrueba) Stop() { adaptador.stopCalls++ }
+
+func TestAgentMicroVMCapacidadSoloTrasNegociacionYConservaMaximoExacto(t *testing.T) {
+	colocacion, err := ports.NewAgentPlacementRef("placement:/home/cuenta-codex/perfil")
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegado := &agenteMicroVMDelegadoPrueba{capacidad: agentmicrovm.NegotiatedPhysicalCapacity{
+		PlacementRef: colocacion, Slots: ^uint32(0),
+	}}
+	agente := nuevoAgentMicroVMPrueba(t, delegado, func() error { return nil }, func() error { return nil })
+
+	if descriptores, err := agente.DescribirCapacidadColocaciones(); err == nil || descriptores != nil {
+		t.Fatalf("capacidad previa=%+v error=%v", descriptores, err)
+	}
+	if _, err := agente.Capabilities(context.Background()); err != nil {
+		t.Fatalf("Capabilities() error=%v", err)
+	}
+	descriptores, err := agente.DescribirCapacidadColocaciones()
+	if err != nil || len(descriptores) != 1 {
+		t.Fatalf("descriptores=%+v error=%v", descriptores, err)
+	}
+	descriptor := descriptores[0]
+	if descriptor.PlacementRef != colocacion || descriptor.SourceRef != "capacity-source:codex:microvm" ||
+		descriptor.BaseMedicion != application.BaseMedicionCapacidadBruta || descriptor.Plazas != int64(^uint32(0)) {
+		t.Fatalf("descriptor=%+v", descriptor)
+	}
+	pool := string(descriptor.PoolRef)
+	if !strings.HasPrefix(pool, "capacity-pool:codex:microvm:") ||
+		strings.Contains(pool, "home") || strings.Contains(pool, "cuenta") || strings.Contains(pool, "perfil") {
+		t.Fatalf("pool filtra colocacion fisica: %q", pool)
+	}
+	repetido, err := agente.DescribirCapacidadColocaciones()
+	if err != nil || repetido[0].PoolRef != descriptor.PoolRef {
+		t.Fatalf("pool inestable: primero=%q repetido=%+v error=%v", descriptor.PoolRef, repetido, err)
+	}
+	otra, _ := ports.NewAgentPlacementRef("placement:/home/cuenta-codex/otro-perfil")
+	if referenciaPoolCapacidadAgentMicroVM(otra) == descriptor.PoolRef {
+		t.Fatal("colocaciones distintas colisionaron")
+	}
+}
+
+func TestAgentMicroVMCapacidadFallaCerradoTrasNegociacionFallida(t *testing.T) {
+	colocacion, _ := ports.NewAgentPlacementRef("placement:microvm")
+	falloCatalogo := errors.New("fallo catalogo")
+	falloNegociacion := errors.New("fallo remoto")
+	delegado := &agenteMicroVMDelegadoPrueba{capacidad: agentmicrovm.NegotiatedPhysicalCapacity{PlacementRef: colocacion, Slots: 20}}
+	agente := nuevoAgentMicroVMPrueba(t, delegado, func() error { return nil }, func() error { return nil })
+	if _, err := agente.Capabilities(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	delegado.mu.Lock()
+	delegado.capacidadErr = falloCatalogo
+	delegado.mu.Unlock()
+	if descriptores, err := agente.DescribirCapacidadColocaciones(); !errors.Is(err, falloCatalogo) || descriptores != nil {
+		t.Fatalf("fallo de catalogo ocultado: %+v error=%v", descriptores, err)
+	}
+	delegado.mu.Lock()
+	delegado.capacidadErr = nil
+	delegado.capabilitiesErr = falloNegociacion
+	delegado.mu.Unlock()
+	if _, err := agente.Capabilities(context.Background()); !errors.Is(err, falloNegociacion) {
+		t.Fatalf("Capabilities() error=%v", err)
+	}
+	if descriptores, err := agente.DescribirCapacidadColocaciones(); err == nil || descriptores != nil {
+		t.Fatalf("capacidad obsoleta publicada: %+v error=%v", descriptores, err)
+	}
+}
+
+func TestAgentMicroVMRechazaDependenciasNulas(t *testing.T) {
+	cierre := func() error { return nil }
+	if _, err := newAgentMicroVM(nil, cierre, cierre); !errors.Is(err, errAgentMicroVMAdapterRequerido) {
+		t.Fatalf("adapter nil error=%v", err)
+	}
+	var delegado *agenteMicroVMDelegadoPrueba
+	if _, err := newAgentMicroVMConDelegado(delegado, cierre, cierre); !errors.Is(err, errAgentMicroVMAdapterRequerido) {
+		t.Fatalf("adapter tipado nil error=%v", err)
+	}
+	valido := &agenteMicroVMDelegadoPrueba{}
+	if _, err := newAgentMicroVMConDelegado(valido, nil, cierre); !errors.Is(err, errAgentMicroVMCierreConexiones) {
+		t.Fatalf("cierre conexiones nil error=%v", err)
+	}
+	if _, err := newAgentMicroVMConDelegado(valido, cierre, nil); !errors.Is(err, errAgentMicroVMCierreCredenciales) {
+		t.Fatalf("cierre credenciales nil error=%v", err)
+	}
+}
+
+func TestAgentMicroVMShutdownCanceladoUneErroresUnaVezYNoDetieneVM(t *testing.T) {
+	delegado := &agenteMicroVMDelegadoPrueba{}
+	falloConexiones := errors.New("fallo conexiones")
+	falloCredenciales := errors.New("fallo credenciales")
+	var cierresConexiones, cierresCredenciales atomic.Int64
+	agente := nuevoAgentMicroVMPrueba(t, delegado, func() error {
+		cierresConexiones.Add(1)
+		return falloConexiones
+	}, func() error {
+		cierresCredenciales.Add(1)
+		return falloCredenciales
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	const llamadas = 32
+	errores := make(chan error, llamadas)
+	var grupo sync.WaitGroup
+	for indice := 0; indice < llamadas; indice++ {
+		grupo.Add(1)
+		go func() {
+			defer grupo.Done()
+			errores <- agente.Shutdown(ctx)
+		}()
+	}
+	grupo.Wait()
+	close(errores)
+	for err := range errores {
+		if !errors.Is(err, falloConexiones) || !errors.Is(err, falloCredenciales) {
+			t.Fatalf("Shutdown() error=%v", err)
+		}
+	}
+	if cierresConexiones.Load() != 1 || cierresCredenciales.Load() != 1 || delegado.stopCalls != 0 {
+		t.Fatalf("cierres conexiones=%d credenciales=%d stop=%d", cierresConexiones.Load(), cierresCredenciales.Load(), delegado.stopCalls)
+	}
+}
+
+func TestAgentMicroVMShutdownDrenaEnVueloYCierraTodasLasEntradas(t *testing.T) {
+	entrada := make(chan struct{})
+	salida := make(chan struct{})
+	delegado := &agenteMicroVMDelegadoPrueba{capabilitiesEntered: entrada, capabilitiesRelease: salida}
+	var cierres atomic.Int64
+	agente := nuevoAgentMicroVMPrueba(t, delegado, func() error { cierres.Add(1); return nil }, func() error { cierres.Add(1); return nil })
+	if _, err := agente.Launch(context.Background(), ports.AgentLaunchRequest{}); err != nil {
+		t.Fatalf("Launch() delegado error=%v", err)
+	}
+	if _, err := agente.ObserveAgent(context.Background(), ports.AgentObserveRequest{}); err != nil {
+		t.Fatalf("ObserveAgent() delegado error=%v", err)
+	}
+
+	capacidadTerminada := make(chan error, 1)
+	go func() {
+		_, err := agente.Capabilities(context.Background())
+		capacidadTerminada <- err
+	}()
+	<-entrada
+	shutdownTerminado := make(chan error, 1)
+	go func() { shutdownTerminado <- agente.Shutdown(context.Background()) }()
+	if cierres.Load() != 0 {
+		t.Fatal("shutdown no dreno llamada en vuelo")
+	}
+	close(salida)
+	if err := <-capacidadTerminada; err != nil {
+		t.Fatalf("llamada en vuelo error=%v", err)
+	}
+	if err := <-shutdownTerminado; err != nil || cierres.Load() != 2 {
+		t.Fatalf("Shutdown() error=%v cierres=%d", err, cierres.Load())
+	}
+
+	if _, err := agente.Capabilities(context.Background()); !errors.Is(err, errAgentMicroVMCerrado) {
+		t.Fatalf("Capabilities posterior error=%v", err)
+	}
+	if _, err := agente.Launch(context.Background(), ports.AgentLaunchRequest{}); !errors.Is(err, errAgentMicroVMCerrado) {
+		t.Fatalf("Launch posterior error=%v", err)
+	}
+	if _, err := agente.ObserveAgent(context.Background(), ports.AgentObserveRequest{}); !errors.Is(err, errAgentMicroVMCerrado) {
+		t.Fatalf("ObserveAgent posterior error=%v", err)
+	}
+	if _, err := agente.DescribirCapacidadColocaciones(); !errors.Is(err, errAgentMicroVMCerrado) {
+		t.Fatalf("catalogo posterior error=%v", err)
+	}
+	delegado.mu.Lock()
+	defer delegado.mu.Unlock()
+	if delegado.capabilitiesCalls != 1 || delegado.launchCalls != 1 || delegado.observeCalls != 1 || delegado.catalogoCalls != 0 {
+		t.Fatalf("llamadas cruzaron tras shutdown: capabilities=%d launch=%d observe=%d catalogo=%d",
+			delegado.capabilitiesCalls, delegado.launchCalls, delegado.observeCalls, delegado.catalogoCalls)
+	}
+}
+
+func nuevoAgentMicroVMPrueba(
+	t *testing.T,
+	adaptador agenteMicroVMDelegado,
+	cerrarConexiones func() error,
+	cerrarCredenciales func() error,
+) *agenteMicroVM {
+	t.Helper()
+	agente, err := newAgentMicroVMConDelegado(adaptador, cerrarConexiones, cerrarCredenciales)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return agente
+}
