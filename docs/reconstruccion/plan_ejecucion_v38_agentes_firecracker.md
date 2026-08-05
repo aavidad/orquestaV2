@@ -622,15 +622,15 @@ sobre estados físicos aproximados.
 | B10.1 | `60bf4646` + `6262dc43`: `AgentLaunchRequest` transporta autorización, aprobación, intento, cerca, tiempo, vencimiento del claim y vencimiento de la aprobación durables; la liquidación defensiva conserva el enlace causal al intento. | Cerrada con revisión premium y pruebas normal/race; no usa reloj vivo, no cambia el fingerprint histórico ni obliga al adaptador de proceso. | Delta real al regularizar |
 | B10.2 | Guarda de dependencia: fija la revisión B10.0 del módulo Go público; prohíbe `replace` local, segundo HTTP, tipos físicos o acceso al registro hermano. | Tras B10.0d; no añade producto. | Estimación histórica `P=0,V=20` |
 | B10.3 | `internal/adapters/agent/agentmicrovm/`: negociación, lanzamiento firmado, `WorkPacket` sellado, inicio/entrega de sesión y observación por eventos; estados físicos y de trabajo permanecen separados. Cierre de código/offline en `3838dbe0`, `2b21911e`, `4ea504cc`, `7926397a`, `ade7e323`, `b770cac6`, `806b4d78` y `8e1d865d`, con revisión premium. | Cerrada tras B10.1/B10.2; sin KVM. `TestAdapterLaunchBuildsPacketBeforeMutationAndDeliversExactInput`, `TestObserveAgentKeepsMissingAndAmbiguousSessionNonterminal`, `TestAdapterLaunchMapsOnlyTypedExactRemotePending`, `TestAdapterLaunchRejectsStaleOrCrossReconciliationReceipt`, `TestRunnerInitialDeadlineInterruptsRealFIFO`, `TestRunnerChildReceivesOnlySealedEnvironment` y `TestBuildWorkPacketV1RejectsForeignOrMutatedCompilation` cubren el corte offline. | Se mide al regularizar; no acredita microVM física ni Codex real. |
-| B10.4 | `5ea6d240`, `962051a0` y `5ed1a1d4`: capacidad negociada, wrapper local y factoría sellada componen la selección microVM. El wiring está activo, pero B10.4 sigue parcial: falta cerrar su composición/evidencia completa y no retira A05.1b. | Abierta tras B10.3; serial en composición. | Se mide al cerrar. |
+| B10.4 | `5ea6d240`, `962051a0`, `5ed1a1d4` y `bd30c246`: capacidad negociada, wrapper local, factoría sellada y bootstrap productivo componen la selección microVM sin fallback a proceso. La capacidad física se negocia antes de crear estado durable; process y factorías custom conservan su orden histórico. | Cerrada offline tras doble revisión premium, focales normal/`-race`, paquete bootstrap y `vet`; no acredita UDS/KVM físico. | Delta real al regularizar. |
 | B10.5a | `agente_microvm@b0d09eb`: replay exacto de `Lanzar` tras reapertura SQLite y concesión expirada; rechaza divergencias `409` y garantiza que el motor se invoca una sola vez. | Cierra este subtramo durable offline. | No acredita reinicio del host ni KVM. |
 | B10.5 | Reinicio del host, concesión byte a byte, cerca, duplicado, receipt/socket perdidos, cursor durable, concurrencia y `-race`. | Sigue abierta: `EffectAttempt` no es aún recuperable tras reinicio del host, aunque B10.5a cerró replay SQLite/concesión expirada. | Se mide al cerrar. |
 
 El desglose B10.0 anterior conserva el plan histórico, no la fotografía vigente:
 la revisión pública fijada por B10.2 ya expone el cliente de sesión, persistencia
 y reconciliación que consume B10.3. Esto no acredita por sí solo el puente
-físico del huésped. B10.1 y B10.3 están cerradas en código/offline; B10 completo
-no está `wired` ni `exercised_without_kvm` mientras B10.4/B10.5 sigan abiertas.
+físico del huésped. B10.1, B10.3 y B10.4 están cerradas en código/offline; B10
+completo no está `exercised_without_kvm` mientras B10.5 siga abierta.
 B11 conserva parada exacta y B12 preservación, sello y el primer Codex físico
 real. Una microVM `disponible`, una orden síncrona o un evento físico no
 acreditan trabajo de agente iniciado o completado.
