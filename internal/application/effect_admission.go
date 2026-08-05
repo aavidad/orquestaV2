@@ -19,14 +19,37 @@ func workItemAuthorities(
 	receipt identity.AuthorizationReceipt,
 	at time.Time,
 ) []WorkItemAuthority {
+	authorities, _ := workItemAuthoritiesWithEgress(items, nil, principal, permission, source, receipt, at)
+	return authorities
+}
+
+func workItemAuthoritiesWithEgress(
+	items []goal.WorkItem,
+	egressPolicies []EgressPolicyAuthority,
+	principal identity.PrincipalRef,
+	permission identity.Permission,
+	source EffectApprovalSource,
+	receipt identity.AuthorizationReceipt,
+	at time.Time,
+) ([]WorkItemAuthority, error) {
+	if len(egressPolicies) != 0 && len(egressPolicies) != len(items) {
+		return nil, errors.New("application.egress_policy_authority_count_invalid")
+	}
 	authorities := make([]WorkItemAuthority, len(items))
 	for index, item := range items {
+		var egressPolicy EgressPolicyAuthority
+		if len(egressPolicies) != 0 {
+			egressPolicy = egressPolicies[index]
+		}
+		if err := ValidateEgressPolicyAuthority(egressPolicy); err != nil {
+			return nil, err
+		}
 		authorities[index] = WorkItemAuthority{
 			WorkItemRef: item.Ref(), PrincipalRef: principal, Permission: permission,
-			Source: source, AuthorizationReceipt: receipt, RecordedAt: at.UTC(),
+			Source: source, AuthorizationReceipt: receipt, EgressPolicy: egressPolicy, RecordedAt: at.UTC(),
 		}
 	}
-	return authorities
+	return authorities, nil
 }
 
 func workItemAuthorityFor(authorities []WorkItemAuthority, ref goal.WorkItemRef) (WorkItemAuthority, bool) {
@@ -36,6 +59,22 @@ func workItemAuthorityFor(authorities []WorkItemAuthority, ref goal.WorkItemRef)
 		}
 	}
 	return WorkItemAuthority{}, false
+}
+
+func validatePersistedWorkItemAuthorities(
+	expected []WorkItemAuthority,
+	observed []WorkItemAuthority,
+) error {
+	if len(observed) != len(expected) {
+		return &StateError{Code: StateConflict}
+	}
+	for _, authority := range expected {
+		persisted, found := workItemAuthorityFor(observed, authority.WorkItemRef)
+		if !found || persisted != authority {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	return nil
 }
 
 func (orchestrator *Orchestrator) launchAction(
@@ -404,6 +443,7 @@ func validateWorkItemAuthority(aggregate goal.Goal, authority WorkItemAuthority)
 		resourceRef = aggregate.Project().String()
 	}
 	if authority.WorkItemRef.String() == "" || authority.PrincipalRef.String() == "" || authority.RecordedAt.IsZero() ||
+		ValidateEgressPolicyAuthority(authority.EgressPolicy) != nil ||
 		!((authority.Source == EffectApprovalSourceGoalConfirmation && authority.Permission == identity.PermissionGoalsCreate) ||
 			(authority.Source == EffectApprovalSourceDirectorDecision && authority.Permission == identity.PermissionGoalsDirect)) ||
 		request.Principal().Ref != authority.PrincipalRef || request.ProjectRef() != aggregate.Project() ||

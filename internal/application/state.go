@@ -365,6 +365,7 @@ type WorkItemAuthority struct {
 	Permission           identity.Permission
 	Source               EffectApprovalSource
 	AuthorizationReceipt identity.AuthorizationReceipt
+	EgressPolicy         EgressPolicyAuthority
 	RecordedAt           time.Time
 }
 
@@ -432,6 +433,29 @@ type CreateGoalState struct {
 	Events               []EventRecord
 	WorkItemAuthorities  []WorkItemAuthority
 	BudgetEnvelopes      []governance.BudgetEnvelope
+}
+
+// GoalSubmissionReplayRequest identifies an already committed Submit result
+// without rebuilding its plan or consulting mutable external policy catalogs.
+type GoalSubmissionReplayRequest struct {
+	RequestRef         string
+	RequestFingerprint string
+	RequestedBy        identity.PrincipalRef
+	ProjectRef         goal.ProjectRef
+}
+
+// GoalSubmissionReplayReader is an optional read-only capability. State
+// adapters must implement it before accepting plans with durable egress
+// authority; legacy adapters remain compatible for plans without egress.
+type GoalSubmissionReplayReader interface {
+	ReplayGoalSubmission(context.Context, GoalSubmissionReplayRequest) (GoalRecord, bool, error)
+}
+
+// IntakeDossierConfirmationReplayReader exposes the already committed atomic
+// dossier confirmation without rebuilding its Goal or resolving mutable
+// external policy references again.
+type IntakeDossierConfirmationReplayReader interface {
+	ReplayIntakeDossierConfirmation(context.Context, GoalSubmissionReplayRequest) (IntakeDossierConfirmationRecord, bool, error)
 }
 
 // IntakeDossierConfirmation is the immutable causal binding produced when an

@@ -2,13 +2,90 @@ package application
 
 import (
 	"context"
+	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 )
+
+type synchronizedDivergentEgressResolver struct {
+	mu          sync.Mutex
+	authorities []EgressPolicyAuthority
+	refs        []EgressPolicyRef
+	err         error
+}
+
+func (resolver *synchronizedDivergentEgressResolver) ResolveEgressPolicy(
+	_ context.Context,
+	ref EgressPolicyRef,
+) (EgressPolicyAuthority, error) {
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	resolver.refs = append(resolver.refs, ref)
+	if resolver.err != nil {
+		return EgressPolicyAuthority{}, resolver.err
+	}
+	return resolver.authorities[(len(resolver.refs)-1)%len(resolver.authorities)], nil
+}
+
+func (resolver *synchronizedDivergentEgressResolver) callCount() int {
+	resolver.mu.Lock()
+	defer resolver.mu.Unlock()
+	return len(resolver.refs)
+}
+
+type intakeDossierReplayBarrierRepository struct {
+	StateRepository
+	arrived chan<- struct{}
+	release <-chan struct{}
+}
+
+func (repository *intakeDossierReplayBarrierRepository) ReplayIntakeDossierConfirmation(
+	ctx context.Context,
+	_ GoalSubmissionReplayRequest,
+) (IntakeDossierConfirmationRecord, bool, error) {
+	select {
+	case repository.arrived <- struct{}{}:
+	case <-ctx.Done():
+		return IntakeDossierConfirmationRecord{}, false, ctx.Err()
+	}
+	select {
+	case <-repository.release:
+		return IntakeDossierConfirmationRecord{}, false, nil
+	case <-ctx.Done():
+		return IntakeDossierConfirmationRecord{}, false, ctx.Err()
+	}
+}
+
+type intakeDossierStateWithoutReplay struct{ StateRepository }
+
+func (repository *memoryRepository) ReplayIntakeDossierConfirmation(
+	_ context.Context,
+	request GoalSubmissionReplayRequest,
+) (IntakeDossierConfirmationRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	key := request.RequestedBy.String() + "\x00" + request.ProjectRef.String() + "\x00" + request.RequestRef
+	record, found := repository.dossierConfirmations[key]
+	if !found {
+		return IntakeDossierConfirmationRecord{}, false, nil
+	}
+	if record.Confirmation.RequestFingerprint != request.RequestFingerprint ||
+		record.Confirmation.PrincipalRef != request.RequestedBy ||
+		record.Confirmation.ProjectRef != request.ProjectRef {
+		return IntakeDossierConfirmationRecord{}, false, &StateError{Code: StateConflict}
+	}
+	live, found := repository.records[record.Confirmation.GoalRef]
+	if !found {
+		return IntakeDossierConfirmationRecord{}, false, &StateError{Code: StateConflict}
+	}
+	record.Goal = live
+	return cloneIntakeDossierConfirmationRecord(record), true, nil
+}
 
 func TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier(t *testing.T) {
 	ctx := context.Background()
@@ -260,6 +337,203 @@ func TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress(t *testing.T) {
 		replayed.Confirmation != first.Confirmation {
 		t.Fatalf("live replay=%+v", replayed)
 	}
+}
+
+func TestConfirmIntakeDossierEgressReplayUsesHistoricalAuthorityWithoutResolver(t *testing.T) {
+	ctx := context.Background()
+	system := newIntakeDossierOrchestratorTestSystem(t)
+	historical := testEgressPolicyAuthority(t, "egress-policy:dossier-historical", `{"revision":1}`)
+	prepared := prepareEgressIntakeDossier(
+		t, system, "request:intake-dossier-egress-replay-prepare",
+		[]EgressPolicyAuthority{historical},
+	)
+	request := ConfirmIntakeDossierRequest{
+		RequestRef: "request:intake-dossier-egress-replay",
+		DossierRef: prepared.Dossier.Ref(), Confirm: true,
+	}
+	system.orchestrator.egressPolicies = &egressPolicyResolverStub{authority: historical}
+	created, err := system.orchestrator.ConfirmIntakeDossier(ctx, system.access, request)
+	if err != nil || !created.Created {
+		t.Fatalf("created=%+v err=%v", created, err)
+	}
+
+	rotated := &egressPolicyResolverStub{authority: testEgressPolicyAuthority(
+		t, historical.PolicyRef.String(), `{"revision":2}`,
+	)}
+	system.orchestrator.egressPolicies = rotated
+	rotatedReplay, err := system.orchestrator.ConfirmIntakeDossier(ctx, system.access, request)
+	if err != nil || rotatedReplay.Created || len(rotated.refs) != 0 ||
+		rotatedReplay.Record.WorkItemAuthorities[0].EgressPolicy != historical {
+		t.Fatalf("rotated replay=%+v calls=%v err=%v", rotatedReplay, rotated.refs, err)
+	}
+
+	failing := &egressPolicyResolverStub{err: errors.New("catalog unavailable")}
+	system.orchestrator.egressPolicies = failing
+	failedReplay, err := system.orchestrator.ConfirmIntakeDossier(ctx, system.access, request)
+	if err != nil || failedReplay.Created || len(failing.refs) != 0 ||
+		failedReplay.Record.WorkItemAuthorities[0].EgressPolicy != historical {
+		t.Fatalf("failed replay=%+v calls=%v err=%v", failedReplay, failing.refs, err)
+	}
+
+	system.orchestrator.egressPolicies = nil
+	retiredReplay, err := system.orchestrator.ConfirmIntakeDossier(ctx, system.access, request)
+	if err != nil || retiredReplay.Created ||
+		retiredReplay.Record.WorkItemAuthorities[0].EgressPolicy != historical {
+		t.Fatalf("retired replay=%+v err=%v", retiredReplay, err)
+	}
+}
+
+func TestConfirmIntakeDossierEgressReplayRejectsCrossWorkItemPolicySwap(t *testing.T) {
+	ctx := context.Background()
+	system := newIntakeDossierOrchestratorTestSystem(t)
+	first := testEgressPolicyAuthority(t, "egress-policy:dossier-first", `{"item":1}`)
+	second := testEgressPolicyAuthority(t, "egress-policy:dossier-second", `{"item":2}`)
+	prepared := prepareEgressIntakeDossier(
+		t, system, "request:intake-dossier-egress-swap-prepare",
+		[]EgressPolicyAuthority{first, second},
+	)
+	system.orchestrator.egressPolicies = &mappedEgressPolicyResolver{authorities: map[EgressPolicyRef]EgressPolicyAuthority{
+		first.PolicyRef: first, second.PolicyRef: second,
+	}}
+	request := ConfirmIntakeDossierRequest{
+		RequestRef: "request:intake-dossier-egress-swap",
+		DossierRef: prepared.Dossier.Ref(), Confirm: true,
+	}
+	created, err := system.orchestrator.ConfirmIntakeDossier(ctx, system.access, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := system.orchestrator.state.(*memoryRepository)
+	repository.mu.Lock()
+	record := repository.records[created.Record.Goal.Ref()]
+	record.WorkItemAuthorities[0].EgressPolicy, record.WorkItemAuthorities[1].EgressPolicy =
+		record.WorkItemAuthorities[1].EgressPolicy, record.WorkItemAuthorities[0].EgressPolicy
+	repository.records[created.Record.Goal.Ref()] = record
+	repository.mu.Unlock()
+	system.orchestrator.egressPolicies = nil
+
+	if _, err := system.orchestrator.ConfirmIntakeDossier(ctx, system.access, request); !IsStateError(err, StateConflict) {
+		t.Fatalf("cross-work-item dossier authority swap replayed: %v", err)
+	}
+}
+
+func TestConfirmIntakeDossierEgressConcurrentReplayMissReturnsOneHistoricalWinner(t *testing.T) {
+	ctx := context.Background()
+	system := newIntakeDossierOrchestratorTestSystem(t)
+	first := testEgressPolicyAuthority(t, "egress-policy:dossier-race", `{"revision":1}`)
+	second := testEgressPolicyAuthority(t, first.PolicyRef.String(), `{"revision":2}`)
+	prepared := prepareEgressIntakeDossier(
+		t, system, "request:intake-dossier-egress-race-prepare",
+		[]EgressPolicyAuthority{first},
+	)
+	resolver := &synchronizedDivergentEgressResolver{authorities: []EgressPolicyAuthority{first, second}}
+	system.orchestrator.egressPolicies = resolver
+	underlying := system.orchestrator.state
+	arrived := make(chan struct{}, 2)
+	release := make(chan struct{})
+	system.orchestrator.state = &intakeDossierReplayBarrierRepository{
+		StateRepository: underlying, arrived: arrived, release: release,
+	}
+	request := ConfirmIntakeDossierRequest{
+		RequestRef: "request:intake-dossier-egress-race",
+		DossierRef: prepared.Dossier.Ref(), Confirm: true,
+	}
+	results := make([]ConfirmIntakeDossierResult, 2)
+	errs := make([]error, 2)
+	var wait sync.WaitGroup
+	for index := range results {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			results[index], errs[index] = system.orchestrator.ConfirmIntakeDossier(ctx, system.access, request)
+		}()
+	}
+	<-arrived
+	<-arrived
+	close(release)
+	wait.Wait()
+	created := 0
+	for index, err := range errs {
+		if err != nil {
+			t.Fatalf("worker %d: %v", index, err)
+		}
+		if results[index].Created {
+			created++
+		}
+	}
+	if created != 1 || resolver.callCount() != 2 ||
+		results[0].Confirmation != results[1].Confirmation ||
+		results[0].Record.WorkItemAuthorities[0].EgressPolicy !=
+			results[1].Record.WorkItemAuthorities[0].EgressPolicy {
+		t.Fatalf("created=%d resolver_calls=%d results=%+v", created, resolver.callCount(), results)
+	}
+}
+
+func TestConfirmIntakeDossierRequiresReplayCapabilityOnlyForEgress(t *testing.T) {
+	ctx := context.Background()
+	egressSystem := newIntakeDossierOrchestratorTestSystem(t)
+	policy := testEgressPolicyAuthority(t, "egress-policy:dossier-required-reader", `{"revision":1}`)
+	prepared := prepareEgressIntakeDossier(
+		t, egressSystem, "request:intake-dossier-egress-reader-prepare",
+		[]EgressPolicyAuthority{policy},
+	)
+	resolver := &egressPolicyResolverStub{authority: policy}
+	egressSystem.orchestrator.egressPolicies = resolver
+	egressSystem.orchestrator.state = intakeDossierStateWithoutReplay{
+		StateRepository: egressSystem.orchestrator.state,
+	}
+	_, err := egressSystem.orchestrator.ConfirmIntakeDossier(ctx, egressSystem.access, ConfirmIntakeDossierRequest{
+		RequestRef: "request:intake-dossier-egress-reader",
+		DossierRef: prepared.Dossier.Ref(), Confirm: true,
+	})
+	if err == nil || err.Error() != "application.egress_policy_replay_reader_required" || len(resolver.refs) != 0 {
+		t.Fatalf("egress state without replay err=%v resolver_calls=%v", err, resolver.refs)
+	}
+
+	plainSystem := newIntakeDossierOrchestratorTestSystem(t)
+	plainPrepared, err := plainSystem.orchestrator.PrepareIntakeDossier(
+		ctx, plainSystem.access,
+		plainSystem.dossier.request(t, "request:intake-dossier-plain-reader-prepare"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plainSystem.orchestrator.state = intakeDossierStateWithoutReplay{
+		StateRepository: plainSystem.orchestrator.state,
+	}
+	plainResult, err := plainSystem.orchestrator.ConfirmIntakeDossier(ctx, plainSystem.access, ConfirmIntakeDossierRequest{
+		RequestRef: "request:intake-dossier-plain-reader",
+		DossierRef: plainPrepared.Record.Dossier.Ref(), Confirm: true,
+	})
+	if err != nil || !plainResult.Created {
+		t.Fatalf("plain state without replay result=%+v err=%v", plainResult, err)
+	}
+}
+
+func prepareEgressIntakeDossier(
+	t *testing.T,
+	system intakeDossierOrchestratorTestSystem,
+	requestRef string,
+	authorities []EgressPolicyAuthority,
+) IntakeDossierRecord {
+	t.Helper()
+	request := system.dossier.request(t, requestRef)
+	request.Plan.WorkItems[0].EgressPolicyRef = authorities[0].PolicyRef.String()
+	for index := 1; index < len(authorities); index++ {
+		item := request.Plan.WorkItems[0]
+		item.Key += ":" + authorities[index].PolicyRef.String()
+		item.Objective += " " + authorities[index].PolicyRef.String()
+		item.RequiredTests = nil
+		item.EgressPolicyRef = authorities[index].PolicyRef.String()
+		request.Plan.WorkItems = append(request.Plan.WorkItems, item)
+	}
+	prepared, err := system.orchestrator.PrepareIntakeDossier(
+		context.Background(), system.access, request,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prepared.Record
 }
 
 func assertConfirmationRepositoryCounts(

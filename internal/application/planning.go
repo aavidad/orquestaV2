@@ -48,6 +48,7 @@ type WorkItemSpec struct {
 	SkillRefs           []string
 	ToolRefs            []string
 	CapabilityRefs      []string
+	EgressPolicyRef     string
 	OutputContract      goal.OutputContractKind
 	BudgetDemand        governance.BudgetDemand
 	SecurityCriticality governance.SecurityCriticality
@@ -299,6 +300,11 @@ func compileWorkItemSpec(
 	scope workItemCompileScope,
 	resolver workItemRefResolver,
 ) (goal.WorkItem, error) {
+	if spec.EgressPolicyRef != "" {
+		if _, err := NewEgressPolicyRef(spec.EgressPolicyRef); err != nil {
+			return goal.WorkItem{}, err
+		}
+	}
 	phaseKey, err := goal.NewPhaseKey(spec.Phase)
 	if err != nil {
 		return goal.WorkItem{}, err
@@ -552,7 +558,10 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 	declaresGovernance := planDeclaresGovernance(spec)
 	declaresRequiredTests := planDeclaresRequiredTests(spec)
 	declaresCouncil := planDeclaresCouncil(spec)
-	if declaresCouncil {
+	declaresEgressPolicy := planDeclaresEgressPolicy(spec)
+	if declaresEgressPolicy {
+		version = "orquesta.plan.v5"
+	} else if declaresCouncil {
 		version = "orquesta.plan.v4"
 	} else if declaresRequiredTests {
 		version = "orquesta.plan.v3"
@@ -606,6 +615,10 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 		writeFingerprintStrings(digest, "skills", item.SkillRefs)
 		writeFingerprintStrings(digest, "tools", item.ToolRefs)
 		writeFingerprintStrings(digest, "capabilities", item.CapabilityRefs)
+		if declaresEgressPolicy {
+			writeFingerprintField(digest, "egress_policy_ref")
+			writeFingerprintField(digest, item.EgressPolicyRef)
+		}
 		if declaresGovernance {
 			writeFingerprintField(digest, "governance")
 			writeFingerprintField(digest, item.BudgetDemand.Ref)
@@ -619,6 +632,18 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 			writeFingerprintField(digest, string(item.ReasoningEffort))
 		}
 	}
+}
+
+func planDeclaresEgressPolicy(spec *PlanSpec) bool {
+	if spec == nil {
+		return false
+	}
+	for _, item := range spec.WorkItems {
+		if item.EgressPolicyRef != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func planDeclaresCouncil(spec *PlanSpec) bool {

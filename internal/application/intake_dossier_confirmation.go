@@ -101,6 +101,35 @@ func (orchestrator *Orchestrator) ConfirmIntakeDossier(
 	fingerprint := intakeDossierConfirmationFingerprint(
 		request, principal, projectRef, dossier, authorization.Ref(),
 	)
+	if planDeclaresEgressPolicy(&plan) {
+		replayReader, available := orchestrator.state.(IntakeDossierConfirmationReplayReader)
+		if !available {
+			return ConfirmIntakeDossierResult{}, errors.New("application.egress_policy_replay_reader_required")
+		}
+		persisted, found, replayErr := replayReader.ReplayIntakeDossierConfirmation(
+			ctx,
+			GoalSubmissionReplayRequest{
+				RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
+				RequestedBy: principal.Ref, ProjectRef: projectRef,
+			},
+		)
+		if replayErr != nil {
+			return ConfirmIntakeDossierResult{}, replayErr
+		}
+		if found {
+			if err := ValidatePersistedIntakeDossierConfirmationRecord(
+				dossier, authorization, persisted,
+			); err != nil {
+				return ConfirmIntakeDossierResult{}, err
+			}
+			if err := validateHistoricalEgressAuthorities(&plan, persisted.Goal); err != nil {
+				return ConfirmIntakeDossierResult{}, err
+			}
+			return ConfirmIntakeDossierResult{
+				Record: persisted.Goal, Confirmation: persisted.Confirmation,
+			}, nil
+		}
+	}
 	createState, err := orchestrator.prepareGoalCreation(
 		ctx, submission, principal, projectRef, authorization, now,
 		IntakeDossierConfirmationAppSpecReason(dossier.Ref()), fingerprint,
@@ -129,10 +158,18 @@ func (orchestrator *Orchestrator) ConfirmIntakeDossier(
 		); err != nil {
 			return ConfirmIntakeDossierResult{}, err
 		}
+		if err := validatePersistedWorkItemAuthorities(
+			createState.WorkItemAuthorities, persisted.Goal.WorkItemAuthorities,
+		); err != nil {
+			return ConfirmIntakeDossierResult{}, err
+		}
 	}
 	if err := ValidatePersistedIntakeDossierConfirmationRecord(
 		dossier, authorization, persisted,
 	); err != nil {
+		return ConfirmIntakeDossierResult{}, err
+	}
+	if err := validateHistoricalEgressAuthorities(&plan, persisted.Goal); err != nil {
 		return ConfirmIntakeDossierResult{}, err
 	}
 	return ConfirmIntakeDossierResult{

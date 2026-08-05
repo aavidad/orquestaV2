@@ -42,6 +42,7 @@ type Dependencies struct {
 	AgentCapabilities       ports.AgentCapabilities
 	ExecutionSessions       ports.ExecutionSessionBroker
 	PostArtifactMailbox     PostArtifactMailboxAdmitter
+	EgressPolicies          EgressPolicyResolver
 	CapacitySources         []FuenteCapacidadColocacionAgente
 	CapacityObservationWait time.Duration
 }
@@ -75,6 +76,7 @@ type Orchestrator struct {
 	agentCapabilities       ports.AgentCapabilities
 	executionSessions       ports.ExecutionSessionBroker
 	postArtifactMailbox     PostArtifactMailboxAdmitter
+	egressPolicies          EgressPolicyResolver
 	capacitySources         []FuenteCapacidadColocacionAgente
 	capacityObservationWait time.Duration
 }
@@ -199,6 +201,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		agentCapabilities:       cloneAgentCapabilities(dependencies.AgentCapabilities),
 		executionSessions:       dependencies.ExecutionSessions,
 		postArtifactMailbox:     dependencies.PostArtifactMailbox,
+		egressPolicies:          dependencies.EgressPolicies,
 		capacitySources:         capacitySources,
 		capacityObservationWait: dependencies.CapacityObservationWait,
 	}, nil

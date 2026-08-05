@@ -273,10 +273,17 @@ func (orchestrator *Orchestrator) buildDirectorPlanState(ctx context.Context, re
 		return ApplyDirectorPlanState{}, err
 	}
 	allItems, oldItems := updated.WorkItems(), current.Goal.WorkItems()
-	newAuthorities := workItemAuthorities(
-		allItems[len(oldItems):], principal.Ref, identity.PermissionGoalsDirect,
+	egressPolicies, err := orchestrator.resolvePlanEgressPolicies(ctx, &request.Plan)
+	if err != nil {
+		return ApplyDirectorPlanState{}, err
+	}
+	newAuthorities, err := workItemAuthoritiesWithEgress(
+		allItems[len(oldItems):], egressPolicies, principal.Ref, identity.PermissionGoalsDirect,
 		EffectApprovalSourceDirectorDecision, authorization, now,
 	)
+	if err != nil {
+		return ApplyDirectorPlanState{}, err
+	}
 	authorities := append(append([]WorkItemAuthority(nil), current.WorkItemAuthorities...), newAuthorities...)
 	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(
 		ctx, updated, current.Executions, authorities, goalPolicy, now,

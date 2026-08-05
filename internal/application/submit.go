@@ -53,6 +53,28 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, access Access, req
 	}
 	now = authorizationCausalFloor(now, authorizationReceipt)
 	fingerprint := submissionFingerprint(access, request)
+	if planDeclaresEgressPolicy(request.Plan) {
+		replayReader, available := orchestrator.state.(GoalSubmissionReplayReader)
+		if !available {
+			return SubmitResult{}, errors.New("application.egress_policy_replay_reader_required")
+		}
+		record, found, replayErr := replayReader.ReplayGoalSubmission(ctx, GoalSubmissionReplayRequest{
+			RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
+			RequestedBy: principal.Ref, ProjectRef: projectRef,
+		})
+		if replayErr != nil {
+			return SubmitResult{}, replayErr
+		}
+		if found {
+			if err := validateCreatedRecord(request, fingerprint, principal, projectRef, record); err != nil {
+				return SubmitResult{}, err
+			}
+			if err := validateHistoricalEgressAuthorities(request.Plan, record); err != nil {
+				return SubmitResult{}, err
+			}
+			return SubmitResult{Record: record}, nil
+		}
+	}
 	createState, err := orchestrator.prepareGoalCreation(
 		ctx, request, principal, projectRef, authorizationReceipt, now,
 		initialAppSpecReason, fingerprint,
@@ -70,8 +92,16 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, access Access, req
 		); err != nil {
 			return SubmitResult{}, err
 		}
+		if err := validatePersistedWorkItemAuthorities(
+			createState.WorkItemAuthorities, record.WorkItemAuthorities,
+		); err != nil {
+			return SubmitResult{}, err
+		}
 	}
 	if err := validateCreatedRecord(request, fingerprint, principal, projectRef, record); err != nil {
+		return SubmitResult{}, err
+	}
+	if err := validateHistoricalEgressAuthorities(request.Plan, record); err != nil {
 		return SubmitResult{}, err
 	}
 	return SubmitResult{Record: record, Created: created}, nil
@@ -146,10 +176,17 @@ func (orchestrator *Orchestrator) prepareGoalCreation(
 	if err != nil {
 		return CreateGoalState{}, err
 	}
-	authorities := workItemAuthorities(
-		aggregate.WorkItems(), principal.Ref, identity.PermissionGoalsCreate,
+	egressPolicies, err := orchestrator.resolvePlanEgressPolicies(ctx, request.Plan)
+	if err != nil {
+		return CreateGoalState{}, err
+	}
+	authorities, err := workItemAuthoritiesWithEgress(
+		aggregate.WorkItems(), egressPolicies, principal.Ref, identity.PermissionGoalsCreate,
 		EffectApprovalSourceGoalConfirmation, authorizationReceipt, now,
 	)
+	if err != nil {
+		return CreateGoalState{}, err
+	}
 	executions, actions, scheduledEvents, err := orchestrator.scheduleReady(
 		ctx, aggregate, nil, authorities,
 		orchestrator.budgetPolicy.effectPolicy(), now,
