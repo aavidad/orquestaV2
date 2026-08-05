@@ -132,17 +132,8 @@ func DecodificarAperturaServicioHostV1(lector io.Reader) (AperturaServicioHostV1
 		return AperturaServicioHostV1{}, errorAperturaServicioHost("trama_incompleta")
 	}
 
-	if !utf8.Valid(contenido) || !escapesUnicodeJSONValidos(contenido) ||
-		!estructuraJSONAperturaServicioHostValida(contenido) {
-		return AperturaServicioHostV1{}, errorAperturaServicioHost("json_invalido")
-	}
 	var apertura AperturaServicioHostV1
-	decodificador := json.NewDecoder(bytes.NewReader(contenido))
-	decodificador.DisallowUnknownFields()
-	if err := decodificador.Decode(&apertura); err != nil {
-		return AperturaServicioHostV1{}, errorAperturaServicioHost("json_invalido")
-	}
-	if err := decodificador.Decode(&struct{}{}); err != io.EOF {
+	if !decodificarObjetoJSONEstricto(contenido, esquemaAperturaServicioHostV1, &apertura) {
 		return AperturaServicioHostV1{}, errorAperturaServicioHost("json_invalido")
 	}
 	if err := ValidarAperturaServicioHostV1(apertura); err != nil {
@@ -151,41 +142,14 @@ func DecodificarAperturaServicioHostV1(lector io.Reader) (AperturaServicioHostV1
 	return apertura, nil
 }
 
-// estructuraJSONAperturaServicioHostValida conserva la semántica de serde:
-// un campo repetido tampoco puede ganar por orden de aparición.
-func estructuraJSONAperturaServicioHostValida(contenido []byte) bool {
-	camposPermitidos := map[string]struct{}{
-		"protocolo": {}, "ejecucion_ref": {}, "run_ref": {}, "cid_vsock": {},
-		"plan_sha256": {}, "concesion_sha256": {}, "cerca": {}, "papel": {},
-		"servicio_ref": {}, "identidad_ref": {}, "identidad_sha256": {},
-		"firecracker_pid": {}, "firecracker_uid": {},
-	}
-	decodificador := json.NewDecoder(bytes.NewReader(contenido))
-	primero, err := decodificador.Token()
-	if err != nil || primero != json.Delim('{') {
-		return false
-	}
-	vistos := make(map[string]struct{}, 13)
-	for decodificador.More() {
-		campo, err := decodificador.Token()
-		nombre, esNombre := campo.(string)
-		if err != nil || !esNombre {
-			return false
-		}
-		if _, permitido := camposPermitidos[nombre]; !permitido {
-			return false
-		}
-		if _, repetido := vistos[nombre]; repetido {
-			return false
-		}
-		vistos[nombre] = struct{}{}
-		var valor json.RawMessage
-		if err := decodificador.Decode(&valor); err != nil {
-			return false
-		}
-	}
-	ultimo, err := decodificador.Token()
-	return err == nil && ultimo == json.Delim('}') && len(vistos) == len(camposPermitidos)
+var esquemaAperturaServicioHostV1 = esquemaObjetoJSONEstricto{
+	"protocolo": esquemaEscalarJSONEstricto, "ejecucion_ref": esquemaEscalarJSONEstricto,
+	"run_ref": esquemaEscalarJSONEstricto, "cid_vsock": esquemaEscalarJSONEstricto,
+	"plan_sha256": esquemaEscalarJSONEstricto, "concesion_sha256": esquemaEscalarJSONEstricto,
+	"cerca": esquemaEscalarJSONEstricto, "papel": esquemaEscalarJSONEstricto,
+	"servicio_ref": esquemaEscalarJSONEstricto, "identidad_ref": esquemaEscalarJSONEstricto,
+	"identidad_sha256": esquemaEscalarJSONEstricto, "firecracker_pid": esquemaEscalarJSONEstricto,
+	"firecracker_uid": esquemaEscalarJSONEstricto,
 }
 
 func cadenasAperturaServicioHostUTF8Validas(apertura AperturaServicioHostV1) bool {
@@ -238,65 +202,6 @@ func codificarJSONAperturaServicioHost(apertura AperturaServicioHostV1) ([]byte,
 		resultado = append(resultado, contenido[indice])
 	}
 	return resultado, nil
-}
-
-// encoding/json sustituye surrogates UTF-16 aislados por U+FFFD. serde_json
-// los rechaza; esta pasada preserva esa misma frontera antes de decodificar.
-func escapesUnicodeJSONValidos(contenido []byte) bool {
-	dentroCadena := false
-	for indice := 0; indice < len(contenido); indice++ {
-		switch contenido[indice] {
-		case '"':
-			dentroCadena = !dentroCadena
-		case '\\':
-			if !dentroCadena || indice+1 >= len(contenido) {
-				continue
-			}
-			if contenido[indice+1] != 'u' {
-				indice++
-				continue
-			}
-			primero, ok := valorEscapeUnicode(contenido, indice)
-			if !ok {
-				return false
-			}
-			indice += 5
-			if primero >= 0xd800 && primero <= 0xdbff {
-				if indice+6 >= len(contenido) || contenido[indice+1] != '\\' || contenido[indice+2] != 'u' {
-					return false
-				}
-				segundo, segundoOK := valorEscapeUnicode(contenido, indice+1)
-				if !segundoOK || segundo < 0xdc00 || segundo > 0xdfff {
-					return false
-				}
-				indice += 6
-			} else if primero >= 0xdc00 && primero <= 0xdfff {
-				return false
-			}
-		}
-	}
-	return !dentroCadena
-}
-
-func valorEscapeUnicode(contenido []byte, inicio int) (uint16, bool) {
-	if inicio+5 >= len(contenido) || contenido[inicio] != '\\' || contenido[inicio+1] != 'u' {
-		return 0, false
-	}
-	var valor uint16
-	for _, digito := range contenido[inicio+2 : inicio+6] {
-		valor <<= 4
-		switch {
-		case digito >= '0' && digito <= '9':
-			valor += uint16(digito - '0')
-		case digito >= 'a' && digito <= 'f':
-			valor += uint16(digito-'a') + 10
-		case digito >= 'A' && digito <= 'F':
-			valor += uint16(digito-'A') + 10
-		default:
-			return 0, false
-		}
-	}
-	return valor, true
 }
 
 func referenciaExternaServicioHostValida(valor string) bool {
