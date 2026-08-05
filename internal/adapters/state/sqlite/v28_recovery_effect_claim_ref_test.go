@@ -113,7 +113,7 @@ func claimSQLiteV28Recovery(
 	requirements, err := readAgentRequirementsBatch(ctx, transaction, candidates)
 	sqliteTestNoError(t, err)
 	selected, found, err := selectClaimCandidate(
-		ctx, transaction, candidates, requirements, sqliteTestCapabilities(), system.capacidad, now,
+		ctx, transaction, candidates, requirements, sqliteTestCapabilities(), system.capacidad, false, now,
 	)
 	if err != nil || !found {
 		t.Fatalf("select recovery candidate found=%t err=%v", found, err)

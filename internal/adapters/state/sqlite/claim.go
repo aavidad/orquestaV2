@@ -104,7 +104,7 @@ func (repository *Repository) ClaimNextAction(
 			return application.ActionClaim{}, false, err
 		}
 		selected, found, err = selectClaimCandidate(ctx, transaction, candidates, requirements,
-			request.Capabilities, request.CapacityCandidates, now)
+			request.Capabilities, request.CapacityCandidates, request.ExcludeLaunch, now)
 		if err != nil {
 			return application.ActionClaim{}, false, err
 		}
@@ -183,15 +183,54 @@ type claimSelection struct {
 	budgetExhaustion         application.RetryBudgetExhaustion
 	recoveryEffectAttemptRef string
 	capacidad                seleccionCapacidadReclamo
+	recovery                 *claimRecoverySeed
 }
+
+type claimRecoverySeed struct {
+	record     application.GoalRecord
+	candidates []claimRecoveryCandidate
+}
+
+type claimRecoveryCandidate struct {
+	attemptRef string
+	approval   application.EffectApproval
+}
+
+type claimRecoveryState uint8
+
+const (
+	claimRecoveryAbsent claimRecoveryState = iota
+	claimRecoveryBlocking
+	claimRecoveryResolved
+	claimRecoveryParked
+)
 
 func selectClaimCandidate(
 	ctx context.Context, tx *sql.Tx, candidates []claimCandidate,
 	requirements map[claimRequirementKey]ports.AgentRequirements,
-	capabilities ports.AgentCapabilities, capacityCandidates []application.AgentCapacityPlacementCandidate, now time.Time,
+	capabilities ports.AgentCapabilities, capacityCandidates []application.AgentCapacityPlacementCandidate,
+	excludeLaunch bool, now time.Time,
 ) (claimSelection, bool, error) {
 	for index := range candidates {
 		candidate := &candidates[index]
+		recovery, recoveryState, err := prepareLaunchRecoveryClaim(ctx, tx, candidate, now)
+		if err != nil {
+			return claimSelection{}, false, err
+		}
+		if recoveryState == claimRecoveryParked ||
+			recoveryState == claimRecoveryResolved && excludeLaunch {
+			continue
+		}
+		if recoveryState == claimRecoveryBlocking {
+			matches, err := claimCandidateMatches(*candidate, requirements, capabilities)
+			if err != nil {
+				return claimSelection{}, false, err
+			}
+			if !matches {
+				continue
+			}
+			return recovery, true, nil
+		}
 		exhaustion, local, err := admitIrreversibleRetryBeforeExternal(ctx, tx, candidate)
 		if err != nil {
 			return claimSelection{}, false, err
@@ -236,6 +275,111 @@ func selectClaimCandidate(
 		}, true, nil
 	}
 	return claimSelection{}, false, nil
+}
+
+// prepareLaunchRecoveryClaim detects a physical footprint before any normal
+// admission. Once a launch has crossed that boundary it may only continue by
+// recovering the exact historical authority; it must never fall back to a new
+// approval, budget reservation or capacity observation.
+func prepareLaunchRecoveryClaim(
+	ctx context.Context,
+	tx *sql.Tx,
+	candidate *claimCandidate,
+	now time.Time,
+) (claimSelection, claimRecoveryState, error) {
+	if candidate.governanceVersion != 1 || candidate.action.Kind != application.ActionLaunchAgent ||
+		candidate.action.EffectIntentRef == "" {
+		return claimSelection{}, claimRecoveryAbsent, nil
+	}
+	var footprints int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM effect_attempts
+WHERE action_ref=? AND intent_ref=?`, candidate.action.Ref, candidate.action.EffectIntentRef).Scan(&footprints); err != nil {
+		return claimSelection{}, claimRecoveryAbsent, mapDatabaseError(err)
+	}
+	if footprints == 0 {
+		return claimSelection{}, claimRecoveryAbsent, nil
+	}
+	intent, found, err := requireCandidateEffectIntent(ctx, tx, *candidate)
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	if !found {
+		return claimSelection{}, claimRecoveryBlocking, conflict(errors.New("sqlite.claim_recovery_effect_intent_missing"))
+	}
+	candidate.action.EffectIntent = intent
+	record, err := readGoalRecord(ctx, tx, candidate.action.GoalRef.String())
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	attempt, preflightErr := application.PreflightAgentLaunchRecoveryAttempt(record, candidate.action)
+	if preflightErr != nil {
+		if !application.AgentLaunchHasBlockingEffectAttempt(record, candidate.action) {
+			return claimSelection{}, claimRecoveryResolved, nil
+		}
+		return claimSelection{}, claimRecoveryBlocking,
+			conflict(errors.New("sqlite.claim_recovery_effect_selection_conflict"))
+	}
+	approval, unique := exactRecoveryApproval(record.EffectApprovals, attempt.ApprovalRef)
+	if !unique {
+		return claimSelection{}, claimRecoveryBlocking,
+			conflict(errors.New("sqlite.claim_recovery_effect_approval_conflict"))
+	}
+	current, err := authorizationMembershipCurrent(ctx, tx, intent.Authority)
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	if current {
+		current, err = authorizationMembershipCurrent(ctx, tx, approval.AuthorizationReceipt)
+		if err != nil {
+			return claimSelection{}, claimRecoveryBlocking, err
+		}
+	}
+	if !current {
+		if err := parkLaunchWithStaleAdmission(ctx, tx, *candidate, intent, now); err != nil {
+			return claimSelection{}, claimRecoveryBlocking, err
+		}
+		return claimSelection{}, claimRecoveryParked, nil
+	}
+	reservation, found, err := readActiveBudgetReservation(ctx, tx, candidate.action.Ref)
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	if !found || !reservationMatchesCandidate(reservation, *candidate, intent.PolicyHash) {
+		return claimSelection{}, claimRecoveryBlocking, conflict(errors.New("sqlite.claim_recovery_budget_reservation_conflict"))
+	}
+	capacity, placement, found, err := leerReservaCapacidadAccion(ctx, tx, candidate.action.Ref)
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	if !found {
+		return claimSelection{}, claimRecoveryBlocking, conflict(errors.New("sqlite.claim_recovery_capacity_reservation_missing"))
+	}
+	return claimSelection{
+		candidate:         *candidate,
+		reservation:       reservation,
+		reservationExists: true,
+		capacidad: seleccionCapacidadReclamo{
+			activa: true, repetida: true, reserva: capacity, colocacion: placement,
+		},
+		recovery: &claimRecoverySeed{record: record, candidates: []claimRecoveryCandidate{{
+			attemptRef: attempt.Ref, approval: approval,
+		}}},
+	}, claimRecoveryBlocking, nil
+}
+
+func exactRecoveryApproval(
+	approvals []application.EffectApproval,
+	ref string,
+) (application.EffectApproval, bool) {
+	var selected application.EffectApproval
+	matches := 0
+	for _, approval := range approvals {
+		if approval.Ref == ref {
+			selected = approval
+			matches++
+		}
+	}
+	return selected, matches == 1
 }
 
 func claimCandidateMatches(
@@ -373,8 +517,16 @@ func claimSelectedCandidate(
 	if candidate.deliveryAttempt < 0 || uint64(candidate.deliveryAttempt) >= maxSQLiteInteger {
 		return application.ActionClaim{}, invalid(fmt.Errorf("sqlite.action_attempt_invalid"))
 	}
+	recoveryColumn, err := sqliteTableHasColumn(ctx, tx, "outbox", "recovery_effect_attempt_ref")
+	if err != nil {
+		return application.ActionClaim{}, mapDatabaseError(err)
+	}
+	if !recoveryColumn && (selected.recovery != nil ||
+		selected.disposition == application.ActionClaimDispositionRecoverEffect) {
+		return application.ActionClaim{}, conflict(errors.New("sqlite.claim_recovery_effect_schema_missing"))
+	}
 	deliveryAttempt, fence := candidate.deliveryAttempt+1, int64(0)
-	err := tx.QueryRowContext(ctx, `INSERT INTO work_item_fences(goal_ref,work_item_ref,fence) VALUES(?,?,1)
+	err = tx.QueryRowContext(ctx, `INSERT INTO work_item_fences(goal_ref,work_item_ref,fence) VALUES(?,?,1)
 ON CONFLICT(goal_ref,work_item_ref) DO UPDATE SET fence=work_item_fences.fence+1 RETURNING fence`,
 		candidate.action.GoalRef.String(), candidate.action.WorkItemRef.String()).Scan(&fence)
 	if err != nil {
@@ -382,6 +534,14 @@ ON CONFLICT(goal_ref,work_item_ref) DO UPDATE SET fence=work_item_fences.fence+1
 	}
 	if fence <= 0 {
 		return application.ActionClaim{}, invalid(errors.New("sqlite.claim_fence_invalid"))
+	}
+	if selected.recovery != nil {
+		selected, err = finalizeLaunchRecoveryClaim(
+			selected, request, leaseUntil, uint64(deliveryAttempt), uint64(fence),
+		)
+		if err != nil {
+			return application.ActionClaim{}, err
+		}
 	}
 	reservation := selected.reservation
 	if candidate.governanceVersion == 1 && candidate.action.Kind == application.ActionLaunchAgent {
@@ -404,10 +564,6 @@ ON CONFLICT(goal_ref,work_item_ref) DO UPDATE SET fence=work_item_fences.fence+1
 	}
 	recoveryAssignment := ""
 	arguments := []any{request.Token, request.WorkerRef, requiredTime(leaseUntil), deliveryAttempt, fence}
-	recoveryColumn, err := sqliteTableHasColumn(ctx, tx, "outbox", "recovery_effect_attempt_ref")
-	if err != nil {
-		return application.ActionClaim{}, mapDatabaseError(err)
-	}
 	if recoveryColumn {
 		recoveryAssignment = ",recovery_effect_attempt_ref=?"
 		arguments = append(arguments, nullableString(selected.recoveryEffectAttemptRef))
@@ -440,6 +596,42 @@ AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, arguments...
 		}
 	}
 	return claim, nil
+}
+
+func finalizeLaunchRecoveryClaim(
+	selected claimSelection,
+	request application.ClaimRequest,
+	leaseUntil time.Time,
+	deliveryAttempt, fence uint64,
+) (claimSelection, error) {
+	if selected.recovery == nil {
+		return selected, nil
+	}
+	winners := make([]claimRecoveryCandidate, 0, 1)
+	for _, candidate := range selected.recovery.candidates {
+		claim := application.ActionClaim{
+			Action: selected.candidate.action, Token: request.Token, WorkerRef: request.WorkerRef,
+			DeliveryAttempt: deliveryAttempt, Fence: fence,
+			Disposition:              application.ActionClaimDispositionRecoverEffect,
+			RecoveryEffectAttemptRef: candidate.attemptRef,
+			BudgetReservationRef:     selected.reservation.Ref,
+			BudgetReservation:        selected.reservation,
+			CapacityReservation:      selected.capacidad.reserva,
+			ReferenciaColocacion:     selected.capacidad.colocacion,
+			EffectApproval:           candidate.approval,
+			LeaseUntil:               leaseUntil,
+		}
+		if _, err := application.SelectAgentLaunchRecoveryAttempt(selected.recovery.record, claim); err == nil {
+			winners = append(winners, candidate)
+		}
+	}
+	if len(winners) != 1 {
+		return claimSelection{}, conflict(errors.New("sqlite.claim_recovery_effect_selection_conflict"))
+	}
+	selected.disposition = application.ActionClaimDispositionRecoverEffect
+	selected.recoveryEffectAttemptRef = winners[0].attemptRef
+	selected.approval = winners[0].approval
+	return selected, nil
 }
 
 func observeIdentityMatches(candidate claimCandidate, capabilities ports.AgentCapabilities) bool {
@@ -549,7 +741,11 @@ WHERE o.completed_at IS NULL
         AND stop.governance_version = 1
         AND stop.retired_at IS NULL AND stop.quarantined_at IS NULL
   ))
-  AND (? = 0 OR o.kind <> 'launch_agent')
+  AND (? = 0 OR o.kind <> 'launch_agent' OR EXISTS (
+      SELECT 1 FROM effect_attempts recovery_attempt
+      WHERE recovery_attempt.action_ref=o.ref
+        AND recovery_attempt.intent_ref=o.effect_intent_ref
+  ))
   AND (? = 0 OR (
       CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
       CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,

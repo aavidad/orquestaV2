@@ -170,6 +170,42 @@ func TestAgentLaunchRecoverySelectorSkipsOnlyValidZeroRelease(t *testing.T) {
 	})
 }
 
+func TestAgentLaunchRecoveryPreflightIgnoresReleasedPeerApproval(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixture(t)
+	fixture.record.EffectAttempts[0].ActionFence++
+	fixture.attempt = fixture.record.EffectAttempts[0]
+	fixture.claim.Fence = fixture.attempt.ActionFence + 1
+	previous := fixture.attempt
+	previous.Ref += ":released-revoked-approver"
+	previous.ApprovalRef = "effect-approval:released-revoked-approver"
+	previous.ActionFence--
+	previous.WorkerRef = "worker:released-revoked-approver"
+	fixture.record.EffectAttempts = append([]EffectAttempt{previous}, fixture.record.EffectAttempts...)
+	fixture.record.BudgetSettlements = append(fixture.record.BudgetSettlements,
+		exactZeroReleaseForRecovery(fixture.claim.BudgetReservation, previous))
+
+	selected, err := PreflightAgentLaunchRecoveryAttempt(fixture.record, fixture.claim.Action)
+	if err != nil || selected != fixture.attempt {
+		t.Fatalf("selected=%+v err=%v ambiguous=%+v", selected, err, fixture.attempt)
+	}
+}
+
+func TestAgentLaunchBlockingAttemptAdmissionUsesExactZeroRelease(t *testing.T) {
+	fixture := newAgentLaunchRecoveryFixture(t)
+	if !AgentLaunchHasBlockingEffectAttempt(fixture.record, fixture.claim.Action) {
+		t.Fatal("ambiguous launch attempt did not block normal admission")
+	}
+	fixture.record.BudgetSettlements = append(fixture.record.BudgetSettlements,
+		exactZeroReleaseForRecovery(fixture.claim.BudgetReservation, fixture.attempt))
+	if AgentLaunchHasBlockingEffectAttempt(fixture.record, fixture.claim.Action) {
+		t.Fatal("exact causal zero-release kept blocking normal admission")
+	}
+	fixture.record.EffectAttempts[0].ClaimLeaseUntil = time.Time{}
+	if !AgentLaunchHasBlockingEffectAttempt(fixture.record, fixture.claim.Action) {
+		t.Fatal("malformed historical authority reopened normal admission")
+	}
+}
+
 func TestAgentLaunchRecoveryRejectsLeaseFenceAndCrossBindings(t *testing.T) {
 	tests := map[string]func(*agentLaunchRecoveryFixture){
 		"lease missing": func(f *agentLaunchRecoveryFixture) { f.record.EffectAttempts[0].ClaimLeaseUntil = time.Time{} },

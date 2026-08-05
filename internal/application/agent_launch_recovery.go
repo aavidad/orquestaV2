@@ -36,31 +36,51 @@ func SelectAgentLaunchRecoveryAttempt(record GoalRecord, claim ActionClaim) (Eff
 	if err := validateAgentLaunchRecoveryClaim(record, claim); err != nil {
 		return EffectAttempt{}, err
 	}
-	intent := claim.Action.EffectIntent
-	if recoveryReceiptsRelated(record, claim.Action.Ref, intent.Ref) {
+	attempt, err := PreflightAgentLaunchRecoveryAttempt(record, claim.Action)
+	if err != nil || attempt.Ref != claim.RecoveryEffectAttemptRef || claim.Fence <= attempt.ActionFence {
 		return EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	if err := validateRecoverableLaunchAttempt(record, claim, attempt); err != nil {
+		return EffectAttempt{}, err
+	}
+	return attempt, nil
+}
+
+// PreflightAgentLaunchRecoveryAttempt returns the sole physical launch attempt
+// that still has an ambiguous outcome. It is pure: receipts veto recovery,
+// exact causal zero-releases are discarded, and malformed or non-unique
+// history is never converted into authority.
+func PreflightAgentLaunchRecoveryAttempt(record GoalRecord, action ActionRecord) (EffectAttempt, error) {
+	blocking, err := blockingAgentLaunchAttempts(record, action)
+	if err != nil || len(blocking) != 1 {
+		return EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
+	}
+	return blocking[0], nil
+}
+
+func blockingAgentLaunchAttempts(record GoalRecord, action ActionRecord) ([]EffectAttempt, error) {
+	intent := action.EffectIntent
+	if action.Kind != ActionLaunchAgent || action.EffectIntentRef != intent.Ref ||
+		ValidateEffectIntent(intent) != nil || intent.ActionRef != action.Ref ||
+		intent.ActionKind != ActionLaunchAgent || intent.Kind != EffectKindAgentLaunch ||
+		intent.Subject.GoalRef != action.GoalRef || intent.Subject.WorkItemRef != action.WorkItemRef ||
+		intent.Subject.ExecutionRef != action.ExecutionRef || intent.Subject.PlanGeneration != action.PlanGeneration ||
+		recoveryReceiptsRelated(record, action.Ref, intent.Ref) {
+		return nil, ErrAgentLaunchRecoveryInvalid
 	}
 	blocking := make([]EffectAttempt, 0, 1)
 	for _, attempt := range record.EffectAttempts {
-		if attempt.ActionRef != claim.Action.Ref || attempt.IntentRef != intent.Ref {
+		if attempt.ActionRef != action.Ref || attempt.IntentRef != intent.Ref {
 			continue
 		}
 		if err := validateHistoricalLaunchAttemptIdentity(intent, attempt); err != nil {
-			return EffectAttempt{}, err
+			return nil, err
 		}
-		if effectAttemptDefinitelyUnapplied(record, attempt) {
-			continue
+		if !effectAttemptDefinitelyUnapplied(record, attempt) {
+			blocking = append(blocking, attempt)
 		}
-		blocking = append(blocking, attempt)
 	}
-	if len(blocking) != 1 || blocking[0].Ref != claim.RecoveryEffectAttemptRef ||
-		claim.Fence <= blocking[0].ActionFence {
-		return EffectAttempt{}, ErrAgentLaunchRecoveryInvalid
-	}
-	if err := validateRecoverableLaunchAttempt(record, claim, blocking[0]); err != nil {
-		return EffectAttempt{}, err
-	}
-	return blocking[0], nil
+	return blocking, nil
 }
 
 // BuildAgentLaunchRecoveryRequest preserves the already-derived request and

@@ -123,7 +123,11 @@ func TestClaimSelectionExcludeLaunchPreservesStopAndObserveProgress(t *testing.T
 }
 
 func TestClaimSelectionExcludeLaunchFilterGuardsWindowAndKeyset(t *testing.T) {
-	const filter = "AND (? = 0 OR o.kind <> 'launch_agent')"
+	const filter = `AND (? = 0 OR o.kind <> 'launch_agent' OR EXISTS (
+      SELECT 1 FROM effect_attempts recovery_attempt
+      WHERE recovery_attempt.action_ref=o.ref
+        AND recovery_attempt.intent_ref=o.effect_intent_ref
+  ))`
 	if claimCandidateWindowSize != 16 {
 		t.Fatalf("candidate window = %d, want 16", claimCandidateWindowSize)
 	}
@@ -132,9 +136,11 @@ func TestClaimSelectionExcludeLaunchFilterGuardsWindowAndKeyset(t *testing.T) {
 	}
 	filterAt := strings.Index(claimCandidatesQuery, filter)
 	keysetAt := strings.Index(claimCandidatesQuery, "AND (? = 0 OR (")
+	orderAt := strings.LastIndex(claimCandidatesQuery, "ORDER BY CASE")
 	limitAt := strings.LastIndex(claimCandidatesQuery, "LIMIT ?")
-	if filterAt < 0 || keysetAt < 0 || limitAt < 0 || filterAt >= keysetAt || keysetAt >= limitAt {
-		t.Fatalf("filter/keyset/limit order = %d/%d/%d", filterAt, keysetAt, limitAt)
+	if filterAt < 0 || keysetAt < 0 || orderAt < 0 || limitAt < 0 ||
+		filterAt >= keysetAt || keysetAt >= orderAt || orderAt >= limitAt {
+		t.Fatalf("filter/keyset/order/limit order = %d/%d/%d/%d", filterAt, keysetAt, orderAt, limitAt)
 	}
 }
 

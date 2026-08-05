@@ -56,6 +56,19 @@ func priorEffectAttemptBlocksDispatch(record GoalRecord, action ActionRecord) bo
 	return false
 }
 
+// AgentLaunchHasBlockingEffectAttempt is the canonical admission boundary for
+// a launch that already has physical history. Only attempts proven unapplied
+// by one exact causal zero-release stop blocking normal admission. Malformed
+// historical authority remains blocking so callers cannot turn corruption
+// into permission to repeat an external effect.
+func AgentLaunchHasBlockingEffectAttempt(record GoalRecord, action ActionRecord) bool {
+	if action.Kind != ActionLaunchAgent || action.EffectIntentRef == "" {
+		return false
+	}
+	blocking, err := blockingAgentLaunchAttempts(record, action)
+	return err != nil || len(blocking) != 0
+}
+
 func effectAttemptHasReceipt(receipts []EffectReceipt, attempt EffectAttempt) bool {
 	for _, receipt := range receipts {
 		if receipt.AttemptRef == attempt.Ref && receipt.ActionRef == attempt.ActionRef &&
