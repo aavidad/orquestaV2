@@ -19,16 +19,20 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
-const appSpecsBackfillMarker = "-- orquesta:go-backfill app_specs"
+const (
+	appSpecsBackfillMarker                = "-- orquesta:go-backfill app_specs"
+	effectAttemptClaimLeaseBackfillMarker = "-- orquesta:go-backfill effect_attempt_claim_lease"
+)
 
 type migration struct {
-	version  int
-	name     string
-	checksum string
-	sql      string
-	preSQL   string
-	postSQL  string
-	backfill bool
+	version                         int
+	name                            string
+	checksum                        string
+	sql                             string
+	preSQL                          string
+	postSQL                         string
+	backfill                        bool
+	effectAttemptClaimLeaseBackfill bool
 }
 
 func applyMigrations(ctx context.Context, database *sql.DB) error {
@@ -156,6 +160,11 @@ func applyMigrationSteps(
 				return current, migrated, invalid(err)
 			}
 		}
+		if migration.effectAttemptClaimLeaseBackfill {
+			if err := backfillEffectAttemptClaimLeases(ctx, transaction); err != nil {
+				return current, migrated, invalid(err)
+			}
+		}
 		if strings.TrimSpace(migration.postSQL) != "" {
 			if _, err := transaction.ExecContext(ctx, migration.postSQL); err != nil {
 				return current, migrated, mapDatabaseError(err)
@@ -261,6 +270,16 @@ func loadMigrations() ([]migration, error) {
 		} else if len(parts) != 1 {
 			return nil, fmt.Errorf("sqlite.backfill_marker_unexpected")
 		}
+		leaseParts := strings.Split(loaded.preSQL, effectAttemptClaimLeaseBackfillMarker)
+		if version == 27 {
+			if len(leaseParts) != 2 || strings.TrimSpace(loaded.postSQL) != "" || loaded.backfill {
+				return nil, fmt.Errorf("sqlite.effect_attempt_claim_lease_backfill_marker_invalid")
+			}
+			loaded.preSQL, loaded.postSQL, loaded.effectAttemptClaimLeaseBackfill =
+				leaseParts[0], leaseParts[1], true
+		} else if len(leaseParts) != 1 {
+			return nil, fmt.Errorf("sqlite.backfill_marker_unexpected")
+		}
 		result = append(result, loaded)
 	}
 	sort.Slice(result, func(left, right int) bool { return result[left].version < result[right].version })
@@ -273,6 +292,110 @@ func loadMigrations() ([]migration, error) {
 		}
 	}
 	return result, nil
+}
+
+// backfillEffectAttemptClaimLeases never borrows a lease from a later claim.
+// It only copies the outbox bytes when the historical token encoded in the
+// attempt ref, fence and worker still identify that exact claim. A legacy NULL
+// remains admissible solely when a terminal receipt or one exact zero-release
+// makes physical reconciliation unnecessary.
+func backfillEffectAttemptClaimLeases(ctx context.Context, transaction *sql.Tx) error {
+	if _, err := transaction.ExecContext(ctx, `
+UPDATE effect_attempts AS attempt
+SET claim_lease_until = (
+ SELECT action.claimed_until FROM outbox action
+ WHERE action.ref=attempt.action_ref
+   AND action.fence=attempt.action_fence
+   AND action.claimed_by=attempt.worker_ref
+   AND action.claim_token IS NOT NULL
+   AND attempt.ref='effect-attempt:' || action.ref || ':' || action.claim_token
+   AND action.claimed_until>attempt.started_at
+)
+WHERE EXISTS (
+ SELECT 1 FROM outbox action
+ WHERE action.ref=attempt.action_ref
+   AND action.fence=attempt.action_fence
+   AND action.claimed_by=attempt.worker_ref
+   AND action.claim_token IS NOT NULL
+   AND attempt.ref='effect-attempt:' || action.ref || ':' || action.claim_token
+   AND action.claimed_until>attempt.started_at
+)`); err != nil {
+		return err
+	}
+
+	var ambiguous int
+	if err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM effect_attempts attempt
+WHERE attempt.claim_lease_until IS NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM effect_receipts receipt
+    WHERE receipt.attempt_ref=attempt.ref
+      AND receipt.intent_ref=attempt.intent_ref
+      AND receipt.intent_digest=attempt.intent_digest
+      AND receipt.approval_ref=attempt.approval_ref
+      AND receipt.project_ref=attempt.project_ref
+      AND receipt.goal_ref=attempt.goal_ref
+      AND receipt.work_item_ref=attempt.work_item_ref
+      AND receipt.execution_ref=attempt.execution_ref
+      AND receipt.plan_generation=attempt.plan_generation
+      AND receipt.app_spec_generation=attempt.app_spec_generation
+      AND receipt.spec_hash=attempt.spec_hash
+      AND receipt.actor_ref=attempt.actor_ref
+      AND receipt.action_ref=attempt.action_ref
+      AND receipt.action_fence=attempt.action_fence
+      AND receipt.idempotency_key=attempt.idempotency_key
+  )
+  AND NOT (
+    (SELECT COUNT(*) FROM budget_settlements related
+     WHERE related.causal_attempt_ref=attempt.ref)=1
+    AND
+    (SELECT COUNT(*)
+     FROM budget_settlements settlement
+     JOIN budget_reservations reservation ON reservation.ref=settlement.reservation_ref
+     WHERE settlement.causal_attempt_ref=attempt.ref
+       AND reservation.action_ref=attempt.action_ref
+       AND reservation.effect_intent_ref=attempt.intent_ref
+       AND reservation.fence<=attempt.action_fence
+       AND settlement.reserved_tokens=reservation.tokens
+       AND settlement.reserved_money_micros=reservation.money_micros
+       AND settlement.reserved_currency=reservation.currency
+       AND settlement.reserved_active_time_ns=reservation.active_time_ns
+       AND settlement.reserved_process_slots=reservation.process_slots
+       AND settlement.reserved_disk_bytes=reservation.disk_bytes
+       AND settlement.observed_tokens=0
+       AND settlement.observed_money_micros=0
+       AND settlement.observed_currency=reservation.currency
+       AND settlement.observed_active_time_ns=0
+       AND settlement.observed_process_slots=0
+       AND settlement.observed_disk_bytes=0
+       AND settlement.observed_known=31
+       AND settlement.observed_quality='exact'
+       AND settlement.charged_tokens=0
+       AND settlement.charged_money_micros=0
+       AND settlement.charged_currency=reservation.currency
+       AND settlement.charged_active_time_ns=0
+       AND settlement.charged_process_slots=0
+       AND settlement.charged_disk_bytes=0
+       AND settlement.released_tokens=reservation.tokens
+       AND settlement.released_money_micros=reservation.money_micros
+       AND settlement.released_currency=reservation.currency
+       AND settlement.released_active_time_ns=reservation.active_time_ns
+       AND settlement.released_process_slots=reservation.process_slots
+       AND settlement.released_disk_bytes=reservation.disk_bytes
+       AND settlement.overrun_tokens=0
+       AND settlement.overrun_money_micros=0
+       AND settlement.overrun_currency=reservation.currency
+       AND settlement.overrun_active_time_ns=0
+       AND settlement.overrun_process_slots=0
+       AND settlement.overrun_disk_bytes=0)=1
+  )`).Scan(&ambiguous); err != nil {
+		return err
+	}
+	if ambiguous != 0 {
+		return fmt.Errorf("sqlite.v27_effect_attempt_claim_lease_ambiguous:count=%d", ambiguous)
+	}
+	return nil
 }
 
 type legacyGoalRow struct {

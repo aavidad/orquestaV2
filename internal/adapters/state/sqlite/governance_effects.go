@@ -349,7 +349,8 @@ func effectAttemptMatchesClaim(attempt application.EffectAttempt, claim applicat
 		attempt.ApprovalRef == claim.EffectApproval.Ref && attempt.Subject == claim.Action.EffectIntent.Subject &&
 		attempt.ActionRef == claim.Action.Ref && attempt.ActionFence == claim.Fence &&
 		attempt.WorkerRef == claim.WorkerRef &&
-		attempt.IdempotencyKey == claim.Action.EffectIntent.IdempotencyKey && !attempt.StartedAt.IsZero()
+		attempt.IdempotencyKey == claim.Action.EffectIntent.IdempotencyKey && !attempt.StartedAt.IsZero() &&
+		attempt.ClaimLeaseUntil.Equal(claim.LeaseUntil.UTC()) && attempt.ClaimLeaseUntil.After(attempt.StartedAt)
 }
 
 func insertEffectAttempt(ctx context.Context, transaction *sql.Tx, attempt application.EffectAttempt) error {
@@ -358,15 +359,15 @@ INSERT INTO effect_attempts(
     ref, intent_ref, intent_digest, approval_ref, project_ref, goal_ref,
     work_item_ref, execution_ref, plan_generation, app_spec_generation,
     spec_hash, actor_ref, action_ref, action_fence, worker_ref,
-    idempotency_key, started_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    idempotency_key, started_at, claim_lease_until
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		attempt.Ref, attempt.IntentRef, attempt.IntentDigest, attempt.ApprovalRef,
 		attempt.Subject.ProjectRef.String(), attempt.Subject.GoalRef.String(),
 		attempt.Subject.WorkItemRef.String(), attempt.Subject.ExecutionRef.String(),
 		int64(attempt.Subject.PlanGeneration), int64(attempt.Subject.AppSpecGeneration),
 		attempt.Subject.SpecHash, attempt.Subject.ActorRef.String(), attempt.ActionRef,
 		int64(attempt.ActionFence), attempt.WorkerRef, attempt.IdempotencyKey,
-		requiredTime(attempt.StartedAt),
+		requiredTime(attempt.StartedAt), requiredTime(attempt.ClaimLeaseUntil),
 	)
 	return mapDatabaseError(err)
 }

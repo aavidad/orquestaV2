@@ -199,16 +199,25 @@ func readEffectAttemptByFence(
 	var attempt application.EffectAttempt
 	var projectRef, goalRef, workRef, executionRef, actorRef string
 	var planGeneration, appSpecGeneration, actionFence, startedAt int64
-	err := source.QueryRowContext(ctx, `
+	var claimLeaseUntil sql.NullInt64
+	claimLeaseProjection := "NULL"
+	claimLeasePersisted, err := sqliteTableHasColumn(ctx, source, "effect_attempts", "claim_lease_until")
+	if err != nil {
+		return application.EffectAttempt{}, false, mapDatabaseError(err)
+	}
+	if claimLeasePersisted {
+		claimLeaseProjection = "claim_lease_until"
+	}
+	err = source.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT ref, intent_ref, intent_digest, approval_ref, project_ref, goal_ref,
        work_item_ref, execution_ref, plan_generation, app_spec_generation,
        spec_hash, actor_ref, action_ref, action_fence, worker_ref,
-       idempotency_key, started_at
-FROM effect_attempts WHERE action_ref = ? AND action_fence = ?`, actionRef, int64(fence)).Scan(
+       idempotency_key, started_at, %s
+FROM effect_attempts WHERE action_ref = ? AND action_fence = ?`, claimLeaseProjection), actionRef, int64(fence)).Scan(
 		&attempt.Ref, &attempt.IntentRef, &attempt.IntentDigest, &attempt.ApprovalRef,
 		&projectRef, &goalRef, &workRef, &executionRef, &planGeneration, &appSpecGeneration,
 		&attempt.Subject.SpecHash, &actorRef, &attempt.ActionRef, &actionFence, &attempt.WorkerRef,
-		&attempt.IdempotencyKey, &startedAt,
+		&attempt.IdempotencyKey, &startedAt, &claimLeaseUntil,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.EffectAttempt{}, false, nil
@@ -225,5 +234,8 @@ FROM effect_attempts WHERE action_ref = ? AND action_fence = ?`, actionRef, int6
 	}
 	attempt.ActionFence = uint64(actionFence)
 	attempt.StartedAt = time.Unix(0, startedAt).UTC()
+	if claimLeaseUntil.Valid {
+		attempt.ClaimLeaseUntil = time.Unix(0, claimLeaseUntil.Int64).UTC()
+	}
 	return attempt, true, nil
 }
