@@ -303,6 +303,17 @@ func (adapter *Adapter) Launch(
 	return receipt, nil
 }
 
+// ReconcileLaunch repeats the exact durable launch through the sibling's
+// idempotency boundary. It deliberately shares the complete Launch pipeline so
+// signing, session delivery and receipt derivation cannot drift during host
+// recovery.
+func (adapter *Adapter) ReconcileLaunch(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+) (ports.AgentLaunchReceipt, error) {
+	return adapter.Launch(ctx, request)
+}
+
 func validSignedPlan(compiled Compilation, raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) < 2 || trimmed[0] != '{' || trimmed[len(trimmed)-1] != '}' {

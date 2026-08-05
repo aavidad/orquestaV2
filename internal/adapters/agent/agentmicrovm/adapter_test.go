@@ -16,6 +16,12 @@ import (
 	"orquesta/internal/ports"
 )
 
+type agentLaunchReconcilerContract interface {
+	ReconcileLaunch(context.Context, ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error)
+}
+
+var _ agentLaunchReconcilerContract = (*Adapter)(nil)
+
 type launchClientStub struct {
 	capabilities     microvm.RespuestaCapacidades
 	capabilitiesErr  error
@@ -169,7 +175,7 @@ func (signer *launchSignerStub) Preparar(
 	return cloneSignedRequestUnchecked(prepared), nil
 }
 
-func TestAdapterLaunchSignsAndReplaysExactPhysicalRequest(t *testing.T) {
+func TestAdapterLaunchAndReconcileSignAndReplayExactPhysicalRequest(t *testing.T) {
 	request := validLaunchRequest(t)
 	descriptor := validDescriptor(t, false)
 	client := &launchClientStub{capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor)}
@@ -181,9 +187,9 @@ func TestAdapterLaunchSignsAndReplaysExactPhysicalRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Launch() first error = %v", err)
 	}
-	second, err := adapter.Launch(ctx, request)
+	second, err := adapter.ReconcileLaunch(ctx, request)
 	if err != nil {
-		t.Fatalf("Launch() replay error = %v", err)
+		t.Fatalf("ReconcileLaunch() replay error = %v", err)
 	}
 	if first != second {
 		t.Fatalf("replay receipt changed: first=%+v second=%+v", first, second)
@@ -209,6 +215,17 @@ func TestAdapterLaunchSignsAndReplaysExactPhysicalRequest(t *testing.T) {
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, first); err != nil {
 		t.Fatalf("ValidateAgentLaunchReceipt() = %v", err)
+	}
+
+	client.launchErr = &microvm.ErrorRespuesta{Estado: 409, Codigo: "api.idempotencia_conflictiva"}
+	mutated := request
+	mutated.EffectAuthority.ActionFence++
+	if _, err := adapter.ReconcileLaunch(ctx, mutated); ErrorCode(err) != CodeLaunchRejected {
+		t.Fatalf("ReconcileLaunch() divergent replay error=%v code=%q", err, ErrorCode(err))
+	}
+	if len(client.launchKeys) != 3 || client.launchKeys[2] != request.IdempotencyKey ||
+		reflect.DeepEqual(client.launchRequests[0], client.launchRequests[2]) {
+		t.Fatalf("divergent replay was not preserved for sibling rejection: keys=%v requests=%+v", client.launchKeys, client.launchRequests)
 	}
 }
 
@@ -774,14 +791,22 @@ func TestAdapterRejectsNilAndPreCanceledContextsBeforeTransport(t *testing.T) {
 		capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor),
 	}
 	adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
-	var nilContext context.Context
-	if _, err := adapter.Launch(nilContext, request); ErrorCode(err) != CodeConfigurationInvalid {
-		t.Fatalf("nil context error=%v code=%q", err, ErrorCode(err))
+	methods := map[string]func(context.Context, ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error){
+		"launch":    adapter.Launch,
+		"reconcile": adapter.ReconcileLaunch,
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	if _, err := adapter.Launch(ctx, request); !errors.Is(err, context.Canceled) || ErrorCode(err) != "" {
-		t.Fatalf("canceled context error=%v code=%q", err, ErrorCode(err))
+	for name, method := range methods {
+		t.Run(name, func(t *testing.T) {
+			var nilContext context.Context
+			if _, err := method(nilContext, request); ErrorCode(err) != CodeConfigurationInvalid {
+				t.Fatalf("nil context error=%v code=%q", err, ErrorCode(err))
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if _, err := method(ctx, request); !errors.Is(err, context.Canceled) || ErrorCode(err) != "" {
+				t.Fatalf("canceled context error=%v code=%q", err, ErrorCode(err))
+			}
+		})
 	}
 	if client.capabilitiesCall != 0 || len(client.launchRequests) != 0 {
 		t.Fatalf("context rejection touched transport: capabilities=%d launches=%d", client.capabilitiesCall, len(client.launchRequests))
