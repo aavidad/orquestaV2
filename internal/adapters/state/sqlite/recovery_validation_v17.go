@@ -50,7 +50,11 @@ func validateRecoveryV17Checks(ctx context.Context, tx *sql.Tx, checks []recover
 }
 
 func validateRecoveryV17Governance(ctx context.Context, tx *sql.Tx) error {
-	for _, check := range recoveryV15Checks {
+	return validateRecoveryV17GovernanceWithChecks(ctx, tx, recoveryV15Checks)
+}
+
+func validateRecoveryV17GovernanceWithChecks(ctx context.Context, tx *sql.Tx, checks []recoveryV15Check) error {
+	for _, check := range checks {
 		if check.code == "sqlite.recovery_v15_unknown_applied_repeated" {
 			continue
 		}

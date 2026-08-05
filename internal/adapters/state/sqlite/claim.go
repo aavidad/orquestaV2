@@ -175,13 +175,14 @@ SELECT claim_token FROM action_consumption_receipts WHERE claim_token=?) LIMIT 1
 }
 
 type claimSelection struct {
-	candidate         claimCandidate
-	approval          application.EffectApproval
-	reservation       governance.BudgetReservation
-	reservationExists bool
-	disposition       application.ActionClaimDisposition
-	budgetExhaustion  application.RetryBudgetExhaustion
-	capacidad         seleccionCapacidadReclamo
+	candidate                claimCandidate
+	approval                 application.EffectApproval
+	reservation              governance.BudgetReservation
+	reservationExists        bool
+	disposition              application.ActionClaimDisposition
+	budgetExhaustion         application.RetryBudgetExhaustion
+	recoveryEffectAttemptRef string
+	capacidad                seleccionCapacidadReclamo
 }
 
 func selectClaimCandidate(
@@ -401,12 +402,21 @@ ON CONFLICT(goal_ref,work_item_ref) DO UPDATE SET fence=work_item_fences.fence+1
 			return application.ActionClaim{}, invalid(err)
 		}
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE outbox SET claim_token=?,claimed_by=?,claimed_until=?,delivery_attempt=?,fence=?
+	recoveryAssignment := ""
+	arguments := []any{request.Token, request.WorkerRef, requiredTime(leaseUntil), deliveryAttempt, fence}
+	recoveryColumn, err := sqliteTableHasColumn(ctx, tx, "outbox", "recovery_effect_attempt_ref")
+	if err != nil {
+		return application.ActionClaim{}, mapDatabaseError(err)
+	}
+	if recoveryColumn {
+		recoveryAssignment = ",recovery_effect_attempt_ref=?"
+		arguments = append(arguments, nullableString(selected.recoveryEffectAttemptRef))
+	}
+	arguments = append(arguments, marker, marker, candidate.action.Ref, requiredTime(now), requiredTime(now))
+	result, err := tx.ExecContext(ctx, `UPDATE outbox SET claim_token=?,claimed_by=?,claimed_until=?,delivery_attempt=?,fence=?`+recoveryAssignment+`
  ,last_error_code=CASE WHEN ?<>'' THEN ? ELSE last_error_code END
 WHERE ref=? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL
-AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, request.Token, request.WorkerRef,
-		requiredTime(leaseUntil), deliveryAttempt, fence, marker, marker,
-		candidate.action.Ref, requiredTime(now), requiredTime(now))
+AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, arguments...)
 	if err != nil {
 		return application.ActionClaim{}, mapDatabaseError(err)
 	}
@@ -419,9 +429,10 @@ AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, request.Toke
 	}
 	claim := application.ActionClaim{Action: candidate.action, Token: request.Token, WorkerRef: request.WorkerRef,
 		DeliveryAttempt: uint64(deliveryAttempt), Fence: uint64(fence),
-		Disposition: selected.disposition, RetryBudgetExhaustion: selected.budgetExhaustion,
-		BudgetReservationRef: reservation.Ref,
-		BudgetReservation:    reservation, CapacityReservation: reservaCapacidad, ReferenciaColocacion: colocacion,
+		Disposition: selected.disposition, RecoveryEffectAttemptRef: selected.recoveryEffectAttemptRef,
+		RetryBudgetExhaustion: selected.budgetExhaustion,
+		BudgetReservationRef:  reservation.Ref,
+		BudgetReservation:     reservation, CapacityReservation: reservaCapacidad, ReferenciaColocacion: colocacion,
 		EffectApproval: selected.approval, LeaseUntil: leaseUntil}
 	if candidate.governanceVersion == 1 && candidate.action.Kind == application.ActionLaunchAgent {
 		if err := advanceFairness(ctx, tx, candidate.projectRef, candidate.action.GoalRef, now); err != nil {
@@ -760,7 +771,7 @@ func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.Ac
 	var controlRef sql.NullString
 	var changeRef, expectedTarget, reviewGateDigest string
 	var availableAt, planGeneration, itemGeneration int64
-	var token, worker sql.NullString
+	var token, worker, recoveryEffectAttemptRef sql.NullString
 	var leaseUntil, completedAt, quarantinedAt sql.NullInt64
 	var deliveryAttempt, fence, currentFence int64
 	var lastErrorCode string
@@ -772,18 +783,27 @@ func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.Ac
 	if workspaceColumns {
 		changeProjection = "o.change_ref, o.expected_target_oid, o.review_gate_digest"
 	}
+	recoveryProjection := "NULL AS recovery_effect_attempt_ref"
+	recoveryColumn, err := sqliteTableHasColumn(ctx, transaction, "outbox", "recovery_effect_attempt_ref")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if recoveryColumn {
+		recoveryProjection = "o.recovery_effect_attempt_ref"
+	}
 	err = transaction.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT o.kind, o.goal_ref, o.work_item_ref, o.execution_ref, o.control_ref, %s,
        o.plan_generation, o.work_item_generation, o.available_at,
        o.claim_token, o.claimed_by, o.claimed_until, o.delivery_attempt, o.fence,
-       o.completed_at, o.quarantined_at, o.last_error_code, wf.fence
+	       o.completed_at, o.quarantined_at, o.last_error_code, wf.fence,
+	       %s
 FROM outbox o
 JOIN work_item_fences wf ON wf.goal_ref = o.goal_ref AND wf.work_item_ref = o.work_item_ref
-WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
+WHERE o.ref = ?`, changeProjection, recoveryProjection), claim.Action.Ref).Scan(
 		&kind, &goalValue, &itemValue, &executionValue, &controlRef, &changeRef, &expectedTarget, &reviewGateDigest,
 		&planGeneration, &itemGeneration, &availableAt,
 		&token, &worker, &leaseUntil, &deliveryAttempt, &fence,
-		&completedAt, &quarantinedAt, &lastErrorCode, &currentFence,
+		&completedAt, &quarantinedAt, &lastErrorCode, &currentFence, &recoveryEffectAttemptRef,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return conflict(err)
@@ -808,18 +828,32 @@ WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
 	marker, markerErr := application.RetryBudgetExhaustionMarker(claim.RetryBudgetExhaustion)
 	switch claim.Disposition {
 	case application.ActionClaimDispositionNormal:
-		if strings.HasPrefix(lastErrorCode, application.RetryBudgetExhaustionMarkerPrefix) {
+		if recoveryEffectAttemptRef.Valid || strings.HasPrefix(lastErrorCode, application.RetryBudgetExhaustionMarkerPrefix) {
 			return conflict(errors.New("sqlite.claim_disposition_conflict"))
 		}
 	case application.ActionClaimDispositionRetryBudgetIrreversible:
-		if markerErr != nil || lastErrorCode != marker {
+		if recoveryEffectAttemptRef.Valid || markerErr != nil || lastErrorCode != marker {
 			return conflict(errors.New("sqlite.claim_disposition_conflict"))
+		}
+	case application.ActionClaimDispositionRecoverEffect:
+		if !recoveryEffectAttemptRef.Valid || recoveryEffectAttemptRef.String != claim.RecoveryEffectAttemptRef ||
+			strings.HasPrefix(lastErrorCode, application.RetryBudgetExhaustionMarkerPrefix) {
+			return conflict(errors.New("sqlite.claim_disposition_conflict"))
+		}
+		record, err := readGoalRecord(ctx, transaction, claim.Action.GoalRef.String())
+		if err != nil {
+			return err
+		}
+		attempt, err := application.SelectAgentLaunchRecoveryAttempt(record, claim)
+		if err != nil || attempt.Ref != recoveryEffectAttemptRef.String {
+			return conflict(errors.New("sqlite.claim_recovery_effect_conflict"))
 		}
 	default:
 		return conflict(errors.New("sqlite.claim_disposition_invalid"))
 	}
 	if claim.Action.Kind == application.ActionLaunchAgent && claim.Action.EffectIntentRef != "" &&
-		claim.Disposition == application.ActionClaimDispositionNormal {
+		(claim.Disposition == application.ActionClaimDispositionNormal ||
+			claim.Disposition == application.ActionClaimDispositionRecoverEffect) {
 		reserva, colocacion, encontrada, err := leerReservaCapacidadAccion(ctx, transaction, claim.Action.Ref)
 		if err != nil {
 			return err

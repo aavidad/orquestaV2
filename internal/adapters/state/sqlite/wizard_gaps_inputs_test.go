@@ -657,6 +657,8 @@ WHERE ref=?`,
 			)
 		},
 	)
+	legacyTriggers := canonicalWizardSchemaTriggers(t, recoverySchemaV23WizardGaps,
+		"action_consumption_effect_receipt_guard", "effect_receipts_causal_guard")
 	mustV10Exec(
 		t, system.repository.db,
 		`DROP TABLE agent_placement_bindings; DROP TABLE agent_quota_observations;
@@ -664,6 +666,10 @@ DROP TABLE agent_capacity_transitions; DROP TABLE agent_capacity_reservations;
 DROP TABLE agent_capacity_observations; DROP TABLE agent_environment_receipts;
 DROP TRIGGER executions_environment_preservation_write_once;
 ALTER TABLE executions DROP COLUMN environment_preservation_required;
+DROP TRIGGER outbox_recovery_effect_claim_guard;
+DROP TRIGGER action_consumption_effect_receipt_guard;
+ALTER TABLE outbox DROP COLUMN recovery_effect_attempt_ref;
+DROP TRIGGER effect_receipts_causal_guard;
 DROP TRIGGER effect_attempts_claim_lease_guard;
 DROP TRIGGER effect_attempts_immutable_update;
 ALTER TABLE effect_attempts DROP COLUMN claim_lease_until;
@@ -671,11 +677,14 @@ CREATE TRIGGER effect_attempts_immutable_update BEFORE UPDATE ON effect_attempts
 BEGIN SELECT RAISE(ABORT, 'sqlite.effect_attempt_immutable'); END;
 DROP TABLE wizard_gaps_input_receipts`,
 	)
+	for _, statement := range legacyTriggers {
+		mustV10Exec(t, system.repository.db, statement)
+	}
 	mustV10Exec(
 		t,
 		system.repository.db,
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?)`,
-		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim, recoverySchemaV38Environment, recoverySchemaV38EnvironmentGate, recoverySchemaV38AttemptLease,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?,?)`,
+		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim, recoverySchemaV38Environment, recoverySchemaV38EnvironmentGate, recoverySchemaV38AttemptLease, recoverySchemaV38RecoveryClaim,
 	)
 	mustV10Exec(
 		t,
@@ -704,6 +713,27 @@ DROP TABLE wizard_gaps_input_receipts`,
 	); err != nil {
 		t.Fatalf("schema21 recovery: %s", intakeTestErrorChain(err))
 	}
+}
+
+func canonicalWizardSchemaTriggers(t *testing.T, version int, names ...string) []string {
+	t.Helper()
+	database, err := sql.Open(driverName, ":memory:")
+	sqliteTestNoError(t, err)
+	defer database.Close()
+	database.SetMaxOpenConns(1)
+	migrations, err := loadMigrations()
+	sqliteTestNoError(t, err)
+	prefix, err := recoveryMigrationPrefix(migrations, version)
+	sqliteTestNoError(t, err)
+	sqliteTestNoError(t, applyRecoveryMigrationPrefix(context.Background(), database, prefix))
+	statements := make([]string, 0, len(names))
+	for _, name := range names {
+		var statement string
+		sqliteTestNoError(t, database.QueryRow(`
+SELECT sql FROM sqlite_schema WHERE type='trigger' AND name=?`, name).Scan(&statement))
+		statements = append(statements, statement)
+	}
+	return statements
 }
 
 func sqliteWizardGapsInputRecord(

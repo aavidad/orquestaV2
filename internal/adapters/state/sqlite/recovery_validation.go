@@ -84,12 +84,16 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 	if version >= recoverySchemaV17 {
 		// Classify broken ledgers at their owning schema boundary before the
 		// hydrated read model rejects the same corruption more generically.
+		governanceValidator := validateRecoveryV17Governance
+		if version >= recoverySchemaV38RecoveryClaim {
+			governanceValidator = validateRecoveryV28Governance
+		}
 		validators := []recoveryValidator{
 			validateRecoveryV10Identity,
 			validateRecoveryV12Director,
 			validateRecoveryV13Mailbox,
 			validateRecoveryV14Controls,
-			validateRecoveryV17Governance,
+			governanceValidator,
 			validateRecoveryV16WorkspaceGit,
 			validateRecoveryV17TestAttestor,
 			validateRecoveryV18Reviews,
@@ -126,6 +130,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		}
 		if version >= recoverySchemaV38AttemptLease {
 			validators = append(validators, validateRecoveryV27EffectAttemptClaimLease)
+		}
+		if version >= recoverySchemaV38RecoveryClaim {
+			validators = append(validators, validateRecoveryV28EffectRecoveryClaim)
 		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {

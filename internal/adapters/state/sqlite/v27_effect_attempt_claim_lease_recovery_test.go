@@ -52,11 +52,12 @@ func TestRecoveryV26RemainsVerifiableAndRestorable(t *testing.T) {
 func TestRecoveryV27RoundTripPreservesExactAttemptClaimLease(t *testing.T) {
 	ctx := context.Background()
 	system, attempt := seedV27CompletedLaunch(t, "roundtrip")
-	beforeSchemaRef, _, err := validateRecoveryDatabase(ctx, system.repository.db)
-	sqliteTestNoError(t, err)
+	downgradeLatestFixtureToV27(t, system)
 	migrations, err := loadMigrations()
 	sqliteTestNoError(t, err)
 	wantPrefix, err := recoveryMigrationPrefix(migrations, recoverySchemaV38AttemptLease)
+	sqliteTestNoError(t, err)
+	beforeSchemaRef, _, err := validateRecoveryDatabase(ctx, system.repository.db)
 	sqliteTestNoError(t, err)
 	if beforeSchemaRef != migrationSchemaRef(wantPrefix) {
 		t.Fatalf("V27 schema ref=%q", beforeSchemaRef)
@@ -104,6 +105,7 @@ func TestRecoveryV27RejectsAmbiguousOrInvalidAttemptClaimLease(t *testing.T) {
 
 	t.Run("receipt fuera del lease historico", func(t *testing.T) {
 		system, attempt := seedV27CompletedLaunch(t, "late-receipt")
+		downgradeLatestFixtureToV27(t, system)
 		rewriteRecoveryTrigger(t, system.repository.db, "effect_attempts_immutable_update", func() {
 			rewriteRecoveryTrigger(t, system.repository.db, "effect_receipts_immutable_update", func() {
 				mustV10Exec(t, system.repository.db, `UPDATE effect_attempts
@@ -115,6 +117,34 @@ WHERE attempt_ref=?`, attempt.Ref, attempt.Ref)
 		})
 		requireV27RecoveryError(t, system, "sqlite.recovery_v27_effect_receipt_outside_claim_lease")
 	})
+}
+
+func downgradeLatestFixtureToV27(t *testing.T, system *sqliteV15System) {
+	t.Helper()
+	path := cloneV27FixtureToV26(t, system, nil)
+	database := openFastV18MigrationFixture(t, path)
+	database.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = database.Close() })
+	migrations, err := loadMigrations()
+	sqliteTestNoError(t, err)
+	prefix, err := recoveryMigrationPrefix(migrations, recoverySchemaV38AttemptLease)
+	sqliteTestNoError(t, err)
+	connection, err := database.Conn(context.Background())
+	sqliteTestNoError(t, err)
+	_, err = connection.ExecContext(context.Background(), "PRAGMA foreign_keys=OFF")
+	sqliteTestNoError(t, err)
+	transaction, err := connection.BeginTx(context.Background(), nil)
+	sqliteTestNoError(t, err)
+	_, _, err = applyMigrationSteps(
+		context.Background(), transaction, prefix, recoverySchemaV38EnvironmentGate,
+	)
+	sqliteTestNoError(t, err)
+	sqliteTestNoError(t, transaction.Commit())
+	sqliteTestNoError(t, connection.Close())
+	_, err = database.ExecContext(context.Background(), "PRAGMA foreign_keys=ON")
+	sqliteTestNoError(t, err)
+	system.path = path
+	system.repository = &Repository{db: database, path: path, now: system.clock.Now}
 }
 
 func TestRecoveryV27AllowsLegacyNullOnlyWithExactTerminalProof(t *testing.T) {

@@ -964,7 +964,8 @@ func validateClaim(claim application.ActionClaim) error {
 		return err
 	}
 	requerida := claim.Action.Kind == application.ActionLaunchAgent && claim.Action.EffectIntentRef != "" &&
-		claim.Disposition == application.ActionClaimDispositionNormal
+		(claim.Disposition == application.ActionClaimDispositionNormal ||
+			claim.Disposition == application.ActionClaimDispositionRecoverEffect)
 	presente := claim.CapacityReservation != (application.AgentCapacityReservation{}) && claim.ReferenciaColocacion.String() != ""
 	reserva := claim.CapacityReservation
 	if requerida != presente || presente && (application.ValidateAgentCapacityReservation(reserva) != nil ||
@@ -995,6 +996,12 @@ func validateClaimBase(claim application.ActionClaim) error {
 			return errors.New("sqlite.claim_disposition_invalid")
 		}
 		if _, err := application.RetryBudgetExhaustionMarker(claim.RetryBudgetExhaustion); err != nil {
+			return errors.New("sqlite.claim_disposition_invalid")
+		}
+	case application.ActionClaimDispositionRecoverEffect:
+		if claim.Action.Kind != application.ActionLaunchAgent || claim.Action.EffectIntentRef == "" ||
+			!validText(claim.RecoveryEffectAttemptRef) ||
+			claim.RetryBudgetExhaustion != (application.RetryBudgetExhaustion{}) {
 			return errors.New("sqlite.claim_disposition_invalid")
 		}
 	default:
