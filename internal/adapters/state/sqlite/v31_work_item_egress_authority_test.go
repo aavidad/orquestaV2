@@ -154,11 +154,13 @@ func TestV31MigrationKeepsV30AuthorityAsExplicitNoEgress(t *testing.T) {
 	sqliteTestNoError(t, system.repository.Close())
 	database := openFastV18MigrationFixture(t, system.path)
 	mustV10Exec(t, database, `
+DROP TABLE microvm_host_launch_authorities;
+DROP INDEX effect_attempts_microvm_host_launch_scope_idx;
 DROP TRIGGER work_item_authorities_egress_shape_guard;
 ALTER TABLE work_item_authorities DROP COLUMN egress_policy_canonical_payload;
 ALTER TABLE work_item_authorities DROP COLUMN egress_policy_payload_sha256;
 ALTER TABLE work_item_authorities DROP COLUMN egress_policy_ref;
-DELETE FROM schema_migrations WHERE version=31;
+DELETE FROM schema_migrations WHERE version IN (31,32);
 PRAGMA user_version=30`)
 	sqliteTestNoError(t, database.Close())
 
@@ -174,8 +176,8 @@ PRAGMA user_version=30`)
 	sqliteTestNoError(t, reopened.db.QueryRow(`
 SELECT COUNT(*) FROM pragma_table_info('work_item_authorities')
 WHERE name LIKE 'egress_policy_%'`).Scan(&columns))
-	if version != recoverySchemaV38EgressAuthority || columns != 3 {
-		t.Fatalf("V31 migration version=%d columns=%d", version, columns)
+	if version != recoverySchemaLatest || columns != 3 {
+		t.Fatalf("migration chain after V31 version=%d columns=%d", version, columns)
 	}
 }
 

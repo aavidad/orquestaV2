@@ -38,7 +38,8 @@ const (
 	recoverySchemaV38PreservationRatchet = 29
 	recoverySchemaV38RecoveryRequeue     = 30
 	recoverySchemaV38EgressAuthority     = 31
-	recoverySchemaLatest                 = recoverySchemaV38EgressAuthority
+	recoverySchemaV38MicroVMHostLaunch   = 32
+	recoverySchemaLatest                 = recoverySchemaV38MicroVMHostLaunch
 )
 
 func migrationSchemaRef(migrations []migration) string {
@@ -59,7 +60,11 @@ func recoveryMigrationPrefix(migrations []migration, version int) ([]migration, 
 		version != recoverySchemaV23Confirmation &&
 		version != recoverySchemaV23WizardGaps &&
 		version != recoverySchemaV23 && version != recoverySchemaV38Physical &&
-		version != recoverySchemaV38Capacity && version != recoverySchemaV38Claim && version != recoverySchemaV38Environment && version != recoverySchemaV38EnvironmentGate && version != recoverySchemaV38AttemptLease && version != recoverySchemaV38RecoveryClaim && version != recoverySchemaV38PreservationRatchet && version != recoverySchemaV38RecoveryRequeue && version != recoverySchemaV38EgressAuthority {
+		version != recoverySchemaV38Capacity && version != recoverySchemaV38Claim &&
+		version != recoverySchemaV38Environment && version != recoverySchemaV38EnvironmentGate &&
+		version != recoverySchemaV38AttemptLease && version != recoverySchemaV38RecoveryClaim &&
+		version != recoverySchemaV38PreservationRatchet && version != recoverySchemaV38RecoveryRequeue &&
+		version != recoverySchemaV38EgressAuthority && version != recoverySchemaV38MicroVMHostLaunch {
 		return nil, errors.New("sqlite.recovery_schema_version_invalid")
 	}
 	if version > len(migrations) || migrations[version-1].version != version {
