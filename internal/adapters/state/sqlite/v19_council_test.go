@@ -84,6 +84,13 @@ func (observer *sqliteV19CouncilObserver) Observe(
 		Content: content, Usage: observer.base.observationUsage, ObservedAt: observer.base.clock.Now()}, nil
 }
 
+func (observer *sqliteV19CouncilObserver) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return observer.Observe(ctx, request.ExecutionRef)
+}
+
 func newSQLiteV19CouncilOrchestrator(
 	t *testing.T, system *sqliteV15System, observer application.AgentObserver,
 ) *application.Orchestrator {

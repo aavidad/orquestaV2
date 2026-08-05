@@ -264,6 +264,13 @@ func (agent *v18PersistentAgentAdapter) Observe(
 	return observation, nil
 }
 
+func (agent *v18PersistentAgentAdapter) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func (external *v18ExternalAgent) primaryObserved() bool {
 	external.mu.Lock()
 	defer external.mu.Unlock()

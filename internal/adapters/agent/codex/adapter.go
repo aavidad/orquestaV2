@@ -903,6 +903,89 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 	return adapter.observeStateLocked(executionKey, executionRef, state)
 }
 
+func (adapter *Adapter) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	if err := ports.ValidateAgentObserveRequest(request); err != nil {
+		return ports.AgentObservation{}, err
+	}
+	if adapter == nil {
+		return ports.AgentObservation{}, &Error{Code: CodeUnavailable}
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.AgentObservation{}, err
+	}
+	_, endOperation, err := adapter.beginOperation(ctx)
+	if err != nil {
+		return ports.AgentObservation{}, err
+	}
+	adapter.mu.Lock()
+	if adapter.closed {
+		adapter.mu.Unlock()
+		endOperation()
+		return ports.AgentObservation{}, &Error{Code: CodeUnavailable}
+	}
+	record, _, found, loadErr := adapter.loadLaunchRecord(request.ExecutionRef)
+	mediaType := ""
+	if state := adapter.executions[request.ExecutionRef.String()]; state != nil {
+		mediaType = state.artifactMediaType
+	}
+	adapter.mu.Unlock()
+	endOperation()
+	if loadErr != nil {
+		return ports.AgentObservation{}, loadErr
+	}
+	if !found {
+		return ports.AgentObservation{}, &Error{Code: CodeExecutionNotFound}
+	}
+	if err := validateDurableObserveRequest(record, mediaType, request); err != nil {
+		return ports.AgentObservation{}, err
+	}
+	return adapter.Observe(ctx, request.ExecutionRef)
+}
+
+func validateDurableObserveRequest(
+	record launchRecord,
+	availableMediaType string,
+	request ports.AgentObserveRequest,
+) error {
+	checks := []struct {
+		matches bool
+		field   string
+	}{
+		{request.ExecutionRef.String() == record.ExecutionRef, "execution_ref"},
+		{request.GoalRef.String() == record.GoalRef, "goal_ref"},
+		{request.WorkItemRef.String() == record.WorkItemRef, "work_item_ref"},
+		{request.PlanGeneration == record.PlanGeneration, "plan_generation"},
+		{request.AppSpecGeneration == record.AppSpecGeneration, "app_spec_generation"},
+		{request.ExecutionAttempt == record.ExecutionAttempt, "execution_attempt"},
+		{request.SpecHash == record.SpecHash, "spec_hash"},
+		{request.ProviderRef == record.ProviderRef, "provider_ref"},
+		{request.ModelRef == record.ModelRef, "model_ref"},
+		{request.AgentRef == record.AgentRef, "agent_ref"},
+		{request.ExternalRef == record.ExternalRef, "external_ref"},
+		{request.SessionRef.String() == record.ExecutionSessionRef, "session_ref"},
+		{request.MaxOutputBytes == record.MaxOutputBytes, "max_output_bytes"},
+	}
+	for _, check := range checks {
+		if !check.matches {
+			return &Error{Code: CodeStateInvalid, Cause: &ports.AgentContractError{
+				Code: "agent.observation_request_" + check.field + "_mismatch",
+			}}
+		}
+	}
+	// Current request.json binds media type inside RequestHash but does not
+	// project it independently. Compare it when recovered live state exposes
+	// the value; never pretend a partial hash can prove that single field.
+	if availableMediaType != "" && request.ArtifactMediaType != availableMediaType {
+		return &Error{Code: CodeStateInvalid, Cause: &ports.AgentContractError{
+			Code: "agent.observation_request_artifact_media_type_mismatch",
+		}}
+	}
+	return nil
+}
+
 func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState) error {
 	terminal := terminalRecord{SchemaVersion: stateSchemaVersion, RequestHash: state.terminalRequestHash,
 		Status: ports.AgentFailed, ErrorCode: CodeExecutionInterrupted,

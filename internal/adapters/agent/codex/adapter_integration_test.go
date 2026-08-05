@@ -192,6 +192,58 @@ func TestAdapterLaunchIsIdempotentAcrossRestart(t *testing.T) {
 	}
 }
 
+func TestObserveAgentRejectsDurableBindingMismatchesAfterRestart(t *testing.T) {
+	config := testConfig(t)
+	first := openTestAdapter(t, config)
+	request := testRequest(t, "observe-durable-bindings", "helper:success", 1024)
+	receipt, err := first.Launch(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Launch() error = %v", err)
+	}
+	_ = awaitTerminal(t, first, request.ExecutionRef)
+	if err := first.Close(); err != nil {
+		t.Fatalf("Close(first) error = %v", err)
+	}
+
+	reopened := openTestAdapter(t, config)
+	observeRequest := codexObserveRequest(request, receipt)
+	tests := map[string]func(*ports.AgentObserveRequest){
+		"spec":     func(value *ports.AgentObserveRequest) { value.SpecHash = strings.Repeat("a", 64) },
+		"external": func(value *ports.AgentObserveRequest) { value.ExternalRef = "codex:other" },
+		"session": func(value *ports.AgentObserveRequest) {
+			value.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:other")
+		},
+		"max output": func(value *ports.AgentObserveRequest) { value.MaxOutputBytes++ },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := observeRequest
+			mutate(&candidate)
+			if _, err := reopened.ObserveAgent(context.Background(), candidate); ErrorCode(err) != CodeStateInvalid {
+				t.Fatalf("ObserveAgent mismatch error = %v", err)
+			}
+		})
+	}
+	observation, err := reopened.ObserveAgent(context.Background(), observeRequest)
+	if err != nil || observation.Status != ports.AgentCompleted {
+		t.Fatalf("ObserveAgent valid = %+v error=%v", observation, err)
+	}
+}
+
+func codexObserveRequest(
+	launch ports.AgentLaunchRequest,
+	receipt ports.AgentLaunchReceipt,
+) ports.AgentObserveRequest {
+	return ports.AgentObserveRequest{
+		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
+		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
+		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
+		ExternalRef: receipt.ExternalRef, SessionRef: launch.SessionRef,
+		ArtifactMediaType: launch.ArtifactMediaType, MaxOutputBytes: launch.MaxOutputBytes,
+	}
+}
+
 func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 	adapter := openTestAdapter(t, testConfig(t))
 	request := testRequest(t, "conflict", "helper:success", 1024)

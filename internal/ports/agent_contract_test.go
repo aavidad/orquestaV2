@@ -73,6 +73,88 @@ func validAgentLaunchReceipt(request AgentLaunchRequest) AgentLaunchReceipt {
 	}
 }
 
+func validAgentObserveRequest(t *testing.T) AgentObserveRequest {
+	t.Helper()
+	launch := validAgentLaunchRequest(t)
+	receipt := validAgentLaunchReceipt(launch)
+	sessionRef, _ := NewExecutionSessionRef("execution-session:sha256:" + strings.Repeat("b", 64))
+	return AgentObserveRequest{
+		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
+		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
+		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
+		ExternalRef: receipt.ExternalRef, SessionRef: sessionRef,
+		ArtifactMediaType: launch.ArtifactMediaType, MaxOutputBytes: launch.MaxOutputBytes,
+	}
+}
+
+func TestAgentObserveRequestRequiresDurableExecutionIdentity(t *testing.T) {
+	valid := validAgentObserveRequest(t)
+	if err := ValidateAgentObserveRequest(valid); err != nil {
+		t.Fatalf("valid observation request rejected: %v", err)
+	}
+	tests := map[string]func(*AgentObserveRequest){
+		"execution":  func(value *AgentObserveRequest) { value.ExecutionRef = goal.ExecutionRef{} },
+		"goal":       func(value *AgentObserveRequest) { value.GoalRef = goal.GoalRef{} },
+		"work item":  func(value *AgentObserveRequest) { value.WorkItemRef = goal.WorkItemRef{} },
+		"plan":       func(value *AgentObserveRequest) { value.PlanGeneration = 0 },
+		"app spec":   func(value *AgentObserveRequest) { value.AppSpecGeneration = 0 },
+		"attempt":    func(value *AgentObserveRequest) { value.ExecutionAttempt = 0 },
+		"spec":       func(value *AgentObserveRequest) { value.SpecHash = "invalid" },
+		"provider":   func(value *AgentObserveRequest) { value.ProviderRef = "" },
+		"model":      func(value *AgentObserveRequest) { value.ModelRef = " model:fake" },
+		"agent":      func(value *AgentObserveRequest) { value.AgentRef = "agent:fake " },
+		"external":   func(value *AgentObserveRequest) { value.ExternalRef = " " },
+		"session":    func(value *AgentObserveRequest) { value.SessionRef = "execution-session:bad/path" },
+		"media type": func(value *AgentObserveRequest) { value.ArtifactMediaType = "" },
+		"max output": func(value *AgentObserveRequest) { value.MaxOutputBytes = 0 },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := valid
+			mutate(&candidate)
+			if code := AgentContractErrorCode(ValidateAgentObserveRequest(candidate)); code == "" {
+				t.Fatalf("invalid observation request accepted: %+v", candidate)
+			}
+		})
+	}
+
+	withoutSession := valid
+	withoutSession.SessionRef = ""
+	if err := ValidateAgentObserveRequest(withoutSession); err != nil {
+		t.Fatalf("optional session rejected: %v", err)
+	}
+}
+
+func TestAgentObserveTargetRejectsLaunchBindingMismatches(t *testing.T) {
+	launch := validAgentLaunchRequest(t)
+	sessionRef, _ := NewExecutionSessionRef("execution-session:sha256:" + strings.Repeat("b", 64))
+	launch.SessionRef = sessionRef
+	receipt := validAgentLaunchReceipt(launch)
+	valid := validAgentObserveRequest(t)
+	if err := ValidateAgentObserveTarget(launch, receipt, valid); err != nil {
+		t.Fatalf("valid observation target rejected: %v", err)
+	}
+	tests := map[string]func(*AgentObserveRequest){
+		"spec":     func(value *AgentObserveRequest) { value.SpecHash = strings.Repeat("a", 64) },
+		"external": func(value *AgentObserveRequest) { value.ExternalRef = "external:other" },
+		"session": func(value *AgentObserveRequest) {
+			value.SessionRef, _ = NewExecutionSessionRef("execution-session:sha256:" + strings.Repeat("c", 64))
+		},
+		"media":      func(value *AgentObserveRequest) { value.ArtifactMediaType = "text/plain" },
+		"max output": func(value *AgentObserveRequest) { value.MaxOutputBytes++ },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := valid
+			mutate(&candidate)
+			if code := AgentContractErrorCode(ValidateAgentObserveTarget(launch, receipt, candidate)); code == "" {
+				t.Fatalf("mismatched observation target accepted: %+v", candidate)
+			}
+		})
+	}
+}
+
 func TestAgentLaunchEffectAuthorityRequiresEveryDurableFact(t *testing.T) {
 	valid := AgentLaunchEffectAuthority{
 		AuthorizationReceiptRef: "authorization:launch:1",

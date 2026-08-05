@@ -234,6 +234,13 @@ func (external *sqliteV15External) Observe(
 	return ports.AgentObservation{}, fmt.Errorf("sqlite.v15.execution_missing")
 }
 
+func (external *sqliteV15External) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return external.Observe(ctx, request.ExecutionRef)
+}
+
 func sqliteCouncilEvidenceFromObjective(objective string) (string, string, council.Role, error) {
 	const prefix = "Assess exact approved V18 evidence "
 	value := strings.TrimPrefix(objective, prefix)

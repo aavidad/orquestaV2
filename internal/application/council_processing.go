@@ -14,7 +14,7 @@ func (orchestrator *Orchestrator) processCouncilObservation(ctx context.Context,
 	record GoalRecord, item goal.WorkItem, itemState ExecutionRecord,
 ) error {
 	execution := itemState
-	observation, observeErr := orchestrator.observer.Observe(ctx, execution.Ref)
+	observation, observeErr := orchestrator.observer.ObserveAgent(ctx, agentObserveRequest(execution))
 	if observeErr != nil {
 		if orchestrator.executionExpired(execution, claim) {
 			return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "application.execution_expired",

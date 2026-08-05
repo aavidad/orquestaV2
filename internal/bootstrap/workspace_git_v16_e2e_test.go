@@ -185,6 +185,13 @@ func (agent *v16WorkspaceAgent) Observe(
 	return observation, nil
 }
 
+func (agent *v16WorkspaceAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func v16ReviewEvidence(objective string) (string, review.Role) {
 	const prefix = "Review exact immutable evidence "
 	value := strings.TrimPrefix(objective, prefix)

@@ -255,6 +255,13 @@ func (agent *countingAgent) Observe(ctx context.Context, executionRef goal.Execu
 	}, nil
 }
 
+func (agent *countingAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func (agent *countingAgent) Shutdown(context.Context) error {
 	agent.mu.Lock()
 	agent.closed = true
@@ -404,6 +411,13 @@ func (agent *processAgent) Observe(context.Context, goal.ExecutionRef) (ports.Ag
 		ExecutionRef: agent.execution, SpecHash: agent.request.SpecHash, Status: ports.AgentRunning,
 		Usage: unknownTestUsage(), ObservedAt: agent.now(),
 	}, nil
+}
+
+func (agent *processAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
 }
 
 func testBudgetDemand(ref string) governance.BudgetDemand {

@@ -3224,6 +3224,7 @@ type scriptedAgent struct {
 	launches                         int
 	observationCalls                 int
 	launchRequests                   []ports.AgentLaunchRequest
+	observeRequests                  []ports.AgentObserveRequest
 	launchSpecHashes                 map[goal.ExecutionRef]string
 	receiptSpecHashOverride          string
 	preserveEmptyReceiptSpecHash     bool
@@ -3559,6 +3560,16 @@ func (agent *scriptedAgent) Observe(_ context.Context, execution goal.ExecutionR
 		observation.Usage = unknownUsage()
 	}
 	return observation, nil
+}
+
+func (agent *scriptedAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	agent.mu.Lock()
+	agent.observeRequests = append(agent.observeRequests, request)
+	agent.mu.Unlock()
+	return agent.Observe(ctx, request.ExecutionRef)
 }
 
 func reviewSubjectDigestFromPrompt(objective string) string {

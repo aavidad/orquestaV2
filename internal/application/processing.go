@@ -666,7 +666,7 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.processCouncilObservation(ctx, claim, record, item, execution)
 	}
 	reviewer := isReviewerExecution(execution)
-	observation, observeErr := orchestrator.observer.Observe(ctx, execution.Ref)
+	observation, observeErr := orchestrator.observer.ObserveAgent(ctx, agentObserveRequest(execution))
 	if observeErr != nil {
 		if orchestrator.executionExpired(execution, claim) {
 			if reviewer {
@@ -750,6 +750,17 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.succeedGoal(ctx, claim, record, execution, observation, transitionAt)
 	default:
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_status_invalid")
+	}
+}
+
+func agentObserveRequest(execution ExecutionRecord) ports.AgentObserveRequest {
+	return ports.AgentObserveRequest{
+		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
+		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
+		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
+		ProviderRef: execution.ProviderRef, ModelRef: execution.ModelRef, AgentRef: execution.AgentRef,
+		ExternalRef: execution.ExternalRef, SessionRef: execution.ExecutionSessionRef,
+		ArtifactMediaType: execution.ArtifactMediaType, MaxOutputBytes: execution.MaxOutputBytes,
 	}
 }
 

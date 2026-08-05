@@ -382,9 +382,17 @@ func launchAndAwaitCredentialArtifact(t *testing.T, agent AgentAdapter, suffix, 
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
 		t.Fatalf("Launch receipt(%s): %v", suffix, err)
 	}
+	observeRequest := ports.AgentObserveRequest{
+		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
+		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
+		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
+		ExternalRef: receipt.ExternalRef, SessionRef: request.SessionRef,
+		ArtifactMediaType: request.ArtifactMediaType, MaxOutputBytes: request.MaxOutputBytes,
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		observation, err := agent.Observe(context.Background(), request.ExecutionRef)
+		observation, err := agent.ObserveAgent(context.Background(), observeRequest)
 		if err == nil && observation.Status == ports.AgentCompleted {
 			if string(observation.Content) != wanted {
 				t.Fatalf("credential artifact(%s)=%q want=%q", suffix, observation.Content, wanted)

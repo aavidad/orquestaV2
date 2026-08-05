@@ -995,6 +995,13 @@ func (agent *v06Agent) Observe(_ context.Context, executionRef goal.ExecutionRef
 	}, nil
 }
 
+func (agent *v06Agent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 type v06ArtifactStore struct {
 	mu      sync.Mutex
 	content map[goal.ArtifactRef]ports.ArtifactContent

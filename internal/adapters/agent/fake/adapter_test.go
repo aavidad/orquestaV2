@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,9 +64,27 @@ func TestAdapterLaunchIsIdempotentAndObservable(t *testing.T) {
 	if _, err := adapter.Launch(context.Background(), conflicting); err == nil || err.Error() != "fake_agent.execution_conflict" {
 		t.Fatalf("spec hash conflict error = %v", err)
 	}
-	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
+	observeRequest := fakeObserveRequest(request, first)
+	for name, mutate := range map[string]func(*ports.AgentObserveRequest){
+		"spec":     func(value *ports.AgentObserveRequest) { value.SpecHash = strings.Repeat("a", 64) },
+		"external": func(value *ports.AgentObserveRequest) { value.ExternalRef = "external:other" },
+		"session": func(value *ports.AgentObserveRequest) {
+			value.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:other")
+		},
+		"max output": func(value *ports.AgentObserveRequest) { value.MaxOutputBytes++ },
+	} {
+		t.Run("observe "+name, func(t *testing.T) {
+			candidate := observeRequest
+			mutate(&candidate)
+			if _, err := adapter.ObserveAgent(context.Background(), candidate); err == nil ||
+				err.Error() != "fake_agent.observation_conflict" {
+				t.Fatalf("mismatched observe error = %v", err)
+			}
+		})
+	}
+	observation, err := adapter.ObserveAgent(context.Background(), observeRequest)
 	if err != nil {
-		t.Fatalf("Observe() error = %v", err)
+		t.Fatalf("ObserveAgent() error = %v", err)
 	}
 	if err := ports.ValidateAgentObservation(observation, request.MaxOutputBytes); err != nil {
 		t.Fatalf("observation contract error = %v", err)
@@ -75,6 +94,20 @@ func TestAdapterLaunchIsIdempotentAndObservable(t *testing.T) {
 	}
 	if observation.Usage.Quality != governance.UsageQualityUnknown || observation.Usage.Known != 0 {
 		t.Fatalf("fake invented usage: %+v", observation.Usage)
+	}
+}
+
+func fakeObserveRequest(
+	launch ports.AgentLaunchRequest,
+	receipt ports.AgentLaunchReceipt,
+) ports.AgentObserveRequest {
+	return ports.AgentObserveRequest{
+		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
+		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
+		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
+		ExternalRef: receipt.ExternalRef, SessionRef: launch.SessionRef,
+		ArtifactMediaType: launch.ArtifactMediaType, MaxOutputBytes: launch.MaxOutputBytes,
 	}
 }
 

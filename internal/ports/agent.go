@@ -198,6 +198,25 @@ type AgentLaunchReceipt struct {
 	RequierePreservacionEntorno bool
 }
 
+// AgentObserveRequest carries the durable identity of one accepted execution.
+// Adapters must not need process-local launch state to locate the execution.
+type AgentObserveRequest struct {
+	ExecutionRef      goal.ExecutionRef
+	GoalRef           goal.GoalRef
+	WorkItemRef       goal.WorkItemRef
+	PlanGeneration    goal.PlanGeneration
+	AppSpecGeneration goal.AppSpecGeneration
+	ExecutionAttempt  uint64
+	SpecHash          string
+	ProviderRef       string
+	ModelRef          string
+	AgentRef          string
+	ExternalRef       string
+	SessionRef        ExecutionSessionRef
+	ArtifactMediaType string
+	MaxOutputBytes    int64
+}
+
 type AgentObservation struct {
 	ExecutionRef       goal.ExecutionRef
 	SpecHash           string
@@ -208,6 +227,83 @@ type AgentObservation struct {
 	ErrorCode          string
 	Usage              governance.ResourceUsage
 	ObservedAt         time.Time
+}
+
+func ValidateAgentObserveRequest(request AgentObserveRequest) error {
+	if request.SessionRef.String() != "" {
+		if _, err := NewExecutionSessionRef(request.SessionRef.String()); err != nil {
+			return &AgentContractError{Code: "agent.observation_request_session_ref_invalid"}
+		}
+	}
+	switch {
+	case request.ExecutionRef.String() == "":
+		return &AgentContractError{Code: "agent.observation_request_execution_ref_required"}
+	case request.GoalRef.String() == "":
+		return &AgentContractError{Code: "agent.observation_request_goal_ref_required"}
+	case request.WorkItemRef.String() == "":
+		return &AgentContractError{Code: "agent.observation_request_work_item_ref_required"}
+	case request.PlanGeneration == 0:
+		return &AgentContractError{Code: "agent.observation_request_plan_generation_required"}
+	case request.AppSpecGeneration == 0:
+		return &AgentContractError{Code: "agent.observation_request_app_spec_generation_required"}
+	case request.ExecutionAttempt == 0:
+		return &AgentContractError{Code: "agent.observation_request_execution_attempt_required"}
+	case request.SpecHash == "":
+		return &AgentContractError{Code: "agent.observation_request_spec_hash_required"}
+	case !goal.IsCanonicalAppSpecHash(request.SpecHash):
+		return &AgentContractError{Code: "agent.observation_request_spec_hash_invalid"}
+	case !validAgentIdentityRef(request.ProviderRef):
+		return &AgentContractError{Code: "agent.observation_request_provider_ref_required"}
+	case !validAgentIdentityRef(request.ModelRef):
+		return &AgentContractError{Code: "agent.observation_request_model_ref_required"}
+	case !validAgentIdentityRef(request.AgentRef):
+		return &AgentContractError{Code: "agent.observation_request_agent_ref_required"}
+	case strings.TrimSpace(request.ExternalRef) == "":
+		return &AgentContractError{Code: "agent.observation_request_external_ref_required"}
+	case strings.TrimSpace(request.ArtifactMediaType) == "":
+		return &AgentContractError{Code: "agent.observation_request_artifact_media_type_required"}
+	case request.MaxOutputBytes <= 0:
+		return &AgentContractError{Code: "agent.observation_request_max_output_bytes_invalid"}
+	default:
+		return nil
+	}
+}
+
+// ValidateAgentObserveTarget binds an observation query to the exact accepted
+// launch. Launch-only prompt and governance fields remain outside this check.
+func ValidateAgentObserveTarget(
+	launch AgentLaunchRequest,
+	receipt AgentLaunchReceipt,
+	request AgentObserveRequest,
+) error {
+	if err := ValidateAgentObserveRequest(request); err != nil {
+		return err
+	}
+	checks := []struct {
+		matches bool
+		field   string
+	}{
+		{request.ExecutionRef == receipt.ExecutionRef, "execution_ref"},
+		{request.GoalRef == receipt.GoalRef, "goal_ref"},
+		{request.WorkItemRef == receipt.WorkItemRef, "work_item_ref"},
+		{request.PlanGeneration == receipt.PlanGeneration, "plan_generation"},
+		{request.AppSpecGeneration == receipt.AppSpecGeneration, "app_spec_generation"},
+		{request.ExecutionAttempt == receipt.ExecutionAttempt, "execution_attempt"},
+		{request.SpecHash == receipt.SpecHash, "spec_hash"},
+		{request.ProviderRef == receipt.ProviderRef, "provider_ref"},
+		{request.ModelRef == receipt.ModelRef, "model_ref"},
+		{request.AgentRef == receipt.AgentRef, "agent_ref"},
+		{request.ExternalRef == receipt.ExternalRef, "external_ref"},
+		{request.SessionRef == launch.SessionRef, "session_ref"},
+		{request.ArtifactMediaType == launch.ArtifactMediaType, "artifact_media_type"},
+		{request.MaxOutputBytes == launch.MaxOutputBytes, "max_output_bytes"},
+	}
+	for _, check := range checks {
+		if !check.matches {
+			return &AgentContractError{Code: "agent.observation_request_" + check.field + "_mismatch"}
+		}
+	}
+	return nil
 }
 
 type AgentContractError struct {

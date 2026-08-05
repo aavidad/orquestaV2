@@ -926,6 +926,13 @@ func (agent *dagAgent) Observe(ctx context.Context, executionRef goal.ExecutionR
 	}, nil
 }
 
+func (agent *dagAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func dagReviewSubjectDigest(objective string) string {
 	const prefix = "Review exact immutable evidence "
 	value := strings.TrimPrefix(objective, prefix)

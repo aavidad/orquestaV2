@@ -466,6 +466,25 @@ func (pool *Pool) Observe(
 	return profile.adapter.Observe(operationContext, executionRef)
 }
 
+func (pool *Pool) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	if err := ports.ValidateAgentObserveRequest(request); err != nil {
+		return ports.AgentObservation{}, err
+	}
+	operationContext, end, err := pool.beginOperation(ctx)
+	if err != nil {
+		return ports.AgentObservation{}, err
+	}
+	defer end()
+	profile, _, err := pool.route(operationContext, request.ExecutionRef, false)
+	if err != nil {
+		return ports.AgentObservation{}, err
+	}
+	return profile.adapter.ObserveAgent(operationContext, request)
+}
+
 func (pool *Pool) ControlCapabilities(
 	ctx context.Context,
 ) (ports.AgentControlCapabilities, error) {

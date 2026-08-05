@@ -437,6 +437,13 @@ func (agent *sqliteTerminalStopAgent) Observe(
 	}, nil
 }
 
+func (agent *sqliteTerminalStopAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func (*sqliteTerminalStopAgent) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
 	return ports.AgentControlCapabilities{CooperativeStop: true}, nil
 }
@@ -484,6 +491,13 @@ func (agent *sqliteMultiControlAgent) Launch(
 
 func (*sqliteMultiControlAgent) Observe(context.Context, goal.ExecutionRef) (ports.AgentObservation, error) {
 	return ports.AgentObservation{}, nil
+}
+
+func (agent *sqliteMultiControlAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
 }
 
 func (*sqliteMultiControlAgent) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {

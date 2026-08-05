@@ -339,6 +339,13 @@ func (*sqliteEscalationAgent) Observe(context.Context, goal.ExecutionRef) (ports
 	return ports.AgentObservation{}, nil
 }
 
+func (agent *sqliteEscalationAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func (*sqliteEscalationAgent) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
 	return ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}, nil
 }

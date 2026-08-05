@@ -191,3 +191,10 @@ func (a *v19CouncilAgent) Observe(ctx context.Context, ref goal.ExecutionRef) (p
 	a.mu.Unlock()
 	return observation, nil
 }
+
+func (a *v19CouncilAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return a.Observe(ctx, request.ExecutionRef)
+}

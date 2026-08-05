@@ -270,6 +270,13 @@ func (*sqliteLaunchFenceAgent) Observe(context.Context, goal.ExecutionRef) (port
 	return ports.AgentObservation{}, errors.New("sqlite launch fence observation unused")
 }
 
+func (agent *sqliteLaunchFenceAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func (*sqliteLaunchFenceAgent) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
 	return ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}, nil
 }

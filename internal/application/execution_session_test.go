@@ -2,11 +2,13 @@ package application
 
 import (
 	"context"
-	"orquesta/internal/goal"
-	"orquesta/internal/ports"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"orquesta/internal/goal"
+	"orquesta/internal/ports"
 )
 
 type testExecutionSessionBroker struct {
@@ -71,6 +73,23 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 		accessAuthority.MailboxEndpointRef != authority.MailboxEndpointRef {
 		t.Fatalf("SessionRef=%s durable=%s authority=%+v err=%v",
 			sessionRef, execution.ExecutionSessionRef, authority, err)
+	}
+
+	agent.mu.Lock()
+	agent.observations = []ports.AgentObservation{{
+		Status: ports.AgentRunning, Usage: unknownUsage(), ObservedAt: clock.Now(),
+	}}
+	agent.mu.Unlock()
+	if result, err := orchestrator.ProcessNext(ctx, "worker:execution-session-observe"); err != nil ||
+		!result.Processed {
+		t.Fatalf("ProcessNext observe result=%+v err=%v", result, err)
+	}
+	agent.mu.Lock()
+	observed := append([]ports.AgentObserveRequest(nil), agent.observeRequests...)
+	agent.mu.Unlock()
+	wantObservation := agentObserveRequest(execution)
+	if len(observed) != 1 || !reflect.DeepEqual(observed[0], wantObservation) {
+		t.Fatalf("observe requests=%+v want=%+v", observed, wantObservation)
 	}
 }
 

@@ -147,6 +147,28 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 	}, nil
 }
 
+func (adapter *Adapter) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	if err := ports.ValidateAgentObserveRequest(request); err != nil {
+		return ports.AgentObservation{}, err
+	}
+	if adapter == nil {
+		return ports.AgentObservation{}, errors.New("fake_agent.unavailable")
+	}
+	adapter.mu.Lock()
+	run, found := adapter.runs[request.ExecutionRef]
+	adapter.mu.Unlock()
+	if !found {
+		return ports.AgentObservation{}, errors.New("fake_agent.execution_not_found")
+	}
+	if err := ports.ValidateAgentObserveTarget(run.request, run.receipt, request); err != nil {
+		return ports.AgentObservation{}, errors.New("fake_agent.observation_conflict")
+	}
+	return adapter.Observe(ctx, request.ExecutionRef)
+}
+
 var _ application.AgentLauncher = (*Adapter)(nil)
 var _ application.AgentObserver = (*Adapter)(nil)
 var _ application.AgentController = (*Adapter)(nil)

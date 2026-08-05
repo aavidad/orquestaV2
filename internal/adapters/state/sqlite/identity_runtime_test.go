@@ -696,6 +696,9 @@ func (sqliteMembershipExternalStub) Launch(context.Context, ports.AgentLaunchReq
 func (sqliteMembershipExternalStub) Observe(context.Context, goal.ExecutionRef) (ports.AgentObservation, error) {
 	return ports.AgentObservation{}, fmt.Errorf("sqlite.membership_test.observe_unexpected")
 }
+func (stub sqliteMembershipExternalStub) ObserveAgent(ctx context.Context, request ports.AgentObserveRequest) (ports.AgentObservation, error) {
+	return stub.Observe(ctx, request.ExecutionRef)
+}
 func (sqliteMembershipExternalStub) Put(context.Context, ports.PutArtifactRequest) (ports.StoredArtifact, error) {
 	return ports.StoredArtifact{}, fmt.Errorf("sqlite.membership_test.put_unexpected")
 }

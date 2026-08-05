@@ -41,9 +41,10 @@ func isDefinitelyNotAppliedAgentError(err error) bool {
 	return errors.As(err, &unapplied) && unapplied.DefinitelyNotApplied()
 }
 
-// AgentObserver recovers observations, including terminal state, by execution.
+// AgentObserver recovers observations, including terminal state, from durable
+// accepted-execution identity.
 type AgentObserver interface {
-	Observe(context.Context, goal.ExecutionRef) (ports.AgentObservation, error)
+	ObserveAgent(context.Context, ports.AgentObserveRequest) (ports.AgentObservation, error)
 }
 
 // AgentController stops one exact execution. Global adapter shutdown remains a

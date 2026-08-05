@@ -369,6 +369,13 @@ func (agent *restartAgent) Observe(context.Context, goal.ExecutionRef) (ports.Ag
 	return ports.AgentObservation{}, errors.New("restart_agent.observe_not_used")
 }
 
+func (agent *restartAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
+}
+
 func (agent *restartAgent) launchRequests() []ports.AgentLaunchRequest {
 	agent.mu.Lock()
 	defer agent.mu.Unlock()
@@ -425,6 +432,13 @@ func (agent *leaseCompletionAgent) Observe(_ context.Context, executionRef goal.
 		Content: []byte("lease-fenced artifact"),
 		Usage:   governance.ResourceUsage{Quality: governance.UsageQualityUnknown}, ObservedAt: agent.clock.Now(),
 	}, nil
+}
+
+func (agent *leaseCompletionAgent) ObserveAgent(
+	ctx context.Context,
+	request ports.AgentObserveRequest,
+) (ports.AgentObservation, error) {
+	return agent.Observe(ctx, request.ExecutionRef)
 }
 
 type leaseAdvancingArtifacts struct {
