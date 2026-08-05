@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
@@ -21,18 +22,19 @@ import (
 )
 
 const (
-	CodeConfigurationInvalid    = "agentmicrovm.configuration_invalid"
-	CodeCapabilitiesUnavailable = "agentmicrovm.capabilities_unavailable"
-	CodeCapabilitiesRejected    = "agentmicrovm.capabilities_rejected"
-	CodeProtocolIncompatible    = "agentmicrovm.protocol_incompatible"
-	CodePhysicalUnavailable     = "agentmicrovm.physical_unavailable"
-	CodeOperationUnsupported    = "agentmicrovm.operation_unsupported"
-	CodeCapabilityMismatch      = "agentmicrovm.capability_mismatch"
-	CodeSigningFailed           = "agentmicrovm.signing_failed"
-	CodeLaunchUnavailable       = "agentmicrovm.launch_unavailable"
-	CodeLaunchRejected          = "agentmicrovm.launch_rejected"
-	CodeLaunchResponseInvalid   = "agentmicrovm.launch_response_invalid"
-	CodeObservationUnavailable  = "agentmicrovm.observation_unavailable"
+	CodeConfigurationInvalid                  = "agentmicrovm.configuration_invalid"
+	CodeCapabilitiesUnavailable               = "agentmicrovm.capabilities_unavailable"
+	CodeCapabilitiesRejected                  = "agentmicrovm.capabilities_rejected"
+	CodeNegotiatedPhysicalCapacityUnavailable = "agentmicrovm.negotiated_physical_capacity_unavailable"
+	CodeProtocolIncompatible                  = "agentmicrovm.protocol_incompatible"
+	CodePhysicalUnavailable                   = "agentmicrovm.physical_unavailable"
+	CodeOperationUnsupported                  = "agentmicrovm.operation_unsupported"
+	CodeCapabilityMismatch                    = "agentmicrovm.capability_mismatch"
+	CodeSigningFailed                         = "agentmicrovm.signing_failed"
+	CodeLaunchUnavailable                     = "agentmicrovm.launch_unavailable"
+	CodeLaunchRejected                        = "agentmicrovm.launch_rejected"
+	CodeLaunchResponseInvalid                 = "agentmicrovm.launch_response_invalid"
+	CodeObservationUnavailable                = "agentmicrovm.observation_unavailable"
 )
 
 const (
@@ -121,6 +123,14 @@ type Config struct {
 	PromptRenderer PromptRenderer
 }
 
+// NegotiatedPhysicalCapacity is the last complete physical-capacity proof
+// obtained from Agente MicroVM. PlacementRef remains opaque and Slots is the
+// exact remote maximum; neither value is inferred from logical capacity.
+type NegotiatedPhysicalCapacity struct {
+	PlacementRef ports.AgentPlacementRef
+	Slots        uint32
+}
+
 // Adapter translates launch authority without owning a lifecycle or retaining
 // replay state. Repetition always crosses the sibling idempotency boundary with
 // the same key and signed bytes.
@@ -132,6 +142,13 @@ type Adapter struct {
 	capabilities ports.AgentCapabilities
 	model        string
 	renderer     PromptRenderer
+
+	negotiationGate                     chan struct{}
+	physicalCapacityMu                  sync.RWMutex
+	physicalCapacityGeneration          uint64
+	physicalCapacityGenerationExhausted bool
+	physicalCapacity                    NegotiatedPhysicalCapacity
+	physicalCapacityAvailable           bool
 }
 
 // New validates only local, immutable composition facts. Remote readiness is
@@ -158,13 +175,14 @@ func New(config Config) (*Adapter, error) {
 		return nil, fail(CodeConfigurationInvalid, err)
 	}
 	return &Adapter{
-		client:       config.Client,
-		observer:     observer,
-		signer:       config.Signer,
-		profile:      cloneProfileBinding(config.ModelBinding.Profile),
-		capabilities: cloneCapabilities(config.Capabilities),
-		model:        config.ModelBinding.ProviderModel,
-		renderer:     config.PromptRenderer,
+		client:          config.Client,
+		observer:        observer,
+		signer:          config.Signer,
+		profile:         cloneProfileBinding(config.ModelBinding.Profile),
+		capabilities:    cloneCapabilities(config.Capabilities),
+		model:           config.ModelBinding.ProviderModel,
+		renderer:        config.PromptRenderer,
+		negotiationGate: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -179,6 +197,22 @@ func (adapter *Adapter) Capabilities(ctx context.Context) (ports.AgentCapabiliti
 		return ports.AgentCapabilities{}, err
 	}
 	return cloneCapabilities(adapter.capabilities), nil
+}
+
+// NegotiatedPhysicalCapacity returns only a capacity published by a complete
+// successful negotiation. A negotiation in progress or any later failed
+// negotiation leaves this read closed instead of retaining stale capacity.
+func (adapter *Adapter) NegotiatedPhysicalCapacity() (NegotiatedPhysicalCapacity, error) {
+	if adapter == nil {
+		return NegotiatedPhysicalCapacity{}, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	}
+	adapter.physicalCapacityMu.RLock()
+	capacity, available := adapter.physicalCapacity, adapter.physicalCapacityAvailable
+	adapter.physicalCapacityMu.RUnlock()
+	if !available {
+		return NegotiatedPhysicalCapacity{}, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	}
+	return capacity, nil
 }
 
 // Launch signs and submits one exact physical launch. A physically available
@@ -317,6 +351,19 @@ func (adapter *Adapter) negotiate(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	generation, ok := adapter.beginPhysicalCapacityNegotiation()
+	if !ok || adapter.negotiationGate == nil {
+		return fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	}
+	select {
+	case adapter.negotiationGate <- struct{}{}:
+		defer func() { <-adapter.negotiationGate }()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	response, err := adapter.client.Capacidades(ctx)
 	if err != nil {
 		if contextErr := preserveContextError(ctx, err); contextErr != nil {
@@ -346,7 +393,38 @@ func (adapter *Adapter) negotiate(ctx context.Context) error {
 			return fail(CodeOperationUnsupported, nil)
 		}
 	}
+	adapter.publishNegotiatedPhysicalCapacity(generation, NegotiatedPhysicalCapacity{
+		PlacementRef: adapter.profile.PlacementRef,
+		Slots:        response.MaximoEjecuciones,
+	})
 	return nil
+}
+
+func (adapter *Adapter) beginPhysicalCapacityNegotiation() (uint64, bool) {
+	adapter.physicalCapacityMu.Lock()
+	defer adapter.physicalCapacityMu.Unlock()
+	adapter.physicalCapacity = NegotiatedPhysicalCapacity{}
+	adapter.physicalCapacityAvailable = false
+	if adapter.physicalCapacityGeneration == ^uint64(0) {
+		adapter.physicalCapacityGenerationExhausted = true
+		return 0, false
+	}
+	adapter.physicalCapacityGeneration++
+	return adapter.physicalCapacityGeneration, true
+}
+
+func (adapter *Adapter) publishNegotiatedPhysicalCapacity(
+	generation uint64,
+	capacity NegotiatedPhysicalCapacity,
+) bool {
+	adapter.physicalCapacityMu.Lock()
+	defer adapter.physicalCapacityMu.Unlock()
+	if adapter.physicalCapacityGenerationExhausted || adapter.physicalCapacityGeneration != generation {
+		return false
+	}
+	adapter.physicalCapacity = capacity
+	adapter.physicalCapacityAvailable = true
+	return true
 }
 
 func validLaunchResponse(response microvm.RespuestaEjecucion, plan microvm.PlanLanzamiento) bool {
@@ -518,6 +596,7 @@ func (err *Error) Temporary() bool {
 	}
 	switch err.Code {
 	case CodeCapabilitiesUnavailable, CodePhysicalUnavailable, CodeLaunchUnavailable,
+		CodeNegotiatedPhysicalCapacityUnavailable,
 		CodeObservationUnavailable, CodeWorkRevisionUnavailable,
 		CodeSessionStartUnavailable, CodeSessionPending,
 		CodeSessionInputUnavailable, CodeSessionInputPending,
@@ -536,6 +615,7 @@ func (err *Error) DefinitelyNotApplied() bool {
 	}
 	switch err.Code {
 	case CodeConfigurationInvalid, CodeCapabilitiesUnavailable, CodeCapabilitiesRejected,
+		CodeNegotiatedPhysicalCapacityUnavailable,
 		CodeProtocolIncompatible, CodePhysicalUnavailable, CodeOperationUnsupported,
 		CodeCapabilityMismatch, CodeSigningFailed,
 		CodeLaunchRequestInvalid, CodeSessionRequired, CodeAccessAuthorityRequired,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,6 +26,38 @@ type launchClientStub struct {
 	launchRequests   []microvm.SolicitudLanzamiento
 	onCapabilities   func()
 	onLaunch         func()
+}
+
+type blockingCapabilitiesClient struct {
+	*launchClientStub
+	mu           sync.Mutex
+	calls        int
+	firstStarted chan struct{}
+	releaseFirst chan struct{}
+}
+
+func (client *blockingCapabilitiesClient) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
+	client.mu.Lock()
+	client.calls++
+	call := client.calls
+	response, err := client.capabilities, client.capabilitiesErr
+	client.mu.Unlock()
+	if call == 1 {
+		close(client.firstStarted)
+		<-client.releaseFirst
+	}
+	return response, err
+}
+
+type gateWaitSignalContext struct {
+	context.Context
+	waitStarted chan struct{}
+	once        sync.Once
+}
+
+func (ctx *gateWaitSignalContext) Done() <-chan struct{} {
+	ctx.once.Do(func() { close(ctx.waitStarted) })
+	return ctx.Context.Done()
 }
 
 func (client *launchClientStub) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
@@ -317,6 +350,268 @@ func TestAdapterCapabilitiesNegotiatesCompleteRuntimeBeforeReturningNeutralFacts
 	second, err := adapter.Capabilities(context.Background())
 	if err != nil || !reflect.DeepEqual(second, want) {
 		t.Fatalf("capability storage was aliased: second=%+v err=%v", second, err)
+	}
+}
+
+func TestAdapterNegotiatedPhysicalCapacityFailsClosedThenReturnsImmutableProfilePlacement(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	remote := validRemoteCapabilities()
+	remote.MaximoEjecuciones = 5
+	client := &launchClientStub{capabilities: remote}
+	config := validAdapterConfig(client, validSigner(), request, descriptor)
+	wantPlacement := config.ModelBinding.Profile.PlacementRef
+	adapter, err := New(config)
+	if err != nil {
+		t.Fatalf("New() = %v", err)
+	}
+
+	before, err := adapter.NegotiatedPhysicalCapacity()
+	if before != (NegotiatedPhysicalCapacity{}) || ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable ||
+		!isTemporary(err) || !isDefinitelyNotApplied(err) {
+		t.Fatalf("capacity before negotiation=%+v error=%v code=%q", before, err, ErrorCode(err))
+	}
+	otherPlacement, _ := ports.NewAgentPlacementRef("placement:mutated-after-new")
+	config.ModelBinding.Profile.PlacementRef = otherPlacement
+	if _, err := adapter.Capabilities(context.Background()); err != nil {
+		t.Fatalf("Capabilities() = %v", err)
+	}
+
+	capacity, err := adapter.NegotiatedPhysicalCapacity()
+	if err != nil || capacity.PlacementRef != wantPlacement || capacity.Slots != 5 {
+		t.Fatalf("NegotiatedPhysicalCapacity()=%+v error=%v", capacity, err)
+	}
+	capacity.PlacementRef = otherPlacement
+	capacity.Slots = 999
+	again, err := adapter.NegotiatedPhysicalCapacity()
+	if err != nil || again.PlacementRef != wantPlacement || again.Slots != 5 {
+		t.Fatalf("capacity storage was aliased: %+v error=%v", again, err)
+	}
+}
+
+func TestAdapterNegotiatedPhysicalCapacityClearsPriorOnFailedNegotiation(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	tests := []struct {
+		name   string
+		mutate func(*launchClientStub)
+	}{
+		{
+			name: "incomplete operations",
+			mutate: func(client *launchClientStub) {
+				removeOperation(&client.capabilities, operationReadSessionEvents)
+			},
+		},
+		{
+			name: "invalid physical maximum",
+			mutate: func(client *launchClientStub) {
+				client.capabilities.MaximoEjecuciones = 0
+			},
+		},
+		{
+			name: "transport failure",
+			mutate: func(client *launchClientStub) {
+				client.capabilitiesErr = errors.New("socket unavailable")
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := &launchClientStub{capabilities: validRemoteCapabilities()}
+			adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+			if _, err := adapter.Capabilities(context.Background()); err != nil {
+				t.Fatalf("initial Capabilities() = %v", err)
+			}
+			test.mutate(client)
+			if _, err := adapter.Capabilities(context.Background()); err == nil {
+				t.Fatal("failed negotiation returned success")
+			}
+			capacity, err := adapter.NegotiatedPhysicalCapacity()
+			if capacity != (NegotiatedPhysicalCapacity{}) || ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
+				t.Fatalf("stale capacity survived: %+v error=%v code=%q", capacity, err, ErrorCode(err))
+			}
+		})
+	}
+}
+
+func TestAdapterNegotiatedPhysicalCapacityClearsBeforeQueryAndPublishesRemoteChange(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	remote := validRemoteCapabilities()
+	remote.MaximoEjecuciones = 5
+	client := &launchClientStub{capabilities: remote}
+	adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+	if _, err := adapter.Capabilities(context.Background()); err != nil {
+		t.Fatalf("initial Capabilities() = %v", err)
+	}
+
+	codeDuringQuery := ""
+	client.capabilities.MaximoEjecuciones = 20
+	client.onCapabilities = func() {
+		_, err := adapter.NegotiatedPhysicalCapacity()
+		codeDuringQuery = ErrorCode(err)
+	}
+	if _, err := adapter.Capabilities(context.Background()); err != nil {
+		t.Fatalf("updated Capabilities() = %v", err)
+	}
+	capacity, err := adapter.NegotiatedPhysicalCapacity()
+	if codeDuringQuery != CodeNegotiatedPhysicalCapacityUnavailable || err != nil || capacity.Slots != 20 ||
+		capacity.PlacementRef != request.ReferenciaColocacion {
+		t.Fatalf("during=%q capacity=%+v error=%v", codeDuringQuery, capacity, err)
+	}
+}
+
+func TestAdapterNegotiationCancellationSupersedesBlockedGenerationWithoutStalePublication(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &blockingCapabilitiesClient{
+		launchClientStub: &launchClientStub{capabilities: validRemoteCapabilities()},
+		firstStarted:     make(chan struct{}),
+		releaseFirst:     make(chan struct{}),
+	}
+	defer func() {
+		select {
+		case <-client.releaseFirst:
+		default:
+			close(client.releaseFirst)
+		}
+	}()
+	adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+
+	firstResult := make(chan error, 1)
+	go func() {
+		_, err := adapter.Capabilities(context.Background())
+		firstResult <- err
+	}()
+	<-client.firstStarted
+	if capacity, err := adapter.NegotiatedPhysicalCapacity(); capacity != (NegotiatedPhysicalCapacity{}) ||
+		ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
+		t.Fatalf("blocked first negotiation exposed capacity=%+v error=%v", capacity, err)
+	}
+
+	base, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	waitStarted := make(chan struct{})
+	secondContext := &gateWaitSignalContext{Context: base, waitStarted: waitStarted}
+	secondResult := make(chan error, 1)
+	go func() {
+		_, err := adapter.Capabilities(secondContext)
+		secondResult <- err
+	}()
+	<-waitStarted
+	if capacity, err := adapter.NegotiatedPhysicalCapacity(); capacity != (NegotiatedPhysicalCapacity{}) ||
+		ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
+		t.Fatalf("queued generation exposed capacity=%+v error=%v", capacity, err)
+	}
+	cancel()
+	if err := <-secondResult; err != context.Canceled {
+		t.Fatalf("canceled queued negotiation = %v, want literal context.Canceled", err)
+	}
+
+	close(client.releaseFirst)
+	if err := <-firstResult; err != nil {
+		t.Fatalf("stale but otherwise valid first negotiation = %v", err)
+	}
+	if capacity, err := adapter.NegotiatedPhysicalCapacity(); capacity != (NegotiatedPhysicalCapacity{}) ||
+		ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
+		t.Fatalf("stale first negotiation republished capacity=%+v error=%v", capacity, err)
+	}
+
+	if _, err := adapter.Capabilities(context.Background()); err != nil {
+		t.Fatalf("third Capabilities() = %v", err)
+	}
+	capacity, err := adapter.NegotiatedPhysicalCapacity()
+	if err != nil || capacity.PlacementRef != request.ReferenciaColocacion || capacity.Slots != 16 {
+		t.Fatalf("third capacity=%+v error=%v", capacity, err)
+	}
+}
+
+func TestAdapterNegotiationGenerationExhaustionFailsClosedWithoutWrapping(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &launchClientStub{capabilities: validRemoteCapabilities()}
+	adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
+	adapter.physicalCapacityGeneration = ^uint64(0)
+	adapter.physicalCapacity = NegotiatedPhysicalCapacity{
+		PlacementRef: request.ReferenciaColocacion,
+		Slots:        999,
+	}
+	adapter.physicalCapacityAvailable = true
+
+	if _, err := adapter.Capabilities(context.Background()); ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
+		t.Fatalf("Capabilities() = %v code=%q", err, ErrorCode(err))
+	}
+	capacity, err := adapter.NegotiatedPhysicalCapacity()
+	if adapter.physicalCapacityGeneration != ^uint64(0) ||
+		capacity != (NegotiatedPhysicalCapacity{}) ||
+		ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable || client.capabilitiesCall != 0 {
+		t.Fatalf("generation=%d capacity=%+v error=%v calls=%d",
+			adapter.physicalCapacityGeneration, capacity, err, client.capabilitiesCall)
+	}
+}
+
+func TestAdapterNegotiatedPhysicalCapacityConcurrentCapabilitiesLaunchAndRead(t *testing.T) {
+	request := validLaunchRequest(t)
+	descriptor := validDescriptor(t, false)
+	client := &concurrentResolvedSessionClient{
+		physical: validPhysicalResponse(t, request, descriptor),
+		request:  request,
+	}
+	signer := concurrentSessionSigner{delegate: validSigner().delegate}
+	adapter := mustNewAdapter(t, client, signer, request, descriptor)
+	if _, err := adapter.Capabilities(context.Background()); err != nil {
+		t.Fatalf("initial Capabilities() = %v", err)
+	}
+
+	const workers = 12
+	start := make(chan struct{})
+	errorsFound := make(chan error, workers*3)
+	var wait sync.WaitGroup
+	for range workers {
+		wait.Add(3)
+		go func() {
+			defer wait.Done()
+			<-start
+			_, err := adapter.Capabilities(context.Background())
+			if err != nil {
+				errorsFound <- err
+			}
+		}()
+		go func() {
+			defer wait.Done()
+			<-start
+			_, err := adapter.Launch(context.Background(), request)
+			if err != nil {
+				errorsFound <- err
+			}
+		}()
+		go func() {
+			defer wait.Done()
+			<-start
+			capacity, err := adapter.NegotiatedPhysicalCapacity()
+			if err != nil {
+				if capacity != (NegotiatedPhysicalCapacity{}) || ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
+					errorsFound <- errors.New("capacity read did not fail closed")
+				}
+				return
+			}
+			if capacity.PlacementRef != request.ReferenciaColocacion || capacity.Slots != 16 {
+				errorsFound <- errors.New("capacity read returned mixed snapshot")
+			}
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(errorsFound)
+	for err := range errorsFound {
+		t.Fatalf("concurrent operation = %v", err)
+	}
+	if _, err := adapter.Capabilities(context.Background()); err != nil {
+		t.Fatalf("final Capabilities() = %v", err)
+	}
+	capacity, err := adapter.NegotiatedPhysicalCapacity()
+	if err != nil || capacity.PlacementRef != request.ReferenciaColocacion || capacity.Slots != 16 {
+		t.Fatalf("final capacity=%+v error=%v", capacity, err)
 	}
 }
 
