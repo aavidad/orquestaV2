@@ -135,6 +135,7 @@ func (orchestrator *Orchestrator) beginEffectAttempt(
 		IntentRef: intent.Ref, IntentDigest: intent.Digest, ApprovalRef: approval.Ref,
 		Subject: intent.Subject, ActionRef: claim.Action.Ref, ActionFence: claim.Fence,
 		WorkerRef: claim.WorkerRef, IdempotencyKey: intent.IdempotencyKey, StartedAt: at.UTC(),
+		ClaimLeaseUntil: claim.LeaseUntil.UTC(),
 	}
 	persisted, created, err := orchestrator.state.RecordEffectAttempt(ctx, RecordEffectAttemptState{
 		Claim: claim, Attempt: attempt, OperationAt: at.UTC(),
@@ -217,7 +218,9 @@ func validateEffectAttempt(claim ActionClaim, attempt EffectAttempt) error {
 		attempt.ApprovalRef != claim.EffectApproval.Ref || attempt.Subject != intent.Subject ||
 		attempt.ActionRef != claim.Action.Ref || attempt.ActionFence != claim.Fence ||
 		attempt.WorkerRef != claim.WorkerRef || attempt.IdempotencyKey != intent.IdempotencyKey ||
-		attempt.StartedAt.IsZero() {
+		attempt.StartedAt.IsZero() || attempt.ClaimLeaseUntil.IsZero() ||
+		!attempt.ClaimLeaseUntil.After(attempt.StartedAt) ||
+		!attempt.ClaimLeaseUntil.Equal(claim.LeaseUntil.UTC()) {
 		return errors.New("application.effect_attempt_invalid")
 	}
 	return nil

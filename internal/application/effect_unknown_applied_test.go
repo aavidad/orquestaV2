@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -15,6 +16,9 @@ const (
 	attemptPersistThenError     attemptFaultMode = "persist_then_error"
 	attemptPersistThenMalformed attemptFaultMode = "persist_then_malformed"
 	attemptAlreadyExists        attemptFaultMode = "already_exists"
+	attemptLeaseMissing         attemptFaultMode = "lease_missing"
+	attemptLeaseEqualsStarted   attemptFaultMode = "lease_equals_started"
+	attemptLeaseMutated         attemptFaultMode = "lease_mutated"
 )
 
 type attemptFaultState struct {
@@ -35,6 +39,15 @@ func (state attemptFaultState) RecordEffectAttempt(
 		return EffectAttempt{}, false, errors.New("test.effect_attempt_persist_ambiguous")
 	case attemptPersistThenMalformed:
 		attempt.Ref += ":malformed"
+		return attempt, true, nil
+	case attemptLeaseMissing:
+		attempt.ClaimLeaseUntil = time.Time{}
+		return attempt, true, nil
+	case attemptLeaseEqualsStarted:
+		attempt.ClaimLeaseUntil = attempt.StartedAt
+		return attempt, true, nil
+	case attemptLeaseMutated:
+		attempt.ClaimLeaseUntil = attempt.ClaimLeaseUntil.Add(time.Nanosecond)
 		return attempt, true, nil
 	case attemptAlreadyExists:
 		return attempt, false, nil
@@ -304,6 +317,7 @@ func TestEveryPhysicalEffectRequiresNewDurableAttempt(t *testing.T) {
 	} {
 		for _, mode := range []attemptFaultMode{
 			attemptPersistThenError, attemptPersistThenMalformed, attemptAlreadyExists,
+			attemptLeaseMissing, attemptLeaseEqualsStarted, attemptLeaseMutated,
 		} {
 			t.Run(string(kind)+"/"+string(mode), func(t *testing.T) {
 				fixture := newPhysicalEffectFaultFixture(t, kind)
@@ -318,6 +332,26 @@ func TestEveryPhysicalEffectRequiresNewDurableAttempt(t *testing.T) {
 				assertLocalEffectUnknown(t, fixture.repository, kind)
 			})
 		}
+	}
+}
+
+func TestEffectAttemptPreservesExactClaimLeaseAcrossReplay(t *testing.T) {
+	fixture := newEffectDecisionFixture(t, governance.SecurityCriticalitySensitive, time.Minute)
+	decideFixtureEffect(t, fixture, fixture.access, "request:attempt-lease", EffectApproved)
+	claim, found, err := fixture.orchestrator.ClaimNextAction(
+		context.Background(), "worker:attempt-lease", ActionClaimSelection{},
+	)
+	if err != nil || !found {
+		t.Fatalf("claim found=%t err=%v", found, err)
+	}
+
+	first, created, err := fixture.orchestrator.beginEffectAttempt(context.Background(), claim, fixture.clock.Now())
+	if err != nil || !created || first.ClaimLeaseUntil != claim.LeaseUntil.UTC() {
+		t.Fatalf("first created=%t lease=%s want=%s err=%v", created, first.ClaimLeaseUntil, claim.LeaseUntil.UTC(), err)
+	}
+	second, created, err := fixture.orchestrator.beginEffectAttempt(context.Background(), claim, fixture.clock.Now())
+	if err != nil || created || second != first {
+		t.Fatalf("replay created=%t attempt=%+v want=%+v err=%v", created, second, first, err)
 	}
 }
 
