@@ -23,6 +23,7 @@ const (
 	ErrorPurposeDenied       ErrorCode = "credentials.purpose_denied"
 	ErrorVersionConflict     ErrorCode = "credentials.version_conflict"
 	ErrorIdempotencyConflict ErrorCode = "credentials.idempotency_conflict"
+	ErrorAlreadyConsumed     ErrorCode = "credentials.already_consumed"
 	ErrorRevoked             ErrorCode = "credentials.revoked"
 	ErrorUnsafeFile          ErrorCode = "credentials.unsafe_file"
 	ErrorSecretLeak          ErrorCode = "credentials.secret_leak"
@@ -69,6 +70,8 @@ type OwnerRef string
 type ScopeRef string
 type PurposeRef string
 type Version uint64
+
+const OperationUseOnce = "use_once"
 
 func (ref CredentialRef) String() string { return string(ref) }
 func (ref OwnerRef) String() string      { return string(ref) }
@@ -119,6 +122,11 @@ type UseRequest struct {
 	Version       Version
 }
 
+// OneShotUseRequest binds one irreversible consumption claim to the complete
+// credential authority tuple. Version must identify one concrete version;
+// floating current-version selection is forbidden.
+type OneShotUseRequest UseRequest
+
 type RotateRequest struct {
 	ActorRef, RequestRef string
 	CredentialRef        CredentialRef
@@ -163,12 +171,41 @@ type MutationResult struct {
 	Replayed bool
 }
 
-// Store is the only credential capability exposed to consumers.
+// OneShotUseResult contains only durable, material-free consumption evidence.
+// Replayed is false for the first claimed consumption, including when its
+// consumer later fails, and true only for an exact rejected replay.
+type OneShotUseResult struct {
+	Receipt  Receipt
+	Replayed bool
+}
+
+// Store exposes reusable credential lifecycle and legacy replayable use.
 type Store interface {
 	Create(context.Context, CreateRequest) (MutationResult, error)
 	Use(context.Context, UseRequest, func(Secret) error) (Receipt, error)
 	Rotate(context.Context, RotateRequest) (MutationResult, error)
 	Revoke(context.Context, RevokeRequest) (MutationResult, error)
+}
+
+// OneShotStore exposes irreversible credential consumption without changing
+// Store.Use's legacy replay behavior.
+//
+// UseOnce must atomically and durably claim ActorRef/RequestRef before invoking
+// consume. CredentialRef, OwnerRef, ScopeRef, PurposeRef, and Version form the
+// claim fingerprint. An exact replay must not invoke consume and must return
+// the original material-free receipt with Replayed true and
+// ErrorAlreadyConsumed. Reusing the same ActorRef/RequestRef with any other
+// fingerprint value must return ErrorIdempotencyConflict without invoking
+// consume. The claim is not global per CredentialRef/Version: distinct causal
+// ActorRef/RequestRef pairs may legitimately consume the same concrete version.
+//
+// A consume failure does not release the claim: UseOnce returns the original
+// receipt with Replayed false and a material-free error. Implementations must
+// destroy callback-scoped secret material and must never expose material or a
+// material-derived digest through results, errors, durable projections, or
+// serialization.
+type OneShotStore interface {
+	UseOnce(context.Context, OneShotUseRequest, func(Secret) error) (OneShotUseResult, error)
 }
 
 func ValidateCreateRequest(request CreateRequest) error {
@@ -194,6 +231,35 @@ func ValidateCreateRequest(request CreateRequest) error {
 func ValidateUseRequest(request UseRequest) error {
 	return firstError(validateCommon(request.ActorRef, request.RequestRef, request.CredentialRef, request.OwnerRef),
 		ValidateScopeRef(request.ScopeRef), ValidatePurposeRef(request.PurposeRef))
+}
+
+func ValidateOneShotUseRequest(request OneShotUseRequest) error {
+	if err := ValidateUseRequest(UseRequest(request)); err != nil {
+		return err
+	}
+	if request.Version == 0 {
+		return NewError(ErrorInvalidRequest, "version")
+	}
+	return nil
+}
+
+// ValidateOneShotUseResult verifies that durable evidence is bound to request.
+// It validates only results returned after a claim was durably recorded.
+func ValidateOneShotUseResult(request OneShotUseRequest, result OneShotUseResult) error {
+	if err := ValidateOneShotUseRequest(request); err != nil {
+		return err
+	}
+	receipt := result.Receipt
+	if receipt.CredentialRef != request.CredentialRef || receipt.OwnerRef != request.OwnerRef ||
+		receipt.ScopeRef != request.ScopeRef || receipt.PurposeRef != request.PurposeRef ||
+		receipt.RequestRef != request.RequestRef || receipt.ActorRef != request.ActorRef ||
+		receipt.Operation != OperationUseOnce || receipt.OccurredAt.IsZero() {
+		return NewError(ErrorInvalidRequest, "one_shot_result")
+	}
+	if receipt.Version != request.Version {
+		return NewError(ErrorVersionConflict, "version")
+	}
+	return nil
 }
 
 func ValidateRotateRequest(request RotateRequest) error {
