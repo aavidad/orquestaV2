@@ -149,11 +149,18 @@ func TestRebuildArchitecture(t *testing.T) {
 			for _, imported := range file.imports {
 				// Ports may share pure identity value objects; providers, policy
 				// decisions and every concrete identity adapter remain outside.
-				if reason := rebuildArchitectureOnlyInternalPackages(imported.path,
-					"orquesta/internal/goal", "orquesta/internal/governance", "orquesta/internal/identity"); reason != "" {
+				// Credentials is an exact stdlib-only contract dependency; its
+				// subpackages are not part of this inward boundary.
+				if reason := rebuildArchitecturePortsImportReason(imported.path); reason != "" {
 					rebuildArchitectureImportError(t, file, imported, "internal/ports "+reason)
 				}
 			}
+		}
+		if reason := rebuildArchitecturePortsImportReason("orquesta/internal/credentials"); reason != "" {
+			t.Errorf("ports rejected exact credential contract: %s", reason)
+		}
+		if reason := rebuildArchitecturePortsImportReason("orquesta/internal/credentials/local"); reason == "" {
+			t.Error("ports accepted credential adapter subpackage")
 		}
 	})
 
@@ -233,12 +240,20 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
-	t.Run("credentials_contract_depends_only_inward", func(t *testing.T) {
+	t.Run("credentials_contract_is_standard_library_only", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/credentials") {
 			for _, imported := range file.imports {
-				if reason := rebuildArchitectureOnlyInternalPackages(imported.path); reason != "" {
+				if reason := rebuildArchitectureCredentialsImportReason(imported.path); reason != "" {
 					rebuildArchitectureImportError(t, file, imported, "internal/credentials "+reason)
 				}
+			}
+		}
+		if reason := rebuildArchitectureCredentialsImportReason("context"); reason != "" {
+			t.Errorf("credentials rejected standard library: %s", reason)
+		}
+		for _, mutant := range []string{"orquesta/internal/goal", "example.com/provider/sdk", "provider/sdk"} {
+			if reason := rebuildArchitectureCredentialsImportReason(mutant); reason == "" {
+				t.Errorf("credentials accepted non-standard-library import %q", mutant)
 			}
 		}
 	})
@@ -825,6 +840,21 @@ func rebuildArchitectureOnlyInternalPackages(importPath string, allowed ...strin
 		}
 	}
 	return "may not depend on " + importPath
+}
+
+func rebuildArchitecturePortsImportReason(importPath string) string {
+	if importPath == "orquesta/internal/credentials" {
+		return ""
+	}
+	return rebuildArchitectureOnlyInternalPackages(importPath,
+		"orquesta/internal/goal", "orquesta/internal/governance", "orquesta/internal/identity")
+}
+
+func rebuildArchitectureCredentialsImportReason(importPath string) string {
+	if rebuildArchitectureCommandIsStandardLibraryImport(importPath) {
+		return ""
+	}
+	return "may depend only on the standard library"
 }
 
 func rebuildArchitectureAdapterImportReason(filePath, importPath string) string {

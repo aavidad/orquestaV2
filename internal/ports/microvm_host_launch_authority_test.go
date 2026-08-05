@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 )
 
@@ -53,6 +54,93 @@ func TestMicroVMHostLaunchAuthorityRejectsInvalidCausalityAndDigests(t *testing.
 			want := "microvm_host_launch_authority." + test.code
 			if got := MicroVMHostLaunchAuthorityContractErrorCode(ValidateMicroVMHostLaunchAuthorityV1(candidate)); got != want {
 				t.Fatalf("error code=%q want=%q", got, want)
+			}
+		})
+	}
+}
+
+func TestMicroVMHostLaunchAuthorityRequiresCompleteExactOneShotClaim(t *testing.T) {
+	base := validMicroVMHostLaunchAuthority(t)
+	tests := map[string]struct {
+		mutate func(*credentials.OneShotUseRequest)
+		code   string
+	}{
+		"actor":      {func(v *credentials.OneShotUseRequest) { v.ActorRef = "" }, "one_shot_claim_invalid"},
+		"request":    {func(v *credentials.OneShotUseRequest) { v.RequestRef = "" }, "one_shot_claim_invalid"},
+		"credential": {func(v *credentials.OneShotUseRequest) { v.CredentialRef = "" }, "one_shot_claim_invalid"},
+		"owner":      {func(v *credentials.OneShotUseRequest) { v.OwnerRef = "" }, "one_shot_claim_invalid"},
+		"scope":      {func(v *credentials.OneShotUseRequest) { v.ScopeRef = "" }, "one_shot_claim_invalid"},
+		"purpose":    {func(v *credentials.OneShotUseRequest) { v.PurposeRef = "" }, "one_shot_claim_invalid"},
+		"version":    {func(v *credentials.OneShotUseRequest) { v.Version = 0 }, "one_shot_claim_invalid"},
+		"causal request": {
+			func(v *credentials.OneShotUseRequest) { v.RequestRef = "request:other-valid-request" },
+			"one_shot_request_ref_mismatch",
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := CloneMicroVMHostLaunchAuthorityV1(base)
+			test.mutate(&candidate.OneShotClaim)
+			want := "microvm_host_launch_authority." + test.code
+			if got := MicroVMHostLaunchAuthorityContractErrorCode(ValidateMicroVMHostLaunchAuthorityV1(candidate)); got != want {
+				t.Fatalf("error code=%q want=%q", got, want)
+			}
+		})
+	}
+}
+
+func TestMicroVMHostLaunchAuthorityKeepsOneShotPurposeNeutral(t *testing.T) {
+	authority := validMicroVMHostLaunchAuthority(t)
+	authority.OneShotClaim.PurposeRef = "provider:anthropic"
+	if err := ValidateMicroVMHostLaunchAuthorityPreparedV1(authority); err != nil {
+		t.Fatalf("neutral provider purpose rejected: %v", err)
+	}
+}
+
+func TestBuildMicroVMHostLaunchOneShotRequestRefV1IsDeterministicAndCausal(t *testing.T) {
+	base := validMicroVMHostLaunchAuthority(t)
+	derive := func(t *testing.T, authority MicroVMHostLaunchAuthorityV1) string {
+		t.Helper()
+		requestRef, err := BuildMicroVMHostLaunchOneShotRequestRefV1(
+			authority.Key,
+			authority.EffectAttemptRef,
+			authority.SessionRef,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return requestRef
+	}
+	want := derive(t, base)
+	if got := derive(t, base); got != want {
+		t.Fatalf("same causality derived different refs: %q != %q", got, want)
+	}
+	if !strings.HasPrefix(want, microVMHostLaunchOneShotRequestPrefixV1) ||
+		!validWorkspaceDigest(strings.TrimPrefix(want, microVMHostLaunchOneShotRequestPrefixV1)) {
+		t.Fatalf("derived request ref is not canonical: %q", want)
+	}
+
+	otherRun := CloneMicroVMHostLaunchAuthorityV1(base)
+	var err error
+	otherRun.Key.RunRef, err = goal.NewExecutionRef("execution:host-launch-other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherFence := CloneMicroVMHostLaunchAuthorityV1(base)
+	otherFence.Key.ActionFence++
+	otherAttempt := CloneMicroVMHostLaunchAuthorityV1(base)
+	otherAttempt.EffectAttemptRef = "effect-attempt:launch:two"
+	otherSession := CloneMicroVMHostLaunchAuthorityV1(base)
+	otherSession.SessionRef, err = NewExecutionSessionRef("execution-session:sha256:" + strings.Repeat("f", 64))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, candidate := range map[string]MicroVMHostLaunchAuthorityV1{
+		"run": otherRun, "fence": otherFence, "attempt": otherAttempt, "session": otherSession,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := derive(t, candidate); got == want {
+				t.Fatalf("changed %s preserved request ref %q", name, got)
 			}
 		})
 	}
@@ -112,24 +200,49 @@ func TestCloneMicroVMHostLaunchAuthorityDetachesServices(t *testing.T) {
 	if original.Services[0].ServiceRef == clone.Services[0].ServiceRef {
 		t.Fatal("clone aliases caller-owned Services")
 	}
+	if clone.OneShotClaim != original.OneShotClaim {
+		t.Fatal("clone changed material-free OneShot claim")
+	}
 }
 
-func TestMicroVMHostLaunchAuthorityContractExposesNoSecretOrEndpointSurface(t *testing.T) {
+func TestMicroVMHostLaunchAuthorityContractExposesNoMaterialOrEndpointSurface(t *testing.T) {
 	for _, contract := range []reflect.Type{
 		reflect.TypeOf(MicroVMHostLaunchAuthorityKey{}),
 		reflect.TypeOf(MicroVMHostServiceAuthorityV1{}),
 		reflect.TypeOf(MicroVMHostLaunchAuthorityV1{}),
 	} {
-		for index := 0; index < contract.NumField(); index++ {
-			name := strings.ToLower(contract.Field(index).Name)
-			for _, forbidden := range []string{"secret", "credential", "token", "material", "path", "endpoint", "command", "payload"} {
-				if strings.Contains(name, forbidden) {
-					t.Fatalf("credential-bearing field exposed: %s.%s", contract, contract.Field(index).Name)
-				}
-			}
-		}
+		assertMicroVMHostLaunchMaterialFreeType(t, contract, map[reflect.Type]bool{})
 	}
 	var _ MicroVMHostLaunchAuthorityRegistry = (*microVMHostLaunchRegistryContractStub)(nil)
+}
+
+func assertMicroVMHostLaunchMaterialFreeType(t *testing.T, contract reflect.Type, seen map[reflect.Type]bool) {
+	t.Helper()
+	for contract.Kind() == reflect.Pointer {
+		contract = contract.Elem()
+	}
+	if contract.Kind() == reflect.Slice || contract.Kind() == reflect.Array {
+		if contract.Elem().Kind() == reflect.Uint8 {
+			t.Fatalf("byte material exposed through %s", contract)
+		}
+		assertMicroVMHostLaunchMaterialFreeType(t, contract.Elem(), seen)
+		return
+	}
+	if contract.Kind() != reflect.Struct || seen[contract] {
+		return
+	}
+	seen[contract] = true
+	for index := 0; index < contract.NumField(); index++ {
+		field := contract.Field(index)
+		name := strings.ToLower(field.Name)
+		typeName := strings.ToLower(field.Type.String())
+		for _, forbidden := range []string{"secret", "token", "material", "path", "endpoint", "payload"} {
+			if strings.Contains(name, forbidden) || strings.Contains(typeName, forbidden) {
+				t.Fatalf("material-bearing field exposed: %s.%s (%s)", contract, field.Name, field.Type)
+			}
+		}
+		assertMicroVMHostLaunchMaterialFreeType(t, field.Type, seen)
+	}
 }
 
 type microVMHostLaunchRegistryContractStub struct{}
@@ -156,9 +269,13 @@ func validMicroVMHostLaunchAuthority(t *testing.T) MicroVMHostLaunchAuthorityV1 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return MicroVMHostLaunchAuthorityV1{
+	authority := MicroVMHostLaunchAuthorityV1{
 		Key:              MicroVMHostLaunchAuthorityKey{RunRef: runRef, ActionFence: 7},
 		EffectAttemptRef: "effect-attempt:launch:one", SessionRef: sessionRef,
+		OneShotClaim: credentials.OneShotUseRequest{
+			ActorRef: "actor:microvm-host", CredentialRef: "credential:provider_codex_primary",
+			OwnerRef: "owner:orquesta", ScopeRef: "project:one", PurposeRef: "provider:codex", Version: 3,
+		},
 		PlanSHA256: strings.Repeat("a", 64), ConcessionSHA256: strings.Repeat("b", 64),
 		Services: []MicroVMHostServiceAuthorityV1{
 			{Role: MicroVMHostServiceControlBroker, ServiceRef: "servicio:control", Port: 5001,
@@ -167,4 +284,13 @@ func validMicroVMHostLaunchAuthority(t *testing.T) MicroVMHostLaunchAuthorityV1 
 				IdentityRef: "identidad-servicio:egress", IdentitySHA256: strings.Repeat("e", 64)},
 		},
 	}
+	authority.OneShotClaim.RequestRef, err = BuildMicroVMHostLaunchOneShotRequestRefV1(
+		authority.Key,
+		authority.EffectAttemptRef,
+		authority.SessionRef,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return authority
 }

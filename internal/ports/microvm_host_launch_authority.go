@@ -2,9 +2,14 @@ package ports
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 
+	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 )
 
@@ -13,6 +18,8 @@ const (
 	microVMHostLaunchMaxEffectAttemptRefBytes = 512
 	microVMHostLaunchMaxServiceRefBytes       = 160
 	microVMHostLaunchMaxPhysicalRefBytes      = 96
+	microVMHostLaunchOneShotRequestDomainV1   = "orquesta.microvm-host-launch.one-shot-request.v1"
+	microVMHostLaunchOneShotRequestPrefixV1   = "request:microvm-host-launch-one-shot:sha256:"
 )
 
 // MicroVMHostServiceRole identifies one signed host service without carrying
@@ -50,10 +57,49 @@ type MicroVMHostLaunchAuthorityV1 struct {
 	Key              MicroVMHostLaunchAuthorityKey
 	EffectAttemptRef string
 	SessionRef       ExecutionSessionRef
+	OneShotClaim     credentials.OneShotUseRequest
 	PlanSHA256       string
 	ConcessionSHA256 string
 	Services         []MicroVMHostServiceAuthorityV1
 	ExternalRef      string
+}
+
+// BuildMicroVMHostLaunchOneShotRequestRefV1 derives the exact causal request
+// identity persisted before crossing client.Lanzar. The historical action
+// fence is part of the identity; a later physical ExternalRef is deliberately
+// absent because it is unknown at prepare time.
+func BuildMicroVMHostLaunchOneShotRequestRefV1(
+	key MicroVMHostLaunchAuthorityKey,
+	effectAttemptRef string,
+	sessionRef ExecutionSessionRef,
+) (string, error) {
+	if err := ValidateMicroVMHostLaunchAuthorityKey(key); err != nil {
+		return "", err
+	}
+	if !validMicroVMHostLaunchOpaqueRef(effectAttemptRef, microVMHostLaunchMaxEffectAttemptRefBytes) {
+		return "", microVMHostLaunchAuthorityError("effect_attempt_ref_invalid")
+	}
+	if len(sessionRef.String()) > microVMSessionMaxRefBytes {
+		return "", microVMHostLaunchAuthorityError("session_ref_invalid")
+	}
+	if _, err := NewExecutionSessionRef(sessionRef.String()); err != nil {
+		return "", microVMHostLaunchAuthorityError("session_ref_invalid")
+	}
+
+	digest := sha256.New()
+	for _, field := range []string{
+		microVMHostLaunchOneShotRequestDomainV1,
+		key.RunRef.String(),
+		strconv.FormatUint(key.ActionFence, 10),
+		effectAttemptRef,
+		sessionRef.String(),
+	} {
+		var size [8]byte
+		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
+		_, _ = digest.Write(size[:])
+		_, _ = digest.Write([]byte(field))
+	}
+	return microVMHostLaunchOneShotRequestPrefixV1 + hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 // MicroVMHostLaunchAuthorityRegistry owns durable prepare-before-launch and
@@ -102,17 +148,19 @@ func ValidateMicroVMHostLaunchAuthorityKey(key MicroVMHostLaunchAuthorityKey) er
 // ValidateMicroVMHostLaunchAuthorityV1 accepts either a prepared authority or
 // an authority carrying one valid set-once physical ExternalRef.
 func ValidateMicroVMHostLaunchAuthorityV1(authority MicroVMHostLaunchAuthorityV1) error {
-	if err := ValidateMicroVMHostLaunchAuthorityKey(authority.Key); err != nil {
+	expectedRequestRef, err := BuildMicroVMHostLaunchOneShotRequestRefV1(
+		authority.Key,
+		authority.EffectAttemptRef,
+		authority.SessionRef,
+	)
+	if err != nil {
 		return err
 	}
-	if !validMicroVMHostLaunchOpaqueRef(authority.EffectAttemptRef, microVMHostLaunchMaxEffectAttemptRefBytes) {
-		return microVMHostLaunchAuthorityError("effect_attempt_ref_invalid")
+	if err := credentials.ValidateOneShotUseRequest(authority.OneShotClaim); err != nil {
+		return microVMHostLaunchAuthorityError("one_shot_claim_invalid")
 	}
-	if len(authority.SessionRef.String()) > microVMSessionMaxRefBytes {
-		return microVMHostLaunchAuthorityError("session_ref_invalid")
-	}
-	if _, err := NewExecutionSessionRef(authority.SessionRef.String()); err != nil {
-		return microVMHostLaunchAuthorityError("session_ref_invalid")
+	if authority.OneShotClaim.RequestRef != expectedRequestRef {
+		return microVMHostLaunchAuthorityError("one_shot_request_ref_mismatch")
 	}
 	if !validWorkspaceDigest(authority.PlanSHA256) {
 		return microVMHostLaunchAuthorityError("plan_digest_invalid")
