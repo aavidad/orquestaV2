@@ -83,13 +83,14 @@ func TestBuildRejectsPartialMicroVMConfigBeforeCompositionState(t *testing.T) {
 
 func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *testing.T) {
 	root := t.TempDir()
-	configPath, socketPath := writeRuntimeIsolationMicroVMConfig(t, root, true)
+	configPath, socketPath, brokerPath := writeRuntimeIsolationMicroVMConfig(t, root, true)
 	provisionRuntimeIsolationMicroVMCredential(t, root)
 	statePath := filepath.Join(root, "state", "orquesta.sqlite")
 
 	client := &clienteRuntimeIsolationMicroVM{}
 	var constructorCalls atomic.Int64
 	var connectionCloses atomic.Int64
+	var brokerCerradoAntesDelCliente atomic.Bool
 	runtime, err := Build(context.Background(), Options{
 		ConfigPath: configPath,
 		constructorClienteAgentMicroVM: func(gotSocket string) (recursoClienteAgentMicroVM, error) {
@@ -103,6 +104,8 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 			return recursoClienteAgentMicroVM{
 				cliente: client,
 				liberarConexiones: func() error {
+					_, statErr := os.Lstat(brokerPath)
+					brokerCerradoAntesDelCliente.Store(errors.Is(statErr, os.ErrNotExist))
 					connectionCloses.Add(1)
 					return nil
 				},
@@ -124,6 +127,10 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 	if runtime.workspace == nil {
 		t.Fatal("configured repository did not compose workspace")
 	}
+	brokerInfo, err := os.Lstat(brokerPath)
+	if err != nil || brokerInfo.Mode().Type() != os.ModeSocket || brokerInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("credential broker info=%v err=%v", brokerInfo, err)
+	}
 	descriptors, err := runtime.agent.(catalogoCapacidadColocacionAgente).DescribirCapacidadColocaciones()
 	if err != nil || len(descriptors) != 1 || descriptors[0].Plazas != 16 ||
 		descriptors[0].PlacementRef.String() != "placement:codex:microvm-runtime" {
@@ -136,14 +143,15 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 	if err := runtime.Shutdown(context.Background()); err != nil {
 		t.Fatalf("Shutdown(microvm) error=%v", err)
 	}
-	if connectionCloses.Load() != 1 {
-		t.Fatalf("connection cleanup=%d want=1", connectionCloses.Load())
+	if connectionCloses.Load() != 1 || !brokerCerradoAntesDelCliente.Load() {
+		t.Fatalf("connection cleanup=%d broker before=%t want=1/true",
+			connectionCloses.Load(), brokerCerradoAntesDelCliente.Load())
 	}
 }
 
 func TestBuildMicroVMCapabilitiesFailureCleansClientAfterOpeningDurableState(t *testing.T) {
 	root := t.TempDir()
-	configPath, socketPath := writeRuntimeIsolationMicroVMConfig(t, root, false)
+	configPath, socketPath, brokerPath := writeRuntimeIsolationMicroVMConfig(t, root, false)
 	provisionRuntimeIsolationMicroVMCredential(t, root)
 	want := errors.New("runtime_isolation.capabilities_failed")
 	statePath := filepath.Join(root, "state", "orquesta.sqlite")
@@ -156,6 +164,7 @@ func TestBuildMicroVMCapabilitiesFailureCleansClientAfterOpeningDurableState(t *
 		},
 	}
 	var connectionCloses atomic.Int64
+	var brokerCerradoAntesDelCliente atomic.Bool
 
 	runtime, err := Build(context.Background(), Options{
 		ConfigPath: configPath,
@@ -167,16 +176,22 @@ func TestBuildMicroVMCapabilitiesFailureCleansClientAfterOpeningDurableState(t *
 				t.Fatalf("constructor microVM anterior al repositorio: info=%v err=%v", info, statErr)
 			}
 			return recursoClienteAgentMicroVM{
-				cliente:           client,
-				liberarConexiones: func() error { connectionCloses.Add(1); return nil },
+				cliente: client,
+				liberarConexiones: func() error {
+					_, statErr := os.Lstat(brokerPath)
+					brokerCerradoAntesDelCliente.Store(errors.Is(statErr, os.ErrNotExist))
+					connectionCloses.Add(1)
+					return nil
+				},
 			}, nil
 		},
 	})
 	if runtime != nil || !errors.Is(err, want) {
 		t.Fatalf("capabilities failure: runtime=%v err=%v", runtime, err)
 	}
-	if client.consultas.Load() != 1 || connectionCloses.Load() != 1 {
-		t.Fatalf("capabilities=%d cleanup=%d want=1/1", client.consultas.Load(), connectionCloses.Load())
+	if client.consultas.Load() != 1 || connectionCloses.Load() != 1 || !brokerCerradoAntesDelCliente.Load() {
+		t.Fatalf("capabilities=%d cleanup=%d broker before=%t want=1/1/true",
+			client.consultas.Load(), connectionCloses.Load(), brokerCerradoAntesDelCliente.Load())
 	}
 	if info, statErr := os.Lstat(statePath); statErr != nil || !info.Mode().IsRegular() {
 		t.Fatalf("failed Capabilities lost durable state: info=%v err=%v", info, statErr)
@@ -264,7 +279,7 @@ target_ref = "refs/heads/main"
 	}
 }
 
-func writeRuntimeIsolationMicroVMConfig(t *testing.T, root string, withRepository bool) (string, string) {
+func writeRuntimeIsolationMicroVMConfig(t *testing.T, root string, withRepository bool) (string, string, string) {
 	t.Helper()
 	_, descriptorRaw := descriptorFactoriaAgentMicroVM(t)
 	descriptorPath := filepath.Join(root, "perfil-microvm.json")
@@ -272,6 +287,7 @@ func writeRuntimeIsolationMicroVMConfig(t *testing.T, root string, withRepositor
 		t.Fatal(err)
 	}
 	socketPath := filepath.Join(root, "agente-microvm.sock")
+	brokerPath := filepath.Join(root, "b.sock")
 	configPath := writeTestConfig(t, root)
 	replaceTestConfigValue(t, configPath, "[runtime]\n", "[runtime]\nprovider = \"codex\"\nisolation = \"microvm\"\n")
 	replaceTestConfigValue(t, configPath, "[runtime.codex]\n", `[runtime.microvm]
@@ -281,6 +297,10 @@ profile_descriptor_path = `+strconv.Quote(descriptorPath)+`
 expected_profile_descriptor_sha256 = "`+digestRawFactoriaAgentMicroVM(descriptorRaw)+`"
 launch_grant_key_id = "clave-publica:runtime-isolation"
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
+credential_broker_socket_path = `+strconv.Quote(brokerPath)+`
+credential_broker_peer_uid = `+strconv.Itoa(os.Geteuid())+`
+credential_broker_exchange_timeout = "1s"
+credential_broker_max_connections = 16
 
 [runtime.codex]
 model = "gpt-5.6"
@@ -301,7 +321,7 @@ target_ref = "refs/heads/main"
 [identity]
 `)
 	}
-	return configPath, socketPath
+	return configPath, socketPath, brokerPath
 }
 
 func provisionRuntimeIsolationMicroVMCredential(t *testing.T, root string) {

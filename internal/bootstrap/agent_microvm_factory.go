@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -35,6 +36,7 @@ var (
 
 type dependenciasAutoridadFisicaAgentMicroVM struct {
 	lectorCredencial     credentials.UseAuthorityReader
+	almacenOneShot       credentials.OneShotStore
 	registroLanzamientos ports.MicroVMHostLaunchAuthorityRegistry
 }
 
@@ -75,6 +77,7 @@ func productionAgentMicroVMConConstructor(
 	}
 	if interfazNulaAgentMicroVM(promptRenderer) || interfazNulaAgentMicroVM(credentialStore) ||
 		interfazNulaAgentMicroVM(autoridad.lectorCredencial) ||
+		interfazNulaAgentMicroVM(autoridad.almacenOneShot) ||
 		interfazNulaAgentMicroVM(autoridad.registroLanzamientos) {
 		return nil, errFactoriaAgentMicroVMAutoridadInvalida
 	}
@@ -112,6 +115,33 @@ func productionAgentMicroVMConConstructor(
 	if err != nil {
 		return nil, errors.Join(errFactoriaAgentMicroVMAutoridadInvalida, err)
 	}
+	broker, err := agentmicrovm.NewCredentialBroker(
+		autoridad.registroLanzamientos,
+		autoridad.almacenOneShot,
+		snapshot.RuntimeMicroVMCredentialBrokerExchangeTimeout(),
+	)
+	if err != nil {
+		return nil, errors.Join(errFactoriaAgentMicroVMAutoridadInvalida, err)
+	}
+	peerUID := snapshot.RuntimeMicroVMCredentialBrokerPeerUID()
+	maximoConexiones := snapshot.RuntimeMicroVMCredentialBrokerMaxConnections()
+	if peerUID < 0 || uint64(peerUID) > uint64(^uint32(0)) ||
+		maximoConexiones <= 0 || uint64(maximoConexiones) > uint64(^uint32(0)) {
+		return nil, errFactoriaAgentMicroVMAutoridadInvalida
+	}
+	servidorBroker, err := agentmicrovm.NewCredentialBrokerServer(
+		agentmicrovm.CredentialBrokerServerConfig{
+			SocketPath:        snapshot.RuntimeMicroVMCredentialBrokerSocketPath(),
+			OwnerUID:          uint32(os.Geteuid()),
+			PeerUID:           uint32(peerUID),
+			ConnectionTimeout: snapshot.RuntimeMicroVMCredentialBrokerExchangeTimeout(),
+			MaxConcurrent:     uint32(maximoConexiones),
+		},
+		broker,
+	)
+	if err != nil {
+		return nil, errors.Join(errFactoriaAgentMicroVMAutoridadInvalida, err)
+	}
 	recurso, err := construirCliente(snapshot.RuntimeMicroVMSocketPath())
 	if err != nil {
 		return nil, errors.Join(errFactoriaAgentMicroVMClienteInvalido, err)
@@ -122,7 +152,7 @@ func productionAgentMicroVMConConstructor(
 		}
 		return nil, errFactoriaAgentMicroVMClienteInvalido
 	}
-	fallar := func(causa error) (*agenteMicroVM, error) {
+	fallarCliente := func(causa error) (*agenteMicroVM, error) {
 		return nil, errors.Join(causa, recurso.liberarConexiones())
 	}
 
@@ -150,14 +180,34 @@ func productionAgentMicroVMConConstructor(
 		PromptRenderer: promptRenderer,
 	})
 	if err != nil {
-		return fallar(err)
+		return fallarCliente(err)
+	}
+	// El listener pertenece a la composición residente, no al contexto efímero
+	// de Build. Start acredita la publicación antes de devolver el agente.
+	if err := servidorBroker.Start(context.Background()); err != nil {
+		return fallarCliente(err)
+	}
+	cerrarBrokerYCliente := func() error {
+		shutdownCtx, cancel := context.WithTimeout(
+			context.Background(),
+			snapshot.ServerShutdownTimeout(),
+		)
+		brokerErr := servidorBroker.Shutdown(shutdownCtx)
+		cancel()
+		if brokerErr != nil {
+			// Shutdown ya ha ordenado cerrar listener y conexiones. Esperar su
+			// terminación exacta evita liberar el cliente mientras el broker aún
+			// pudiera consumir el store compartido.
+			brokerErr = errors.Join(brokerErr, servidorBroker.Shutdown(context.Background()))
+		}
+		return errors.Join(brokerErr, recurso.liberarConexiones())
 	}
 
 	// El store pertenece al Runtime. El callback explícito sin efecto evita que
 	// el wrapper lo descubra o cierre por aproximación estructural.
-	agente, err := newAgentMicroVM(adaptador, recurso.liberarConexiones, func() error { return nil })
+	agente, err := newAgentMicroVM(adaptador, cerrarBrokerYCliente, func() error { return nil })
 	if err != nil {
-		return fallar(err)
+		return nil, errors.Join(err, cerrarBrokerYCliente())
 	}
 	return agente, nil
 }

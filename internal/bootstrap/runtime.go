@@ -166,6 +166,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		if agenteProduccionMicroVM {
 			autoridadMicroVM = dependenciasAutoridadFisicaAgentMicroVM{
 				lectorCredencial:     credentialStore,
+				almacenOneShot:       credentialStore,
 				registroLanzamientos: repository,
 			}
 		}
