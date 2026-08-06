@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -534,7 +535,6 @@ func TestCargarDescriptorPerfilAgentMicroVMRechazaFilesystemDigestYJSONInseguros
 		{"symlink", symlink, digest, os.Geteuid()},
 		{"modo escribible", modo, digest, os.Geteuid()},
 		{"no regular", directorio, digest, os.Geteuid()},
-		{"owner distinto", valido, digest, os.Geteuid() + 1},
 		{"hardlink", hardlink, digest, os.Geteuid()},
 		{"json inválido", invalidoJSON, digestRawFactoriaAgentMicroVM([]byte(`{"esquema":"desconocido"}`)), os.Geteuid()},
 		{"sobredimensionado", grande, digestRawFactoriaAgentMicroVM([]byte(strings.Repeat("x", int(maximoDescriptorPerfilMicroVMBytes+1)))), os.Geteuid()},
@@ -548,6 +548,72 @@ func TestCargarDescriptorPerfilAgentMicroVMRechazaFilesystemDigestYJSONInseguros
 		})
 	}
 }
+
+func TestDescriptorPerfilAgentMicroVMAceptaSoloRootOConsumerSinRelajarMetadata(t *testing.T) {
+	const consumerUID = 1000
+	seguro := descriptorPerfilAgentMicroVMInfoPrueba{
+		mode: 0o444, size: 1,
+		stat: syscall.Stat_t{Uid: 0, Nlink: 1},
+	}
+	if !descriptorPerfilAgentMicroVMSeguro(seguro, consumerUID) {
+		t.Fatal("descriptor root-owned seguro rechazado")
+	}
+	seguro.stat.Uid = consumerUID
+	if !descriptorPerfilAgentMicroVMSeguro(seguro, consumerUID) {
+		t.Fatal("descriptor del consumer seguro rechazado")
+	}
+	if descriptorPerfilAgentMicroVMSeguro(seguro, 0) {
+		t.Fatal("proceso root aceptó descriptor de un UID tercero")
+	}
+
+	for nombre, mutar := range map[string]func(*descriptorPerfilAgentMicroVMInfoPrueba){
+		"tercer uid":                func(info *descriptorPerfilAgentMicroVMInfoPrueba) { info.stat.Uid = 2000 },
+		"root escribible por grupo": func(info *descriptorPerfilAgentMicroVMInfoPrueba) { info.mode = 0o464 },
+		"root escribible por otros": func(info *descriptorPerfilAgentMicroVMInfoPrueba) { info.mode = 0o446 },
+		"root hardlink":             func(info *descriptorPerfilAgentMicroVMInfoPrueba) { info.stat.Nlink = 2 },
+		"root symlink":              func(info *descriptorPerfilAgentMicroVMInfoPrueba) { info.mode = os.ModeSymlink | 0o444 },
+	} {
+		t.Run(nombre, func(t *testing.T) {
+			candidato := descriptorPerfilAgentMicroVMInfoPrueba{
+				mode: 0o444, size: 1,
+				stat: syscall.Stat_t{Uid: 0, Nlink: 1},
+			}
+			mutar(&candidato)
+			if descriptorPerfilAgentMicroVMSeguro(candidato, consumerUID) {
+				t.Fatal("metadata insegura aceptada")
+			}
+		})
+	}
+	for _, prueba := range []struct {
+		actual    int
+		consumer  int
+		permitido bool
+	}{
+		{actual: 0, consumer: consumerUID, permitido: true},
+		{actual: consumerUID, consumer: consumerUID, permitido: true},
+		{actual: 2000, consumer: consumerUID, permitido: false},
+		{actual: 0, consumer: 0, permitido: true},
+		{actual: consumerUID, consumer: 0, permitido: false},
+		{actual: 0, consumer: -1, permitido: false},
+	} {
+		if got := descriptorPerfilAgentMicroVMUIDPermitido(prueba.actual, prueba.consumer); got != prueba.permitido {
+			t.Fatalf("actual=%d consumer=%d permitido=%t", prueba.actual, prueba.consumer, got)
+		}
+	}
+}
+
+type descriptorPerfilAgentMicroVMInfoPrueba struct {
+	mode os.FileMode
+	size int64
+	stat syscall.Stat_t
+}
+
+func (info descriptorPerfilAgentMicroVMInfoPrueba) Name() string      { return "descriptor.json" }
+func (info descriptorPerfilAgentMicroVMInfoPrueba) Size() int64       { return info.size }
+func (info descriptorPerfilAgentMicroVMInfoPrueba) Mode() os.FileMode { return info.mode }
+func (descriptorPerfilAgentMicroVMInfoPrueba) ModTime() time.Time     { return time.Time{} }
+func (info descriptorPerfilAgentMicroVMInfoPrueba) IsDir() bool       { return info.mode.IsDir() }
+func (info descriptorPerfilAgentMicroVMInfoPrueba) Sys() any          { return &info.stat }
 
 func TestProductionAgentMicroVMRechazaDependenciasNulasAntesDeAbrirCliente(t *testing.T) {
 	snapshot, _, _ := fixtureFactoriaAgentMicroVM(t)

@@ -229,10 +229,10 @@ func nuevoRecursoClienteAgentMicroVM(rutaSocket string) (recursoClienteAgentMicr
 func cargarDescriptorPerfilAgentMicroVM(
 	ruta string,
 	digestEsperado string,
-	ownerUID int,
+	consumerUID int,
 ) (microvm.DescriptorPerfilLanzamientoV1, error) {
 	if strings.TrimSpace(ruta) != ruta || strings.ContainsRune(ruta, '\x00') ||
-		!filepath.IsAbs(ruta) || filepath.Clean(ruta) != ruta || ownerUID < 0 {
+		!filepath.IsAbs(ruta) || filepath.Clean(ruta) != ruta || consumerUID < 0 {
 		return microvm.DescriptorPerfilLanzamientoV1{}, errFactoriaAgentMicroVMDescriptorInvalido
 	}
 	digestBytes, err := hex.DecodeString(digestEsperado)
@@ -253,7 +253,7 @@ func cargarDescriptorPerfilAgentMicroVM(
 	}
 	defer raiz.Close()
 	antes, err := raiz.Lstat(nombre)
-	if err != nil || !descriptorPerfilAgentMicroVMSeguro(antes, ownerUID) {
+	if err != nil || !descriptorPerfilAgentMicroVMSeguro(antes, consumerUID) {
 		return microvm.DescriptorPerfilLanzamientoV1{}, errFactoriaAgentMicroVMDescriptorInvalido
 	}
 	fichero, err := raiz.Open(nombre)
@@ -262,7 +262,7 @@ func cargarDescriptorPerfilAgentMicroVM(
 	}
 	defer fichero.Close()
 	abierto, err := fichero.Stat()
-	if err != nil || !descriptorPerfilAgentMicroVMSeguro(abierto, ownerUID) || !os.SameFile(antes, abierto) {
+	if err != nil || !descriptorPerfilAgentMicroVMSeguro(abierto, consumerUID) || !os.SameFile(antes, abierto) {
 		return microvm.DescriptorPerfilLanzamientoV1{}, errFactoriaAgentMicroVMDescriptorInvalido
 	}
 	contenido, err := io.ReadAll(io.LimitReader(fichero, maximoDescriptorPerfilMicroVMBytes+1))
@@ -270,7 +270,7 @@ func cargarDescriptorPerfilAgentMicroVM(
 		return microvm.DescriptorPerfilLanzamientoV1{}, errFactoriaAgentMicroVMDescriptorInvalido
 	}
 	despues, err := raiz.Lstat(nombre)
-	if err != nil || !descriptorPerfilAgentMicroVMSeguro(despues, ownerUID) || !os.SameFile(abierto, despues) {
+	if err != nil || !descriptorPerfilAgentMicroVMSeguro(despues, consumerUID) || !os.SameFile(abierto, despues) {
 		return microvm.DescriptorPerfilLanzamientoV1{}, errFactoriaAgentMicroVMDescriptorInvalido
 	}
 	digest := sha256.Sum256(contenido)
@@ -284,12 +284,19 @@ func cargarDescriptorPerfilAgentMicroVM(
 	return descriptor, nil
 }
 
-func descriptorPerfilAgentMicroVMSeguro(info os.FileInfo, ownerUID int) bool {
+func descriptorPerfilAgentMicroVMSeguro(info os.FileInfo, consumerUID int) bool {
 	if info == nil || !info.Mode().IsRegular() || info.Size() <= 0 ||
 		info.Size() > maximoDescriptorPerfilMicroVMBytes || info.Mode().Perm()&0o400 == 0 ||
 		info.Mode().Perm()&0o022 != 0 || info.Mode()&(os.ModeSetuid|os.ModeSetgid|os.ModeSticky) != 0 {
 		return false
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && stat != nil && int(stat.Uid) == ownerUID && stat.Nlink == 1
+	return ok && stat != nil && descriptorPerfilAgentMicroVMUIDPermitido(int(stat.Uid), consumerUID) && stat.Nlink == 1
+}
+
+// El instalador publica el descriptor como root. El owner del proceso se
+// conserva para el modo de desarrollo no privilegiado; ningún tercer UID es
+// autoridad, aunque el fichero sea legible.
+func descriptorPerfilAgentMicroVMUIDPermitido(actualUID, consumerUID int) bool {
+	return consumerUID >= 0 && (actualUID == 0 || actualUID == consumerUID)
 }
