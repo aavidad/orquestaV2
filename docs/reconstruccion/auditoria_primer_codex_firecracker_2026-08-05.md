@@ -1,6 +1,6 @@
 # Auditoría del primer Codex físico en Firecracker
 
-Fecha de corte: 2026-08-05.
+Fecha de corte: 2026-08-06.
 
 ## Veredicto
 
@@ -11,8 +11,8 @@ segundo `Launch`. Esto no prueba que un Codex haya trabajado dentro de KVM.
 Estimación del corte físico:
 
 - B10 lógico/durable: 90–95%;
-- Firecracker/microVM hasta primer Codex real: aproximadamente 81%;
-- pendiente físico: aproximadamente 19%.
+- Firecracker/microVM hasta primer Codex real: aproximadamente 86%;
+- pendiente físico: aproximadamente 14%.
 
 Este porcentaje mide solo el corte hasta el primer Codex físico. No representa
 el porcentaje de cierre de todo Orquesta.
@@ -69,10 +69,13 @@ arranque KVM ni de ejecución Codex física.
    `UseOnce`; `b25b1f58` y `7f04863d` fijan la consulta de versión sin material;
    `4f48195c`, `02b864a3`, `5a8d4bb6` y `130961aa` fijan la autoridad física,
    su claim causal, la selección exacta por colocación y su enlace con la
-   compilación firmada. `f02b811e` y `f6c07202` añaden la migración SQLite v32
-   y el registro durable `Prepare -> BindExternal -> Resolve`, con carrera y
-   reapertura acreditadas. C4 sigue pendiente en el broker host y el wiring
-   residente del adaptador/composición.
+   compilación firmada. `f02b811e`, `f6c07202` y `01f22436` añaden las
+   migraciones SQLite v32/v33 y el registro durable
+   `Prepare -> BindExternal -> Resolve`, con sesión exacta, carrera, rollback y
+   reapertura acreditados. `2bf62d96` cierra el handler one-shot y `9c64e12b`
+   compone resolver, registry y replay histórico en el arranque productivo. C4
+   queda pendiente solo en el listener UDS residente, su `peercred`/lifecycle y
+   el cableado físico con el servicio host.
 
 KVM y Firecracker 1.16.1 están disponibles. El usuario ya puede acceder a
 `/dev/kvm`; no hace falta sudo para ejecutar KVM. El sudo inevitable se limita
@@ -85,7 +88,7 @@ a instalar el servicio root, usuario/grupo, directorios y delegación cgroup.
 | PFC-01 | **Cerrado en código/arnés** por `5412c70e`: activos Codex actuales reproducibles | construcción doble exacta, manifiesto ligado y cancelación limpia; no acredita KVM | PFC-06 para evidencia física |
 | PFC-02 | **Cerrado en código/arnés**: frontera root/no-root del UDS (`agente_microvm@989272d`) | daemon root; Orquesta por grupo+`peercred`; tercero rechazado; socket no público | PFC-06/PFC-07 para evidencia física |
 | PFC-03 | **PFC-03a cerrado** por `ca78a490`; broker general aplazable | sesión exacta por `RunRef`+fence+atestación; el listener one-shot de credencial queda en PFC-04 | no bloquea por sí solo PFC-06 |
-| PFC-04 | C1/C1b/C2/C3 y C4a hasta registro SQLite v32 cerrados por `ec9304e`, `6d08deb`, `2f00b3d`, `d6ce92c1`, `5d00ede4`, `b96b3a2e`, `b25b1f58`, `7f04863d`, `4f48195c`, `02b864a3`, `5a8d4bb6`, `130961aa`, `f02b811e`, `f6c07202` y pin `cc7cec3e` | secreto solo en memoria/tmpfs fuera de `/trabajo`, `0600`, principal exacto, consumo one-shot y autoridad preparada/bound durable | cerrar broker host y wiring residente |
+| PFC-04 | C1/C1b/C2/C3, handler one-shot, replay productivo y autoridad SQLite v32/v33 cerrados hasta `2bf62d96`, `9c64e12b` y `01f22436`; pin huésped `cc7cec3e` | secreto solo en memoria/tmpfs fuera de `/trabajo`, `0600`, principal exacto, consumo one-shot y autoridad preparada/bound durable | cerrar listener UDS residente con `peercred`/lifecycle y wiring físico del servicio host |
 | PFC-05 | **Cadena durable/transporte/compilación cerrada en código** hasta `b6f0fafd` y gate amplio verde tras `a74bfc26` | proxy explícito; concesión no llega al huésped; solo endpoint loopback | PFC-06 para evidencia física |
 | PFC-06 | E2E físico acotado | una microVM, un Codex real, resultado terminal durable y limpieza exacta | 2–4 h |
 | PFC-07 | **PFC-07a cerrado offline** por `agente_microvm@2acd300` | único sudo idempotente para servicio/grupo/directorios/cgroup, con status y rollback exactos | PFC-07b físico |
