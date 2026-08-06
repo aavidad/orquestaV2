@@ -343,8 +343,8 @@ func TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lines := bytes.Count(generatedGo, []byte{'\n'}); lines > 470 {
-		t.Fatalf("generated config Go exceeds 470 lines: %d", lines)
+	if lines := bytes.Count(generatedGo, []byte{'\n'}); lines > 480 {
+		t.Fatalf("generated config Go exceeds 480 lines: %d", lines)
 	}
 
 	temporary := t.TempDir()

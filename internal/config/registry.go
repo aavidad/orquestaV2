@@ -463,6 +463,10 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeMicroVMCredentialBrokerPeerUID,
 			KeyRuntimeMicroVMCredentialBrokerExchangeTimeout,
 			KeyRuntimeMicroVMCredentialBrokerMaxConnections,
+			KeyRuntimeMicroVMEgressPolicyRef,
+			KeyRuntimeMicroVMEgressPolicyPath,
+			KeyRuntimeMicroVMEgressPolicyExpectedSHA256,
+			KeyRuntimeMicroVMEgressPolicyMaxBytes,
 		},
 		"agent_firecracker_vsock_cid_lease_bounds": {
 			KeyAgentFirecrackerVsockCIDMinimumLeaseDuration,
@@ -472,7 +476,7 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 		"server_mcp_path_literal": {KeyServerMCPPath},
 		"runtime_paths_disjoint": {
 			KeyStateSQLitePath, KeyArtifactFilesystemRoot, KeyCredentialsLocalPath, KeyRuntimeCodexWorkRoot,
-			KeyRuntimeCodexCacheRoot, KeyRuntimeCodexAccountHomeRoot, KeyWorkspaceLocalRoot,
+			KeyRuntimeCodexCacheRoot, KeyRuntimeCodexAccountHomeRoot, KeyRuntimeMicroVMEgressPolicyPath, KeyWorkspaceLocalRoot,
 			KeyConfigEffectivePath, KeyIdentityLocalTokenPath, KeyIdentityLocalPrincipalsManifestPath,
 		},
 		"identity_provider_requirements": {

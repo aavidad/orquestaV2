@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-08-06.2",
+  "revision": "2026-08-06.4",
   "precedence": [
     "default",
     "file",
@@ -54,7 +54,11 @@
         "runtime.microvm.credential_broker_socket_path",
         "runtime.microvm.credential_broker_peer_uid",
         "runtime.microvm.credential_broker_exchange_timeout",
-        "runtime.microvm.credential_broker_max_connections"
+        "runtime.microvm.credential_broker_max_connections",
+        "runtime.microvm.egress_policy_ref",
+        "runtime.microvm.egress_policy_path",
+        "runtime.microvm.egress_policy_expected_sha256",
+        "runtime.microvm.egress_policy_max_bytes"
       ]
     },
     {
@@ -86,6 +90,7 @@
         "runtime.codex.work_root",
         "runtime.codex.cache_root",
         "runtime.codex.account_home_root",
+        "runtime.microvm.egress_policy_path",
         "workspace.local.root",
         "config.effective_path",
         "identity.local_token_path",
@@ -537,6 +542,64 @@
       ],
       "minimum": 1,
       "maximum": 256
+    },
+    {
+      "key": "runtime.microvm.egress_policy_ref",
+      "go_name": "RuntimeMicroVMEgressPolicyRef",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_ref",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_REF",
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.microvm.egress_policy_path",
+      "go_name": "RuntimeMicroVMEgressPolicyPath",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_path",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_PATH",
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "runtime.microvm.egress_policy_expected_sha256",
+      "go_name": "RuntimeMicroVMEgressPolicyExpectedSHA256",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_expected_sha256",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_EXPECTED_SHA256",
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.microvm.egress_policy_max_bytes",
+      "go_name": "RuntimeMicroVMEgressPolicyMaxBytes",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_max_bytes",
+      "type": "integer",
+      "default": 65536,
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_MAX_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 65536
     },
     {
       "key": "runtime.codex.command",

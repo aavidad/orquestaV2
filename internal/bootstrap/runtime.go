@@ -24,6 +24,7 @@ import (
 	"orquesta/internal/adapters/auth/oidc"
 	configtoml "orquesta/internal/adapters/config/toml"
 	credentiallocal "orquesta/internal/adapters/credentials/local"
+	"orquesta/internal/adapters/egresspolicyfile"
 	statesqlite "orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/adapters/system/local"
 	gitlocal "orquesta/internal/adapters/workspace/gitlocal"
@@ -139,6 +140,10 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		if err := validateBuildAgentSelection(setup.snapshot); err != nil {
 			return nil, err
 		}
+	}
+	egressPolicies, err := openBuildEgressPolicyResolver(setup.snapshot)
+	if err != nil {
+		return nil, err
 	}
 	var cleanup buildCleanup
 	defer cleanup.run()
@@ -316,7 +321,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
 		executionRuntimeComposition{
 			sessions: executionBroker, postArtifactMailbox: postArtifactMailbox,
-			capacitySources: fuentesCapacidad,
+			capacitySources: fuentesCapacidad, egressPolicies: egressPolicies,
 		},
 	)
 	if err != nil {
@@ -332,6 +337,23 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanup.add(runtime.cancelLifecycle)
 	cleanup.release()
 	return runtime, nil
+}
+
+func openBuildEgressPolicyResolver(snapshot config.Snapshot) (application.EgressPolicyResolver, error) {
+	if snapshot.RuntimeMicroVMEgressPolicyRef() == "" {
+		return nil, nil
+	}
+	ref, err := application.NewEgressPolicyRef(snapshot.RuntimeMicroVMEgressPolicyRef())
+	if err != nil {
+		return nil, err
+	}
+	return egresspolicyfile.New(
+		ref,
+		snapshot.RuntimeMicroVMEgressPolicyPath(),
+		snapshot.RuntimeMicroVMEgressPolicyExpectedSHA256(),
+		uint32(os.Geteuid()),
+		snapshot.RuntimeMicroVMEgressPolicyMaxBytes(),
+	)
 }
 
 func prepareBuildSetup(ctx context.Context, configPath string) (buildSetup, error) {
@@ -754,6 +776,7 @@ type executionRuntimeComposition struct {
 	sessions            ports.ExecutionSessionBroker
 	postArtifactMailbox application.PostArtifactMailboxAdmitter
 	capacitySources     []application.FuenteCapacidadColocacionAgente
+	egressPolicies      application.EgressPolicyResolver
 }
 
 func buildOrchestratorDependencies(
@@ -783,6 +806,7 @@ func buildOrchestratorDependencies(
 		ObservationDelay: setup.snapshot.SchedulerObservationInterval(), ExecutionTimeout: setup.snapshot.SchedulerExecutionTimeout(),
 		AgentCapabilities: capabilities,
 		ExecutionSessions: composition.sessions, PostArtifactMailbox: composition.postArtifactMailbox,
+		EgressPolicies:  composition.egressPolicies,
 		CapacitySources: composition.capacitySources, CapacityObservationWait: setup.snapshot.RuntimeCapacityObservationTimeout(),
 	}
 }
@@ -1362,6 +1386,14 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 			return errors.New("bootstrap.account_home_path_invalid")
 		}
 	}
+	egressPolicyPath := ""
+	if strings.TrimSpace(snapshot.RuntimeMicroVMEgressPolicyPath()) != "" {
+		var err error
+		egressPolicyPath, err = canonicalRuntimePath(snapshot.RuntimeMicroVMEgressPolicyPath())
+		if err != nil {
+			return errors.New("bootstrap.egress_policy_path_invalid")
+		}
+	}
 	rawCredentialReservedPaths := credentiallocal.ReservedPaths(snapshot.CredentialsLocalPath())
 	credentialReservedPaths := make([]string, 0, len(rawCredentialReservedPaths))
 	for _, raw := range rawCredentialReservedPaths {
@@ -1387,6 +1419,11 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 			effectivePath, tokenDirectory, credentialPath, workspaceRoot) {
 		return errors.New("bootstrap.runtime_paths_overlap")
 	}
+	if egressPolicyPath != "" &&
+		overlapsAny(egressPolicyPath, stateDirectory, artifactRoot, credentialPath, workRoot, cacheRoot,
+			effectivePath, tokenDirectory, workspaceRoot, accountHomeRoot) {
+		return errors.New("bootstrap.runtime_paths_overlap")
+	}
 	if snapshot.IdentityLocalPrincipalsManifestPath() != "" {
 		manifestPath, err := canonicalRuntimePath(snapshot.IdentityLocalPrincipalsManifestPath())
 		if err != nil {
@@ -1394,7 +1431,7 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		}
 		if manifestPath == tokenPath ||
 			overlapsAny(manifestPath, stateDirectory, artifactRoot, workRoot, cacheRoot,
-				effectivePath, credentialPath, workspaceRoot, accountHomeRoot) {
+				effectivePath, credentialPath, workspaceRoot, accountHomeRoot, egressPolicyPath) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 		for _, reservedPath := range credentialReservedPaths {
@@ -1405,7 +1442,7 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 	}
 	for _, reservedPath := range credentialReservedPaths {
 		if overlapsAny(reservedPath, stateDirectory, artifactRoot, workRoot, cacheRoot,
-			effectivePath, tokenPath, workspaceRoot, accountHomeRoot) {
+			effectivePath, tokenPath, workspaceRoot, accountHomeRoot, egressPolicyPath) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 	}
@@ -1415,7 +1452,7 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 			return errors.New("bootstrap.config_path_invalid")
 		}
 		if overlapsAny(configPath, statePath, artifactRoot, workRoot, cacheRoot,
-			effectivePath, tokenDirectory, credentialPath, workspaceRoot, accountHomeRoot) {
+			effectivePath, tokenDirectory, credentialPath, workspaceRoot, accountHomeRoot, egressPolicyPath) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 		for _, reservedPath := range credentialReservedPaths {

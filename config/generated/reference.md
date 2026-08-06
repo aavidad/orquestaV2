@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-08-06.2`
+Registry revision: `2026-08-06.4`
 
-Registry hash: `sha256:d459d4ef770e6df77e13c744e33d1123bcbd4e1d05aa4440aa5720844564967f`
+Registry hash: `sha256:b01c18c0e4e5c448160dead8b7a0d3b8c09ec22548f266fcb0fbf0419307cd9a`
 
 Precedence: `default < file < env`
 
@@ -40,6 +40,10 @@ Source limit: `1048576` bytes
 | `runtime.microvm.credential_broker_peer_uid` | `integer` | `0` | `ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_PEER_UID` | `true` | `integer_bounds` |
 | `runtime.microvm.credential_broker_exchange_timeout` | `duration` | `"30s"` | `ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_EXCHANGE_TIMEOUT` | `true` | `positive_duration` |
 | `runtime.microvm.credential_broker_max_connections` | `integer` | `16` | `ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_MAX_CONNECTIONS` | `true` | `integer_bounds` |
+| `runtime.microvm.egress_policy_ref` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_REF` | `true` | `trimmed_optional_string` |
+| `runtime.microvm.egress_policy_path` | `optional_path` | `""` | `ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_PATH` | `true` | `optional_path` |
+| `runtime.microvm.egress_policy_expected_sha256` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_EXPECTED_SHA256` | `true` | `trimmed_optional_string` |
+| `runtime.microvm.egress_policy_max_bytes` | `integer` | `65536` | `ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_MAX_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.command` | `string` | `"codex"` | `ORQUESTA_RUNTIME_CODEX_COMMAND` | `true` | `trimmed_non_empty_string` |
 | `runtime.codex.model` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_MODEL` | `true` | `trimmed_optional_string` |
 | `runtime.codex.reasoning` | `string` | `"medium"` | `ORQUESTA_RUNTIME_CODEX_REASONING` | `true` | `allowed_values` |
@@ -121,11 +125,11 @@ Source limit: `1048576` bytes
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`; maximum duration `30s`
 - `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.account_profiles`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
-- `runtime_microvm_requirements`: `runtime.provider`, `runtime.isolation`, `runtime.codex.model`, `runtime.codex.credential_ref`, `runtime.microvm.placement_ref`, `runtime.microvm.socket_path`, `runtime.microvm.profile_descriptor_path`, `runtime.microvm.expected_profile_descriptor_sha256`, `runtime.microvm.launch_grant_key_id`, `runtime.microvm.launch_grant_signing_credential_ref`, `runtime.microvm.credential_broker_socket_path`, `runtime.microvm.credential_broker_peer_uid`, `runtime.microvm.credential_broker_exchange_timeout`, `runtime.microvm.credential_broker_max_connections`
+- `runtime_microvm_requirements`: `runtime.provider`, `runtime.isolation`, `runtime.codex.model`, `runtime.codex.credential_ref`, `runtime.microvm.placement_ref`, `runtime.microvm.socket_path`, `runtime.microvm.profile_descriptor_path`, `runtime.microvm.expected_profile_descriptor_sha256`, `runtime.microvm.launch_grant_key_id`, `runtime.microvm.launch_grant_signing_credential_ref`, `runtime.microvm.credential_broker_socket_path`, `runtime.microvm.credential_broker_peer_uid`, `runtime.microvm.credential_broker_exchange_timeout`, `runtime.microvm.credential_broker_max_connections`, `runtime.microvm.egress_policy_ref`, `runtime.microvm.egress_policy_path`, `runtime.microvm.egress_policy_expected_sha256`, `runtime.microvm.egress_policy_max_bytes`
 - `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`; maximum duration `24h`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
-- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.cache_root`, `runtime.codex.account_home_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`, `identity.local_principals_manifest_path`
+- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.cache_root`, `runtime.codex.account_home_root`, `runtime.microvm.egress_policy_path`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`, `identity.local_principals_manifest_path`
 - `identity_provider_requirements`: `identity.provider`, `identity.oidc.issuer`, `identity.oidc.audience`, `identity.oidc.clock_skew`, `identity.oidc.upstream_timeout`
 - `test_attestor_provider_requirements`: `test_attestor.provider`, `test_attestor.timeout`, `test_attestor.bubblewrap.command`, `test_attestor.microvm.launcher_socket`, `test_attestor.microvm.expected_asset_digest`, `test_attestor.microvm.guest_memory_mib`, `test_attestor.go.toolchain_root`, `runtime.max_output_bytes`, `test_attestor.max_subject_bytes`, `test_attestor.max_concurrent_runs`, `repository.local.seed_path`, `test_attestor.resources.cgroup_root`, `test_attestor.resources.memory_max_bytes`, `test_attestor.resources.pids_max`, `test_attestor.resources.cpu_quota_micros`, `server.shutdown_timeout`, `scheduler.attest_test_claim_lease`, `scheduler.execution_timeout`; microVM minimum guest `128 MiB`, cgroup headroom `1073741824` bytes, operational reserve `2147483648` bytes, maximum CPU quota `3200000` micros
 

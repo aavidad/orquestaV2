@@ -29,6 +29,12 @@ credential_broker_exchange_timeout = "30s"
 credential_broker_max_connections = 16
 `
 
+const validRuntimeMicroVMEgressTOML = validRuntimeMicroVMTOML + `egress_policy_ref = "egreso:codex-controlado"
+egress_policy_path = "/srv/orquesta/policies/codex-controlado.json"
+egress_policy_expected_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+egress_policy_max_bytes = 4096
+`
+
 func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 	snapshot := resolveTOML(t, validRuntimeMicroVMTOML, nil)
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" ||
@@ -133,6 +139,10 @@ func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
 		KeyRuntimeMicroVMCredentialBrokerPeerUID,
 		KeyRuntimeMicroVMCredentialBrokerExchangeTimeout,
 		KeyRuntimeMicroVMCredentialBrokerMaxConnections,
+		KeyRuntimeMicroVMEgressPolicyRef,
+		KeyRuntimeMicroVMEgressPolicyPath,
+		KeyRuntimeMicroVMEgressPolicyExpectedSHA256,
+		KeyRuntimeMicroVMEgressPolicyMaxBytes,
 	}
 	for _, validator := range CrossValidators() {
 		if validator.ID != "runtime_microvm_requirements" {
@@ -144,6 +154,32 @@ func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
 		return
 	}
 	t.Fatal("runtime_microvm_requirements cross-validator missing")
+}
+
+func TestV38RuntimePathAuthorityIncludesEgressPolicyPath(t *testing.T) {
+	wantKeys := []Key{
+		KeyStateSQLitePath,
+		KeyArtifactFilesystemRoot,
+		KeyCredentialsLocalPath,
+		KeyRuntimeCodexWorkRoot,
+		KeyRuntimeCodexCacheRoot,
+		KeyRuntimeCodexAccountHomeRoot,
+		KeyRuntimeMicroVMEgressPolicyPath,
+		KeyWorkspaceLocalRoot,
+		KeyConfigEffectivePath,
+		KeyIdentityLocalTokenPath,
+		KeyIdentityLocalPrincipalsManifestPath,
+	}
+	for _, validator := range CrossValidators() {
+		if validator.ID != "runtime_paths_disjoint" {
+			continue
+		}
+		if !reflect.DeepEqual(validator.Keys, wantKeys) {
+			t.Fatalf("runtime path cross-validator keys = %#v, want %#v", validator.Keys, wantKeys)
+		}
+		return
+	}
+	t.Fatal("runtime_paths_disjoint cross-validator missing")
 }
 
 func TestV38ProcessIsolationRejectsDeadMicroVMConfiguration(t *testing.T) {
@@ -158,6 +194,10 @@ func TestV38ProcessIsolationRejectsDeadMicroVMConfiguration(t *testing.T) {
 		defaults.RuntimeMicroVMCredentialBrokerPeerUID() != 0 ||
 		defaults.RuntimeMicroVMCredentialBrokerExchangeTimeout() != 30*time.Second ||
 		defaults.RuntimeMicroVMCredentialBrokerMaxConnections() != 16 ||
+		defaults.RuntimeMicroVMEgressPolicyRef() != "" ||
+		defaults.RuntimeMicroVMEgressPolicyPath() != "" ||
+		defaults.RuntimeMicroVMEgressPolicyExpectedSHA256() != "" ||
+		defaults.RuntimeMicroVMEgressPolicyMaxBytes() != 64<<10 ||
 		defaults.RuntimeCodexCredentialRef() != "" {
 		t.Fatal("process defaults retain microVM configuration")
 	}
@@ -192,10 +232,142 @@ credential_broker_peer_uid = 109`},
 credential_broker_exchange_timeout = "5s"`},
 		{name: "broker max connections", toml: `[runtime.microvm]
 credential_broker_max_connections = 20`},
+		{name: "egress policy ref", toml: `[runtime.microvm]
+egress_policy_ref = "egreso:codex-controlado"`},
+		{name: "egress policy path", toml: `[runtime.microvm]
+egress_policy_path = "/srv/orquesta/policies/codex-controlado.json"`},
+		{name: "egress policy digest", toml: `[runtime.microvm]
+egress_policy_expected_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"`},
+		{name: "egress policy maximum", toml: `[runtime.microvm]
+egress_policy_max_bytes = 4096`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Resolve(ResolveOptions{TOML: []byte(test.toml)})
+			assertConfigError(t, err, ErrorCrossValidation, "")
+		})
+	}
+}
+
+func TestV38RuntimeMicroVMEgressPolicyIsOptInAndAllOrNone(t *testing.T) {
+	snapshot := resolveTOML(t, validRuntimeMicroVMEgressTOML, nil)
+	if snapshot.RuntimeMicroVMEgressPolicyRef() != "egreso:codex-controlado" ||
+		snapshot.RuntimeMicroVMEgressPolicyPath() != "/srv/orquesta/policies/codex-controlado.json" ||
+		snapshot.RuntimeMicroVMEgressPolicyExpectedSHA256() != strings.Repeat("b", 64) ||
+		snapshot.RuntimeMicroVMEgressPolicyMaxBytes() != 4096 {
+		t.Fatal("runtime microVM egress policy configuration drifted")
+	}
+	defaultBoundSource := strings.Replace(validRuntimeMicroVMEgressTOML, "egress_policy_max_bytes = 4096\n", "", 1)
+	defaultBound := resolveTOML(t, defaultBoundSource, nil)
+	if defaultBound.RuntimeMicroVMEgressPolicyRef() == "" || defaultBound.RuntimeMicroVMEgressPolicyMaxBytes() != 64<<10 {
+		t.Fatal("configured policy did not retain the canonical default byte bound")
+	}
+	for _, test := range []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{name: "missing ref", old: `egress_policy_ref = "egreso:codex-controlado"`, new: `egress_policy_ref = ""`},
+		{name: "missing path", old: `egress_policy_path = "/srv/orquesta/policies/codex-controlado.json"`, new: `egress_policy_path = ""`},
+		{name: "missing digest", old: `egress_policy_expected_sha256 = "` + strings.Repeat("b", 64) + `"`, new: `egress_policy_expected_sha256 = ""`},
+		{name: "relative path", old: `egress_policy_path = "/srv/orquesta/policies/codex-controlado.json"`, new: `egress_policy_path = "policies/codex-controlado.json"`},
+		{name: "unclean path", old: `egress_policy_path = "/srv/orquesta/policies/codex-controlado.json"`, new: `egress_policy_path = "/srv/orquesta/policies/../codex-controlado.json"`},
+		{name: "uppercase digest", old: `egress_policy_expected_sha256 = "` + strings.Repeat("b", 64) + `"`, new: `egress_policy_expected_sha256 = "` + strings.Repeat("B", 64) + `"`},
+		{name: "short digest", old: `egress_policy_expected_sha256 = "` + strings.Repeat("b", 64) + `"`, new: `egress_policy_expected_sha256 = "` + strings.Repeat("b", 63) + `"`},
+		{name: "oversized ref", old: `egress_policy_ref = "egreso:codex-controlado"`, new: `egress_policy_ref = "` + strings.Repeat("r", 513) + `"`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := strings.Replace(validRuntimeMicroVMEgressTOML, test.old, test.new, 1)
+			if source == validRuntimeMicroVMEgressTOML {
+				t.Fatal("test mutation did not apply")
+			}
+			_, err := Resolve(ResolveOptions{TOML: []byte(source)})
+			assertConfigError(t, err, ErrorCrossValidation, "")
+		})
+	}
+
+	for _, test := range []struct {
+		name  string
+		value string
+	}{
+		{name: "zero maximum", value: "0"},
+		{name: "maximum above authority bound", value: "65537"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			source := strings.Replace(validRuntimeMicroVMEgressTOML, "egress_policy_max_bytes = 4096", "egress_policy_max_bytes = "+test.value, 1)
+			_, err := Resolve(ResolveOptions{TOML: []byte(source)})
+			assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeMicroVMEgressPolicyMaxBytes)
+		})
+	}
+
+	environment := map[string]string{
+		"ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_REF":             "egreso:environment",
+		"ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_PATH":            "/srv/orquesta/policies/environment.json",
+		"ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_EXPECTED_SHA256": strings.Repeat("c", 64),
+		"ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_MAX_BYTES":       "8192",
+	}
+	environmentSnapshot := resolveTOML(t, validRuntimeMicroVMEgressTOML, environment)
+	if environmentSnapshot.RuntimeMicroVMEgressPolicyRef() != "egreso:environment" ||
+		environmentSnapshot.RuntimeMicroVMEgressPolicyPath() != "/srv/orquesta/policies/environment.json" ||
+		environmentSnapshot.RuntimeMicroVMEgressPolicyExpectedSHA256() != strings.Repeat("c", 64) ||
+		environmentSnapshot.RuntimeMicroVMEgressPolicyMaxBytes() != 8192 {
+		t.Fatal("canonical egress policy environment aliases did not override TOML")
+	}
+	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMEgressPolicyRef, SourceEnv)
+	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMEgressPolicyPath, SourceEnv)
+	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMEgressPolicyExpectedSHA256, SourceEnv)
+	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMEgressPolicyMaxBytes, SourceEnv)
+	_, err := Resolve(ResolveOptions{TOML: []byte(validRuntimeMicroVMTOML), Environment: map[string]string{
+		"ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_REF": "egreso:partial-environment",
+	}})
+	assertConfigError(t, err, ErrorCrossValidation, "")
+	_, err = Resolve(ResolveOptions{TOML: []byte(validRuntimeMicroVMTOML), Environment: map[string]string{
+		"ORQUESTA_RUNTIME_MICROVM_EGRESS_POLICY_MAX_BYTES": "4096",
+	}})
+	assertConfigError(t, err, ErrorCrossValidation, "")
+
+	definition, found := Definition(KeyRuntimeMicroVMEgressPolicyMaxBytes)
+	if !found || definition.Type != "integer" || definition.Sensitive || definition.Scope != "runtime" ||
+		definition.Minimum == nil || *definition.Minimum != 1 ||
+		definition.Maximum == nil || *definition.Maximum != 64<<10 {
+		t.Fatalf("egress policy maximum definition = %+v/%v", definition, found)
+	}
+}
+
+func TestV38RuntimeMicroVMEgressPolicyPathRejectsProtectedRuntimePairs(t *testing.T) {
+	const configuredPath = "/srv/orquesta/policies/codex-controlado.json"
+	tests := []struct {
+		name       string
+		policyPath string
+		extraTOML  string
+		sourcePath string
+	}{
+		{name: "effective config", policyPath: "/srv/orquesta/collisions/effective.json",
+			extraTOML: "\n[config]\neffective_path = \"/srv/orquesta/collisions/effective.json\"\n"},
+		{name: "state", policyPath: "/srv/orquesta/collisions/state/orquesta.sqlite",
+			extraTOML: "\n[state.sqlite]\npath = \"/srv/orquesta/collisions/state/orquesta.sqlite\"\n"},
+		{name: "state sidecar", policyPath: "/srv/orquesta/collisions/state/orquesta.sqlite-wal",
+			extraTOML: "\n[state.sqlite]\npath = \"/srv/orquesta/collisions/state/orquesta.sqlite\"\n"},
+		{name: "artifact root", policyPath: "/srv/orquesta/collisions/artifacts/policy.json",
+			extraTOML: "\n[artifact.filesystem]\nroot = \"/srv/orquesta/collisions/artifacts\"\n"},
+		{name: "credential store", policyPath: "/srv/orquesta/collisions/credentials.json",
+			extraTOML: "\n[credentials.local]\npath = \"/srv/orquesta/collisions/credentials.json\"\n"},
+		{name: "credential recovery sidecar", policyPath: "/srv/orquesta/collisions/credentials.json.next",
+			extraTOML: "\n[credentials.local]\npath = \"/srv/orquesta/collisions/credentials.json\"\n"},
+		{name: "workspace root", policyPath: "/srv/orquesta/collisions/workspaces/policy.json",
+			extraTOML: "\n[workspace.local]\nroot = \"/srv/orquesta/collisions/workspaces\"\n"},
+		{name: "config source sidecar", policyPath: "/srv/orquesta/collisions/orquesta.toml.lock",
+			sourcePath: "/srv/orquesta/collisions/orquesta.toml.lock"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := strings.Replace(
+				validRuntimeMicroVMEgressTOML,
+				`egress_policy_path = "`+configuredPath+`"`,
+				`egress_policy_path = "`+test.policyPath+`"`,
+				1,
+			) + test.extraTOML
+			_, err := Resolve(ResolveOptions{TOML: []byte(source), SourcePath: test.sourcePath})
 			assertConfigError(t, err, ErrorCrossValidation, "")
 		})
 	}

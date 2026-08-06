@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-08-06.2",
-  "registry_hash": "sha256:d459d4ef770e6df77e13c744e33d1123bcbd4e1d05aa4440aa5720844564967f",
+  "registry_revision": "2026-08-06.4",
+  "registry_hash": "sha256:b01c18c0e4e5c448160dead8b7a0d3b8c09ec22548f266fcb0fbf0419307cd9a",
   "aliases": [],
   "cross_validators": [
     {
@@ -47,7 +47,11 @@
         "runtime.microvm.credential_broker_socket_path",
         "runtime.microvm.credential_broker_peer_uid",
         "runtime.microvm.credential_broker_exchange_timeout",
-        "runtime.microvm.credential_broker_max_connections"
+        "runtime.microvm.credential_broker_max_connections",
+        "runtime.microvm.egress_policy_ref",
+        "runtime.microvm.egress_policy_path",
+        "runtime.microvm.egress_policy_expected_sha256",
+        "runtime.microvm.egress_policy_max_bytes"
       ]
     },
     {
@@ -79,6 +83,7 @@
         "runtime.codex.work_root",
         "runtime.codex.cache_root",
         "runtime.codex.account_home_root",
+        "runtime.microvm.egress_policy_path",
         "workspace.local.root",
         "config.effective_path",
         "identity.local_token_path",
@@ -474,6 +479,56 @@
       ],
       "minimum": 1,
       "maximum": 256
+    },
+    {
+      "key": "runtime.microvm.egress_policy_ref",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_ref",
+      "label_key": "config.field.runtime.microvm.egress_policy_ref",
+      "type": "string",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.microvm.egress_policy_path",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_path",
+      "label_key": "config.field.runtime.microvm.egress_policy_path",
+      "type": "optional_path",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "runtime.microvm.egress_policy_expected_sha256",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_expected_sha256",
+      "label_key": "config.field.runtime.microvm.egress_policy_expected_sha256",
+      "type": "string",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.microvm.egress_policy_max_bytes",
+      "semantic_ref": "orquesta.config.runtime.microvm.egress_policy_max_bytes",
+      "label_key": "config.field.runtime.microvm.egress_policy_max_bytes",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 65536
     },
     {
       "key": "runtime.codex.command",

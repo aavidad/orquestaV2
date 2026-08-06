@@ -209,18 +209,28 @@ func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
 	brokerPeerUID, brokerPeerUIDOK := values[KeyRuntimeMicroVMCredentialBrokerPeerUID].value.(int64)
 	brokerExchangeTimeout, brokerTimeoutOK := values[KeyRuntimeMicroVMCredentialBrokerExchangeTimeout].value.(time.Duration)
 	brokerMaxConnections, brokerMaxConnectionsOK := values[KeyRuntimeMicroVMCredentialBrokerMaxConnections].value.(int64)
+	egressPolicyRef, egressPolicyRefOK := values[KeyRuntimeMicroVMEgressPolicyRef].value.(string)
+	egressPolicyPath, egressPolicyPathOK := values[KeyRuntimeMicroVMEgressPolicyPath].value.(string)
+	egressPolicyDigest, egressPolicyDigestOK := values[KeyRuntimeMicroVMEgressPolicyExpectedSHA256].value.(string)
+	egressPolicyMaxBytes, egressPolicyMaxBytesOK := values[KeyRuntimeMicroVMEgressPolicyMaxBytes].value.(int64)
 	if !providerOK || !isolationOK || !modelOK || !providerCredentialOK || !placementOK || !socketOK ||
 		!profileOK || !digestOK || !keyIDOK || !credentialOK || !brokerSocketOK || !brokerPeerUIDOK ||
-		!brokerTimeoutOK || !brokerMaxConnectionsOK {
+		!brokerTimeoutOK || !brokerMaxConnectionsOK || !egressPolicyRefOK || !egressPolicyPathOK ||
+		!egressPolicyDigestOK || !egressPolicyMaxBytesOK {
 		return false
 	}
+	egressPolicyConfigured := egressPolicyRef != "" || egressPolicyPath != "" || egressPolicyDigest != "" ||
+		egressPolicyMaxBytes != 64<<10
 	configured := placementRef != "" || socketPath != "" || profilePath != "" || profileDigest != "" ||
 		keyID != "" || credentialRef != "" || brokerSocketPath != "" || brokerPeerUID != 0 ||
-		brokerExchangeTimeout != 30*time.Second || brokerMaxConnections != 16
+		brokerExchangeTimeout != 30*time.Second || brokerMaxConnections != 16 || egressPolicyConfigured
 	if isolation == "process" {
 		return !configured
 	}
-	return isolation == "microvm" && provider == "codex" &&
+	validEgressPolicy := !egressPolicyConfigured ||
+		(validRuntimeMicroVMEgressPolicyRef(egressPolicyRef) && canonicalAbsolutePath(egressPolicyPath) &&
+			validBareSHA256(egressPolicyDigest) && egressPolicyMaxBytes > 0 && egressPolicyMaxBytes <= 64<<10)
+	return isolation == "microvm" && provider == "codex" && validEgressPolicy &&
 		validProviderModel(providerModel) &&
 		providerCredentialRef != "" && providerCredentialRef != credentialRef &&
 		validRuntimeMicroVMPlacementRef(placementRef) &&
@@ -231,6 +241,11 @@ func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
 		credentialRef != "" &&
 		canonicalAbsolutePath(brokerSocketPath) && brokerSocketPath != socketPath &&
 		brokerExchangeTimeout > 0 && brokerMaxConnections > 0
+}
+
+func validRuntimeMicroVMEgressPolicyRef(value string) bool {
+	return value != "" && len(value) <= 512 && value == strings.TrimSpace(value) &&
+		!strings.ContainsRune(value, '\x00') && utf8.ValidString(value)
 }
 
 func validProviderModel(value string) bool {
@@ -439,17 +454,21 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 	workRoot, workOK := canonical(KeyRuntimeCodexWorkRoot)
 	cacheRoot, cacheOK := canonical(KeyRuntimeCodexCacheRoot)
 	accountHomeRoot, accountHomeOK := canonical(KeyRuntimeCodexAccountHomeRoot)
+	egressPolicyPath, egressPolicyOK := canonical(KeyRuntimeMicroVMEgressPolicyPath)
 	workspaceRoot, workspaceOK := canonical(KeyWorkspaceLocalRoot)
 	effectivePath, effectiveOK := canonical(KeyConfigEffectivePath)
 	tokenPath, tokenOK := canonical(KeyIdentityLocalTokenPath)
 	manifestPath, manifestOK := canonical(KeyIdentityLocalPrincipalsManifestPath)
 	manifestConfigured, _ := values[KeyIdentityLocalPrincipalsManifestPath].value.(string)
+	egressPolicyConfigured, _ := values[KeyRuntimeMicroVMEgressPolicyPath].value.(string)
 	if !stateOK || !artifactOK || !credentialOK || !workOK || !cacheOK ||
 		!workspaceOK || !effectiveOK || !tokenOK ||
-		(strings.TrimSpace(manifestConfigured) != "" && !manifestOK) {
+		(strings.TrimSpace(manifestConfigured) != "" && !manifestOK) ||
+		(strings.TrimSpace(egressPolicyConfigured) != "" && !egressPolicyOK) {
 		return false
 	}
 	stateDirectory, tokenDirectory := filepath.Dir(statePath), filepath.Dir(tokenPath)
+	credentialRecoveryPath := credentialPath + ".next"
 	pairs := [][2]string{
 		{stateDirectory, artifactRoot}, {stateDirectory, workRoot}, {stateDirectory, cacheRoot},
 		{artifactRoot, workRoot}, {artifactRoot, cacheRoot}, {workRoot, cacheRoot},
@@ -478,7 +497,6 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		)
 	}
 	if manifestOK {
-		credentialRecoveryPath := credentialPath + ".next"
 		pairs = append(pairs,
 			[2]string{manifestPath, stateDirectory},
 			[2]string{manifestPath, artifactRoot},
@@ -494,6 +512,25 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 			pairs = append(pairs, [2]string{manifestPath, accountHomeRoot})
 		}
 	}
+	if egressPolicyOK {
+		pairs = append(pairs,
+			[2]string{egressPolicyPath, stateDirectory},
+			[2]string{egressPolicyPath, artifactRoot},
+			[2]string{egressPolicyPath, credentialPath},
+			[2]string{egressPolicyPath, credentialRecoveryPath},
+			[2]string{egressPolicyPath, workRoot},
+			[2]string{egressPolicyPath, cacheRoot},
+			[2]string{egressPolicyPath, workspaceRoot},
+			[2]string{egressPolicyPath, effectivePath},
+			[2]string{egressPolicyPath, tokenDirectory},
+		)
+		if accountHomeOK {
+			pairs = append(pairs, [2]string{egressPolicyPath, accountHomeRoot})
+		}
+		if manifestOK {
+			pairs = append(pairs, [2]string{egressPolicyPath, manifestPath})
+		}
+	}
 	for _, pair := range pairs {
 		if pathsOverlap(pair[0], pair[1]) {
 			return false
@@ -507,6 +544,9 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		otherPaths := []string{
 			statePath, artifactRoot, credentialPath, workRoot, cacheRoot,
 			workspaceRoot, effectivePath, tokenDirectory,
+		}
+		if egressPolicyOK {
+			otherPaths = append(otherPaths, egressPolicyPath)
 		}
 		if accountHomeOK {
 			otherPaths = append(otherPaths, accountHomeRoot)
