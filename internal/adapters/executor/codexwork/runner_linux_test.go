@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
-	protocol "orquesta/internal/adapters/protocol/codexwork"
+	protocol "orquesta/internal/agentprotocol/codexwork"
 )
 
 const helperSeparator = "--codexwork-helper"
@@ -656,11 +656,31 @@ func TestCodexWorkExecutorHelperProcess(t *testing.T) {
 		_, _ = fmt.Fprintln(os.Stderr, strings.Repeat("CHILD_SECRET", 1024))
 	case "environment", "environment-egress":
 		want := exactSealedEnvironment(mode == "environment-egress")
-		if !slices.Equal(os.Environ(), want) {
+		observed, observeErr := readProcSelfEnvironment()
+		if observeErr != nil || !slices.Equal(observed, want) {
 			os.Exit(84)
 		}
 	}
 	serveSuccessfulProtocol(reader, initial, artifact)
+}
+
+func readProcSelfEnvironment() ([]string, error) {
+	raw, err := os.ReadFile("/proc/self/environ")
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || raw[len(raw)-1] != 0 {
+		return nil, errors.New("entorno de proceso incompleto")
+	}
+	entries := bytes.Split(raw[:len(raw)-1], []byte{0})
+	environment := make([]string, len(entries))
+	for index, entry := range entries {
+		if len(entry) == 0 || !bytes.ContainsRune(entry, '=') {
+			return nil, errors.New("entrada de entorno invalida")
+		}
+		environment[index] = string(entry)
+	}
+	return environment, nil
 }
 
 func exactSealedEnvironment(withEgress bool) []string {

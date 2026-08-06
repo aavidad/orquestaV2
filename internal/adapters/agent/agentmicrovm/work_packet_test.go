@@ -12,7 +12,7 @@ import (
 
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
 
-	"orquesta/internal/adapters/protocol/codexwork"
+	"orquesta/internal/agentprotocol/codexwork"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/ports"

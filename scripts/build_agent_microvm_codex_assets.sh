@@ -334,7 +334,7 @@ readonly -a ORQUESTA_ARCHIVE_PATHS=(
   vendor/golang.org/x/sys/unix
   cmd/orquesta-codex-work-executor
   internal/adapters/executor/codexwork
-  internal/adapters/protocol/codexwork
+  internal/agentprotocol/codexwork
 )
 readonly -a AGENT_ARCHIVE_PATHS=(
   Cargo.toml

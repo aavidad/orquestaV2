@@ -7,7 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"orquesta/internal/adapters/protocol/codexwork"
+	"orquesta/internal/agentprotocol/codexwork"
 	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )

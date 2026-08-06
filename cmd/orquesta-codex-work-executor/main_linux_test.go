@@ -16,7 +16,7 @@ import (
 	"time"
 
 	executor "orquesta/internal/adapters/executor/codexwork"
-	protocol "orquesta/internal/adapters/protocol/codexwork"
+	protocol "orquesta/internal/agentprotocol/codexwork"
 )
 
 const signalHelperMarker = "--codexwork-signal-helper"

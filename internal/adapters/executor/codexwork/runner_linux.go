@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
-	protocol "orquesta/internal/adapters/protocol/codexwork"
+	protocol "orquesta/internal/agentprotocol/codexwork"
 )
 
 const (

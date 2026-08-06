@@ -23,7 +23,7 @@ import (
 
 	"orquesta/internal/adapters/agent/agentmicrovm"
 	"orquesta/internal/adapters/agent/codex"
-	"orquesta/internal/adapters/protocol/codexwork"
+	"orquesta/internal/agentprotocol/codexwork"
 	"orquesta/internal/config"
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"

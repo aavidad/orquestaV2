@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	rebuildArchitectureEnvLoader        = "internal/config/env_loader.go"
-	rebuildArchitectureLauncherContract = "orquesta/internal/testattestorprotocol/launcher"
-	rebuildArchitectureRawDriveProtocol = "orquesta/internal/testattestorprotocol/rawdrive"
+	rebuildArchitectureEnvLoader         = "internal/config/env_loader.go"
+	rebuildArchitectureLauncherContract  = "orquesta/internal/testattestorprotocol/launcher"
+	rebuildArchitectureRawDriveProtocol  = "orquesta/internal/testattestorprotocol/rawdrive"
+	rebuildArchitectureCodexWorkProtocol = "orquesta/internal/agentprotocol/codexwork"
 )
 
 type rebuildArchitectureImport struct {
@@ -181,7 +182,7 @@ func TestRebuildArchitecture(t *testing.T) {
 		} {
 			for _, file := range rebuildArchitectureFilesUnder(files, root) {
 				for _, imported := range file.imports {
-					if !rebuildArchitectureIsStandardLibraryImport(imported.path) {
+					if !rebuildArchitectureCommandIsStandardLibraryImport(imported.path) {
 						rebuildArchitectureImportError(
 							t,
 							file,
@@ -190,6 +191,40 @@ func TestRebuildArchitecture(t *testing.T) {
 						)
 					}
 				}
+			}
+		}
+	})
+
+	t.Run("codex_work_shared_protocol_is_standard_library_only", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/agentprotocol/codexwork") {
+			for _, imported := range file.imports {
+				if !rebuildArchitectureCommandIsStandardLibraryImport(imported.path) {
+					rebuildArchitectureImportError(
+						t,
+						file,
+						imported,
+						"shared Codex work protocol must depend only on the standard library",
+					)
+				}
+			}
+		}
+	})
+
+	t.Run("shared_protocol_standard_library_guard_rejects_mutants", func(t *testing.T) {
+		for _, accepted := range []string{"context", "encoding/json"} {
+			if !rebuildArchitectureCommandIsStandardLibraryImport(accepted) {
+				t.Errorf("shared protocol guard rejected standard-library import %q", accepted)
+			}
+		}
+		for _, rejected := range []string{
+			"C",
+			"notastdlib",
+			"provider",
+			"orquesta/internal/goal",
+			"golang.org/x/sys/unix",
+		} {
+			if rebuildArchitectureCommandIsStandardLibraryImport(rejected) {
+				t.Errorf("shared protocol guard accepted non-standard-library import %q", rejected)
 			}
 		}
 	})
@@ -204,9 +239,13 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 		if !rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureLauncherContract) ||
 			!rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol) ||
+			!rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureCodexWorkProtocol) ||
 			rebuildArchitectureIsSharedAdapterProtocol("orquesta/internal/adapters/attestor/firecracker") ||
 			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureLauncherContract+"/mutant") ||
-			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol+"/mutant") {
+			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol+"/mutant") ||
+			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureCodexWorkProtocol+"/mutant") ||
+			rebuildArchitectureIsSharedAdapterProtocol("orquesta/internal/agentprotocol") ||
+			rebuildArchitectureIsSharedAdapterProtocol("orquesta/internal/agentprotocol/other") {
 			t.Fatal("shared protocol exceptions must remain exact and outside internal/adapters")
 		}
 		for _, accepted := range []string{
@@ -906,7 +945,8 @@ func rebuildArchitectureIsStandardLibraryImport(importPath string) bool {
 
 func rebuildArchitectureIsSharedAdapterProtocol(importPath string) bool {
 	return importPath == rebuildArchitectureLauncherContract ||
-		importPath == rebuildArchitectureRawDriveProtocol
+		importPath == rebuildArchitectureRawDriveProtocol ||
+		importPath == rebuildArchitectureCodexWorkProtocol
 }
 
 func rebuildArchitectureIsMCPImport(importPath string) bool {
