@@ -17,7 +17,7 @@ import (
 	"orquesta/internal/ports"
 )
 
-func TestV32MicroVMHostLaunchAuthorityMigrationAndStrictShapeSurviveReopen(t *testing.T) {
+func TestV33MicroVMHostLaunchAuthorityMigrationAndStrictShapeSurviveReopen(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "microvm-host-authority-v31.db")
 	database := agentCapacityDatabase(t, path, recoverySchemaV38EgressAuthority)
 	sqliteTestNoError(t, database.Close())
@@ -42,6 +42,7 @@ func TestV32MicroVMHostLaunchAuthorityRejectsPartialProxy(t *testing.T) {
 	system := newSQLiteV15System(t, 1)
 	_, attempt := seedV32EffectAttempt(t, system, "proxy")
 	base := newV32MicroVMHostLaunchAuthority(t, attempt)
+	bindV32MicroVMHostLaunchExecutionSession(t, system, base)
 	complete := [4]any{
 		"servicio:egress", int64(5002), "identidad-servicio:egress", strings.Repeat("e", 64),
 	}
@@ -64,6 +65,7 @@ func TestV32MicroVMHostLaunchAuthorityRejectsEveryMutationAndDelete(t *testing.T
 	system := newSQLiteV15System(t, 1)
 	_, attempt := seedV32EffectAttempt(t, system, "immutable")
 	authority := newV32MicroVMHostLaunchAuthority(t, attempt)
+	bindV32MicroVMHostLaunchExecutionSession(t, system, authority)
 	authority.proxy = [4]any{
 		"servicio:egress", int64(5002), "identidad-servicio:egress", strings.Repeat("e", 64),
 	}
@@ -118,6 +120,7 @@ func TestV32MicroVMHostLaunchAuthorityBindsExternalRefExactlyOnce(t *testing.T) 
 	system := newSQLiteV15System(t, 1)
 	_, attempt := seedV32EffectAttempt(t, system, "bind")
 	authority := newV32MicroVMHostLaunchAuthority(t, attempt)
+	bindV32MicroVMHostLaunchExecutionSession(t, system, authority)
 	sqliteTestNoError(t, insertV32MicroVMHostLaunchAuthority(system.repository.db, authority))
 	assertV32MicroVMHostLaunchAuthorityRoundTrip(t, system.repository.db, authority, false, false)
 
@@ -156,6 +159,7 @@ func TestV32MicroVMHostLaunchAuthorityRejectsRawMalformedTextAndPort(t *testing.
 	system := newSQLiteV15System(t, 1)
 	_, attempt := seedV32EffectAttempt(t, system, "raw-shape")
 	base := newV32MicroVMHostLaunchAuthority(t, attempt)
+	bindV32MicroVMHostLaunchExecutionSession(t, system, base)
 	tests := []struct {
 		name   string
 		mutate func(*v32MicroVMHostLaunchAuthority)
@@ -186,6 +190,7 @@ func TestV32MicroVMHostLaunchAuthorityRejectsCausalMismatchAndPostReceipt(t *tes
 		system := newSQLiteV15System(t, 1)
 		_, attempt := seedV32EffectAttempt(t, system, "already-bound")
 		authority := newV32MicroVMHostLaunchAuthority(t, attempt)
+		bindV32MicroVMHostLaunchExecutionSession(t, system, authority)
 		authority.externalRef = "ejecucion:premature"
 		assertV32CausalInsertRejected(t, system.repository.db, authority)
 	})
@@ -194,6 +199,7 @@ func TestV32MicroVMHostLaunchAuthorityRejectsCausalMismatchAndPostReceipt(t *tes
 		system := newSQLiteV15System(t, 1)
 		_, attempt := seedV32EffectAttempt(t, system, "causal-subject")
 		base := newV32MicroVMHostLaunchAuthority(t, attempt)
+		bindV32MicroVMHostLaunchExecutionSession(t, system, base)
 		for name, mutate := range map[string]func(*v32MicroVMHostLaunchAuthority){
 			"actor": func(value *v32MicroVMHostLaunchAuthority) { value.actorRef = "actor:other" },
 			"scope": func(value *v32MicroVMHostLaunchAuthority) { value.scopeRef = "project:other" },
@@ -210,6 +216,7 @@ func TestV32MicroVMHostLaunchAuthorityRejectsCausalMismatchAndPostReceipt(t *tes
 		system := newSQLiteV15System(t, 1)
 		claim, attempt := seedV32EffectAttempt(t, system, "post-receipt")
 		authority := newV32MicroVMHostLaunchAuthority(t, attempt)
+		bindV32MicroVMHostLaunchExecutionSession(t, system, authority)
 		acceptAgentCapacityLaunch(t, system, claim, attempt)
 		assertV32CausalInsertRejected(t, system.repository.db, authority)
 	})
@@ -229,7 +236,9 @@ func TestV32MicroVMHostLaunchAuthorityRejectsCausalMismatchAndPostReceipt(t *tes
 		if err != nil || !created || persisted != attempt {
 			t.Fatalf("non-launch attempt=%+v created=%t err=%v", persisted, created, err)
 		}
-		assertV32CausalInsertRejected(t, system.repository.db, newV32MicroVMHostLaunchAuthority(t, attempt))
+		authority := newV32MicroVMHostLaunchAuthority(t, attempt)
+		bindV32MicroVMHostLaunchExecutionSession(t, system, authority)
+		assertV32CausalInsertRejected(t, system.repository.db, authority)
 	})
 }
 
@@ -238,6 +247,7 @@ func TestV32MicroVMHostLaunchAuthorityForeignKeyBindsAttemptExecutionAndFence(t 
 	_, first := seedV32EffectAttempt(t, system, "causal-first")
 	_, second := seedV32EffectAttempt(t, system, "causal-second")
 	base := newV32MicroVMHostLaunchAuthority(t, first)
+	bindV32MicroVMHostLaunchExecutionSession(t, system, base)
 	sqliteTestNoError(t, execV32DropCausalInsertGuard(system.repository.db))
 
 	tests := []struct {
@@ -437,29 +447,64 @@ func seedV32EffectAttempt(
 	if err != nil || !created || persisted != attempt {
 		t.Fatalf("seed attempt=%+v created=%t err=%v", persisted, created, err)
 	}
+	session := recoveryV32ExecutionSessionRef(t, attempt.Ref)
+	mustV10Exec(t, system.repository.db, `
+UPDATE executions SET execution_session_ref=? WHERE ref=? AND execution_session_ref=''`,
+		session.String(), attempt.Subject.ExecutionRef.String())
 	return claim, attempt
+}
+
+func bindV32MicroVMHostLaunchExecutionSession(
+	t *testing.T,
+	system *sqliteV15System,
+	authority v32MicroVMHostLaunchAuthority,
+) {
+	t.Helper()
+	result, err := system.repository.db.Exec(`
+UPDATE executions SET execution_session_ref=?
+WHERE ref=? AND (execution_session_ref='' OR execution_session_ref=?)`,
+		authority.sessionRef, authority.executionRef, authority.sessionRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil || rows != 1 {
+		t.Fatalf("bind V32 execution session rows=%d err=%v", rows, err)
+	}
 }
 
 func assertV32MicroVMHostLaunchAuthorityShape(t *testing.T, database *sql.DB) {
 	t.Helper()
-	var version, receipt, strict, rows, foreignKeyViolations int
-	var name, tableSQL string
+	var version, receiptV32, receiptV33, strict, rows, foreignKeyViolations int
+	var nameV32, nameV33, tableSQL, causalTriggerSQL string
 	sqliteTestNoError(t, database.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, database.QueryRow(`
-SELECT name FROM schema_migrations WHERE version=?`, recoverySchemaV38MicroVMHostLaunch).Scan(&name))
+SELECT name FROM schema_migrations WHERE version=?`, recoverySchemaV38MicroVMHostLaunch).Scan(&nameV32))
+	sqliteTestNoError(t, database.QueryRow(`
+SELECT name FROM schema_migrations WHERE version=?`, recoverySchemaV38MicroVMHostSession).Scan(&nameV33))
 	sqliteTestNoError(t, database.QueryRow(`
 SELECT strict FROM pragma_table_list WHERE name='microvm_host_launch_authorities'`).Scan(&strict))
 	sqliteTestNoError(t, database.QueryRow(`
 SELECT sql FROM sqlite_schema WHERE type='table' AND name='microvm_host_launch_authorities'`).Scan(&tableSQL))
 	sqliteTestNoError(t, database.QueryRow(`
+SELECT sql FROM sqlite_schema
+WHERE type='trigger' AND name='microvm_host_launch_authorities_causal_insert'`).Scan(&causalTriggerSQL))
+	sqliteTestNoError(t, database.QueryRow(`
 SELECT COUNT(*) FROM microvm_host_launch_authorities`).Scan(&rows))
 	sqliteTestNoError(t, database.QueryRow(`
-SELECT COUNT(*) FROM schema_migrations WHERE version=?`, recoverySchemaV38MicroVMHostLaunch).Scan(&receipt))
+SELECT COUNT(*) FROM schema_migrations WHERE version=?`, recoverySchemaV38MicroVMHostLaunch).Scan(&receiptV32))
+	sqliteTestNoError(t, database.QueryRow(`
+SELECT COUNT(*) FROM schema_migrations WHERE version=?`, recoverySchemaV38MicroVMHostSession).Scan(&receiptV33))
 	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&foreignKeyViolations))
-	if version != recoverySchemaLatest || name != "032_microvm_host_launch_authority.sql" ||
-		receipt != 1 || strict != 1 || rows != 0 || foreignKeyViolations != 0 {
-		t.Fatalf("V32 shape version=%d name=%q receipt=%d strict=%d rows=%d fk=%d",
-			version, name, receipt, strict, rows, foreignKeyViolations)
+	if version != recoverySchemaLatest || nameV32 != "032_microvm_host_launch_authority.sql" ||
+		nameV33 != "033_microvm_host_launch_session.sql" || receiptV32 != 1 || receiptV33 != 1 ||
+		strict != 1 || rows != 0 || foreignKeyViolations != 0 {
+		t.Fatalf("V33 shape version=%d names=%q/%q receipts=%d/%d strict=%d rows=%d fk=%d",
+			version, nameV32, nameV33, receiptV32, receiptV33, strict, rows, foreignKeyViolations)
+	}
+	if !strings.Contains(causalTriggerSQL, "execution.execution_session_ref<>''") ||
+		!strings.Contains(causalTriggerSQL, "execution.execution_session_ref=NEW.session_ref") {
+		t.Fatalf("V33 causal trigger lacks exact durable session: %s", causalTriggerSQL)
 	}
 	for _, column := range []string{
 		"execution_ref", "effect_attempt_ref", "session_ref", "plan_sha256", "concession_sha256",

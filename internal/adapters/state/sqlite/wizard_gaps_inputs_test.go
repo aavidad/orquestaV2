@@ -689,9 +689,9 @@ DROP TABLE wizard_gaps_input_receipts`,
 	mustV10Exec(
 		t,
 		system.repository.db,
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim, recoverySchemaV38Environment, recoverySchemaV38EnvironmentGate, recoverySchemaV38AttemptLease, recoverySchemaV38RecoveryClaim, recoverySchemaV38PreservationRatchet, recoverySchemaV38RecoveryRequeue,
-		recoverySchemaV38EgressAuthority, recoverySchemaV38MicroVMHostLaunch,
+		recoverySchemaV38EgressAuthority, recoverySchemaV38MicroVMHostLaunch, recoverySchemaV38MicroVMHostSession,
 	)
 	mustV10Exec(
 		t,

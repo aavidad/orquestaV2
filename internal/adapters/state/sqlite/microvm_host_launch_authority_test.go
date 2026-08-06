@@ -18,6 +18,7 @@ import (
 func TestMicroVMHostLaunchAuthorityPrepareResolveReplayAndReopen(t *testing.T) {
 	system, attempt := seedV27AmbiguousLaunch(t, "host-authority-reopen")
 	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, true)
+	bindSQLiteMicroVMHostLaunchSession(t, system, authority)
 
 	prepared, err := system.repository.Prepare(context.Background(), authority)
 	if err != nil || !reflect.DeepEqual(prepared, authority) {
@@ -44,6 +45,7 @@ func TestMicroVMHostLaunchAuthorityPrepareResolveReplayAndReopen(t *testing.T) {
 func TestMicroVMHostLaunchAuthorityPreparedReplayAcceptsBoundAndRejectsDivergence(t *testing.T) {
 	system, attempt := seedV27AmbiguousLaunch(t, "host-authority-bound-replay")
 	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, false)
+	bindSQLiteMicroVMHostLaunchSession(t, system, authority)
 	if _, err := system.repository.Prepare(context.Background(), authority); err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +70,7 @@ func TestMicroVMHostLaunchAuthorityPreparedReplayAcceptsBoundAndRejectsDivergenc
 func TestMicroVMHostLaunchAuthorityPrepareRejectsCrossedAttemptSubject(t *testing.T) {
 	system, attempt := seedV27AmbiguousLaunch(t, "host-authority-crossed-subject")
 	base := sqliteMicroVMHostLaunchAuthority(t, attempt, false)
+	bindSQLiteMicroVMHostLaunchSession(t, system, base)
 	tests := map[string]func(*ports.MicroVMHostLaunchAuthorityV1){
 		"actor": func(authority *ports.MicroVMHostLaunchAuthorityV1) {
 			authority.OneShotClaim.ActorRef = "actor:crossed"
@@ -91,6 +94,51 @@ func TestMicroVMHostLaunchAuthorityPrepareRejectsCrossedAttemptSubject(t *testin
 	}
 }
 
+func TestMicroVMHostLaunchAuthorityPrepareRequiresExactDurableExecutionSession(t *testing.T) {
+	for _, mode := range []string{"empty", "crossed"} {
+		t.Run(mode, func(t *testing.T) {
+			system, attempt := seedV27AmbiguousLaunch(t, "host-authority-session-"+mode)
+			authority := sqliteMicroVMHostLaunchAuthority(t, attempt, false)
+			if mode == "crossed" {
+				crossed, err := ports.NewExecutionSessionRef(
+					"execution-session:sha256:" + strings.Repeat("f", 64),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := system.repository.db.Exec(`
+UPDATE executions SET execution_session_ref=? WHERE ref=? AND execution_session_ref=''`,
+					crossed.String(), authority.Key.RunRef.String(),
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if rows, err := result.RowsAffected(); err != nil || rows != 1 {
+					t.Fatalf("crossed session rows=%d err=%v", rows, err)
+				}
+			}
+			if got, err := system.repository.Prepare(context.Background(), authority); !reflect.DeepEqual(got, ports.MicroVMHostLaunchAuthorityV1{}) ||
+				!application.IsStateError(err, application.StateConflict) {
+				t.Fatalf("%s Prepare()=%+v err=%v", mode, got, err)
+			}
+			var rows int
+			if err := system.repository.db.QueryRow(
+				`SELECT COUNT(*) FROM microvm_host_launch_authorities`,
+			).Scan(&rows); err != nil || rows != 0 {
+				t.Fatalf("%s inserted rows=%d err=%v", mode, rows, err)
+			}
+		})
+	}
+
+	system, attempt := seedV27AmbiguousLaunch(t, "host-authority-session-exact")
+	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, false)
+	bindSQLiteMicroVMHostLaunchSession(t, system, authority)
+	prepared, err := system.repository.Prepare(context.Background(), authority)
+	if err != nil || !reflect.DeepEqual(prepared, authority) {
+		t.Fatalf("exact Prepare()=%+v err=%v", prepared, err)
+	}
+}
+
 func TestMicroVMHostLaunchAuthorityPrepareRejectsAttemptWithReceiptWithoutInsert(t *testing.T) {
 	system := newSQLiteV15System(t, 1)
 	system.submit(t, "request:host-authority-receipted")
@@ -104,6 +152,8 @@ func TestMicroVMHostLaunchAuthorityPrepareRejectsAttemptWithReceiptWithoutInsert
 	); err != nil || !created {
 		t.Fatalf("RecordEffectAttempt created=%t err=%v", created, err)
 	}
+	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, false)
+	bindSQLiteMicroVMHostLaunchSession(t, system, authority)
 	receipt := sqliteV15EffectReceipt(
 		claim, attempt, application.EffectStatusAccepted, system.clock.Now(),
 	)
@@ -119,7 +169,6 @@ func TestMicroVMHostLaunchAuthorityPrepareRejectsAttemptWithReceiptWithoutInsert
 		t.Fatal(err)
 	}
 
-	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, false)
 	if _, err := system.repository.Prepare(context.Background(), authority); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("receipted Prepare err=%v", err)
 	}
@@ -165,6 +214,7 @@ func TestMicroVMHostLaunchAuthorityPrepareRejectsSQLiteIntegerOverflowWithoutMut
 func TestMicroVMHostLaunchAuthorityBindIsSetOnceAndUnknownFails(t *testing.T) {
 	system, attempt := seedV27AmbiguousLaunch(t, "host-authority-bind")
 	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, true)
+	bindSQLiteMicroVMHostLaunchSession(t, system, authority)
 	if _, err := system.repository.Prepare(context.Background(), authority); err != nil {
 		t.Fatal(err)
 	}
@@ -191,6 +241,7 @@ func TestMicroVMHostLaunchAuthorityBindIsSetOnceAndUnknownFails(t *testing.T) {
 func TestMicroVMHostLaunchAuthorityConcurrentDifferentBindsHaveOneWinner(t *testing.T) {
 	system, attempt := seedV27AmbiguousLaunch(t, "host-authority-concurrent")
 	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, false)
+	bindSQLiteMicroVMHostLaunchSession(t, system, authority)
 	if _, err := system.repository.Prepare(context.Background(), authority); err != nil {
 		t.Fatal(err)
 	}
@@ -252,6 +303,7 @@ func TestMicroVMHostLaunchAuthorityPreservesCanceledContextWithoutMutation(t *te
 func TestMicroVMHostLaunchAuthorityRejectsSemanticCorruptionOnRead(t *testing.T) {
 	system, attempt := seedV27AmbiguousLaunch(t, "host-authority-corrupt")
 	authority := sqliteMicroVMHostLaunchAuthority(t, attempt, true)
+	bindSQLiteMicroVMHostLaunchSession(t, system, authority)
 	if _, err := system.repository.Prepare(context.Background(), authority); err != nil {
 		t.Fatal(err)
 	}
@@ -286,10 +338,7 @@ func sqliteMicroVMHostLaunchAuthority(
 	withProxy bool,
 ) ports.MicroVMHostLaunchAuthorityV1 {
 	t.Helper()
-	session, err := ports.NewExecutionSessionRef("execution-session:host-authority")
-	if err != nil {
-		t.Fatal(err)
-	}
+	session := recoveryV32ExecutionSessionRef(t, attempt.Ref)
 	key := ports.MicroVMHostLaunchAuthorityKey{
 		RunRef: attempt.Subject.ExecutionRef, ActionFence: attempt.ActionFence,
 	}
@@ -324,4 +373,24 @@ func sqliteMicroVMHostLaunchAuthority(
 		t.Fatalf("fixture authority invalid: %v", err)
 	}
 	return authority
+}
+
+func bindSQLiteMicroVMHostLaunchSession(
+	t *testing.T,
+	system *sqliteV15System,
+	authority ports.MicroVMHostLaunchAuthorityV1,
+) {
+	t.Helper()
+	result, err := system.repository.db.Exec(`
+UPDATE executions SET execution_session_ref=?
+WHERE ref=? AND execution_session_ref=''`,
+		authority.SessionRef.String(), authority.Key.RunRef.String(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil || rows != 1 {
+		t.Fatalf("bind execution session rows=%d err=%v", rows, err)
+	}
 }

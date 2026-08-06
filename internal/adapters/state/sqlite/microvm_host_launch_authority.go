@@ -44,6 +44,19 @@ func (repository *Repository) Prepare(
 		return ports.MicroVMHostLaunchAuthorityV1{}, microVMHostLaunchContextError(ctx, err)
 	}
 	defer transaction.Rollback()
+	var exactExecutionSession int
+	if err := transaction.QueryRowContext(ctx, `
+SELECT EXISTS(
+ SELECT 1 FROM executions
+ WHERE ref=? AND execution_session_ref=? AND execution_session_ref<>''
+)`, authority.Key.RunRef.String(), authority.SessionRef.String()).Scan(&exactExecutionSession); err != nil {
+		return ports.MicroVMHostLaunchAuthorityV1{}, microVMHostLaunchDatabaseError(ctx, err)
+	}
+	if exactExecutionSession != 1 {
+		return ports.MicroVMHostLaunchAuthorityV1{}, conflict(
+			errors.New("sqlite.microvm_host_launch_authority_session_conflict"),
+		)
+	}
 
 	persisted, found, err := readMicroVMHostLaunchAuthority(ctx, transaction, authority.Key)
 	if err != nil {
@@ -79,6 +92,7 @@ JOIN executions execution ON execution.ref=attempt.execution_ref
  WHERE attempt.ref=? AND attempt.execution_ref=? AND attempt.action_fence=?
  AND intent.kind='agent_launch' AND intent.execution_ref=attempt.execution_ref
  AND execution.state='dispatching'
+ AND execution.execution_session_ref=? AND execution.execution_session_ref<>''
  AND attempt.actor_ref=? AND attempt.project_ref=?
  AND NOT EXISTS (
   SELECT 1 FROM effect_receipts receipt WHERE receipt.attempt_ref=attempt.ref
@@ -92,6 +106,7 @@ JOIN executions execution ON execution.ref=attempt.execution_ref
 		claim.CredentialRef.String(), claim.OwnerRef.String(), claim.ScopeRef.String(),
 		claim.PurposeRef.String(), claim.Version, claim.ActorRef, claim.RequestRef,
 		authority.EffectAttemptRef, authority.Key.RunRef.String(), authority.Key.ActionFence,
+		authority.SessionRef.String(),
 		claim.ActorRef, claim.ScopeRef.String(),
 	)
 	if err != nil {
