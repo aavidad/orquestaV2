@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-08-05.1`
+Registry revision: `2026-08-06.1`
 
-Registry hash: `sha256:b1ef972427ce9765d0c9963739992e14f56390927580da2b0ae7f4290b00a0a5`
+Registry hash: `sha256:b0849e90f4a4af9f3c402f6d1029dcb5ec0cd088e003cf8a36d4ecbdc30a9f71`
 
 Precedence: `default < file < env`
 
@@ -117,7 +117,7 @@ Source limit: `1048576` bytes
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`; maximum duration `30s`
 - `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.account_profiles`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
-- `runtime_microvm_requirements`: `runtime.provider`, `runtime.isolation`, `runtime.codex.model`, `runtime.microvm.placement_ref`, `runtime.microvm.socket_path`, `runtime.microvm.profile_descriptor_path`, `runtime.microvm.expected_profile_descriptor_sha256`, `runtime.microvm.launch_grant_key_id`, `runtime.microvm.launch_grant_signing_credential_ref`
+- `runtime_microvm_requirements`: `runtime.provider`, `runtime.isolation`, `runtime.codex.model`, `runtime.codex.credential_ref`, `runtime.microvm.placement_ref`, `runtime.microvm.socket_path`, `runtime.microvm.profile_descriptor_path`, `runtime.microvm.expected_profile_descriptor_sha256`, `runtime.microvm.launch_grant_key_id`, `runtime.microvm.launch_grant_signing_credential_ref`
 - `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`; maximum duration `24h`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`

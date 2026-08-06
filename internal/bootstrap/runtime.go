@@ -157,10 +157,18 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		controller          application.AgentController
 		identityComposition identityRuntimeComposition
 		credentialStore     *credentiallocal.Store
+		repository          *statesqlite.Repository
 		fuentesCapacidad    []application.FuenteCapacidadColocacionAgente
 	)
 	agenteProduccionMicroVM := options.AgentFactory == nil && setup.snapshot.RuntimeIsolation() == "microvm"
 	openAgent := func() error {
+		var autoridadMicroVM dependenciasAutoridadFisicaAgentMicroVM
+		if agenteProduccionMicroVM {
+			autoridadMicroVM = dependenciasAutoridadFisicaAgentMicroVM{
+				lectorCredencial:     credentialStore,
+				registroLanzamientos: repository,
+			}
+		}
 		agent, capabilities, controller, err = openBuildAgent(
 			ctx,
 			setup.snapshot,
@@ -168,6 +176,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			options.AgentFactory,
 			promptRenderer,
 			credentialStore,
+			autoridadMicroVM,
 			options.codexGoToolchainTrustForTests,
 			options.constructorClienteAgentMicroVM,
 		)
@@ -202,6 +211,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = credentialStore.Close() })
+	if agenteProduccionMicroVM {
+		repository, err = openBuildRepository(ctx, setup, identityComposition)
+		if err != nil {
+			return nil, err
+		}
+		cleanup.add(func() { _ = repository.Close() })
+	}
 	if options.AgentFactory == nil {
 		if err := openAgent(); err != nil {
 			return nil, err
@@ -230,11 +246,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err := writeEffectiveSnapshot(ctx, setup.snapshot); err != nil {
 		return nil, err
 	}
-	repository, err := openBuildRepository(ctx, setup, identityComposition)
-	if err != nil {
-		return nil, err
+	if repository == nil {
+		repository, err = openBuildRepository(ctx, setup, identityComposition)
+		if err != nil {
+			return nil, err
+		}
+		cleanup.add(func() { _ = repository.Close() })
 	}
-	cleanup.add(func() { _ = repository.Close() })
 	if workspace != nil {
 		if err := workspace.BindDurableWorkspaceBindingResolver(
 			sqliteWorkspaceBindingResolver{repository: repository},
@@ -390,6 +408,7 @@ func openBuildAgent(
 	ctx context.Context, snapshot config.Snapshot, clock local.Clock, factory AgentFactory,
 	promptRenderer codex.PromptRenderer,
 	credentialStore credentials.Store,
+	autoridadMicroVM dependenciasAutoridadFisicaAgentMicroVM,
 	toolchainTrust codexGoToolchainTrust,
 	constructorMicroVM constructorClienteAgentMicroVM,
 ) (AgentAdapter, ports.AgentCapabilities, application.AgentController, error) {
@@ -417,6 +436,7 @@ func openBuildAgent(
 					snapshot,
 					promptRenderer,
 					credentialStore,
+					autoridadMicroVM,
 					constructorMicroVM,
 				)
 			}

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-08-05.1",
+  "revision": "2026-08-06.1",
   "precedence": [
     "default",
     "file",
@@ -44,6 +44,7 @@
         "runtime.provider",
         "runtime.isolation",
         "runtime.codex.model",
+        "runtime.codex.credential_ref",
         "runtime.microvm.placement_ref",
         "runtime.microvm.socket_path",
         "runtime.microvm.profile_descriptor_path",

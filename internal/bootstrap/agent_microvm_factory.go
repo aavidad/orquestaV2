@@ -30,7 +30,13 @@ var (
 	errFactoriaAgentMicroVMSeleccionInvalida  = errors.New("bootstrap.agent_microvm_selection_invalid")
 	errFactoriaAgentMicroVMDescriptorInvalido = errors.New("bootstrap.agent_microvm_profile_descriptor_invalid")
 	errFactoriaAgentMicroVMClienteInvalido    = errors.New("bootstrap.agent_microvm_client_invalid")
+	errFactoriaAgentMicroVMAutoridadInvalida  = errors.New("bootstrap.agent_microvm_authority_invalid")
 )
+
+type dependenciasAutoridadFisicaAgentMicroVM struct {
+	lectorCredencial     credentials.UseAuthorityReader
+	registroLanzamientos ports.MicroVMHostLaunchAuthorityRegistry
+}
 
 type recursoClienteAgentMicroVM struct {
 	cliente           agentmicrovm.Client
@@ -46,11 +52,13 @@ func productionAgentMicroVM(
 	snapshot config.Snapshot,
 	promptRenderer codex.PromptRenderer,
 	credentialStore credentials.Store,
+	autoridad dependenciasAutoridadFisicaAgentMicroVM,
 ) (*agenteMicroVM, error) {
 	return productionAgentMicroVMConConstructor(
 		snapshot,
 		promptRenderer,
 		credentialStore,
+		autoridad,
 		nuevoRecursoClienteAgentMicroVM,
 	)
 }
@@ -59,10 +67,16 @@ func productionAgentMicroVMConConstructor(
 	snapshot config.Snapshot,
 	promptRenderer codex.PromptRenderer,
 	credentialStore credentials.Store,
+	autoridad dependenciasAutoridadFisicaAgentMicroVM,
 	construirCliente constructorClienteAgentMicroVM,
 ) (*agenteMicroVM, error) {
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" {
 		return nil, errFactoriaAgentMicroVMSeleccionInvalida
+	}
+	if interfazNulaAgentMicroVM(promptRenderer) || interfazNulaAgentMicroVM(credentialStore) ||
+		interfazNulaAgentMicroVM(autoridad.lectorCredencial) ||
+		interfazNulaAgentMicroVM(autoridad.registroLanzamientos) {
+		return nil, errFactoriaAgentMicroVMAutoridadInvalida
 	}
 	descriptor, err := cargarDescriptorPerfilAgentMicroVM(
 		snapshot.RuntimeMicroVMProfileDescriptorPath(),
@@ -79,6 +93,25 @@ func productionAgentMicroVMConConstructor(
 	if construirCliente == nil {
 		return nil, errFactoriaAgentMicroVMClienteInvalido
 	}
+	firmante, err := agentmicrovm.NewCredentialSigner(agentmicrovm.CredentialSignerConfig{
+		Store:         credentialStore,
+		CredentialRef: credentials.CredentialRef(snapshot.RuntimeMicroVMLaunchGrantSigningCredentialRef()),
+		KeyID:         snapshot.RuntimeMicroVMLaunchGrantKeyID(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	resolutorCredencial, err := agentmicrovm.NewCredentialClaimResolver(
+		autoridad.lectorCredencial,
+		credentials.PurposeRef(codex.ProviderRef),
+		[]agentmicrovm.CredentialClaimBinding{{
+			PlacementRef:  colocacion,
+			CredentialRef: credentials.CredentialRef(snapshot.RuntimeCodexCredentialRef()),
+		}},
+	)
+	if err != nil {
+		return nil, errors.Join(errFactoriaAgentMicroVMAutoridadInvalida, err)
+	}
 	recurso, err := construirCliente(snapshot.RuntimeMicroVMSocketPath())
 	if err != nil {
 		return nil, errors.Join(errFactoriaAgentMicroVMClienteInvalido, err)
@@ -93,14 +126,6 @@ func productionAgentMicroVMConConstructor(
 		return nil, errors.Join(causa, recurso.liberarConexiones())
 	}
 
-	firmante, err := agentmicrovm.NewCredentialSigner(agentmicrovm.CredentialSignerConfig{
-		Store:         credentialStore,
-		CredentialRef: credentials.CredentialRef(snapshot.RuntimeMicroVMLaunchGrantSigningCredentialRef()),
-		KeyID:         snapshot.RuntimeMicroVMLaunchGrantKeyID(),
-	})
-	if err != nil {
-		return fallar(err)
-	}
 	capacidades := ports.AgentCapabilities{
 		ProviderRef:                 codex.ProviderRef,
 		ModelRef:                    codex.DefaultModelRef,
@@ -109,9 +134,11 @@ func productionAgentMicroVMConConstructor(
 		RequierePreservacionEntorno: true,
 	}
 	adaptador, err := agentmicrovm.New(agentmicrovm.Config{
-		Client:       recurso.cliente,
-		Signer:       firmante,
-		Capabilities: capacidades,
+		Client:                  recurso.cliente,
+		Signer:                  firmante,
+		ClaimResolver:           resolutorCredencial,
+		LaunchAuthorityRegistry: autoridad.registroLanzamientos,
+		Capabilities:            capacidades,
 		ModelBinding: agentmicrovm.ProviderModelBinding{
 			ModelRef:      codex.DefaultModelRef,
 			ProviderModel: snapshot.RuntimeCodexModel(),

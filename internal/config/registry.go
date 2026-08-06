@@ -452,6 +452,7 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeProvider,
 			KeyRuntimeIsolation,
 			KeyRuntimeCodexModel,
+			KeyRuntimeCodexCredentialRef,
 			KeyRuntimeMicroVMPlacementRef,
 			KeyRuntimeMicroVMSocketPath,
 			KeyRuntimeMicroVMProfileDescriptorPath,

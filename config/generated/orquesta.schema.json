@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-08-05.1",
+  "$id": "urn:orquesta:config:2026-08-06.1",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -1470,8 +1470,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-08-05.1",
-  "x-registry-hash": "sha256:b1ef972427ce9765d0c9963739992e14f56390927580da2b0ae7f4290b00a0a5",
+  "x-registry-revision": "2026-08-06.1",
+  "x-registry-hash": "sha256:b0849e90f4a4af9f3c402f6d1029dcb5ec0cd088e003cf8a36d4ecbdc30a9f71",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1507,6 +1507,7 @@
         "runtime.provider",
         "runtime.isolation",
         "runtime.codex.model",
+        "runtime.codex.credential_ref",
         "runtime.microvm.placement_ref",
         "runtime.microvm.socket_path",
         "runtime.microvm.profile_descriptor_path",

@@ -43,10 +43,11 @@ func (*rendererTipadoNuloFactoriaAgentMicroVM) RenderAgentPrompt(ports.AgentProm
 }
 
 type storeFactoriaAgentMicroVM struct {
-	cierres  atomic.Int64
-	material []byte
-	usos     []credentials.UseRequest
-	secretos []credentials.Secret
+	cierres       atomic.Int64
+	material      []byte
+	usos          []credentials.UseRequest
+	secretos      []credentials.Secret
+	descripciones []credentials.DescribeUseAuthorityRequest
 }
 
 func (*storeFactoriaAgentMicroVM) Create(context.Context, credentials.CreateRequest) (credentials.MutationResult, error) {
@@ -74,9 +75,69 @@ func (*storeFactoriaAgentMicroVM) Rotate(context.Context, credentials.RotateRequ
 func (*storeFactoriaAgentMicroVM) Revoke(context.Context, credentials.RevokeRequest) (credentials.MutationResult, error) {
 	return credentials.MutationResult{}, nil
 }
+func (store *storeFactoriaAgentMicroVM) DescribeUseAuthority(
+	_ context.Context,
+	request credentials.DescribeUseAuthorityRequest,
+) (credentials.DescribedUseAuthority, error) {
+	store.descripciones = append(store.descripciones, request)
+	return credentials.DescribedUseAuthority{
+		CredentialRef: request.CredentialRef,
+		OwnerRef:      request.OwnerRef,
+		ScopeRef:      request.ScopeRef,
+		PurposeRef:    request.PurposeRef,
+		Version:       1,
+	}, nil
+}
 func (store *storeFactoriaAgentMicroVM) Close() error {
 	store.cierres.Add(1)
 	return nil
+}
+
+type registroLanzamientosFactoriaAgentMicroVM struct {
+	autoridad ports.MicroVMHostLaunchAuthorityV1
+	prepares  atomic.Int64
+	bindings  atomic.Int64
+}
+
+func (registro *registroLanzamientosFactoriaAgentMicroVM) Prepare(
+	_ context.Context,
+	autoridad ports.MicroVMHostLaunchAuthorityV1,
+) (ports.MicroVMHostLaunchAuthorityV1, error) {
+	registro.prepares.Add(1)
+	registro.autoridad = ports.CloneMicroVMHostLaunchAuthorityV1(autoridad)
+	return ports.CloneMicroVMHostLaunchAuthorityV1(registro.autoridad), nil
+}
+
+func (registro *registroLanzamientosFactoriaAgentMicroVM) BindExternal(
+	_ context.Context,
+	key ports.MicroVMHostLaunchAuthorityKey,
+	externalRef string,
+) (ports.MicroVMHostLaunchAuthorityV1, error) {
+	registro.bindings.Add(1)
+	if registro.autoridad.Key != key {
+		return ports.MicroVMHostLaunchAuthorityV1{}, errors.New("registro factoria: key cruzada")
+	}
+	registro.autoridad.ExternalRef = externalRef
+	return ports.CloneMicroVMHostLaunchAuthorityV1(registro.autoridad), nil
+}
+
+func (registro *registroLanzamientosFactoriaAgentMicroVM) Resolve(
+	_ context.Context,
+	key ports.MicroVMHostLaunchAuthorityKey,
+) (ports.MicroVMHostLaunchAuthorityV1, error) {
+	if registro.autoridad.Key != key {
+		return ports.MicroVMHostLaunchAuthorityV1{}, errors.New("registro factoria: autoridad ausente")
+	}
+	return ports.CloneMicroVMHostLaunchAuthorityV1(registro.autoridad), nil
+}
+
+func autoridadFisicaFactoriaAgentMicroVM(
+	lector credentials.UseAuthorityReader,
+	registro ports.MicroVMHostLaunchAuthorityRegistry,
+) dependenciasAutoridadFisicaAgentMicroVM {
+	return dependenciasAutoridadFisicaAgentMicroVM{
+		lectorCredencial: lector, registroLanzamientos: registro,
+	}
 }
 
 type clienteFactoriaAgentMicroVM struct{}
@@ -209,11 +270,13 @@ func (*clienteLanzamientoFactoriaAgentMicroVM) LeerEventosSesion(
 func TestProductionAgentMicroVMComponeBindingCapacidadYCierraSoloConexiones(t *testing.T) {
 	snapshot, _, rutaSocket := fixtureFactoriaAgentMicroVM(t)
 	store := &storeFactoriaAgentMicroVM{}
+	registro := &registroLanzamientosFactoriaAgentMicroVM{}
 	var conexiones atomic.Int64
 	agente, err := productionAgentMicroVMConConstructor(
 		snapshot,
 		rendererFactoriaAgentMicroVM{},
 		store,
+		autoridadFisicaFactoriaAgentMicroVM(store, registro),
 		func(ruta string) (recursoClienteAgentMicroVM, error) {
 			if ruta != rutaSocket {
 				t.Fatalf("socket=%q want=%q", ruta, rutaSocket)
@@ -260,11 +323,13 @@ func TestProductionAgentMicroVMLaunchFirmaYEntregaBindingExactoOffline(t *testin
 	solicitud := solicitudLanzamientoFactoriaAgentMicroVM(t)
 	privada := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize))
 	store := &storeFactoriaAgentMicroVM{material: append([]byte(nil), privada...)}
+	registro := &registroLanzamientosFactoriaAgentMicroVM{}
 	cliente := &clienteLanzamientoFactoriaAgentMicroVM{solicitud: solicitud, descriptor: descriptor}
 	agente, err := productionAgentMicroVMConConstructor(
 		snapshot,
 		rendererFactoriaAgentMicroVM{},
 		store,
+		autoridadFisicaFactoriaAgentMicroVM(store, registro),
 		func(string) (recursoClienteAgentMicroVM, error) {
 			return recursoClienteAgentMicroVM{
 				cliente:           cliente,
@@ -297,6 +362,20 @@ func TestProductionAgentMicroVMLaunchFirmaYEntregaBindingExactoOffline(t *testin
 	}
 	if len(store.usos) != 1 || store.usos[0] != wantUse {
 		t.Fatalf("CredentialStore.Use=%+v want=%+v", store.usos, wantUse)
+	}
+	if len(store.descripciones) != 1 ||
+		store.descripciones[0].CredentialRef != "credential:codex-account-1" ||
+		store.descripciones[0].PurposeRef != credentials.PurposeRef(codex.ProviderRef) {
+		t.Fatalf("DescribeUseAuthority=%+v", store.descripciones)
+	}
+	if registro.prepares.Load() != 1 || registro.bindings.Load() != 1 ||
+		registro.autoridad.OneShotClaim.CredentialRef != "credential:codex-account-1" ||
+		registro.autoridad.OneShotClaim.PurposeRef != credentials.PurposeRef(codex.ProviderRef) ||
+		registro.autoridad.OneShotClaim.OwnerRef.String() != solicitud.ActorRef.String() ||
+		registro.autoridad.OneShotClaim.ScopeRef.String() != solicitud.ProjectRef.String() ||
+		registro.autoridad.ExternalRef != recibo.ExternalRef {
+		t.Fatalf("registro autoridad=%+v prepare=%d bind=%d",
+			registro.autoridad, registro.prepares.Load(), registro.bindings.Load())
 	}
 	if len(store.secretos) != 1 || !bytes.Equal(store.secretos[0].Bytes(), make([]byte, ed25519.PrivateKeySize)) {
 		t.Fatal("la clave privada no quedó destruida al salir del callback")
@@ -351,10 +430,12 @@ func TestProductionAgentMicroVMLaunchFirmaYEntregaBindingExactoOffline(t *testin
 func TestProductionAgentMicroVMConstruyeClientePublicoSinMarcarSocketNiKVM(t *testing.T) {
 	snapshot, _, rutaSocket := fixtureFactoriaAgentMicroVM(t)
 	store := &storeFactoriaAgentMicroVM{}
+	registro := &registroLanzamientosFactoriaAgentMicroVM{}
 	agente, err := productionAgentMicroVM(
 		snapshot,
 		rendererFactoriaAgentMicroVM{},
 		store,
+		autoridadFisicaFactoriaAgentMicroVM(store, registro),
 	)
 	if err != nil || agente == nil {
 		t.Fatalf("productionAgentMicroVM() agente=%v error=%v", agente, err)
@@ -432,39 +513,45 @@ func TestCargarDescriptorPerfilAgentMicroVMRechazaFilesystemDigestYJSONInseguros
 	}
 }
 
-func TestProductionAgentMicroVMFallaCerradoYLiberaClienteSinCerrarStore(t *testing.T) {
+func TestProductionAgentMicroVMRechazaDependenciasNulasAntesDeAbrirCliente(t *testing.T) {
 	snapshot, _, _ := fixtureFactoriaAgentMicroVM(t)
 	store := &storeFactoriaAgentMicroVM{}
-	falloCleanup := errors.New("fallo cleanup conexiones")
-	var cierres atomic.Int64
+	registro := &registroLanzamientosFactoriaAgentMicroVM{}
+	var construcciones atomic.Int64
 	constructor := func(string) (recursoClienteAgentMicroVM, error) {
+		construcciones.Add(1)
 		return recursoClienteAgentMicroVM{
-			cliente: &clienteFactoriaAgentMicroVM{},
-			liberarConexiones: func() error {
-				cierres.Add(1)
-				return falloCleanup
-			},
+			cliente:           &clienteFactoriaAgentMicroVM{},
+			liberarConexiones: func() error { return nil },
 		}, nil
 	}
 	tests := []struct {
-		nombre   string
-		renderer codex.PromptRenderer
-		store    credentials.Store
+		nombre    string
+		renderer  codex.PromptRenderer
+		store     credentials.Store
+		autoridad dependenciasAutoridadFisicaAgentMicroVM
 	}{
-		{"renderer nil", nil, store},
-		{"renderer tipado nil", (*rendererTipadoNuloFactoriaAgentMicroVM)(nil), store},
-		{"store nil", rendererFactoriaAgentMicroVM{}, nil},
-		{"store tipado nil", rendererFactoriaAgentMicroVM{}, (*storeFactoriaAgentMicroVM)(nil)},
+		{"renderer nil", nil, store, autoridadFisicaFactoriaAgentMicroVM(store, registro)},
+		{"renderer tipado nil", (*rendererTipadoNuloFactoriaAgentMicroVM)(nil), store, autoridadFisicaFactoriaAgentMicroVM(store, registro)},
+		{"store nil", rendererFactoriaAgentMicroVM{}, nil, autoridadFisicaFactoriaAgentMicroVM(store, registro)},
+		{"store tipado nil", rendererFactoriaAgentMicroVM{}, (*storeFactoriaAgentMicroVM)(nil), autoridadFisicaFactoriaAgentMicroVM(store, registro)},
+		{"lector nil", rendererFactoriaAgentMicroVM{}, store, autoridadFisicaFactoriaAgentMicroVM(nil, registro)},
+		{"lector tipado nil", rendererFactoriaAgentMicroVM{}, store, autoridadFisicaFactoriaAgentMicroVM((*storeFactoriaAgentMicroVM)(nil), registro)},
+		{"registro nil", rendererFactoriaAgentMicroVM{}, store, autoridadFisicaFactoriaAgentMicroVM(store, nil)},
+		{"registro tipado nil", rendererFactoriaAgentMicroVM{}, store, autoridadFisicaFactoriaAgentMicroVM(store, (*registroLanzamientosFactoriaAgentMicroVM)(nil))},
 	}
 	for _, test := range tests {
 		t.Run(test.nombre, func(t *testing.T) {
-			antes := cierres.Load()
-			agente, err := productionAgentMicroVMConConstructor(snapshot, test.renderer, test.store, constructor)
-			if agente != nil || err == nil {
+			antes := construcciones.Load()
+			agente, err := productionAgentMicroVMConConstructor(
+				snapshot, test.renderer, test.store,
+				test.autoridad, constructor,
+			)
+			if agente != nil || !errors.Is(err, errFactoriaAgentMicroVMAutoridadInvalida) {
 				t.Fatalf("agente=%v error=%v", agente, err)
 			}
-			if !errors.Is(err, falloCleanup) || cierres.Load() != antes+1 {
-				t.Fatalf("cleanup error=%v cierres=%d antes=%d", err, cierres.Load(), antes)
+			if construcciones.Load() != antes {
+				t.Fatalf("constructor invocado: antes=%d después=%d", antes, construcciones.Load())
 			}
 			if store.cierres.Load() != 0 {
 				t.Fatalf("store compartido cerrado %d veces", store.cierres.Load())
@@ -479,7 +566,11 @@ func TestProductionAgentMicroVMRechazaSeleccionClienteYRecursoIncompleto(t *test
 		t.Fatal(err)
 	}
 	store := &storeFactoriaAgentMicroVM{}
-	if agente, err := productionAgentMicroVMConConstructor(process, rendererFactoriaAgentMicroVM{}, store, nil); agente != nil || !errors.Is(err, errFactoriaAgentMicroVMSeleccionInvalida) {
+	registro := &registroLanzamientosFactoriaAgentMicroVM{}
+	if agente, err := productionAgentMicroVMConConstructor(
+		process, rendererFactoriaAgentMicroVM{}, store,
+		autoridadFisicaFactoriaAgentMicroVM(store, registro), nil,
+	); agente != nil || !errors.Is(err, errFactoriaAgentMicroVMSeleccionInvalida) {
 		t.Fatalf("selección process agente=%v error=%v", agente, err)
 	}
 	if recurso, err := nuevoRecursoClienteAgentMicroVM("socket-relativo"); err == nil || recurso.cliente != nil {
@@ -490,6 +581,7 @@ func TestProductionAgentMicroVMRechazaSeleccionClienteYRecursoIncompleto(t *test
 	var cierres atomic.Int64
 	agente, err := productionAgentMicroVMConConstructor(
 		snapshot, rendererFactoriaAgentMicroVM{}, store,
+		autoridadFisicaFactoriaAgentMicroVM(store, registro),
 		func(string) (recursoClienteAgentMicroVM, error) {
 			return recursoClienteAgentMicroVM{liberarConexiones: func() error { cierres.Add(1); return nil }}, nil
 		},
@@ -500,6 +592,7 @@ func TestProductionAgentMicroVMRechazaSeleccionClienteYRecursoIncompleto(t *test
 	falloCliente := errors.New("cliente no construible")
 	agente, err = productionAgentMicroVMConConstructor(
 		snapshot, rendererFactoriaAgentMicroVM{}, store,
+		autoridadFisicaFactoriaAgentMicroVM(store, registro),
 		func(string) (recursoClienteAgentMicroVM, error) { return recursoClienteAgentMicroVM{}, falloCliente },
 	)
 	if agente != nil || !errors.Is(err, errFactoriaAgentMicroVMClienteInvalido) || !errors.Is(err, falloCliente) {
@@ -530,6 +623,7 @@ launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
 
 [runtime.codex]
 model = "gpt-5.6"
+credential_ref = "credential:codex-account-1"
 `
 	snapshot, err := config.Resolve(config.ResolveOptions{TOML: []byte(toml)})
 	if err != nil {
@@ -556,6 +650,9 @@ func descriptorFactoriaAgentMicroVM(t *testing.T) (microvm.DescriptorPerfilLanza
 		ServiciosDisponibles: []microvm.ServicioVsock{{
 			Papel: "control_broker", ServicioRef: "servicio:control", Puerto: 10_001,
 			IdentidadRef: "identidad-servicio:control", IdentidadSHA256: strings.Repeat("4", 64),
+		}, {
+			Papel: "controlled_egress_proxy", ServicioRef: "servicio:proxy", Puerto: 10_002,
+			IdentidadRef: "identidad-servicio:proxy", IdentidadSHA256: strings.Repeat("5", 64),
 		}},
 	}
 	digest, err := microvm.CalcularSHA256DescriptorPerfilLanzamientoV1(descriptor)
@@ -582,7 +679,7 @@ func solicitudLanzamientoFactoriaAgentMicroVM(t *testing.T) ports.AgentLaunchReq
 	artifactRef, _ := ports.NewExecutionArtifactAccessRef("artifact-access:execution:sha256:" + strings.Repeat("a", 64))
 	mcpRef, _ := ports.NewExecutionMCPAccessRef("mcp-access:execution:sha256:" + strings.Repeat("b", 64))
 	mailboxRef, _ := ports.NewExecutionMailboxEndpointRef("mailbox-endpoint:execution:sha256:" + strings.Repeat("c", 64))
-	return ports.AgentLaunchRequest{
+	request := ports.AgentLaunchRequest{
 		ExecutionRef: executionRef, ReferenciaColocacion: placementRef,
 		SessionRef: sessionRef,
 		AccessAuthority: ports.AgentLaunchAccessAuthority{
@@ -615,6 +712,22 @@ func solicitudLanzamientoFactoriaAgentMicroVM(t *testing.T) ports.AgentLaunchReq
 			ClaimLeaseUntil: time.Unix(30, 0).UTC(), ApprovalExpiresAt: time.Unix(20, 0).UTC(),
 		},
 	}
+	egress := microvm.ConcesionEgreso{
+		Esquema: microvm.EsquemaConcesionEgreso, Referencia: "egreso:codex",
+		Destinos:         []microvm.DestinoEgreso{{Host: "api.openai.com", Puertos: []uint16{443}}},
+		MaximoConexiones: 4, LimiteTiempoMS: 60_000,
+		LimiteSubidaBytes: 1 << 20, LimiteBajadaBytes: 8 << 20,
+	}
+	rawEgress, err := json.Marshal(egress)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digestEgress := sha256.Sum256(rawEgress)
+	request.EgressAuthority = ports.AgentLaunchEgressAuthority{
+		PolicyRef: egress.Referencia, PayloadSHA256: hex.EncodeToString(digestEgress[:]),
+		CanonicalPayload: rawEgress,
+	}
+	return request
 }
 
 type contenidoConcesionFactoriaAgentMicroVM struct {

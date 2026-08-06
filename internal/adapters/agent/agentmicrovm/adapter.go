@@ -31,6 +31,13 @@ const (
 	CodeOperationUnsupported                  = "agentmicrovm.operation_unsupported"
 	CodeCapabilityMismatch                    = "agentmicrovm.capability_mismatch"
 	CodeSigningFailed                         = "agentmicrovm.signing_failed"
+	CodeLaunchAuthorityResolveFailed          = "agentmicrovm.launch_authority_resolve_failed"
+	CodeLaunchAuthorityBuildFailed            = "agentmicrovm.launch_authority_build_failed"
+	CodeLaunchAuthorityLookupFailed           = "agentmicrovm.launch_authority_lookup_failed"
+	CodeLaunchAuthorityReplayInvalid          = "agentmicrovm.launch_authority_replay_invalid"
+	CodeLaunchAuthorityPrepareFailed          = "agentmicrovm.launch_authority_prepare_failed"
+	CodeLaunchAuthorityBindFailed             = "agentmicrovm.launch_authority_bind_failed"
+	CodeLaunchCanceledBeforeSubmit            = "agentmicrovm.launch_canceled_before_submit"
 	CodeLaunchUnavailable                     = "agentmicrovm.launch_unavailable"
 	CodeLaunchRejected                        = "agentmicrovm.launch_rejected"
 	CodeLaunchResponseInvalid                 = "agentmicrovm.launch_response_invalid"
@@ -116,11 +123,13 @@ type ProviderModelBinding struct {
 // hosted inside the microVM; ModelBinding prevents a logical selector, runtime
 // model and physical executor from drifting independently.
 type Config struct {
-	Client         Client
-	Signer         Signer
-	Capabilities   ports.AgentCapabilities
-	ModelBinding   ProviderModelBinding
-	PromptRenderer PromptRenderer
+	Client                  Client
+	Signer                  Signer
+	ClaimResolver           *CredentialClaimResolver
+	LaunchAuthorityRegistry ports.MicroVMHostLaunchAuthorityRegistry
+	Capabilities            ports.AgentCapabilities
+	ModelBinding            ProviderModelBinding
+	PromptRenderer          PromptRenderer
 }
 
 // NegotiatedPhysicalCapacity is the last complete physical-capacity proof
@@ -135,13 +144,15 @@ type NegotiatedPhysicalCapacity struct {
 // replay state. Repetition always crosses the sibling idempotency boundary with
 // the same key and signed bytes.
 type Adapter struct {
-	client       Client
-	observer     observationClient
-	signer       Signer
-	profile      ProfileBinding
-	capabilities ports.AgentCapabilities
-	model        string
-	renderer     PromptRenderer
+	client                  Client
+	observer                observationClient
+	signer                  Signer
+	claimResolver           *CredentialClaimResolver
+	launchAuthorityRegistry ports.MicroVMHostLaunchAuthorityRegistry
+	profile                 ProfileBinding
+	capabilities            ports.AgentCapabilities
+	model                   string
+	renderer                PromptRenderer
 
 	negotiationGate                     chan struct{}
 	physicalCapacityMu                  sync.RWMutex
@@ -155,6 +166,7 @@ type Adapter struct {
 // negotiated by Capabilities and again immediately before every launch.
 func New(config Config) (*Adapter, error) {
 	if nilInterface(config.Client) || nilInterface(config.Signer) ||
+		nilInterface(config.ClaimResolver) || nilInterface(config.LaunchAuthorityRegistry) ||
 		nilInterface(config.PromptRenderer) ||
 		config.ModelBinding.ModelRef != config.Capabilities.ModelRef ||
 		!validWorkPacketToken(config.ModelBinding.ProviderModel, 128) {
@@ -175,14 +187,16 @@ func New(config Config) (*Adapter, error) {
 		return nil, fail(CodeConfigurationInvalid, err)
 	}
 	return &Adapter{
-		client:          config.Client,
-		observer:        observer,
-		signer:          config.Signer,
-		profile:         cloneProfileBinding(config.ModelBinding.Profile),
-		capabilities:    cloneCapabilities(config.Capabilities),
-		model:           config.ModelBinding.ProviderModel,
-		renderer:        config.PromptRenderer,
-		negotiationGate: make(chan struct{}, 1),
+		client:                  config.Client,
+		observer:                observer,
+		signer:                  config.Signer,
+		claimResolver:           config.ClaimResolver,
+		launchAuthorityRegistry: config.LaunchAuthorityRegistry,
+		profile:                 cloneProfileBinding(config.ModelBinding.Profile),
+		capabilities:            cloneCapabilities(config.Capabilities),
+		model:                   config.ModelBinding.ProviderModel,
+		renderer:                config.PromptRenderer,
+		negotiationGate:         make(chan struct{}, 1),
 	}, nil
 }
 
@@ -221,7 +235,16 @@ func (adapter *Adapter) Launch(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
 ) (ports.AgentLaunchReceipt, error) {
+	return adapter.launch(ctx, request, false)
+}
+
+func (adapter *Adapter) launch(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+	reconcile bool,
+) (ports.AgentLaunchReceipt, error) {
 	if adapter == nil || nilInterface(adapter.client) || nilInterface(adapter.signer) ||
+		nilInterface(adapter.claimResolver) || nilInterface(adapter.launchAuthorityRegistry) ||
 		nilInterface(adapter.renderer) || nilInterface(ctx) {
 		return ports.AgentLaunchReceipt{}, fail(CodeConfigurationInvalid, nil)
 	}
@@ -230,6 +253,20 @@ func (adapter *Adapter) Launch(
 	}
 	if err := adapter.validateRequirements(request); err != nil {
 		return ports.AgentLaunchReceipt{}, err
+	}
+	var historical ports.MicroVMHostLaunchAuthorityV1
+	if reconcile {
+		key := ports.MicroVMHostLaunchAuthorityKey{
+			RunRef: request.ExecutionRef, ActionFence: request.EffectAuthority.ActionFence,
+		}
+		var err error
+		historical, err = adapter.launchAuthorityRegistry.Resolve(ctx, key)
+		if err != nil {
+			return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityLookupFailed, err)
+		}
+		if !adapter.validHistoricalLaunchAuthority(request, historical) {
+			return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, nil)
+		}
 	}
 	compiled, err := Compile(request, adapter.profile, request.EffectAuthority.ActionFence)
 	if err != nil {
@@ -271,6 +308,38 @@ func (adapter *Adapter) Launch(
 	if !ok {
 		return ports.AgentLaunchReceipt{}, fail(CodeSigningFailed, nil)
 	}
+	var resolved ResolvedCredentialClaim
+	if reconcile {
+		resolved = ResolvedCredentialClaim{
+			placement: request.ReferenciaColocacion,
+			claim:     historical.OneShotClaim,
+		}
+	} else {
+		resolved, err = adapter.claimResolver.Resolve(ctx, request)
+		if err != nil {
+			return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityResolveFailed, err)
+		}
+	}
+	authority, err := BuildHostLaunchAuthorityV1(request, compiled, signed, resolved)
+	if err != nil {
+		if reconcile {
+			return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, err)
+		}
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityBuildFailed, err)
+	}
+	if reconcile && !validPreparedLaunchAuthorityReplay(authority, historical) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, nil)
+	}
+	prepared, err := adapter.launchAuthorityRegistry.Prepare(ctx, authority)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityPrepareFailed, err)
+	}
+	if !validPreparedLaunchAuthorityReplay(authority, prepared) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityPrepareFailed, nil)
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchCanceledBeforeSubmit, err)
+	}
 	receiptRef := launchReceiptRef(signed)
 	response, err := adapter.client.Lanzar(ctx, request.IdempotencyKey, cloneSignedRequestUnchecked(signed))
 	if err != nil {
@@ -279,11 +348,17 @@ func (adapter *Adapter) Launch(
 		}
 		return ports.AgentLaunchReceipt{}, classifyLaunchError(err)
 	}
-	if err := ctx.Err(); err != nil {
-		return ports.AgentLaunchReceipt{}, err
-	}
 	if !validLaunchResponse(response, compiled.Plan) {
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchResponseInvalid, nil)
+	}
+	bound, err := adapter.launchAuthorityRegistry.BindExternal(
+		context.WithoutCancel(ctx), authority.Key, response.Referencia,
+	)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityBindFailed, err)
+	}
+	if !validBoundLaunchAuthority(authority, prepared, bound, response.Referencia) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityBindFailed, nil)
 	}
 	if err := adapter.launchSession(ctx, request, response, packet.TimeBudgetMS, packetJSON); err != nil {
 		return ports.AgentLaunchReceipt{}, err
@@ -293,7 +368,7 @@ func (adapter *Adapter) Launch(
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: adapter.capabilities.ProviderRef, ModelRef: adapter.capabilities.ModelRef,
-		AgentRef: adapter.capabilities.AgentRef, ExternalRef: response.Referencia,
+		AgentRef: adapter.capabilities.AgentRef, ExternalRef: bound.ExternalRef,
 		IdempotencyKey: request.IdempotencyKey, ReceiptRef: receiptRef,
 		AcceptedAt: compiled.IssuedAt, RequierePreservacionEntorno: request.RequierePreservacionEntorno,
 	}
@@ -301,6 +376,58 @@ func (adapter *Adapter) Launch(
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchResponseInvalid, err)
 	}
 	return receipt, nil
+}
+
+// validHistoricalLaunchAuthority accepts only the exact historical key and
+// causal claim selected by the current placement configuration. It never asks
+// the credential store for the current version: recovery must retain the
+// version prepared before the original physical launch.
+func (adapter *Adapter) validHistoricalLaunchAuthority(
+	request ports.AgentLaunchRequest,
+	authority ports.MicroVMHostLaunchAuthorityV1,
+) bool {
+	if ports.ValidateMicroVMHostLaunchAuthorityV1(authority) != nil ||
+		authority.Key.RunRef != request.ExecutionRef ||
+		authority.Key.ActionFence != request.EffectAuthority.ActionFence ||
+		authority.EffectAttemptRef != request.EffectAuthority.EffectAttemptRef ||
+		authority.SessionRef != request.SessionRef || adapter.claimResolver == nil {
+		return false
+	}
+	credentialRef, found := adapter.claimResolver.bindings[request.ReferenciaColocacion]
+	claim := authority.OneShotClaim
+	return found && credentialRef == claim.CredentialRef &&
+		adapter.claimResolver.purpose == claim.PurposeRef &&
+		claim.ActorRef == request.ActorRef.String() &&
+		claim.OwnerRef.String() == request.ActorRef.String() &&
+		claim.ScopeRef.String() == request.ProjectRef.String()
+}
+
+func validPreparedLaunchAuthorityReplay(
+	want ports.MicroVMHostLaunchAuthorityV1,
+	got ports.MicroVMHostLaunchAuthorityV1,
+) bool {
+	prepared := ports.CloneMicroVMHostLaunchAuthorityV1(got)
+	prepared.ExternalRef = ""
+	if !reflect.DeepEqual(prepared, want) {
+		return false
+	}
+	if got.ExternalRef == "" {
+		return ports.ValidateMicroVMHostLaunchAuthorityPreparedV1(got) == nil
+	}
+	return ports.ValidateMicroVMHostLaunchAuthorityBoundV1(got) == nil
+}
+
+func validBoundLaunchAuthority(
+	want ports.MicroVMHostLaunchAuthorityV1,
+	prepared ports.MicroVMHostLaunchAuthorityV1,
+	bound ports.MicroVMHostLaunchAuthorityV1,
+	externalRef string,
+) bool {
+	want = ports.CloneMicroVMHostLaunchAuthorityV1(want)
+	want.ExternalRef = externalRef
+	return (prepared.ExternalRef == "" || prepared.ExternalRef == externalRef) &&
+		ports.ValidateMicroVMHostLaunchAuthorityBoundV1(bound) == nil &&
+		reflect.DeepEqual(bound, want)
 }
 
 // ReconcileLaunch repeats the exact durable launch through the sibling's
@@ -311,7 +438,7 @@ func (adapter *Adapter) ReconcileLaunch(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
 ) (ports.AgentLaunchReceipt, error) {
-	return adapter.Launch(ctx, request)
+	return adapter.launch(ctx, request, true)
 }
 
 func validSignedPlan(compiled Compilation, raw json.RawMessage) bool {
@@ -618,8 +745,10 @@ func (err *Error) Temporary() bool {
 	}
 }
 
-// DefinitelyNotApplied is true only while no launch mutation crossed the Unix
-// socket. A client launch error and an invalid success response stay ambiguous.
+// DefinitelyNotApplied is true only when the exact failure stage proves that
+// this call did not invoke client.Lanzar. The generic Prepare code also covers
+// invalid or conflicting durable replays and stays conservative; cancellation
+// observed after a successful Prepare has an explicit pre-submit code instead.
 func (err *Error) DefinitelyNotApplied() bool {
 	if err == nil {
 		return false
@@ -629,6 +758,8 @@ func (err *Error) DefinitelyNotApplied() bool {
 		CodeNegotiatedPhysicalCapacityUnavailable,
 		CodeProtocolIncompatible, CodePhysicalUnavailable, CodeOperationUnsupported,
 		CodeCapabilityMismatch, CodeSigningFailed,
+		CodeLaunchAuthorityResolveFailed, CodeLaunchAuthorityBuildFailed,
+		CodeLaunchCanceledBeforeSubmit,
 		CodeLaunchRequestInvalid, CodeSessionRequired, CodeAccessAuthorityRequired,
 		CodeEffectAuthorityInvalid, CodeFenceInvalid, CodeFenceMismatch,
 		CodeProfileBindingInvalid, CodeDescriptorInvalid, CodeControlBrokerRequired,

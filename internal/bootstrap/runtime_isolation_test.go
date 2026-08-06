@@ -85,6 +85,7 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 	root := t.TempDir()
 	configPath, socketPath := writeRuntimeIsolationMicroVMConfig(t, root, true)
 	provisionRuntimeIsolationMicroVMCredential(t, root)
+	statePath := filepath.Join(root, "state", "orquesta.sqlite")
 
 	client := &clienteRuntimeIsolationMicroVM{}
 	var constructorCalls atomic.Int64
@@ -93,6 +94,9 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 		ConfigPath: configPath,
 		constructorClienteAgentMicroVM: func(gotSocket string) (recursoClienteAgentMicroVM, error) {
 			constructorCalls.Add(1)
+			if info, err := os.Lstat(statePath); err != nil || !info.Mode().IsRegular() {
+				t.Fatalf("constructor microVM anterior al repositorio: info=%v err=%v", info, err)
+			}
 			if gotSocket != socketPath {
 				t.Fatalf("microvm socket=%q want=%q", gotSocket, socketPath)
 			}
@@ -137,7 +141,7 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 	}
 }
 
-func TestBuildMicroVMCapabilitiesFailureCleansClientBeforeDurableState(t *testing.T) {
+func TestBuildMicroVMCapabilitiesFailureCleansClientAfterOpeningDurableState(t *testing.T) {
 	root := t.TempDir()
 	configPath, socketPath := writeRuntimeIsolationMicroVMConfig(t, root, false)
 	provisionRuntimeIsolationMicroVMCredential(t, root)
@@ -146,8 +150,8 @@ func TestBuildMicroVMCapabilitiesFailureCleansClientBeforeDurableState(t *testin
 	client := &clienteRuntimeIsolationMicroVM{
 		falloCapacidades: want,
 		antesCapacidades: func() {
-			if _, err := os.Lstat(statePath); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("Capabilities observed SQLite state: %v", err)
+			if info, err := os.Lstat(statePath); err != nil || !info.Mode().IsRegular() {
+				t.Fatalf("Capabilities ran before SQLite state: info=%v err=%v", info, err)
 			}
 		},
 	}
@@ -158,6 +162,9 @@ func TestBuildMicroVMCapabilitiesFailureCleansClientBeforeDurableState(t *testin
 		constructorClienteAgentMicroVM: func(gotSocket string) (recursoClienteAgentMicroVM, error) {
 			if gotSocket != socketPath {
 				t.Fatalf("microvm socket=%q want=%q", gotSocket, socketPath)
+			}
+			if info, statErr := os.Lstat(statePath); statErr != nil || !info.Mode().IsRegular() {
+				t.Fatalf("constructor microVM anterior al repositorio: info=%v err=%v", info, statErr)
 			}
 			return recursoClienteAgentMicroVM{
 				cliente:           client,
@@ -171,8 +178,10 @@ func TestBuildMicroVMCapabilitiesFailureCleansClientBeforeDurableState(t *testin
 	if client.consultas.Load() != 1 || connectionCloses.Load() != 1 {
 		t.Fatalf("capabilities=%d cleanup=%d want=1/1", client.consultas.Load(), connectionCloses.Load())
 	}
+	if info, statErr := os.Lstat(statePath); statErr != nil || !info.Mode().IsRegular() {
+		t.Fatalf("failed Capabilities lost durable state: info=%v err=%v", info, statErr)
+	}
 	for _, path := range []string{
-		statePath,
 		filepath.Join(root, "artifacts"),
 		filepath.Join(root, "effective_config.json"),
 		filepath.Join(root, "work"),
@@ -197,6 +206,7 @@ func TestOpenBuildAgentProcessDoesNotCallMicroVMConstructor(t *testing.T) {
 		nil,
 		rendererFactoriaAgentMicroVM{},
 		nil,
+		dependenciasAutoridadFisicaAgentMicroVM{},
 		codexGoToolchainOwnerTrusted,
 		func(string) (recursoClienteAgentMicroVM, error) {
 			constructorCalls.Add(1)
@@ -274,6 +284,7 @@ launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
 
 [runtime.codex]
 model = "gpt-5.6"
+credential_ref = "credential:codex-account-runtime"
 `)
 	if withRepository {
 		seedPath := filepath.Join(root, "repository")
@@ -322,8 +333,23 @@ func provisionRuntimeIsolationMicroVMCredential(t *testing.T, root string) {
 		Material:      secret,
 	})
 	secret.Destroy()
+	authSecret, authSecretErr := credentials.NewSecret([]byte(`{"auth":"fixture"}`))
+	if authSecretErr != nil {
+		_ = store.Close()
+		t.Fatal(authSecretErr)
+	}
+	_, createAuthErr := store.Create(context.Background(), credentials.CreateRequest{
+		ActorRef:      "actor:local-owner",
+		RequestRef:    "request:runtime-isolation-microvm-create-codex-account",
+		CredentialRef: "credential:codex-account-runtime",
+		OwnerRef:      "actor:local-owner",
+		ScopeRefs:     []credentials.ScopeRef{"project:default"},
+		PurposeRef:    credentials.PurposeRef(codex.ProviderRef),
+		Material:      authSecret,
+	})
+	authSecret.Destroy()
 	closeErr := store.Close()
-	if createErr != nil || closeErr != nil {
-		t.Fatalf("provision microvm credential: create=%v close=%v", createErr, closeErr)
+	if createErr != nil || createAuthErr != nil || closeErr != nil {
+		t.Fatalf("provision microvm credential: signing=%v auth=%v close=%v", createErr, createAuthErr, closeErr)
 	}
 }

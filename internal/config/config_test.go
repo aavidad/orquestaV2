@@ -111,10 +111,12 @@ launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
 
 [runtime.codex]
 model = "gpt-5.6"
+credential_ref = "credential:codex-account-1"
 app_server_max_frame_bytes = 131072
 `, nil)
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" ||
 		snapshot.RuntimeCodexModel() != "gpt-5.6" ||
+		snapshot.RuntimeCodexCredentialRef() != "credential:codex-account-1" ||
 		snapshot.RuntimeMicroVMPlacementRef() != "placement:codex:account-1" ||
 		snapshot.RuntimeCapacityObservationTTL() != 45*time.Second ||
 		snapshot.RuntimeCapacityObservationTimeout() != 750*time.Millisecond ||

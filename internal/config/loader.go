@@ -198,13 +198,14 @@ func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
 	provider, providerOK := values[KeyRuntimeProvider].value.(string)
 	isolation, isolationOK := values[KeyRuntimeIsolation].value.(string)
 	providerModel, modelOK := values[KeyRuntimeCodexModel].value.(string)
+	providerCredentialRef, providerCredentialOK := values[KeyRuntimeCodexCredentialRef].value.(CredentialRef)
 	placementRef, placementOK := values[KeyRuntimeMicroVMPlacementRef].value.(string)
 	socketPath, socketOK := values[KeyRuntimeMicroVMSocketPath].value.(string)
 	profilePath, profileOK := values[KeyRuntimeMicroVMProfileDescriptorPath].value.(string)
 	profileDigest, digestOK := values[KeyRuntimeMicroVMExpectedProfileDescriptorSHA256].value.(string)
 	keyID, keyIDOK := values[KeyRuntimeMicroVMLaunchGrantKeyID].value.(string)
 	credentialRef, credentialOK := values[KeyRuntimeMicroVMLaunchGrantSigningCredentialRef].value.(CredentialRef)
-	if !providerOK || !isolationOK || !modelOK || !placementOK || !socketOK ||
+	if !providerOK || !isolationOK || !modelOK || !providerCredentialOK || !placementOK || !socketOK ||
 		!profileOK || !digestOK || !keyIDOK || !credentialOK {
 		return false
 	}
@@ -215,6 +216,7 @@ func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
 	}
 	return isolation == "microvm" && provider == "codex" &&
 		validProviderModel(providerModel) &&
+		providerCredentialRef != "" && providerCredentialRef != credentialRef &&
 		validRuntimeMicroVMPlacementRef(placementRef) &&
 		canonicalAbsolutePath(socketPath) &&
 		canonicalAbsolutePath(profilePath) &&

@@ -13,6 +13,7 @@ isolation = "microvm"
 
 [runtime.codex]
 model = "gpt-5.6"
+credential_ref = "credential:codex-account-1"
 
 [runtime.microvm]
 placement_ref = "placement:codex:account-1"
@@ -27,6 +28,7 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 	snapshot := resolveTOML(t, validRuntimeMicroVMTOML, nil)
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" ||
 		snapshot.RuntimeCodexModel() != "gpt-5.6" ||
+		snapshot.RuntimeCodexCredentialRef() != "credential:codex-account-1" ||
 		snapshot.RuntimeMicroVMPlacementRef() != "placement:codex:account-1" ||
 		snapshot.RuntimeMicroVMSocketPath() != "/run/orquesta/agente-microvm.sock" ||
 		snapshot.RuntimeMicroVMProfileDescriptorPath() != "/srv/orquesta/profiles/codex-v1.json" ||
@@ -50,14 +52,15 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("effective config: %v", err)
 	}
-	if strings.Contains(string(effective), "credential:microvm-launch-signing") {
-		t.Fatal("effective config leaks launch signing credential reference")
+	if strings.Contains(string(effective), "credential:microvm-launch-signing") ||
+		strings.Contains(string(effective), "credential:codex-account-1") {
+		t.Fatal("effective config leaks a microVM credential reference")
 	}
 	var document effectiveDocument
 	if err := json.Unmarshal(effective, &document); err != nil {
 		t.Fatalf("decode effective config: %v", err)
 	}
-	var foundPlacement, foundCredential bool
+	var foundPlacement, foundSigningCredential, foundProviderCredential bool
 	for _, entry := range document.Entries {
 		switch entry.Key {
 		case KeyRuntimeMicroVMPlacementRef:
@@ -66,14 +69,20 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 				t.Fatalf("effective placement = %+v", entry)
 			}
 		case KeyRuntimeMicroVMLaunchGrantSigningCredentialRef:
-			foundCredential = true
+			foundSigningCredential = true
 			if entry.Value != redactedValue || !entry.Sensitive || entry.Source != SourceFile {
 				t.Fatalf("effective signing credential = %+v", entry)
 			}
+		case KeyRuntimeCodexCredentialRef:
+			foundProviderCredential = true
+			if entry.Value != redactedValue || !entry.Sensitive || entry.Source != SourceFile {
+				t.Fatalf("effective provider credential = %+v", entry)
+			}
 		}
 	}
-	if !foundPlacement || !foundCredential {
-		t.Fatalf("effective microVM identity missing: placement=%v credential=%v", foundPlacement, foundCredential)
+	if !foundPlacement || !foundSigningCredential || !foundProviderCredential {
+		t.Fatalf("effective microVM identity missing: placement=%v signing=%v provider=%v",
+			foundPlacement, foundSigningCredential, foundProviderCredential)
 	}
 
 	environmentSnapshot := resolveTOML(t, validRuntimeMicroVMTOML, map[string]string{
@@ -90,6 +99,7 @@ func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
 		KeyRuntimeProvider,
 		KeyRuntimeIsolation,
 		KeyRuntimeCodexModel,
+		KeyRuntimeCodexCredentialRef,
 		KeyRuntimeMicroVMPlacementRef,
 		KeyRuntimeMicroVMSocketPath,
 		KeyRuntimeMicroVMProfileDescriptorPath,
@@ -116,7 +126,8 @@ func TestV38ProcessIsolationRejectsDeadMicroVMConfiguration(t *testing.T) {
 		defaults.RuntimeMicroVMProfileDescriptorPath() != "" ||
 		defaults.RuntimeMicroVMExpectedProfileDescriptorSHA256() != "" ||
 		defaults.RuntimeMicroVMLaunchGrantKeyID() != "" ||
-		defaults.RuntimeMicroVMLaunchGrantSigningCredentialRef() != "" {
+		defaults.RuntimeMicroVMLaunchGrantSigningCredentialRef() != "" ||
+		defaults.RuntimeCodexCredentialRef() != "" {
 		t.Fatal("process defaults retain microVM configuration")
 	}
 	processWithModel := resolveTOML(t, `[runtime.codex]
@@ -162,6 +173,7 @@ func TestV38MicroVMIsolationRejectsIncompleteOrNonCanonicalConfiguration(t *test
 		{name: "wrong placement prefix", old: `placement_ref = "placement:codex:account-1"`, new: `placement_ref = "profile:codex:account-1"`},
 		{name: "empty placement suffix", old: `placement_ref = "placement:codex:account-1"`, new: `placement_ref = "placement:"`},
 		{name: "missing provider model", old: `model = "gpt-5.6"`, new: `model = ""`},
+		{name: "missing provider credential", old: `credential_ref = "credential:codex-account-1"`, new: `credential_ref = ""`},
 		{name: "oversized provider model", old: `model = "gpt-5.6"`, new: `model = "` + strings.Repeat("m", 129) + `"`},
 		{name: "relative socket", old: `socket_path = "/run/orquesta/agente-microvm.sock"`, new: `socket_path = "run/orquesta/agente-microvm.sock"`},
 		{name: "missing profile", old: `profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"`, new: `profile_descriptor_path = ""`},
@@ -194,6 +206,15 @@ func TestV38MicroVMIsolationRejectsIncompleteOrNonCanonicalConfiguration(t *test
 	)
 	_, err := Resolve(ResolveOptions{TOML: []byte(invalidCredential)})
 	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeMicroVMLaunchGrantSigningCredentialRef)
+
+	reusedSigningCredential := strings.Replace(
+		validRuntimeMicroVMTOML,
+		`credential_ref = "credential:codex-account-1"`,
+		`credential_ref = "credential:microvm-launch-signing"`,
+		1,
+	)
+	_, err = Resolve(ResolveOptions{TOML: []byte(reusedSigningCredential)})
+	assertConfigError(t, err, ErrorCrossValidation, "")
 
 	untrimmedPlacement := strings.Replace(
 		validRuntimeMicroVMTOML,

@@ -220,12 +220,12 @@ func TestAdapterLaunchAndReconcileSignAndReplayExactPhysicalRequest(t *testing.T
 	client.launchErr = &microvm.ErrorRespuesta{Estado: 409, Codigo: "api.idempotencia_conflictiva"}
 	mutated := request
 	mutated.EffectAuthority.ActionFence++
-	if _, err := adapter.ReconcileLaunch(ctx, mutated); ErrorCode(err) != CodeLaunchRejected {
+	if _, err := adapter.ReconcileLaunch(ctx, mutated); ErrorCode(err) != CodeLaunchAuthorityLookupFailed ||
+		isDefinitelyNotApplied(err) {
 		t.Fatalf("ReconcileLaunch() divergent replay error=%v code=%q", err, ErrorCode(err))
 	}
-	if len(client.launchKeys) != 3 || client.launchKeys[2] != request.IdempotencyKey ||
-		reflect.DeepEqual(client.launchRequests[0], client.launchRequests[2]) {
-		t.Fatalf("divergent replay was not preserved for sibling rejection: keys=%v requests=%+v", client.launchKeys, client.launchRequests)
+	if len(client.launchKeys) != 2 {
+		t.Fatalf("divergent replay crossed sibling: keys=%v requests=%+v", client.launchKeys, client.launchRequests)
 	}
 }
 
@@ -957,7 +957,11 @@ func validAdapterConfig(
 	descriptor microvm.DescriptorPerfilLanzamientoV1,
 ) Config {
 	return Config{
-		Client: client, Signer: signer, Capabilities: validAdapterCapabilities(),
+		Client:                  client,
+		Signer:                  signer,
+		ClaimResolver:           validPipelineClaimResolver(request),
+		LaunchAuthorityRegistry: newPipelineAuthorityRegistryStub(),
+		Capabilities:            validAdapterCapabilities(),
 		ModelBinding: ProviderModelBinding{
 			ModelRef: "model:codex-microvm", ProviderModel: "gpt-5.6",
 			Profile: profileBinding(request, descriptor),
