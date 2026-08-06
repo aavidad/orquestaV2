@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +13,79 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+func TestPreservacionEntornoConManifestFisicoFallaCerradoHastaMigracion(t *testing.T) {
+	ctx := context.Background()
+	sistema := newSQLiteV15System(t, 2)
+	sistema.external.requierePreservacion = true
+	sistema.orchestrator = newSQLiteV16Orchestrator(t, sistema)
+	creado, err := sistema.orchestrator.Submit(ctx, sistema.access, application.SubmitRequest{
+		RequestRef: "request:a06-preservacion-manifest", Statement: "preservar con manifiesto físico", Confirm: true,
+		Plan: &application.PlanSpec{
+			Phases: []application.PhaseSpec{{
+				Ref: "phase-instance:a06-manifest", Key: "phase:a06-manifest",
+				TemplateRef: "phase-template:a06-manifest",
+			}},
+			WorkItems: []application.WorkItemSpec{{
+				Key: "writer", Objective: "producir evidencia física", Phase: "phase:a06-manifest",
+				Role: "role:writer", WriteSet: []string{"internal/a06-manifest"},
+				RequiredTests: sqliteRequiredTestSpecs("required-test:a06-manifest"),
+				CouncilPolicy: council.PolicyAuto, OutputContract: goal.OutputContractEvidenceBundle,
+			}},
+		},
+	})
+	sqliteTestNoError(t, err)
+	processSQLiteV16Actions(t, sistema, application.ActionPrepareWorkspace, application.ActionLaunchAgent)
+	registro, err := sistema.repository.GetGoal(ctx, creado.Record.Goal.Ref())
+	sqliteTestNoError(t, err)
+	if len(registro.Executions) != 1 || len(registro.WorkspaceBindings) != 1 {
+		t.Fatalf("frontera de preservación incompleta: %+v", registro)
+	}
+	ejecutada, binding := registro.Executions[0], registro.WorkspaceBindings[0]
+	var cerca uint64
+	for _, consumo := range registro.ConsumptionReceipts {
+		if consumo.Kind == application.ActionLaunchAgent && consumo.ExecutionRef == ejecutada.Ref {
+			cerca = consumo.Fence
+		}
+	}
+	comprobante := comprobantePreservacionSQLite(t, registro, ejecutada, binding, cerca, sistema.clock.Now())
+	comprobante.ManifiestoFisicoRef = "physical-manifest:a06"
+	comprobante.ManifiestoFisicoDigest = strings.Repeat("e", 64)
+
+	assertRechazoManifest := func(repository *Repository) {
+		t.Helper()
+		guardado, creadoAhora, registerErr := repository.RegistrarPreservacionEntornoAgente(ctx, comprobante)
+		var stateErr *application.StateError
+		if creadoAhora || !reflect.DeepEqual(guardado, application.ComprobantePreservacionEntornoAgente{}) ||
+			!errors.As(registerErr, &stateErr) || stateErr.Code != application.StateInvalid ||
+			stateErr.Cause == nil || stateErr.Cause.Error() != agentEnvironmentPhysicalManifestMigrationRequired {
+			t.Fatalf("writer B12 no falló cerrado: creado=%v got=%+v err=%v cause=%v",
+				creadoAhora, guardado, registerErr, stateErr)
+		}
+	}
+	assertSinFilas := func(repository *Repository) {
+		t.Helper()
+		var filas int
+		if countErr := repository.db.QueryRow(`SELECT COUNT(*) FROM agent_environment_receipts`).Scan(&filas); countErr != nil || filas != 0 {
+			t.Fatalf("rechazo mutó receipts: filas=%d err=%v", filas, countErr)
+		}
+	}
+
+	assertRechazoManifest(sistema.repository)
+	assertSinFilas(sistema.repository)
+	sqliteTestNoError(t, sistema.repository.Close())
+	reiniciado := openSQLiteV15Repository(t, sistema.path, sistema.clock.Now)
+	assertSinFilas(reiniciado)
+	assertRechazoManifest(reiniciado)
+	assertSinFilas(reiniciado)
+
+	legacy := comprobante
+	legacy.ManifiestoFisicoRef, legacy.ManifiestoFisicoDigest = "", ""
+	persistido, creadoAhora, err := reiniciado.RegistrarPreservacionEntornoAgente(ctx, legacy)
+	if err != nil || !creadoAhora || !reflect.DeepEqual(persistido, legacy) {
+		t.Fatalf("writer legacy vacío cambió: creado=%v got=%+v err=%v", creadoAhora, persistido, err)
+	}
+}
 
 func TestPreservacionEntornoEsDurableIdempotenteYCausal(t *testing.T) {
 	ctx := context.Background()

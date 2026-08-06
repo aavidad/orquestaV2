@@ -37,6 +37,50 @@ func TestComprobantePreservacionEntornoAgenteConservaCausalidadOrquesta(t *testi
 	}
 }
 
+func TestComprobantePreservacionEntornoAgenteAceptaBindingFisicoOpcionalAtomico(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	proyecto, _ := goal.NewProjectRef("project:environment-manifest")
+	objetivo, _ := goal.NewGoalRef("goal:environment-manifest")
+	item, _ := goal.NewWorkItemRef("work-item:environment-manifest")
+	ejecutada, _ := goal.NewExecutionRef("execution:environment-manifest")
+	paquete, _ := goal.NewArtifactRef("artifact:sha256:" + digest)
+	inventario, _ := goal.NewArtifactRef("artifact:sha256:" + digest)
+	resultado := ports.ResultadoPreservacionEntornoAgente{
+		Estado: ports.EntornoAgentePreservadoPendienteRevision, EjecucionRef: ejecutada,
+		IntentoEjecucion: 1, IdentidadExterna: "external:environment-manifest", Cerca: 2,
+		PaqueteRef: paquete, PaqueteDigest: digest, InventarioRef: inventario, InventarioDigest: digest,
+		ConfiguracionDigest: digest, RootFSDigest: digest, ComprobanteRef: "receipt:environment-manifest",
+		SelladoEn: time.Unix(10, 0).UTC(), PreservadoEn: time.Unix(11, 0).UTC(),
+	}
+	resultado.SelloDigest = ports.ResumenSelloPreservacionEntorno(resultado)
+	base := ComprobantePreservacionEntornoAgente{
+		Ref: "environment-receipt:manifest", ClaveIdempotencia: "environment-idempotency:manifest",
+		ProyectoRef: proyecto, ObjetivoRef: objetivo, ItemRef: item, EjecucionRef: ejecutada,
+		AlcanceEspacio: PreservacionEntornoSinEspacioTrabajo, Resultado: resultado,
+		RegistradoEn: time.Unix(12, 0).UTC(),
+	}
+	if err := ValidarComprobantePreservacionEntornoAgente(base); err != nil {
+		t.Fatalf("historical receipt without physical manifest rejected: %v", err)
+	}
+	bound := base
+	bound.ManifiestoFisicoRef, bound.ManifiestoFisicoDigest = "physical-manifest:one", digest
+	if err := ValidarComprobantePreservacionEntornoAgente(bound); err != nil {
+		t.Fatalf("atomic physical manifest rejected: %v", err)
+	}
+	for name, mutate := range map[string]func(*ComprobantePreservacionEntornoAgente){
+		"missing ref":    func(value *ComprobantePreservacionEntornoAgente) { value.ManifiestoFisicoRef = "" },
+		"missing digest": func(value *ComprobantePreservacionEntornoAgente) { value.ManifiestoFisicoDigest = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			changed := bound
+			mutate(&changed)
+			if ValidarComprobantePreservacionEntornoAgente(changed) == nil {
+				t.Fatal("partial physical manifest binding accepted")
+			}
+		})
+	}
+}
+
 func TestComprobantePreservacionEntornoAgenteSinEspacioNoInventaGit(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	proyecto, _ := goal.NewProjectRef("project:environment-without-workspace")

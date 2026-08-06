@@ -14,9 +14,18 @@ import (
 
 const consultaPreservacionEntorno = `SELECT ref,idempotency_key,project_ref,goal_ref,work_item_ref,execution_ref,workspace_ref,workspace_binding_digest,base_oid,object_format,change_set_ref,change_digest,state,execution_attempt,external_ref,fence,bundle_ref,bundle_digest,inventory_ref,inventory_digest,configuration_digest,rootfs_digest,seal_digest,provider_receipt_ref,sealed_at,preserved_at,recorded_at FROM agent_environment_receipts`
 
+const agentEnvironmentPhysicalManifestMigrationRequired = "sqlite.agent_environment_physical_manifest_migration_required"
+
 func (r *Repository) RegistrarPreservacionEntornoAgente(ctx context.Context, comprobante application.ComprobantePreservacionEntornoAgente) (application.ComprobantePreservacionEntornoAgente, bool, error) {
 	comprobante.Resultado.SelladoEn, comprobante.Resultado.PreservadoEn = comprobante.Resultado.SelladoEn.Round(0).UTC(), comprobante.Resultado.PreservadoEn.Round(0).UTC()
 	comprobante.RegistradoEn = comprobante.RegistradoEn.Round(0).UTC()
+	// B12 cannot persist the physical-manifest pair losslessly before schema
+	// migration 034. Fail before opening a transaction; never report a durable
+	// lifecycle preservation while silently dropping its physical binding.
+	if comprobante.ManifiestoFisicoRef != "" || comprobante.ManifiestoFisicoDigest != "" {
+		return application.ComprobantePreservacionEntornoAgente{}, false,
+			invalid(errors.New(agentEnvironmentPhysicalManifestMigrationRequired))
+	}
 	if application.ValidarComprobantePreservacionEntornoAgente(comprobante) != nil {
 		return application.ComprobantePreservacionEntornoAgente{}, false, invalid(errors.New("sqlite.agent_environment_receipt_invalid"))
 	}

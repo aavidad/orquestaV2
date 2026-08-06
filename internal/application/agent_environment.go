@@ -17,23 +17,29 @@ const (
 
 type ComprobantePreservacionEntornoAgente struct {
 	Ref, ClaveIdempotencia, DigestBindingEspacio, BaseOID, DigestCambio string
-	ProyectoRef                                                         goal.ProjectRef
-	ObjetivoRef                                                         goal.GoalRef
-	ItemRef                                                             goal.WorkItemRef
-	EjecucionRef                                                        goal.ExecutionRef
-	EspacioTrabajoRef                                                   ports.ExecutionWorkspaceRef
-	FormatoObjeto                                                       ports.GitObjectFormat
-	CambioRef                                                           ports.ChangeSetRef
-	AlcanceEspacio                                                      AlcanceEspacioPreservacionEntornoAgente
-	Resultado                                                           ports.ResultadoPreservacionEntornoAgente
-	RegistradoEn                                                        time.Time
+	// Optional as an atomic pair for historical A06 compatibility. The B12
+	// SQLite writer cannot persist this pair until its separate migration 034.
+	ManifiestoFisicoRef, ManifiestoFisicoDigest string
+	ProyectoRef                                 goal.ProjectRef
+	ObjetivoRef                                 goal.GoalRef
+	ItemRef                                     goal.WorkItemRef
+	EjecucionRef                                goal.ExecutionRef
+	EspacioTrabajoRef                           ports.ExecutionWorkspaceRef
+	FormatoObjeto                               ports.GitObjectFormat
+	CambioRef                                   ports.ChangeSetRef
+	AlcanceEspacio                              AlcanceEspacioPreservacionEntornoAgente
+	Resultado                                   ports.ResultadoPreservacionEntornoAgente
+	RegistradoEn                                time.Time
 }
 
 func ValidarComprobantePreservacionEntornoAgente(comprobante ComprobantePreservacionEntornoAgente) error {
 	cambioPresente := comprobante.CambioRef.String() != "" || comprobante.DigestCambio != ""
+	manifiestoPresente := comprobante.ManifiestoFisicoRef != "" || comprobante.ManifiestoFisicoDigest != ""
 	if !validApplicationRef(comprobante.Ref) || !validApplicationRef(comprobante.ClaveIdempotencia) ||
 		comprobante.ProyectoRef.String() == "" || comprobante.ObjetivoRef.String() == "" || comprobante.ItemRef.String() == "" ||
 		comprobante.EjecucionRef != comprobante.Resultado.EjecucionRef ||
+		(manifiestoPresente && (!validApplicationRef(comprobante.ManifiestoFisicoRef) ||
+			!validEffectDigest(comprobante.ManifiestoFisicoDigest))) ||
 		validarEspacioPreservacionEntornoAgente(comprobante, cambioPresente) != nil ||
 		ports.ValidarResultadoPreservacionEntornoAgente(comprobante.Resultado) != nil ||
 		comprobante.RegistradoEn.Before(comprobante.Resultado.PreservadoEn) {
