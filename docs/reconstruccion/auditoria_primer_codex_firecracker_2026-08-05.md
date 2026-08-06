@@ -81,10 +81,13 @@ arranque KVM ni de ejecución Codex física.
    SQLite y los rollbacks, con revisión final P0/P1=0. C4 queda pendiente solo
    de cablearlo y acreditarlo con el servicio host físico.
 9. **Readiness PFC-06 incompleto.** Antes del sudo/smoke hay que componer el
-   resolver productivo de egreso y pedir su ref en el Goal; generar el
-   descriptor sellado desde los manifiestos PFC-01; y provisionar por una
-   superficie operativa la firma Ed25519 y el `auth.json`. Son tres minitareas
-   acotadas sobre contratos existentes, no motivos para ampliar PFC-04.
+   resolver productivo de egreso y pedir su ref en el Goal; hacer que
+   `agente_microvm`, como autoridad física, publique el descriptor sellado al
+   combinar los manifiestos PFC-01, recursos canónicos y servicios PFC-07; y
+   provisionar por una superficie operativa la firma Ed25519 y el `auth.json`.
+   Son tres minitareas acotadas sobre contratos existentes, no motivos para
+   ampliar PFC-04. Orquesta no debe inventar vCPU, memoria ni identidades de
+   servicio mediante flags porque PFC-01 no contiene esos hechos.
 
 KVM y Firecracker 1.16.1 están disponibles. El usuario ya puede acceder a
 `/dev/kvm`; no hace falta sudo para ejecutar KVM. El sudo inevitable se limita
