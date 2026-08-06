@@ -23,10 +23,15 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	if got := catalog.Locales(); !reflect.DeepEqual(got, []string{"es", "en"}) {
 		t.Fatalf("Locales() = %v", got)
 	}
-	if got := len(catalog.Keys()); got != 918 {
+	if got := len(catalog.Keys()); got != 923 {
 		t.Fatalf("Keys() count = %d", got)
 	}
 	for _, key := range []string{
+		"cli.credentials.provision_codex_microvm.usage",
+		"error.cli.credential_provision_arguments_invalid",
+		"error.cli.credential_provision_canceled",
+		"error.cli.credential_provision_configuration_invalid",
+		"error.cli.credential_provision_failed",
 		"command.intakes.dossier.confirm.description",
 		"command.intakes.dossier.get.description",
 		"command.intakes.dossier.prepare.description",

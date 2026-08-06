@@ -70,6 +70,30 @@ func TestVersionAndInvalidCommandDoNotStartRuntime(t *testing.T) {
 	}
 }
 
+func TestCredentialProvisionCommandDispatchesExactLocalSurface(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"credentials", "provision-codex-microvm", "--help"}, &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 ||
+		!strings.Contains(stdout.String(), "orquesta credentials provision-codex-microvm") ||
+		strings.Contains(stdout.String(), "--locale") {
+		t.Fatalf("help code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{
+		"credentials", "provision-codex-microvm",
+		"--config", "/tmp/orquesta.toml",
+		"--auth-json-path", "/tmp/auth.json",
+		"--request-ref", "request:main-test",
+		"--locale", "en",
+	}, &stdout, &stderr)
+	if code != 2 || stdout.Len() != 0 ||
+		!strings.Contains(stderr.String(), "code=cli.credential_provision_arguments_invalid") {
+		t.Fatalf("extra flag code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
 func TestPrivateCodexSupervisorDispatchFailsClosedWithoutDescriptors(t *testing.T) {
 	command := exec.Command(os.Args[0], "__orquesta_internal_codex_supervisor_v1")
 	command.Env = []string{}

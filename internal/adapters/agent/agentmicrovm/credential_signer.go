@@ -12,7 +12,10 @@ import (
 	"orquesta/internal/ports"
 )
 
-const credentialSigningPurpose = credentials.PurposeRef("orquesta.microvm-launch-grant.v1")
+// LaunchGrantSigningCredentialPurpose is the exact credential authority used
+// both when provisioning a signing key and when signing one physical launch.
+// Exporting the typed contract keeps composition from duplicating its value.
+const LaunchGrantSigningCredentialPurpose = credentials.PurposeRef("orquesta.microvm-launch-grant.v1")
 
 // CredentialSignerConfig binds one public key identity to credential-store
 // authority. Private material is intentionally absent from this durable config.
@@ -66,7 +69,7 @@ func (signer *CredentialSigner) Preparar(
 		CredentialRef: signer.credentialRef,
 		OwnerRef:      credentials.OwnerRef(request.ActorRef.String()),
 		ScopeRef:      credentials.ScopeRef(request.ProjectRef.String()),
-		PurposeRef:    credentialSigningPurpose,
+		PurposeRef:    LaunchGrantSigningCredentialPurpose,
 		Version:       0,
 	}
 	if err := credentials.ValidateUseRequest(useRequest); err != nil {

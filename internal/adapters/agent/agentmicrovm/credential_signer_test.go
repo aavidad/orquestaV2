@@ -18,6 +18,12 @@ import (
 
 const testCredentialRef = credentials.CredentialRef("credential:microvm-launch-signing")
 
+func TestLaunchGrantSigningCredentialPurposeIsCanonical(t *testing.T) {
+	if LaunchGrantSigningCredentialPurpose != credentials.PurposeRef("orquesta.microvm-launch-grant.v1") {
+		t.Fatalf("launch grant signing purpose=%q", LaunchGrantSigningCredentialPurpose)
+	}
+}
+
 type credentialSignerStoreStub struct {
 	material []byte
 	err      error
@@ -94,7 +100,7 @@ func TestCredentialSignerUsesExactAuthorityForEveryReplayAndProducesVerifiableSi
 		CredentialRef: testCredentialRef,
 		OwnerRef:      credentials.OwnerRef(request.ActorRef.String()),
 		ScopeRef:      credentials.ScopeRef(request.ProjectRef.String()),
-		PurposeRef:    credentialSigningPurpose,
+		PurposeRef:    LaunchGrantSigningCredentialPurpose,
 		Version:       0,
 	}
 	if len(store.calls) != 2 || store.calls[0] != wantUse || store.calls[1] != wantUse ||

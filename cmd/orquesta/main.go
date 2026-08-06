@@ -38,6 +38,13 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	if len(arguments) > 0 && arguments[0] == "command" {
 		return runCommand(arguments[1:], catalog, stdout, stderr)
 	}
+	if len(arguments) > 1 && arguments[0] == "credentials" && arguments[1] == "provision-codex-microvm" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return bootstrap.RunProvisionCodexMicroVMCredentials(
+			ctx, arguments[2:], catalog, stdout, stderr,
+		)
+	}
 	if len(arguments) == 0 || arguments[0] != "serve" {
 		if !writeCatalogText(stderr, catalog, i18n.DefaultLocale, "error.invalid_request") ||
 			!writeCatalogText(stderr, catalog, i18n.DefaultLocale, "cli.root.usage") {
