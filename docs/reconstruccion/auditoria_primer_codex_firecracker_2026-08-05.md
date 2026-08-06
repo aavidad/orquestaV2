@@ -11,8 +11,8 @@ segundo `Launch`. Esto no prueba que un Codex haya trabajado dentro de KVM.
 Estimación del corte físico:
 
 - B10 lógico/durable: 90–95%;
-- Firecracker/microVM hasta primer Codex real: aproximadamente 86%;
-- pendiente físico: aproximadamente 14%.
+- Firecracker/microVM hasta primer Codex real: aproximadamente 88%;
+- pendiente físico: aproximadamente 12%.
 
 Este porcentaje mide solo el corte hasta el primer Codex físico. No representa
 el porcentaje de cierre de todo Orquesta.
@@ -41,13 +41,15 @@ arranque KVM ni de ejecución Codex física.
    interactivo genérico no bloquea el primer Codex; PFC-04 sí necesita un
    listener one-shot estrecho sobre `control_broker`, ligado a la apertura
    física ya autenticada.
-4. **Cerrada en código la cadena PFC-05a/b/c.**
+4. **Cerrada en código la cadena PFC-05a/b/c y su resolver compuesto.**
    `orquestaV2@db1ac680` y `orquestaV2@8492a97c` conservan y recuperan la
    autoridad histórica de egreso; `011efb3a`, `11b27c85` y `fe7eefb2` la
    transportan como bytes exactos; `agente_microvm@17175ae`, `44814e5b` y
    `b6f0fafd` decodifican el contrato estricto, firman la concesión y proyectan
-   únicamente `HTTP_PROXY`/`HTTPS_PROXY` hacia el loopback controlado. El gate
-   amplio quedó verde tras `a74bfc26`. Falta acreditación física en PFC-06.
+   únicamente `HTTP_PROXY`/`HTTPS_PROXY` hacia el loopback controlado.
+   `59113b5d` y `2c3ebe88` cargan y componen el resolver de política sellada.
+   El gate amplio quedó verde tras `a74bfc26`. Falta que el Goal/smoke solicite
+   una ref explícita y la acreditación física en PFC-06.
 5. El asset huésped con egreso debe reconstruirse y fijarse atómicamente: un
    huésped anterior rechaza correctamente el campo nuevo del WorkPacket.
 6. No existe entrega sellada de OAuth/API key a `/trabajo/.codex`. El runner
@@ -78,16 +80,19 @@ arranque KVM ni de ejecución Codex física.
    `SO_PEERCRED`, concurrencia acotada, lifecycle, cleanup ligado al inodo y
    sustituciones concurrentes quedaron revisados sin P0/P1/P2. `4db7e8b6`
    completa su composición residente, el cierre broker -> cliente -> store ->
-   SQLite y los rollbacks, con revisión final P0/P1=0. C4 queda pendiente solo
-   de cablearlo y acreditarlo con el servicio host físico.
-9. **Readiness PFC-06 incompleto.** Antes del sudo/smoke hay que componer el
-   resolver productivo de egreso y pedir su ref en el Goal; hacer que
-   `agente_microvm`, como autoridad física, publique el descriptor sellado al
-   combinar los manifiestos PFC-01, recursos canónicos y servicios PFC-07; y
-   provisionar por una superficie operativa la firma Ed25519 y el `auth.json`.
-   Son tres minitareas acotadas sobre contratos existentes, no motivos para
-   ampliar PFC-04. Orquesta no debe inventar vCPU, memoria ni identidades de
-   servicio mediante flags porque PFC-01 no contiene esos hechos.
+   SQLite y los rollbacks, con revisión final P0/P1=0. `1bc90fcd` añade una
+   fuente segura de `auth.json` sin exponer material; aún no existe CLI
+   operativa. C4 queda pendiente solo de cablearlo y acreditarlo con el
+   servicio host físico.
+9. **Readiness PFC-06 incompleto.** El resolver productivo de egreso está
+   compuesto, pero el Goal/smoke debe pedir su ref explícita.
+   `agente_microvm@a8d1e76` lleva el perfil físico a config/motor/instalador y
+   `agente_microvm@b67815c` construye el descriptor puro. Falta publicar
+   descriptor+digest+receipt y una CLI operativa para la firma Ed25519 y
+   `auth.json`. Son minitareas
+   acotadas sobre contratos existentes, no motivos para ampliar PFC-04.
+   Orquesta no debe inventar vCPU, memoria ni identidades de servicio mediante
+   flags porque PFC-01 no contiene esos hechos.
 
 KVM y Firecracker 1.16.1 están disponibles. El usuario ya puede acceder a
 `/dev/kvm`; no hace falta sudo para ejecutar KVM. El sudo inevitable se limita
@@ -100,10 +105,10 @@ a instalar el servicio root, usuario/grupo, directorios y delegación cgroup.
 | PFC-01 | **Cerrado en código/arnés** por `5412c70e`: activos Codex actuales reproducibles | construcción doble exacta, manifiesto ligado y cancelación limpia; no acredita KVM | PFC-06 para evidencia física |
 | PFC-02 | **Cerrado en código/arnés**: frontera root/no-root del UDS (`agente_microvm@989272d`) | daemon root; Orquesta por grupo+`peercred`; tercero rechazado; socket no público | PFC-06/PFC-07 para evidencia física |
 | PFC-03 | **PFC-03a cerrado** por `ca78a490`; broker general aplazable | sesión exacta por `RunRef`+fence+atestación; el listener one-shot de credencial queda en PFC-04 | no bloquea por sí solo PFC-06 |
-| PFC-04 | C1/C1b/C2/C3, handler one-shot, listener UDS residente y compuesto, replay productivo y autoridad SQLite v32/v33 cerrados hasta `4db7e8b6`, `911357d9`, `2bf62d96`, `9c64e12b` y `01f22436`; pin huésped `cc7cec3e` | secreto solo en memoria/tmpfs fuera de `/trabajo`, `0600`, principal exacto, consumo one-shot y autoridad preparada/bound durable | cablear y acreditar el servicio host físico en PFC-06 |
-| PFC-05 | **Cadena durable/transporte/compilación cerrada en código** hasta `b6f0fafd` y gate amplio verde tras `a74bfc26` | proxy explícito; concesión no llega al huésped; solo endpoint loopback | PFC-06 para evidencia física |
-| PFC-06 | E2E físico acotado; readiness de egreso, descriptor y provisionado pendiente | una microVM, un Codex real, resultado terminal durable y limpieza exacta | 10–14% del hito físico |
-| PFC-07 | **PFC-07a cerrado offline** por `agente_microvm@2acd300` | único sudo idempotente para servicio/grupo/directorios/cgroup, con status y rollback exactos | PFC-07b físico |
+| PFC-04 | C1/C1b/C2/C3, handler one-shot, listener UDS residente y compuesto, replay productivo y autoridad SQLite v32/v33 cerrados hasta `4db7e8b6`, `911357d9`, `2bf62d96`, `9c64e12b` y `01f22436`; pin huésped `cc7cec3e`; fuente segura `auth.json` en `1bc90fcd` | secreto solo en memoria/tmpfs fuera de `/trabajo`, `0600`, principal exacto, consumo one-shot y autoridad preparada/bound durable | cablear/acreditar host físico y CLI de provisionado en PFC-06 |
+| PFC-05 | **Cadena durable/transporte/compilación y resolver compuesto cerrados en código** hasta `b6f0fafd`, `59113b5d` y `2c3ebe88` | proxy explícito; concesión no llega al huésped; solo endpoint loopback | Goal/smoke debe pedir ref; PFC-06 para evidencia física |
+| PFC-06 | E2E físico acotado; solicitud de egreso, publicación/receipt del descriptor y CLI de provisionado pendientes | una microVM, un Codex real, resultado terminal durable y limpieza exacta | 12% del hito físico |
+| PFC-07 | **PFC-07a cerrado offline** por `agente_microvm@2acd300`; perfil físico en config/motor/instalador por `a8d1e76` | único sudo idempotente para servicio/grupo/directorios/cgroup, con status y rollback exactos | PFC-07b físico |
 
 B11 (parada exacta) y B12 (preservación/sello/compuerta B) se mantienen como
 cortes posteriores separados. No se engordan dentro de PFC-06 para fabricar un
