@@ -166,10 +166,20 @@ type AgentPhysicalPreservationBinding struct {
 	ManifestSHA256 string
 }
 
+// AgentPreservationBinding proves that application accepted and durably
+// recorded the physical preservation before asking the isolation provider to
+// close. ApplicationReceiptRef is the opaque Ref of
+// application.ComprobantePreservacionEntornoAgente; the physical manifest is
+// retained only as the exact provider-side subject of that durable fact.
+type AgentPreservationBinding struct {
+	ApplicationReceiptRef string
+	PhysicalManifest      AgentPhysicalPreservationBinding
+}
+
 type AgentCloseRequest struct {
 	Subject        AgentEnvironmentLifecycleSubject
 	ExpectedToken  AgentEnvironmentLifecycleToken
-	Preservation   AgentPhysicalPreservationBinding
+	Preservation   AgentPreservationBinding
 	IdempotencyKey string
 }
 
@@ -177,7 +187,7 @@ type AgentCloseReceipt struct {
 	Subject        AgentEnvironmentLifecycleSubject
 	PreviousToken  AgentEnvironmentLifecycleToken
 	NextToken      AgentEnvironmentLifecycleToken
-	Preservation   AgentPhysicalPreservationBinding
+	Preservation   AgentPreservationBinding
 	IdempotencyKey string
 	ReceiptRef     string
 	ConfirmedAt    time.Time
@@ -407,8 +417,10 @@ func validateAgentEnvironmentTransition(
 	return nil
 }
 
-func validateAgentPreservationBinding(binding AgentPhysicalPreservationBinding) error {
-	if !validAgentEnvironmentOpaqueValue(binding.ManifestRef) || !resumenEntornoValido(binding.ManifestSHA256) {
+func validateAgentPreservationBinding(binding AgentPreservationBinding) error {
+	if !validAgentEnvironmentOpaqueValue(binding.ApplicationReceiptRef) ||
+		!validAgentEnvironmentOpaqueValue(binding.PhysicalManifest.ManifestRef) ||
+		!resumenEntornoValido(binding.PhysicalManifest.ManifestSHA256) {
 		return environmentLifecycleError("preservation_binding_invalid")
 	}
 	return nil

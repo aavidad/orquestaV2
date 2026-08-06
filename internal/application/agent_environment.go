@@ -8,6 +8,13 @@ import (
 	"orquesta/internal/ports"
 )
 
+type AlcanceEspacioPreservacionEntornoAgente string
+
+const (
+	PreservacionEntornoConEspacioTrabajo AlcanceEspacioPreservacionEntornoAgente = "workspace_bound"
+	PreservacionEntornoSinEspacioTrabajo AlcanceEspacioPreservacionEntornoAgente = "workspace_absent"
+)
+
 type ComprobantePreservacionEntornoAgente struct {
 	Ref, ClaveIdempotencia, DigestBindingEspacio, BaseOID, DigestCambio string
 	ProyectoRef                                                         goal.ProjectRef
@@ -17,6 +24,7 @@ type ComprobantePreservacionEntornoAgente struct {
 	EspacioTrabajoRef                                                   ports.ExecutionWorkspaceRef
 	FormatoObjeto                                                       ports.GitObjectFormat
 	CambioRef                                                           ports.ChangeSetRef
+	AlcanceEspacio                                                      AlcanceEspacioPreservacionEntornoAgente
 	Resultado                                                           ports.ResultadoPreservacionEntornoAgente
 	RegistradoEn                                                        time.Time
 }
@@ -26,9 +34,7 @@ func ValidarComprobantePreservacionEntornoAgente(comprobante ComprobantePreserva
 	if !validApplicationRef(comprobante.Ref) || !validApplicationRef(comprobante.ClaveIdempotencia) ||
 		comprobante.ProyectoRef.String() == "" || comprobante.ObjetivoRef.String() == "" || comprobante.ItemRef.String() == "" ||
 		comprobante.EjecucionRef != comprobante.Resultado.EjecucionRef ||
-		comprobante.EspacioTrabajoRef.String() == "" || !validEffectDigest(comprobante.DigestBindingEspacio) ||
-		ports.ValidateGitOID(comprobante.BaseOID, comprobante.FormatoObjeto) != nil ||
-		(cambioPresente && (comprobante.CambioRef.String() == "" || !validEffectDigest(comprobante.DigestCambio))) ||
+		validarEspacioPreservacionEntornoAgente(comprobante, cambioPresente) != nil ||
 		ports.ValidarResultadoPreservacionEntornoAgente(comprobante.Resultado) != nil ||
 		comprobante.RegistradoEn.Before(comprobante.Resultado.PreservadoEn) {
 		return errors.New("application.agent_environment_receipt_invalid")
@@ -41,7 +47,9 @@ func ValidarCausalidadPreservacionEntornoAgente(comprobante ComprobantePreservac
 		registro.Goal.Project() != comprobante.ProyectoRef {
 		return errors.New("application.agent_environment_receipt_scope_invalid")
 	}
-	ejecutada, ligada, lanzada, cambio := false, false, false, comprobante.CambioRef.String() == ""
+	sinEspacio := comprobante.AlcanceEspacio == PreservacionEntornoSinEspacioTrabajo
+	ejecutada, ligada, lanzada, cambio := false, sinEspacio,
+		false, comprobante.CambioRef.String() == ""
 	for _, ejecucion := range registro.Executions {
 		if ejecucion.Ref == comprobante.EjecucionRef {
 			ejecutada = ejecucion.GoalRef == comprobante.ObjetivoRef && ejecucion.WorkItemRef == comprobante.ItemRef &&
@@ -50,6 +58,10 @@ func ValidarCausalidadPreservacionEntornoAgente(comprobante ComprobantePreservac
 		}
 	}
 	for _, binding := range registro.WorkspaceBindings {
+		if sinEspacio && binding.ExecutionRef == comprobante.EjecucionRef {
+			ligada = false
+			continue
+		}
 		if binding.Ref == comprobante.EspacioTrabajoRef {
 			ligada = binding.ProjectRef == comprobante.ProyectoRef && binding.GoalRef == comprobante.ObjetivoRef &&
 				binding.WorkItemRef == comprobante.ItemRef && binding.ExecutionRef == comprobante.EjecucionRef &&
@@ -64,6 +76,10 @@ func ValidarCausalidadPreservacionEntornoAgente(comprobante ComprobantePreservac
 		}
 	}
 	for _, candidato := range registro.ChangeSets {
+		if sinEspacio && candidato.ExecutionRef == comprobante.EjecucionRef {
+			cambio = false
+			continue
+		}
 		if candidato.Ref == comprobante.CambioRef {
 			cambio = candidato.ProjectRef == comprobante.ProyectoRef && candidato.GoalRef == comprobante.ObjetivoRef &&
 				candidato.WorkItemRef == comprobante.ItemRef && candidato.ExecutionRef == comprobante.EjecucionRef &&
@@ -72,6 +88,25 @@ func ValidarCausalidadPreservacionEntornoAgente(comprobante ComprobantePreservac
 	}
 	if !ejecutada || !ligada || !lanzada || !cambio {
 		return errors.New("application.agent_environment_receipt_causality_invalid")
+	}
+	return nil
+}
+
+func validarEspacioPreservacionEntornoAgente(comprobante ComprobantePreservacionEntornoAgente, cambioPresente bool) error {
+	switch comprobante.AlcanceEspacio {
+	case "", PreservacionEntornoConEspacioTrabajo:
+		if comprobante.EspacioTrabajoRef.String() == "" || !validEffectDigest(comprobante.DigestBindingEspacio) ||
+			ports.ValidateGitOID(comprobante.BaseOID, comprobante.FormatoObjeto) != nil ||
+			(cambioPresente && (comprobante.CambioRef.String() == "" || !validEffectDigest(comprobante.DigestCambio))) {
+			return errors.New("application.agent_environment_workspace_invalid")
+		}
+	case PreservacionEntornoSinEspacioTrabajo:
+		if comprobante.EspacioTrabajoRef.String() != "" || comprobante.DigestBindingEspacio != "" ||
+			comprobante.BaseOID != "" || comprobante.FormatoObjeto != "" || cambioPresente {
+			return errors.New("application.agent_environment_workspace_absence_invalid")
+		}
+	default:
+		return errors.New("application.agent_environment_workspace_scope_invalid")
 	}
 	return nil
 }

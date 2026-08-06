@@ -251,8 +251,9 @@ func TestAgentCloseBindsPreservedManifestAndNeverMeansControlStop(t *testing.T) 
 	subject := validAgentEnvironmentSubject(t)
 	manifest := validAgentPreservationManifest(t)
 	request := AgentCloseRequest{Subject: subject,
-		ExpectedToken:  validAgentEnvironmentToken(t, AgentEnvironmentPreserved, "revision:4"),
-		Preservation:   AgentPhysicalPreservationBinding{ManifestRef: manifest.Ref, ManifestSHA256: manifest.SHA256},
+		ExpectedToken: validAgentEnvironmentToken(t, AgentEnvironmentPreserved, "revision:4"),
+		Preservation: AgentPreservationBinding{ApplicationReceiptRef: "environment-receipt:one",
+			PhysicalManifest: AgentPhysicalPreservationBinding{ManifestRef: manifest.Ref, ManifestSHA256: manifest.SHA256}},
 		IdempotencyKey: "close:execution-1"}
 	receipt := AgentCloseReceipt{Subject: subject, PreviousToken: request.ExpectedToken,
 		NextToken:    validAgentEnvironmentToken(t, AgentEnvironmentClosed, "revision:5"),
@@ -270,11 +271,16 @@ func TestAgentCloseBindsPreservedManifestAndNeverMeansControlStop(t *testing.T) 
 	}
 
 	for name, mutate := range map[string]func(*AgentCloseReceipt){
-		"manifest ref":    func(value *AgentCloseReceipt) { value.Preservation.ManifestRef = "physical-content:other" },
-		"manifest digest": func(value *AgentCloseReceipt) { value.Preservation.ManifestSHA256 = strings.Repeat("b", 64) },
-		"state":           func(value *AgentCloseReceipt) { value.NextToken.State = AgentEnvironmentQuiesced },
-		"receipt":         func(value *AgentCloseReceipt) { value.ReceiptRef = "" },
-		"confirmed at":    func(value *AgentCloseReceipt) { value.ConfirmedAt = time.Time{} },
+		"application receipt": func(value *AgentCloseReceipt) { value.Preservation.ApplicationReceiptRef = "environment-receipt:other" },
+		"manifest ref": func(value *AgentCloseReceipt) {
+			value.Preservation.PhysicalManifest.ManifestRef = "physical-content:other"
+		},
+		"manifest digest": func(value *AgentCloseReceipt) {
+			value.Preservation.PhysicalManifest.ManifestSHA256 = strings.Repeat("b", 64)
+		},
+		"state":        func(value *AgentCloseReceipt) { value.NextToken.State = AgentEnvironmentQuiesced },
+		"receipt":      func(value *AgentCloseReceipt) { value.ReceiptRef = "" },
+		"confirmed at": func(value *AgentCloseReceipt) { value.ConfirmedAt = time.Time{} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			changed := receipt
@@ -283,6 +289,12 @@ func TestAgentCloseBindsPreservedManifestAndNeverMeansControlStop(t *testing.T) 
 				t.Fatalf("mutated close receipt accepted: %+v", changed)
 			}
 		})
+	}
+
+	manifestOnly := request
+	manifestOnly.Preservation.ApplicationReceiptRef = ""
+	if code := AgentContractErrorCode(ValidateAgentCloseRequest(manifestOnly)); code != "agent.environment_lifecycle_preservation_binding_invalid" {
+		t.Fatalf("close without durable application receipt code = %q", code)
 	}
 
 	if reflect.TypeOf(AgentCloseRequest{}).AssignableTo(reflect.TypeOf(AgentStopRequest{})) ||
