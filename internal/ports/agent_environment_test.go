@@ -23,10 +23,15 @@ func TestPreservacionEntornoAgenteLigaSelloEInventarioSinRutas(t *testing.T) {
 		t.Fatal(err)
 	}
 	for nombre, mutar := range map[string]func(*ResultadoPreservacionEntornoAgente){
-		"estado":     func(valor *ResultadoPreservacionEntornoAgente) { valor.Estado = "deleted" },
-		"cerca":      func(valor *ResultadoPreservacionEntornoAgente) { valor.Cerca++ },
-		"inventario": func(valor *ResultadoPreservacionEntornoAgente) { valor.InventarioDigest = strings.Repeat("b", 64) },
-		"sello":      func(valor *ResultadoPreservacionEntornoAgente) { valor.SelloDigest = strings.Repeat("c", 64) },
+		"estado":             func(valor *ResultadoPreservacionEntornoAgente) { valor.Estado = "deleted" },
+		"cerca":              func(valor *ResultadoPreservacionEntornoAgente) { valor.Cerca++ },
+		"inventario":         func(valor *ResultadoPreservacionEntornoAgente) { valor.InventarioDigest = strings.Repeat("b", 64) },
+		"sello":              func(valor *ResultadoPreservacionEntornoAgente) { valor.SelloDigest = strings.Repeat("c", 64) },
+		"sellado ausente":    func(valor *ResultadoPreservacionEntornoAgente) { valor.SelladoEn = time.Time{} },
+		"preservado ausente": func(valor *ResultadoPreservacionEntornoAgente) { valor.PreservadoEn = time.Time{} },
+		"orden temporal": func(valor *ResultadoPreservacionEntornoAgente) {
+			valor.PreservadoEn = valor.SelladoEn.Add(-time.Nanosecond)
+		},
 	} {
 		t.Run(nombre, func(t *testing.T) {
 			alterado := resultado

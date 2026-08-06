@@ -23,6 +23,9 @@ var (
 
 const (
 	EffectKindAgentLaunch      EffectKind = "agent_launch"
+	EffectKindAgentQuiesce     EffectKind = "agent_quiesce"
+	EffectKindAgentPreserve    EffectKind = "agent_environment_preserve"
+	EffectKindAgentClose       EffectKind = "agent_environment_close"
 	EffectKindAgentStop        EffectKind = "agent_stop"
 	EffectKindPrepareWorkspace EffectKind = "prepare_workspace"
 	EffectKindCommitChange     EffectKind = "commit_change"
@@ -351,7 +354,8 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 
 func validEffectKind(kind EffectKind) bool {
 	switch kind {
-	case EffectKindAgentLaunch, EffectKindAgentStop, EffectKindPrepareWorkspace,
+	case EffectKindAgentLaunch, EffectKindAgentQuiesce, EffectKindAgentPreserve, EffectKindAgentClose,
+		EffectKindAgentStop, EffectKindPrepareWorkspace,
 		EffectKindCommitChange, EffectKindAttestTest, EffectKindIntegrateChange:
 		return true
 	default:
@@ -363,6 +367,12 @@ func effectActionKindMatches(kind EffectKind, action ActionKind) bool {
 	switch kind {
 	case EffectKindAgentLaunch:
 		return action == ActionLaunchAgent
+	case EffectKindAgentQuiesce:
+		return action == ActionQuiesceAgent
+	case EffectKindAgentPreserve:
+		return action == ActionPreserveAgentEnvironment
+	case EffectKindAgentClose:
+		return action == ActionCloseAgentEnvironment
 	case EffectKindAgentStop:
 		return action == ActionStopAgent
 	case EffectKindPrepareWorkspace:

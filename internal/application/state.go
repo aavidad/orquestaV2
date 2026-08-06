@@ -243,16 +243,21 @@ type EventRecord struct {
 type ActionKind string
 
 const (
-	ActionLaunchAgent      ActionKind = "launch_agent"
-	ActionObserveAgent     ActionKind = "observe_agent"
-	ActionStopAgent        ActionKind = "stop_agent"
-	ActionDeliverMailbox   ActionKind = "deliver_mailbox"
-	ActionAdmitMailbox     ActionKind = "admit_mailbox"
-	ActionPrepareWorkspace ActionKind = "prepare_workspace"
-	ActionCommitChange     ActionKind = "commit_change"
-	ActionAttestTest       ActionKind = "attest_test"
-	ActionIntegrateChange  ActionKind = "integrate_change"
-	ActionRevokeSession    ActionKind = "revoke_execution_session"
+	ActionLaunchAgent  ActionKind = "launch_agent"
+	ActionObserveAgent ActionKind = "observe_agent"
+	// ActionQuiesceAgent belongs only to successful completion. ActionStopAgent
+	// remains the control/cancellation path and must never be inferred from it.
+	ActionQuiesceAgent             ActionKind = "quiesce_agent"
+	ActionPreserveAgentEnvironment ActionKind = "preserve_agent_environment"
+	ActionCloseAgentEnvironment    ActionKind = "close_agent_environment"
+	ActionStopAgent                ActionKind = "stop_agent"
+	ActionDeliverMailbox           ActionKind = "deliver_mailbox"
+	ActionAdmitMailbox             ActionKind = "admit_mailbox"
+	ActionPrepareWorkspace         ActionKind = "prepare_workspace"
+	ActionCommitChange             ActionKind = "commit_change"
+	ActionAttestTest               ActionKind = "attest_test"
+	ActionIntegrateChange          ActionKind = "integrate_change"
+	ActionRevokeSession            ActionKind = "revoke_execution_session"
 )
 
 type ActionRecord struct {
