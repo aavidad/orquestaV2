@@ -26,6 +26,25 @@ type ResolveOptions struct {
 
 // Resolve resolves captured inputs without reading process-global state.
 func Resolve(options ResolveOptions) (Snapshot, error) {
+	return resolve(options, resolveProfileRuntime)
+}
+
+// ResolveForCredentialProvisioning resolves the canonical configuration for
+// the one-shot credential bootstrap. It keeps every normal validation except
+// that the future physical profile descriptor and its digest may both be
+// absent. Resolve remains the only runtime/server resolver.
+func ResolveForCredentialProvisioning(options ResolveOptions) (Snapshot, error) {
+	return resolve(options, resolveProfileCredentialProvisioning)
+}
+
+type resolveProfile uint8
+
+const (
+	resolveProfileRuntime resolveProfile = iota
+	resolveProfileCredentialProvisioning
+)
+
+func resolve(options ResolveOptions, profile resolveProfile) (Snapshot, error) {
 	registry, err := loadRegistry()
 	if err != nil {
 		return Snapshot{}, err
@@ -51,7 +70,7 @@ func Resolve(options ResolveOptions) (Snapshot, error) {
 	if err := applyEnvironmentMap(values, registry, options.Environment); err != nil {
 		return Snapshot{}, err
 	}
-	if err := validateCrossRegistryValues(registry, values, options.SourcePath); err != nil {
+	if err := validateCrossRegistryValues(registry, values, options.SourcePath, profile); err != nil {
 		return Snapshot{}, err
 	}
 	return buildSnapshot(registry, values)
@@ -103,7 +122,12 @@ func applyEnvironmentMap(resolved map[Key]resolvedValue, registry registry, envi
 	return nil
 }
 
-func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue, sourcePath string) error {
+func validateCrossRegistryValues(
+	registry registry,
+	values map[Key]resolvedValue,
+	sourcePath string,
+	profile resolveProfile,
+) error {
 	fail := func(id string) error {
 		return &Error{Code: ErrorCrossValidation, Cause: fmt.Errorf("%s", id)}
 	}
@@ -158,7 +182,11 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 				return fail(validator.ID)
 			}
 		case "runtime_microvm_requirements":
-			if !validRuntimeMicroVMValues(values) {
+			valid := validRuntimeMicroVMValues(values)
+			if profile == resolveProfileCredentialProvisioning {
+				valid = validRuntimeMicroVMCredentialProvisioningValues(values)
+			}
+			if !valid {
 				return fail(validator.ID)
 			}
 		case "agent_firecracker_vsock_cid_lease_bounds":
@@ -195,6 +223,17 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 }
 
 func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
+	return validRuntimeMicroVMValuesWithProfileDescriptor(values, true)
+}
+
+func validRuntimeMicroVMCredentialProvisioningValues(values map[Key]resolvedValue) bool {
+	return validRuntimeMicroVMValuesWithProfileDescriptor(values, false)
+}
+
+func validRuntimeMicroVMValuesWithProfileDescriptor(
+	values map[Key]resolvedValue,
+	requireProfileDescriptor bool,
+) bool {
 	provider, providerOK := values[KeyRuntimeProvider].value.(string)
 	isolation, isolationOK := values[KeyRuntimeIsolation].value.(string)
 	providerModel, modelOK := values[KeyRuntimeCodexModel].value.(string)
@@ -230,13 +269,16 @@ func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
 	validEgressPolicy := !egressPolicyConfigured ||
 		(validRuntimeMicroVMEgressPolicyRef(egressPolicyRef) && canonicalAbsolutePath(egressPolicyPath) &&
 			validBareSHA256(egressPolicyDigest) && egressPolicyMaxBytes > 0 && egressPolicyMaxBytes <= 64<<10)
+	validProfileDescriptor := canonicalAbsolutePath(profilePath) && validBareSHA256(profileDigest)
+	if !requireProfileDescriptor && profilePath == "" && profileDigest == "" {
+		validProfileDescriptor = true
+	}
 	return isolation == "microvm" && provider == "codex" && validEgressPolicy &&
 		validProviderModel(providerModel) &&
 		providerCredentialRef != "" && providerCredentialRef != credentialRef &&
 		validRuntimeMicroVMPlacementRef(placementRef) &&
 		canonicalAbsolutePath(socketPath) &&
-		canonicalAbsolutePath(profilePath) &&
-		validBareSHA256(profileDigest) &&
+		validProfileDescriptor &&
 		validLaunchGrantKeyID(keyID) &&
 		credentialRef != "" &&
 		canonicalAbsolutePath(brokerSocketPath) && brokerSocketPath != socketPath &&

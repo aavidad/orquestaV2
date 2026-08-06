@@ -12,6 +12,18 @@ import (
 // resolver. Process environment is captured once through the canonical
 // registry and never read by downstream components.
 func loadConfigSnapshot(ctx context.Context, sourcePath string) (config.Snapshot, error) {
+	return loadConfigSnapshotWithResolver(ctx, sourcePath, config.Resolve)
+}
+
+func loadCredentialProvisionConfigSnapshot(ctx context.Context, sourcePath string) (config.Snapshot, error) {
+	return loadConfigSnapshotWithResolver(ctx, sourcePath, config.ResolveForCredentialProvisioning)
+}
+
+func loadConfigSnapshotWithResolver(
+	ctx context.Context,
+	sourcePath string,
+	resolve func(config.ResolveOptions) (config.Snapshot, error),
+) (config.Snapshot, error) {
 	store, err := configtoml.Open(configtoml.Options{
 		Path:            sourcePath,
 		MaxSourceBytes:  config.SourceMaxBytes(),
@@ -29,7 +41,7 @@ func loadConfigSnapshot(ctx context.Context, sourcePath string) (config.Snapshot
 	if err != nil {
 		return config.Snapshot{}, err
 	}
-	return config.Resolve(config.ResolveOptions{
+	return resolve(config.ResolveOptions{
 		TOML: document.Content, Environment: environment, SourcePath: sourcePath,
 	})
 }

@@ -123,6 +123,64 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMCredentialBrokerMaxConnections, SourceEnv)
 }
 
+func TestCredentialProvisioningResolverOmitsOnlyFutureProfileDescriptor(t *testing.T) {
+	withoutDescriptor := strings.ReplaceAll(
+		strings.ReplaceAll(
+			validRuntimeMicroVMTOML,
+			`profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"`+"\n",
+			"",
+		),
+		`expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"`+"\n",
+		"",
+	)
+	snapshot, err := ResolveForCredentialProvisioning(ResolveOptions{TOML: []byte(withoutDescriptor)})
+	if err != nil {
+		t.Fatalf("ResolveForCredentialProvisioning() error=%v", err)
+	}
+	if snapshot.RuntimeMicroVMProfileDescriptorPath() != "" ||
+		snapshot.RuntimeMicroVMExpectedProfileDescriptorSHA256() != "" ||
+		snapshot.RuntimeMicroVMPlacementRef() != "placement:codex:account-1" ||
+		snapshot.RuntimeMicroVMLaunchGrantKeyID() != "clave-publica:orquesta-01" {
+		t.Fatalf("credential provisioning snapshot drifted")
+	}
+	if _, err := Resolve(ResolveOptions{TOML: []byte(withoutDescriptor)}); err == nil ||
+		!HasErrorCode(err, ErrorCrossValidation) {
+		t.Fatalf("runtime Resolve accepted configuration without physical descriptor: %v", err)
+	}
+	if _, err := ResolveForCredentialProvisioning(ResolveOptions{
+		TOML: []byte(withoutDescriptor), Environment: map[string]string{"UNDECLARED_BOOTSTRAP_VALUE": "secret"},
+	}); err == nil || !HasErrorCode(err, ErrorUnknownKey) {
+		t.Fatalf("credential provisioning accepted an ad hoc environment key: %v", err)
+	}
+
+	mutations := []struct {
+		name string
+		old  string
+	}{
+		{name: "only descriptor digest remains", old: `profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"` + "\n"},
+		{name: "only descriptor path remains", old: `expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"` + "\n"},
+		{name: "provider model", old: `model = "gpt-5.6"` + "\n"},
+		{name: "provider credential", old: `credential_ref = "credential:codex-account-1"` + "\n"},
+		{name: "placement", old: `placement_ref = "placement:codex:account-1"` + "\n"},
+		{name: "agent socket", old: `socket_path = "/run/orquesta/agente-microvm.sock"` + "\n"},
+		{name: "launch key", old: `launch_grant_key_id = "clave-publica:orquesta-01"` + "\n"},
+		{name: "signing credential", old: `launch_grant_signing_credential_ref = "credential:microvm-launch-signing"` + "\n"},
+		{name: "broker socket", old: `credential_broker_socket_path = "/run/orquesta/credential-broker.sock"` + "\n"},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			source := strings.Replace(validRuntimeMicroVMTOML, mutation.old, "", 1)
+			if source == validRuntimeMicroVMTOML {
+				t.Fatal("fixture mutation did not apply")
+			}
+			_, err := ResolveForCredentialProvisioning(ResolveOptions{TOML: []byte(source)})
+			if err == nil || !HasErrorCode(err, ErrorCrossValidation) {
+				t.Fatalf("provisioning resolver accepted missing %s: %v", mutation.name, err)
+			}
+		})
+	}
+}
+
 func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
 	wantKeys := []Key{
 		KeyRuntimeProvider,

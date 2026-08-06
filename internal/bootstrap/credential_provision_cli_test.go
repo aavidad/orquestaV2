@@ -83,6 +83,103 @@ func TestProvisionCodexMicroVMCredentialsCLIUsesCanonicalConfigAndResumesWithout
 		filepath.Join(root, "secrets", "credentials.json"), authMaterial, signingMaterial)
 }
 
+func TestProvisionCodexMicroVMCredentialsCLIBootstrapsBeforePhysicalDescriptorExists(t *testing.T) {
+	root := t.TempDir()
+	configPath, _, _ := writeRuntimeIsolationMicroVMConfig(t, root, false)
+	removeTestConfigLines(t, configPath,
+		"profile_descriptor_path = ",
+		"expected_profile_descriptor_sha256 = ",
+	)
+	if _, err := loadConfigSnapshot(context.Background(), configPath); err == nil ||
+		!config.HasErrorCode(err, config.ErrorCrossValidation) {
+		t.Fatalf("runtime loader accepted configuration without physical descriptor: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "secrets"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	authPath := filepath.Join(root, "auth.json")
+	authMaterial := []byte(`{"auth":"pre-installer-secret"}`)
+	if err := os.WriteFile(authPath, authMaterial, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := RunProvisionCodexMicroVMCredentials(
+		context.Background(),
+		credentialProvisionCLIArguments(configPath, authPath, "request:credential-cli-pre-installer"),
+		loadCredentialProvisionCatalog(t), &stdout, &stderr,
+	)
+	output := decodeCredentialProvisionOutput(t, stdout.Bytes())
+	if code != 0 || stderr.Len() != 0 || output.Status != "complete" ||
+		output.PlacementRef != "placement:codex:microvm-runtime" ||
+		output.Signing.State != string(credentials.CredentialProvisionCreated) ||
+		output.Auth.State != string(credentials.CredentialProvisionCreated) {
+		t.Fatalf("pre-installer provision code=%d output=%+v stderr=%q", code, output, stderr.String())
+	}
+	assertCredentialProvisionOutputExcludes(
+		t, append(stdout.Bytes(), stderr.Bytes()...), configPath, authPath,
+		filepath.Join(root, "secrets", "credentials.json"), authMaterial,
+	)
+}
+
+func TestProvisionCodexMicroVMCredentialsCLIMissingRequiredConfigDoesNotMutateStore(t *testing.T) {
+	root := t.TempDir()
+	configPath, _, _ := writeRuntimeIsolationMicroVMConfig(t, root, false)
+	removeTestConfigLines(t, configPath,
+		"profile_descriptor_path = ",
+		"expected_profile_descriptor_sha256 = ",
+		"launch_grant_key_id = ",
+	)
+	authPath := filepath.Join(root, "auth.json")
+	authMaterial := []byte(`{"auth":"must-remain-unread"}`)
+	if err := os.WriteFile(authPath, authMaterial, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dependencies := productionCredentialProvisionDependencies()
+	var opened, authRead, keyGenerated, provisioned bool
+	dependencies.openStore = func(credentiallocal.Options) (credentialProvisionOwnedStore, error) {
+		opened = true
+		return nil, errors.New("must not open")
+	}
+	dependencies.newAuth = func(string, uint32, uint64) (credentials.MaterialSource, error) {
+		authRead = true
+		return nil, errors.New("must not read")
+	}
+	dependencies.newKey = func() (credentials.Ed25519PrivateKeySource, error) {
+		keyGenerated = true
+		return nil, errors.New("must not generate")
+	}
+	dependencies.provision = func(
+		context.Context,
+		credentials.ProvisionStore,
+		credentials.MaterialSource,
+		credentials.Ed25519PrivateKeySource,
+		credentials.ProvisionCodexMicroVMCredentialsRequest,
+	) (credentials.ProvisionCodexMicroVMCredentialsResult, error) {
+		provisioned = true
+		return credentials.ProvisionCodexMicroVMCredentialsResult{}, errors.New("must not provision")
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := runProvisionCodexMicroVMCredentials(
+		context.Background(),
+		credentialProvisionCLIArguments(configPath, authPath, "request:credential-cli-missing-key"),
+		loadCredentialProvisionCatalog(t), &stdout, &stderr, dependencies,
+	)
+	if code != 2 || stdout.Len() != 0 || opened || authRead || keyGenerated || provisioned ||
+		!strings.Contains(stderr.String(), "code=cli.credential_provision_configuration_invalid") {
+		t.Fatalf("preflight code=%d opened=%t auth=%t key=%t provisioned=%t stdout=%q stderr=%q",
+			code, opened, authRead, keyGenerated, provisioned, stdout.String(), stderr.String())
+	}
+	if _, err := os.Lstat(filepath.Join(root, "secrets")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("invalid preflight mutated credential store: %v", err)
+	}
+	assertCredentialProvisionOutputExcludes(
+		t, append(stdout.Bytes(), stderr.Bytes()...), configPath, authPath,
+		filepath.Join(root, "secrets", "credentials.json"), authMaterial,
+	)
+}
+
 func TestProvisionCodexMicroVMCredentialsCLIPartialAuthFailureIsSafeAndRetryable(t *testing.T) {
 	root, configPath, authPath := credentialProvisionCLIFixture(t)
 	authMaterial := []byte(`{"auth":"partial-secret-never-print"}`)
@@ -485,6 +582,38 @@ func credentialProvisionCLIArguments(configPath, authPath, requestRef string) []
 		"--config", configPath,
 		"--auth-json-path", authPath,
 		"--request-ref", requestRef,
+	}
+}
+
+func removeTestConfigLines(t *testing.T, path string, prefixes ...string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(string(content), "\n")
+	removed := make([]bool, len(prefixes))
+	filtered := lines[:0]
+	for _, line := range lines {
+		matched := false
+		for index, prefix := range prefixes {
+			if strings.HasPrefix(line, prefix) {
+				removed[index] = true
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			filtered = append(filtered, line)
+		}
+	}
+	for index, found := range removed {
+		if !found {
+			t.Fatalf("config line prefix %q not found", prefixes[index])
+		}
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(filtered, "\n")), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

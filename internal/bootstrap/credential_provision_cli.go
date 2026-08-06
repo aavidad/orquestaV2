@@ -55,7 +55,7 @@ type credentialProvisionDependencies struct {
 
 func productionCredentialProvisionDependencies() credentialProvisionDependencies {
 	return credentialProvisionDependencies{
-		loadSnapshot: loadConfigSnapshot,
+		loadSnapshot: loadCredentialProvisionConfigSnapshot,
 		openStore: func(options credentiallocal.Options) (credentialProvisionOwnedStore, error) {
 			return credentiallocal.Open(options)
 		},
