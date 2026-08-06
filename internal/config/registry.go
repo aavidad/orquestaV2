@@ -459,6 +459,10 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeMicroVMExpectedProfileDescriptorSHA256,
 			KeyRuntimeMicroVMLaunchGrantKeyID,
 			KeyRuntimeMicroVMLaunchGrantSigningCredentialRef,
+			KeyRuntimeMicroVMCredentialBrokerSocketPath,
+			KeyRuntimeMicroVMCredentialBrokerPeerUID,
+			KeyRuntimeMicroVMCredentialBrokerExchangeTimeout,
+			KeyRuntimeMicroVMCredentialBrokerMaxConnections,
 		},
 		"agent_firecracker_vsock_cid_lease_bounds": {
 			KeyAgentFirecrackerVsockCIDMinimumLeaseDuration,

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 const validRuntimeMicroVMTOML = `[runtime]
@@ -22,6 +23,10 @@ profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"
 expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 launch_grant_key_id = "clave-publica:orquesta-01"
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
+credential_broker_socket_path = "/run/orquesta/credential-broker.sock"
+credential_broker_peer_uid = 0
+credential_broker_exchange_timeout = "30s"
+credential_broker_max_connections = 16
 `
 
 func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
@@ -34,7 +39,11 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 		snapshot.RuntimeMicroVMProfileDescriptorPath() != "/srv/orquesta/profiles/codex-v1.json" ||
 		snapshot.RuntimeMicroVMExpectedProfileDescriptorSHA256() != strings.Repeat("a", 64) ||
 		snapshot.RuntimeMicroVMLaunchGrantKeyID() != "clave-publica:orquesta-01" ||
-		snapshot.RuntimeMicroVMLaunchGrantSigningCredentialRef() != "credential:microvm-launch-signing" {
+		snapshot.RuntimeMicroVMLaunchGrantSigningCredentialRef() != "credential:microvm-launch-signing" ||
+		snapshot.RuntimeMicroVMCredentialBrokerSocketPath() != "/run/orquesta/credential-broker.sock" ||
+		snapshot.RuntimeMicroVMCredentialBrokerPeerUID() != 0 ||
+		snapshot.RuntimeMicroVMCredentialBrokerExchangeTimeout() != 30*time.Second ||
+		snapshot.RuntimeMicroVMCredentialBrokerMaxConnections() != 16 {
 		t.Fatal("runtime microVM configuration drifted")
 	}
 
@@ -60,7 +69,7 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 	if err := json.Unmarshal(effective, &document); err != nil {
 		t.Fatalf("decode effective config: %v", err)
 	}
-	var foundPlacement, foundSigningCredential, foundProviderCredential bool
+	var foundPlacement, foundSigningCredential, foundProviderCredential, foundBrokerSocket bool
 	for _, entry := range document.Entries {
 		switch entry.Key {
 		case KeyRuntimeMicroVMPlacementRef:
@@ -78,20 +87,34 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 			if entry.Value != redactedValue || !entry.Sensitive || entry.Source != SourceFile {
 				t.Fatalf("effective provider credential = %+v", entry)
 			}
+		case KeyRuntimeMicroVMCredentialBrokerSocketPath:
+			foundBrokerSocket = true
+			if entry.Value != "/run/orquesta/credential-broker.sock" || entry.Sensitive || entry.Source != SourceFile {
+				t.Fatalf("effective broker socket = %+v", entry)
+			}
 		}
 	}
-	if !foundPlacement || !foundSigningCredential || !foundProviderCredential {
-		t.Fatalf("effective microVM identity missing: placement=%v signing=%v provider=%v",
-			foundPlacement, foundSigningCredential, foundProviderCredential)
+	if !foundPlacement || !foundSigningCredential || !foundProviderCredential || !foundBrokerSocket {
+		t.Fatalf("effective microVM identity missing: placement=%v signing=%v provider=%v broker_socket=%v",
+			foundPlacement, foundSigningCredential, foundProviderCredential, foundBrokerSocket)
 	}
 
 	environmentSnapshot := resolveTOML(t, validRuntimeMicroVMTOML, map[string]string{
-		"ORQUESTA_RUNTIME_MICROVM_PLACEMENT_REF": "placement:codex:environment",
+		"ORQUESTA_RUNTIME_MICROVM_PLACEMENT_REF":                      "placement:codex:environment",
+		"ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_PEER_UID":         "109",
+		"ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_EXCHANGE_TIMEOUT": "5s",
+		"ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_MAX_CONNECTIONS":  "256",
 	})
-	if environmentSnapshot.RuntimeMicroVMPlacementRef() != "placement:codex:environment" {
-		t.Fatal("canonical placement environment alias did not override TOML")
+	if environmentSnapshot.RuntimeMicroVMPlacementRef() != "placement:codex:environment" ||
+		environmentSnapshot.RuntimeMicroVMCredentialBrokerPeerUID() != 109 ||
+		environmentSnapshot.RuntimeMicroVMCredentialBrokerExchangeTimeout() != 5*time.Second ||
+		environmentSnapshot.RuntimeMicroVMCredentialBrokerMaxConnections() != 256 {
+		t.Fatal("canonical microVM environment aliases did not override TOML")
 	}
 	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMPlacementRef, SourceEnv)
+	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMCredentialBrokerPeerUID, SourceEnv)
+	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMCredentialBrokerExchangeTimeout, SourceEnv)
+	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMCredentialBrokerMaxConnections, SourceEnv)
 }
 
 func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
@@ -106,6 +129,10 @@ func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
 		KeyRuntimeMicroVMExpectedProfileDescriptorSHA256,
 		KeyRuntimeMicroVMLaunchGrantKeyID,
 		KeyRuntimeMicroVMLaunchGrantSigningCredentialRef,
+		KeyRuntimeMicroVMCredentialBrokerSocketPath,
+		KeyRuntimeMicroVMCredentialBrokerPeerUID,
+		KeyRuntimeMicroVMCredentialBrokerExchangeTimeout,
+		KeyRuntimeMicroVMCredentialBrokerMaxConnections,
 	}
 	for _, validator := range CrossValidators() {
 		if validator.ID != "runtime_microvm_requirements" {
@@ -127,6 +154,10 @@ func TestV38ProcessIsolationRejectsDeadMicroVMConfiguration(t *testing.T) {
 		defaults.RuntimeMicroVMExpectedProfileDescriptorSHA256() != "" ||
 		defaults.RuntimeMicroVMLaunchGrantKeyID() != "" ||
 		defaults.RuntimeMicroVMLaunchGrantSigningCredentialRef() != "" ||
+		defaults.RuntimeMicroVMCredentialBrokerSocketPath() != "" ||
+		defaults.RuntimeMicroVMCredentialBrokerPeerUID() != 0 ||
+		defaults.RuntimeMicroVMCredentialBrokerExchangeTimeout() != 30*time.Second ||
+		defaults.RuntimeMicroVMCredentialBrokerMaxConnections() != 16 ||
 		defaults.RuntimeCodexCredentialRef() != "" {
 		t.Fatal("process defaults retain microVM configuration")
 	}
@@ -153,6 +184,14 @@ expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 launch_grant_key_id = "clave-publica:orquesta-01"`},
 		{name: "signing credential", toml: `[runtime.microvm]
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"`},
+		{name: "broker socket", toml: `[runtime.microvm]
+credential_broker_socket_path = "/run/orquesta/credential-broker.sock"`},
+		{name: "broker peer uid", toml: `[runtime.microvm]
+credential_broker_peer_uid = 109`},
+		{name: "broker exchange timeout", toml: `[runtime.microvm]
+credential_broker_exchange_timeout = "5s"`},
+		{name: "broker max connections", toml: `[runtime.microvm]
+credential_broker_max_connections = 20`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -186,6 +225,9 @@ func TestV38MicroVMIsolationRejectsIncompleteOrNonCanonicalConfiguration(t *test
 		{name: "empty launch key suffix", old: `launch_grant_key_id = "clave-publica:orquesta-01"`, new: `launch_grant_key_id = "clave-publica:"`},
 		{name: "non canonical launch key", old: `launch_grant_key_id = "clave-publica:orquesta-01"`, new: `launch_grant_key_id = "clave-publica:Orquesta.01"`},
 		{name: "missing signing credential", old: `launch_grant_signing_credential_ref = "credential:microvm-launch-signing"`, new: `launch_grant_signing_credential_ref = ""`},
+		{name: "missing broker socket", old: `credential_broker_socket_path = "/run/orquesta/credential-broker.sock"`, new: `credential_broker_socket_path = ""`},
+		{name: "relative broker socket", old: `credential_broker_socket_path = "/run/orquesta/credential-broker.sock"`, new: `credential_broker_socket_path = "run/orquesta/credential-broker.sock"`},
+		{name: "broker socket equals launcher socket", old: `credential_broker_socket_path = "/run/orquesta/credential-broker.sock"`, new: `credential_broker_socket_path = "/run/orquesta/agente-microvm.sock"`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -195,6 +237,29 @@ func TestV38MicroVMIsolationRejectsIncompleteOrNonCanonicalConfiguration(t *test
 			}
 			_, err := Resolve(ResolveOptions{TOML: []byte(source)})
 			assertConfigError(t, err, ErrorCrossValidation, "")
+		})
+	}
+
+	invalidTypedValues := []struct {
+		name string
+		old  string
+		new  string
+		key  Key
+	}{
+		{name: "broker peer uid below uint32", old: `credential_broker_peer_uid = 0`, new: `credential_broker_peer_uid = -1`, key: KeyRuntimeMicroVMCredentialBrokerPeerUID},
+		{name: "broker peer uid above uint32", old: `credential_broker_peer_uid = 0`, new: `credential_broker_peer_uid = 4294967296`, key: KeyRuntimeMicroVMCredentialBrokerPeerUID},
+		{name: "broker exchange timeout is zero", old: `credential_broker_exchange_timeout = "30s"`, new: `credential_broker_exchange_timeout = "0s"`, key: KeyRuntimeMicroVMCredentialBrokerExchangeTimeout},
+		{name: "broker max connections below boundary", old: `credential_broker_max_connections = 16`, new: `credential_broker_max_connections = 0`, key: KeyRuntimeMicroVMCredentialBrokerMaxConnections},
+		{name: "broker max connections above physical boundary", old: `credential_broker_max_connections = 16`, new: `credential_broker_max_connections = 257`, key: KeyRuntimeMicroVMCredentialBrokerMaxConnections},
+	}
+	for _, test := range invalidTypedValues {
+		t.Run(test.name, func(t *testing.T) {
+			source := strings.Replace(validRuntimeMicroVMTOML, test.old, test.new, 1)
+			if source == validRuntimeMicroVMTOML {
+				t.Fatal("typed test mutation did not apply")
+			}
+			_, err := Resolve(ResolveOptions{TOML: []byte(source)})
+			assertConfigError(t, err, ErrorValueInvalid, test.key)
 		})
 	}
 

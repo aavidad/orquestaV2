@@ -108,6 +108,10 @@ profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"
 expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 launch_grant_key_id = "clave-publica:orquesta-01"
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
+credential_broker_socket_path = "/run/orquesta/credential-broker.sock"
+credential_broker_peer_uid = 0
+credential_broker_exchange_timeout = "30s"
+credential_broker_max_connections = 16
 
 [runtime.codex]
 model = "gpt-5.6"

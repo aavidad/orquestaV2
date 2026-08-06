@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-08-06.1",
-  "registry_hash": "sha256:b0849e90f4a4af9f3c402f6d1029dcb5ec0cd088e003cf8a36d4ecbdc30a9f71",
+  "registry_revision": "2026-08-06.2",
+  "registry_hash": "sha256:d459d4ef770e6df77e13c744e33d1123bcbd4e1d05aa4440aa5720844564967f",
   "aliases": [],
   "cross_validators": [
     {
@@ -43,7 +43,11 @@
         "runtime.microvm.profile_descriptor_path",
         "runtime.microvm.expected_profile_descriptor_sha256",
         "runtime.microvm.launch_grant_key_id",
-        "runtime.microvm.launch_grant_signing_credential_ref"
+        "runtime.microvm.launch_grant_signing_credential_ref",
+        "runtime.microvm.credential_broker_socket_path",
+        "runtime.microvm.credential_broker_peer_uid",
+        "runtime.microvm.credential_broker_exchange_timeout",
+        "runtime.microvm.credential_broker_max_connections"
       ]
     },
     {
@@ -418,6 +422,58 @@
       "validator_ids": [
         "credential_ref"
       ]
+    },
+    {
+      "key": "runtime.microvm.credential_broker_socket_path",
+      "semantic_ref": "orquesta.config.runtime.microvm.credential_broker_socket_path",
+      "label_key": "config.field.runtime.microvm.credential_broker_socket_path",
+      "type": "optional_path",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "runtime.microvm.credential_broker_peer_uid",
+      "semantic_ref": "orquesta.config.runtime.microvm.credential_broker_peer_uid",
+      "label_key": "config.field.runtime.microvm.credential_broker_peer_uid",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    {
+      "key": "runtime.microvm.credential_broker_exchange_timeout",
+      "semantic_ref": "orquesta.config.runtime.microvm.credential_broker_exchange_timeout",
+      "label_key": "config.field.runtime.microvm.credential_broker_exchange_timeout",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "runtime.microvm.credential_broker_max_connections",
+      "semantic_ref": "orquesta.config.runtime.microvm.credential_broker_max_connections",
+      "label_key": "config.field.runtime.microvm.credential_broker_max_connections",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 256
     },
     {
       "key": "runtime.codex.command",

@@ -205,12 +205,18 @@ func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
 	profileDigest, digestOK := values[KeyRuntimeMicroVMExpectedProfileDescriptorSHA256].value.(string)
 	keyID, keyIDOK := values[KeyRuntimeMicroVMLaunchGrantKeyID].value.(string)
 	credentialRef, credentialOK := values[KeyRuntimeMicroVMLaunchGrantSigningCredentialRef].value.(CredentialRef)
+	brokerSocketPath, brokerSocketOK := values[KeyRuntimeMicroVMCredentialBrokerSocketPath].value.(string)
+	brokerPeerUID, brokerPeerUIDOK := values[KeyRuntimeMicroVMCredentialBrokerPeerUID].value.(int64)
+	brokerExchangeTimeout, brokerTimeoutOK := values[KeyRuntimeMicroVMCredentialBrokerExchangeTimeout].value.(time.Duration)
+	brokerMaxConnections, brokerMaxConnectionsOK := values[KeyRuntimeMicroVMCredentialBrokerMaxConnections].value.(int64)
 	if !providerOK || !isolationOK || !modelOK || !providerCredentialOK || !placementOK || !socketOK ||
-		!profileOK || !digestOK || !keyIDOK || !credentialOK {
+		!profileOK || !digestOK || !keyIDOK || !credentialOK || !brokerSocketOK || !brokerPeerUIDOK ||
+		!brokerTimeoutOK || !brokerMaxConnectionsOK {
 		return false
 	}
 	configured := placementRef != "" || socketPath != "" || profilePath != "" || profileDigest != "" ||
-		keyID != "" || credentialRef != ""
+		keyID != "" || credentialRef != "" || brokerSocketPath != "" || brokerPeerUID != 0 ||
+		brokerExchangeTimeout != 30*time.Second || brokerMaxConnections != 16
 	if isolation == "process" {
 		return !configured
 	}
@@ -222,7 +228,9 @@ func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
 		canonicalAbsolutePath(profilePath) &&
 		validBareSHA256(profileDigest) &&
 		validLaunchGrantKeyID(keyID) &&
-		credentialRef != ""
+		credentialRef != "" &&
+		canonicalAbsolutePath(brokerSocketPath) && brokerSocketPath != socketPath &&
+		brokerExchangeTimeout > 0 && brokerMaxConnections > 0
 }
 
 func validProviderModel(value string) bool {
