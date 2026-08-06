@@ -114,6 +114,42 @@ func TestDirectorPlanInitialAndReplanFencesAreAllOrNothing(t *testing.T) {
 	}
 }
 
+func TestPublicPlansCarryExactOptionalEgressPolicyRefIntoApplication(t *testing.T) {
+	dispatcher, api, _ := testDispatcher(t)
+	const policyRef = "egress-policy:codex-controlled-proxy"
+	item := planWorkItem()
+	item["egress_policy_ref"] = policyRef
+	plan := map[string]any{
+		"phases": []any{map[string]any{
+			"ref": "phase-instance:egress", "key": "phase:main", "template_ref": "phase-template:egress",
+		}},
+		"work_items": []any{item},
+	}
+	created := invoke(t, dispatcher, "orquesta.goals.create", "request:egress-create", map[string]any{
+		"statement": "build through controlled egress", "confirm": true, "plan": plan,
+	}, false)
+	if created.Failure != nil {
+		t.Fatalf("create=%+v", created)
+	}
+	if len(api.submissions) != 1 || api.submissions[0].Plan == nil ||
+		len(api.submissions[0].Plan.WorkItems) != 1 ||
+		api.submissions[0].Plan.WorkItems[0].EgressPolicyRef != policyRef {
+		t.Fatalf("submission egress=%+v", api.submissions)
+	}
+
+	proposed := invoke(t, dispatcher, "orquesta.director.plan.propose", "request:egress-propose", map[string]any{
+		"goal_ref": "goal:g", "expected_goal_revision": 1, "expected_plan_generation": 1,
+		"lease_token": "token:t", "lease_fence": 1, "reason": "extend controlled work", "plan": plan,
+	}, false)
+	if proposed.Failure != nil {
+		t.Fatalf("propose=%+v", proposed)
+	}
+	if len(api.proposals) != 1 || len(api.proposals[0].Plan.WorkItems) != 1 ||
+		api.proposals[0].Plan.WorkItems[0].EgressPolicyRef != policyRef {
+		t.Fatalf("proposal egress=%+v", api.proposals)
+	}
+}
+
 func TestCanonicalRegistryHas35CommandsAndPropagatesCouncilContracts(t *testing.T) {
 	dispatcher, api, _ := testDispatcher(t)
 	if got := len(dispatcher.Definitions()); got != 35 {

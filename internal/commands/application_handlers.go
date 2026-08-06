@@ -129,6 +129,7 @@ type workItemInput struct {
 	SkillRefs           []string            `json:"skill_refs,omitempty"`
 	ToolRefs            []string            `json:"tool_refs,omitempty"`
 	CapabilityRefs      []string            `json:"capability_refs,omitempty"`
+	EgressPolicyRef     string              `json:"egress_policy_ref,omitempty"`
 	OutputContract      string              `json:"output_contract"`
 	SecurityCriticality string              `json:"security_criticality,omitempty"`
 	ReasoningEffort     string              `json:"reasoning_effort,omitempty"`
@@ -160,7 +161,8 @@ func applicationPlan(input *planInput) *application.PlanSpec {
 			Parent: item.Parent, HandoffRequired: item.HandoffRequired,
 			Dependencies: append([]string(nil), item.Dependencies...), WriteSet: append([]string(nil), item.WriteSet...),
 			RequiredTests: tests, SkillRefs: append([]string(nil), item.SkillRefs...), ToolRefs: append([]string(nil), item.ToolRefs...),
-			CapabilityRefs: append([]string(nil), item.CapabilityRefs...), OutputContract: goal.OutputContractKind(item.OutputContract),
+			CapabilityRefs: append([]string(nil), item.CapabilityRefs...), EgressPolicyRef: item.EgressPolicyRef,
+			OutputContract:      goal.OutputContractKind(item.OutputContract),
 			SecurityCriticality: governance.SecurityCriticality(item.SecurityCriticality), ReasoningEffort: governance.ReasoningEffort(item.ReasoningEffort),
 			CouncilPolicy: council.Policy(item.CouncilPolicy),
 		})

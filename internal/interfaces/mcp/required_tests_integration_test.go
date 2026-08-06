@@ -23,6 +23,26 @@ func TestMCPPlanCarriesStructuredRequiredTestsIntoGoalView(t *testing.T) {
 	}
 }
 
+func TestMCPPlanSchemasExposeOptionalEgressPolicyRefForCreateAndReplan(t *testing.T) {
+	for _, commandID := range []string{"orquesta.goals.create", "orquesta.director.plan.propose"} {
+		definition := commandDefinitionByID(t, commandID)
+		schema, err := commandInputSchema(definition)
+		if err != nil {
+			t.Fatalf("%s: %v", commandID, err)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(schema, &decoded); err != nil {
+			t.Fatalf("%s: %v", commandID, err)
+		}
+		if !containsJSONKeys(decoded,
+			"properties", "payload", "properties", "plan", "properties", "work_items",
+			"items", "properties", "egress_policy_ref",
+		) {
+			t.Fatalf("MCP schema dropped egress_policy_ref for %s: %s", commandID, schema)
+		}
+	}
+}
+
 func TestApplicationPlanDeepCopiesRequiredTestArguments(t *testing.T) {
 	one := commandDefinitionByID(t, "orquesta.goals.create")
 	want := append([]byte(nil), one.InputSchema...)

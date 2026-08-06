@@ -13,6 +13,7 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	mcpiface "orquesta/internal/interfaces/mcp"
 )
@@ -50,6 +51,29 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load production config: %v", err)
 	}
+	policyRef := snapshot.RuntimeMicroVMEgressPolicyRef()
+	if snapshot.RuntimeIsolation() == "microvm" && policyRef == "" {
+		t.Fatal("real Codex microVM config has no egress policy ref")
+	}
+	var expectedEgress application.EgressPolicyAuthority
+	if policyRef != "" {
+		resolver, err := openBuildEgressPolicyResolver(snapshot)
+		if err != nil || resolver == nil {
+			t.Fatalf("open configured egress policy: resolver=%T err=%v", resolver, err)
+		}
+		requested, err := application.NewEgressPolicyRef(policyRef)
+		if err != nil {
+			t.Fatalf("parse configured egress policy ref: %v", err)
+		}
+		expectedEgress, err = resolver.ResolveEgressPolicy(context.Background(), requested)
+		if err != nil {
+			t.Fatalf("resolve configured egress policy: %v", err)
+		}
+		if expectedEgress.PolicyRef != requested || expectedEgress.CanonicalPayload == "" ||
+			expectedEgress.PayloadSHA256 == "" {
+			t.Fatalf("configured egress authority is incomplete: %+v", expectedEgress)
+		}
+	}
 	runtime, err := Build(context.Background(), Options{ConfigPath: *realCodexConfig, Version: "codex-real-e2e"})
 	if err != nil {
 		t.Fatalf("build production runtime: %v", err)
@@ -86,6 +110,17 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 		"payload": map[string]any{
 			"statement": "Produce un artefacto de texto que contenga exactamente el marcador " + marker + ".",
 			"confirm":   true,
+			"plan": map[string]any{
+				"phases": []any{map[string]any{
+					"ref": "phase-instance:codex-real-e2e:" + suffix,
+					"key": "phase:main", "template_ref": "phase-template:codex-real-e2e",
+				}},
+				"work_items": []any{map[string]any{
+					"key": "work:codex-real-e2e", "objective": "Produce el marcador exacto " + marker + ".",
+					"phase": "phase:main", "role": "role:worker", "dependencies": []any{},
+					"write_set": []any{}, "egress_policy_ref": policyRef, "output_contract": "evidence_bundle",
+				}},
+			},
 		},
 	})
 	var created mcpiface.CommandToolOutput
@@ -134,6 +169,16 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	record, err := runtime.Orchestrator().GetGoal(ctx, testRuntimeAccess(t, runtime), goalRef)
 	if err != nil || len(record.Artifacts) != 1 || len(record.Attestations) != 1 {
 		t.Fatalf("real closure lacks evidence: record=%+v err=%v", record, err)
+	}
+	if len(record.WorkItemAuthorities) != 1 ||
+		record.WorkItemAuthorities[0].EgressPolicy != expectedEgress {
+		t.Fatalf("durable egress authority=%+v want=%+v", record.WorkItemAuthorities, expectedEgress)
+	}
+	if snapshot.RuntimeIsolation() == "microvm" &&
+		(record.WorkItemAuthorities[0].EgressPolicy.PolicyRef.String() != policyRef ||
+			record.WorkItemAuthorities[0].EgressPolicy.CanonicalPayload == "" ||
+			record.WorkItemAuthorities[0].EgressPolicy.PayloadSHA256 == "") {
+		t.Fatalf("microVM durable egress authority is incomplete: %+v", record.WorkItemAuthorities[0])
 	}
 	artifactResult := callMCPTool(t, ctx, session, "orquesta.artifacts.read", map[string]any{
 		"version": "1", "project_ref": snapshot.ProjectDefault(), "request_ref": requestRef + ":artifact",

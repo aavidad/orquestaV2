@@ -11,29 +11,29 @@ import (
 
 type registryUpgradeApplication struct {
 	*fakeApplication
-	seenSubmitRequests map[string]struct{}
-	submitEffects      int
+	seenAmendRequests map[string]struct{}
+	amendEffects      int
 }
 
-func (api *registryUpgradeApplication) Submit(
+func (api *registryUpgradeApplication) Amend(
 	_ context.Context,
 	_ application.Access,
-	request application.SubmitRequest,
-) (application.SubmitResult, error) {
-	api.called("Submit")
-	_, replay := api.seenSubmitRequests[request.RequestRef]
+	request application.AmendRequest,
+) (application.AmendResult, error) {
+	api.called("Amend")
+	_, replay := api.seenAmendRequests[request.RequestRef]
 	if !replay {
-		api.seenSubmitRequests[request.RequestRef] = struct{}{}
-		api.submitEffects++
+		api.seenAmendRequests[request.RequestRef] = struct{}{}
+		api.amendEffects++
 	}
-	return application.SubmitResult{Created: !replay}, nil
+	return application.AmendResult{Created: !replay}, nil
 }
 
 func TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade(t *testing.T) {
 	ctx := context.Background()
 	api := &registryUpgradeApplication{
-		fakeApplication:    newFakeApplication(),
-		seenSubmitRequests: make(map[string]struct{}),
+		fakeApplication:   newFakeApplication(),
+		seenAmendRequests: make(map[string]struct{}),
 	}
 	audit := newMemoryAudit()
 	dispatcher, err := newDispatcher(
@@ -45,11 +45,15 @@ func TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditi
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition := dispatcher.byID["orquesta.goals.create"]
+	definition := dispatcher.byID["orquesta.goals.amend"]
 	invocation := Invocation{
 		CommandID: definition.ID, CommandVersion: definition.Version,
 		RequestRef: "request:historical-registry-upgrade", ProjectRef: "project:test",
-		Principal: testPrincipal(t), Payload: json.RawMessage(`{"statement":"build","confirm":true}`),
+		Principal: testPrincipal(t), Payload: json.RawMessage(
+			`{"source_goal_ref":"goal:source","expected_source_revision":1,` +
+				`"expected_source_spec_hash":"sha256:source","statement":"amend",` +
+				`"reason":"historical replay","confirm":true}`,
+		),
 	}
 	bound, failure := dispatcher.bindAuthority(ctx, definition, invocation)
 	if failure != nil {
@@ -73,13 +77,13 @@ func TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditi
 	if first.Failure != nil || replayed.Failure != nil ||
 		first.AuditRef != historical.Ref || replayed.AuditRef != historical.Ref ||
 		string(first.Data) != string(replayed.Data) ||
-		api.calls["Submit"] != 2 || api.submitEffects != 1 {
+		api.calls["Amend"] != 2 || api.amendEffects != 1 {
 		t.Fatalf("first=%+v replay=%+v calls=%v effects=%d",
-			first, replayed, api.calls, api.submitEffects)
+			first, replayed, api.calls, api.amendEffects)
 	}
 
 	mutated := definition
-	mutated.DescriptionKey = "command.goals.create.semantic-change"
+	mutated.DescriptionKey = "command.goals.amend.semantic-change"
 	semanticChange := admissionRecord(mutated, invocation, bound, payload)
 	if semanticChange.RegistryDigest == historical.RegistryDigest {
 		t.Fatalf("semantic mutation retained historical digest %q", semanticChange.RegistryDigest)

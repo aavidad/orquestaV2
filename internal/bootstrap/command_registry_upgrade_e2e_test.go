@@ -31,10 +31,8 @@ func TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition := bootstrapCommandDefinition(t, "orquesta.goals.create")
-	payload, err := json.Marshal(map[string]any{
-		"statement": "build registry upgrade evidence", "confirm": true,
-	})
+	definition := bootstrapCommandDefinition(t, "orquesta.system.status")
+	payload, err := json.Marshal(map[string]any{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,12 +55,12 @@ func TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite(t *
 		t.Fatalf("first=%+v replay=%+v", first, replayed)
 	}
 	status, err := runtime.orchestrator.Status(ctx, testRuntimeAccess(t, runtime))
-	if err != nil || status.Goals != 1 {
+	if err != nil || status.Goals != 0 {
 		t.Fatalf("status=%+v err=%v", status, err)
 	}
 
 	mutated := definition
-	mutated.DescriptionKey = "command.goals.create.semantic-change"
+	mutated.DescriptionKey = "command.system.status.semantic-change"
 	semanticChange := historical
 	semanticChange.RegistryDigest = bootstrapDefinitionIdentityDigest(t, mutated)
 	if semanticChange.RegistryDigest == historical.RegistryDigest {
