@@ -38,6 +38,18 @@ readonly CODEX_NATIVE_URL="https://registry.npmjs.org/@openai/codex/-/${CODEX_NA
 readonly CODEX_NATIVE_ARCHIVE_SHA512="d16f4c0713e9596d1c4a436aad30cdda347baf3cd3ee834c850639e38ea54f62f0e5ccf9ca10d3724e156bdae3910126f87945ccffdd98431265b5df26c20d9b"
 readonly CODEX_NATIVE_SHA256="cb0a15567e9a60a5820d54b0f6ae86d504dc3805c1eab21a47f70e3eb7b73a40"
 
+readonly CLAUDE_VERSION="2.1.226"
+readonly CLAUDE_ARCHIVE="claude-code-linux-x64-${CLAUDE_VERSION}.tgz"
+readonly CLAUDE_URL="https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/${CLAUDE_ARCHIVE}"
+readonly CLAUDE_ARCHIVE_SHA512="cc376d576b7309f9e0c4a5c92e3e7f5181ed0956bfc80fcbd2f179741c77c35771e6d700f3e025c91a77a9cb1dfe0614ee16c8fe04b93a803b0bc5ea251f58b4"
+readonly CLAUDE_BINARY_SHA256="4e9bec1177ce9690e8bd988b710ac24105e70da428dd094c5adcbbe786a55555"
+
+readonly GEMINI_VERSION="0.54.4"
+readonly GEMINI_ARCHIVE="gemini-cli-${GEMINI_VERSION}.tgz"
+readonly GEMINI_URL="https://registry.npmjs.org/@google/gemini-cli/-/${GEMINI_ARCHIVE}"
+readonly GEMINI_ARCHIVE_SHA512="9bc3e88cbcae57653afc28a75181d50561c829a003c08212ef98b1725dfc3db5fcf9a9dcc8401b4b613333c5b2d94d644fa91f76d0f8611e94f2cd7fff116ccf"
+readonly GEMINI_WRAPPER_SHA256="acb481430057da90627f66569faa12618e82d69043f3320d6ac371e1cbe1b72f"
+
 readonly RUST_VERSION="1.97.1"
 readonly RUST_TOOLCHAIN="${RUST_VERSION}-x86_64-unknown-linux-gnu"
 readonly RUST_MUSL_TARGET="x86_64-unknown-linux-musl"
@@ -59,6 +71,8 @@ readonly GO_ROOT="${TOOLCHAIN_ROOT}/go/${GO_VERSION}"
 readonly NODE_ROOT="${TOOLCHAIN_ROOT}/node/${NODE_VERSION}"
 readonly NPM_ROOT="${TOOLCHAIN_ROOT}/npm/${NPM_VERSION}"
 readonly CODEX_ROOT="${TOOLCHAIN_ROOT}/codex/${CODEX_VERSION}"
+readonly CLAUDE_ROOT="${TOOLCHAIN_ROOT}/claude-code/${CLAUDE_VERSION}"
+readonly GEMINI_ROOT="${TOOLCHAIN_ROOT}/gemini-cli/${GEMINI_VERSION}"
 readonly RUST_ROOT="${TOOLCHAIN_ROOT}/rust/${RUST_VERSION}"
 readonly FIRECRACKER_ROOT="${TOOLCHAIN_ROOT}/firecracker/${FIRECRACKER_VERSION}"
 readonly EVIDENCE_DIR="/var/lib/orquesta/provisioning"
@@ -282,6 +296,36 @@ install_node_npm_codex() {
   ensure_link "$codex_wrapper" /usr/local/bin/codex
 }
 
+install_claude_gemini() {
+  require_real_directory_or_missing "$CLAUDE_ROOT"
+  if [[ ! -d "$CLAUDE_ROOT" ]]; then
+    local claude_archive="$WORK_DIR/$CLAUDE_ARCHIVE"
+    local claude_stage="$WORK_DIR/claude-root"
+    download_checked sha512 "$CLAUDE_ARCHIVE_SHA512" "$CLAUDE_URL" "$claude_archive"
+    install -d -m 0755 "$claude_stage"
+    tar -xzf "$claude_archive" -C "$claude_stage" --strip-components=1
+    publish_directory "$claude_stage" "$CLAUDE_ROOT"
+  fi
+  verify_file_sha256 "$CLAUDE_ROOT/claude" "$CLAUDE_BINARY_SHA256"
+  [[ "$($CLAUDE_ROOT/claude --version)" == "${CLAUDE_VERSION} (Claude Code)" ]] || fail "claude_version_mismatch"
+
+  require_real_directory_or_missing "$GEMINI_ROOT"
+  if [[ ! -d "$GEMINI_ROOT" ]]; then
+    local gemini_archive="$WORK_DIR/$GEMINI_ARCHIVE"
+    local gemini_stage="$WORK_DIR/gemini-root"
+    download_checked sha512 "$GEMINI_ARCHIVE_SHA512" "$GEMINI_URL" "$gemini_archive"
+    install -d -m 0755 "$gemini_stage"
+    tar -xzf "$gemini_archive" -C "$gemini_stage" --strip-components=1
+    publish_directory "$gemini_stage" "$GEMINI_ROOT"
+  fi
+  local gemini_wrapper="$GEMINI_ROOT/bundle/gemini.js"
+  verify_file_sha256 "$gemini_wrapper" "$GEMINI_WRAPPER_SHA256"
+  [[ "$($NODE_ROOT/bin/node "$gemini_wrapper" --version)" == "$GEMINI_VERSION" ]] || fail "gemini_version_mismatch"
+
+  ensure_link "$CLAUDE_ROOT/claude" /usr/local/bin/claude
+  ensure_link "$gemini_wrapper" /usr/local/bin/gemini
+}
+
 rustup_command() {
   env RUSTUP_HOME="$1" CARGO_HOME="$2" "$2/bin/rustup" "${@:3}"
 }
@@ -380,6 +424,8 @@ record_evidence() {
     --arg node "v${NODE_VERSION}" \
     --arg npm "$NPM_VERSION" \
     --arg codex "$CODEX_VERSION" \
+    --arg claude "$CLAUDE_VERSION" \
+    --arg gemini "$GEMINI_VERSION" \
     --arg rust "$RUST_VERSION" \
     --arg rust_target "$RUST_MUSL_TARGET" \
     --arg firecracker "$FIRECRACKER_VERSION" \
@@ -388,10 +434,12 @@ record_evidence() {
     --arg npm_sha "$NPM_ARCHIVE_SHA512" \
     --arg codex_sha "$CODEX_ARCHIVE_SHA512" \
     --arg codex_native_sha "$CODEX_NATIVE_ARCHIVE_SHA512" \
+    --arg claude_sha "$CLAUDE_ARCHIVE_SHA512" \
+    --arg gemini_sha "$GEMINI_ARCHIVE_SHA512" \
     --arg rustup_sha "$RUSTUP_SHA256" \
     --arg rust_manifest_sha "$RUST_MANIFEST_SHA256" \
     --arg firecracker_sha "$FIRECRACKER_ARCHIVE_SHA256" \
-    '{schema:"orquesta_development_server_provision.v1",generated_at:$generated_at,status:$status,host:{os:"ubuntu",version:"26.04",arch:"x86_64",kvm:$kvm},tools:{go:$go,node:$node,npm:$npm,codex:$codex,rust:$rust,rust_target:$rust_target,firecracker:$firecracker,jailer:$firecracker,qemu:$qemu,qemu_img:$qemu_img},source_digests:{go_sha256:$go_sha,node_sha256:$node_sha,npm_sha512:$npm_sha,codex_sha512:$codex_sha,codex_native_sha512:$codex_native_sha,rustup_sha256:$rustup_sha,rust_manifest_sha256:$rust_manifest_sha,firecracker_sha256:$firecracker_sha}}' \
+    '{schema:"orquesta_development_server_provision.v1",generated_at:$generated_at,status:$status,host:{os:"ubuntu",version:"26.04",arch:"x86_64",kvm:$kvm},tools:{go:$go,node:$node,npm:$npm,codex:$codex,claude:$claude,gemini:$gemini,rust:$rust,rust_target:$rust_target,firecracker:$firecracker,jailer:$firecracker,qemu:$qemu,qemu_img:$qemu_img},source_digests:{go_sha256:$go_sha,node_sha256:$node_sha,npm_sha512:$npm_sha,codex_sha512:$codex_sha,codex_native_sha512:$codex_native_sha,claude_sha512:$claude_sha,gemini_sha512:$gemini_sha,rustup_sha256:$rustup_sha,rust_manifest_sha256:$rust_manifest_sha,firecracker_sha256:$firecracker_sha}}' \
     >"$EVIDENCE_TMP"
   chmod 0644 "$EVIDENCE_TMP"
   chown root:root "$EVIDENCE_TMP"
@@ -408,6 +456,7 @@ main() {
   install_apt_packages
   install_go
   install_node_npm_codex
+  install_claude_gemini
   install_rust
   install_firecracker
 
@@ -418,6 +467,8 @@ main() {
   [[ "$(node --version)" == "v${NODE_VERSION}" ]] || fail "active_node_version_mismatch"
   [[ "$(npm --version)" == "$NPM_VERSION" ]] || fail "active_npm_version_mismatch"
   [[ "$(probe_codex_version /usr/local/bin/codex)" == "codex-cli ${CODEX_VERSION}" ]] || fail "active_codex_version_mismatch"
+  [[ "$(claude --version)" == "${CLAUDE_VERSION} (Claude Code)" ]] || fail "active_claude_version_mismatch"
+  [[ "$(gemini --version)" == "$GEMINI_VERSION" ]] || fail "active_gemini_version_mismatch"
   [[ "$(rustc --version | awk '{print $2}')" == "$RUST_VERSION" ]] || fail "active_rust_version_mismatch"
 
   local kvm_state provision_status
