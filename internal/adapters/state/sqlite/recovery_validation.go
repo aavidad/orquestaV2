@@ -120,6 +120,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 			validators = append(validators, validateRecoveryV23WizardGapsOutcomes)
 		}
 		if version >= recoverySchemaV23 {
+			if version >= recoverySchemaV23WizardGapsSnapshot {
+				validators = append(validators, validateRecoveryV23WizardGapsSnapshots)
+			}
 			validators = append(validators, validateRecoveryV23WizardGapsInputs)
 		}
 		if version >= recoverySchemaV38Capacity {
