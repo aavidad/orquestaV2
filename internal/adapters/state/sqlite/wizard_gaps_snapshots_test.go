@@ -21,7 +21,7 @@ func TestWizardGapsSnapshotSQLiteExactReplayAndConflict(t *testing.T) {
 		created.Record.State.Revision(), intake.OriginForm)
 	first, err := service.ApplyWizardGaps(ctx, request)
 	sqliteTestNoError(t, err)
-	if first.EvaluationReplayExact || len(first.EvaluationSnapshot.Bytes) == 0 {
+	if !first.EvaluationReplayExact || len(first.EvaluationSnapshot.Bytes) == 0 {
 		t.Fatalf("first snapshot=%+v exact=%t", first.EvaluationSnapshot, first.EvaluationReplayExact)
 	}
 	var storedRef, storedDigest string
@@ -42,7 +42,7 @@ WHERE input_receipt_ref=?`, first.InputDurability.ReceiptRef).Scan(
 	sqliteTestNoError(t, err)
 	replayed, err := service.ApplyWizardGaps(ctx, request)
 	sqliteTestNoError(t, err)
-	if replayed.Changed || replayed.EvaluationReplayExact ||
+	if replayed.Changed || !replayed.EvaluationReplayExact ||
 		!reflect.DeepEqual(replayed.EvaluationSnapshot, first.EvaluationSnapshot) ||
 		!reflect.DeepEqual(replayed.Evaluation, first.Evaluation) {
 		t.Fatalf("first=%+v replayed=%+v", first, replayed)

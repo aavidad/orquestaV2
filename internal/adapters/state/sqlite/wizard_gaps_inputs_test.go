@@ -31,7 +31,7 @@ func TestWizardGapsSQLiteMutationInputReplaysExactlyAfterRestart(
 	)
 	first, err := service.ApplyWizardGaps(ctx, request)
 	sqliteTestNoError(t, err)
-	if !first.Changed || first.EvaluationReplayExact ||
+	if !first.Changed || !first.EvaluationReplayExact ||
 		first.RequestOutcome.Kind !=
 			application.WizardGapsRequestOutcomeIntakeMutation {
 		t.Fatalf("first=%+v", first)
@@ -79,7 +79,7 @@ func TestWizardGapsSQLiteMutationInputReplaysExactlyAfterRestart(
 	sqliteTestNoError(t, err)
 	replayed, err := service.ApplyWizardGaps(ctx, request)
 	sqliteTestNoError(t, err)
-	if replayed.Changed || replayed.EvaluationReplayExact ||
+	if replayed.Changed || !replayed.EvaluationReplayExact ||
 		replayed.Record.Receipt != first.Record.Receipt ||
 		replayed.RequestOutcome != first.RequestOutcome ||
 		replayed.InputDurability != first.InputDurability ||

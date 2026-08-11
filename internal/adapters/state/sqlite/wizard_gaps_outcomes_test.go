@@ -39,7 +39,7 @@ func TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart(
 	noOp, err := service.ApplyWizardGaps(ctx, noOpRequest)
 	sqliteTestNoError(t, err)
 	if noOp.Changed || !noOp.RequestRefReserved ||
-		noOp.EvaluationReplayExact ||
+		!noOp.EvaluationReplayExact ||
 		noOp.RequestOutcome.Kind !=
 			application.WizardGapsRequestOutcomeNoOp ||
 		noOp.RequestOutcome.ReceiptRef == "" ||
@@ -102,7 +102,7 @@ func TestWizardGapsSQLiteNoOpOutcomeReplaysHistoricalStateAfterRestart(
 	replayed, err := service.ApplyWizardGaps(ctx, noOpRequest)
 	sqliteTestNoError(t, err)
 	if replayed.Changed || !replayed.RequestRefReserved ||
-		replayed.EvaluationReplayExact ||
+		!replayed.EvaluationReplayExact ||
 		replayed.RequestOutcome != noOp.RequestOutcome ||
 		replayed.Record.Receipt != noOp.Record.Receipt ||
 		replayed.InputDurability != noOp.InputDurability ||
