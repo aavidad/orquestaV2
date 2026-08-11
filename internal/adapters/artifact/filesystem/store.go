@@ -19,14 +19,35 @@ const artifactRefPrefix = "artifact:sha256:"
 
 type Store struct {
 	root              *os.Root
+	projectDigest     string
+	namespace         string
 	syncDirectoryFn   func(*os.Root, string) error
 	readVerifyHook    func()
+	readBytesHook     func(int)
 	tempCreateHook    func(string)
 	beforePublishHook func(string)
 }
 
 func Open(rootPath string) (*Store, error) {
 	return openStore(rootPath, (*os.File).Sync)
+}
+
+// OpenForProject binds one store to an opaque project namespace while keeping
+// Open available for local single-project installations. The raw project ref
+// never becomes a filesystem path.
+func OpenForProject(rootPath string, projectRef goal.ProjectRef) (*Store, error) {
+	if projectRef.String() == "" {
+		return nil, artifactError(ports.ArtifactErrorStoreUnavailable, nil)
+	}
+	projectDigest := sha256.Sum256([]byte(projectRef.String()))
+	projectDigestText := hex.EncodeToString(projectDigest[:])
+	store, err := openStore(rootPath, (*os.File).Sync)
+	if err != nil {
+		return nil, err
+	}
+	store.projectDigest = projectDigestText
+	store.namespace = path.Join("projects", projectDigestText)
+	return store, nil
 }
 
 func openStore(rootPath string, rootSyncFn func(*os.File) error) (*Store, error) {
@@ -74,9 +95,18 @@ func (store *Store) Put(ctx context.Context, request ports.PutArtifactRequest) (
 		Ref: ref, Digest: digestText, MediaType: request.MediaType,
 		Size: int64(len(request.Content)),
 	}
-	finalPath := blobPath(digestText)
+	finalPath := store.blobPath(digestText)
 	if err := store.ensureExistingOrWrite(ctx, finalPath, request.Content, digestText); err != nil {
 		return ports.StoredArtifact{}, err
+	}
+	if store.projectDigest != "" {
+		metadata := artifactMetadata{
+			Schema: metadataSchema, ProjectDigest: store.projectDigest, ArtifactDigest: digestText,
+			MediaType: request.MediaType, Size: stored.Size,
+		}
+		if err := store.ensureArtifactMetadata(ctx, digestText, metadata); err != nil {
+			return ports.StoredArtifact{}, err
+		}
 	}
 	return stored, nil
 }
@@ -95,7 +125,23 @@ func (store *Store) Get(ctx context.Context, ref goal.ArtifactRef, expectedSize 
 	if expectedSize < 0 {
 		return ports.ArtifactContent{}, artifactError(ports.ArtifactErrorExpectedSizeInvalid, nil)
 	}
-	filePath := blobPath(digest)
+	filePath := store.blobPath(digest)
+	mediaType := ""
+	if store.projectDigest != "" {
+		metadata, metadataErr := store.readArtifactMetadata(digest, expectedSize)
+		if errors.Is(metadataErr, os.ErrNotExist) {
+			if _, blobErr := store.readVerifiedBlob(filePath, digest, expectedSize); errors.Is(blobErr, os.ErrNotExist) {
+				return ports.ArtifactContent{}, artifactError(ports.ArtifactErrorNotFound, nil)
+			} else if blobErr != nil {
+				return ports.ArtifactContent{}, blobErr
+			}
+			return ports.ArtifactContent{}, artifactError(ports.ArtifactErrorFileChanged, nil)
+		}
+		if metadataErr != nil {
+			return ports.ArtifactContent{}, metadataErr
+		}
+		mediaType = metadata.MediaType
+	}
 	content, err := store.readVerifiedBlob(filePath, digest, expectedSize)
 	if errors.Is(err, os.ErrNotExist) {
 		return ports.ArtifactContent{}, artifactError(ports.ArtifactErrorNotFound, nil)
@@ -104,7 +150,7 @@ func (store *Store) Get(ctx context.Context, ref goal.ArtifactRef, expectedSize 
 		return ports.ArtifactContent{}, err
 	}
 	return ports.ArtifactContent{
-		Ref: ref, Digest: digest, Size: int64(len(content)), Content: content,
+		Ref: ref, Digest: digest, MediaType: mediaType, Size: int64(len(content)), Content: content,
 	}, nil
 }
 
@@ -217,6 +263,10 @@ func digestFromRef(ref goal.ArtifactRef) (string, error) {
 
 func blobPath(digest string) string {
 	return path.Join("sha256", digest[:2], digest+".blob")
+}
+
+func (store *Store) blobPath(digest string) string {
+	return path.Join(store.namespace, blobPath(digest))
 }
 
 var _ application.ArtifactStore = (*Store)(nil)

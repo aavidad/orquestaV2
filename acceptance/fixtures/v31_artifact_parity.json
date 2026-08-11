@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "fixture_id": "v31_artifact_parity_foundation",
+  "contract_id": "AC-V31-POSTGRES-S3-MULTIHOST",
+  "capability_ids": [
+    "OPS-13"
+  ],
+  "status": "implemented_foundation_not_accredited",
+  "suite_path": "internal/adapters/artifact/contracttest",
+  "adapters": [
+    "filesystem_project_aware",
+    "s3_fake_injected"
+  ],
+  "shared_invariants": [
+    "content_addressed_put",
+    "exact_replay_and_media_type_conflict",
+    "content_and_causal_metadata_tamper_rejection",
+    "bounded_read_and_expected_size_validation",
+    "opaque_project_isolation",
+    "restart_recovery",
+    "concurrent_idempotency_and_single_conflict_winner"
+  ],
+  "deferred_gates": [
+    "real_s3_compatible_backend",
+    "real_s3_compatible_backend_receipt",
+    "postgres_s3_multihost_e2e",
+    "sealed_candidate_receipt"
+  ]
+}

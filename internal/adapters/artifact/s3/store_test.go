@@ -211,11 +211,12 @@ type memoryClient struct {
 	failBeforeWrite     error
 	returnNilOpen       bool
 	headSizeOverride    *int64
+	headSizeByKey       map[string]int64
 	lastRead            int64
 }
 
 func newMemoryClient() *memoryClient {
-	return &memoryClient{objects: make(map[string]memoryObject)}
+	return &memoryClient{objects: make(map[string]memoryObject), headSizeByKey: make(map[string]int64)}
 }
 
 func (client *memoryClient) PutIfAbsent(ctx context.Context, request PutObjectRequest) error {
@@ -258,7 +259,9 @@ func (client *memoryClient) Head(ctx context.Context, locator ObjectLocator) (Ob
 		return ObjectInfo{}, ErrObjectNotFound
 	}
 	size := int64(len(object.content))
-	if client.headSizeOverride != nil {
+	if override, found := client.headSizeByKey[memoryKey(locator)]; found {
+		size = override
+	} else if client.headSizeOverride != nil {
 		size = *client.headSizeOverride
 	}
 	return ObjectInfo{Size: size, Metadata: object.metadata}, nil

@@ -231,8 +231,14 @@ func (store *Store) readVerifiedBlob(filePath, digest string, expectedSize int64
 		}
 		return nil, artifactError(ports.ArtifactErrorIO, nil)
 	}
-	if !privateFileValid(before, expectedSize, os.Geteuid()) {
+	if !privateFileValid(before, before.Size(), os.Geteuid()) {
 		return nil, artifactError(ports.ArtifactErrorFileInvalid, nil)
+	}
+	if before.Size() != expectedSize {
+		if store.projectDigest == "" {
+			return nil, artifactError(ports.ArtifactErrorFileInvalid, nil)
+		}
+		return nil, artifactError(ports.ArtifactErrorSizeMismatch, nil)
 	}
 	file, err := store.root.OpenFile(filePath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
@@ -246,7 +252,11 @@ func (store *Store) readVerifiedBlob(filePath, digest string, expectedSize int64
 	if limit < math.MaxInt64 {
 		limit++
 	}
-	content, err := io.ReadAll(io.LimitReader(file, limit))
+	reader := io.Reader(file)
+	if store.readBytesHook != nil {
+		reader = artifactObservedReader{reader: reader, observe: store.readBytesHook}
+	}
+	content, err := io.ReadAll(io.LimitReader(reader, limit))
 	if err != nil {
 		return nil, artifactError(ports.ArtifactErrorIO, nil)
 	}
@@ -261,6 +271,56 @@ func (store *Store) readVerifiedBlob(filePath, digest string, expectedSize int64
 		store.readVerifyHook()
 	}
 	if !privateFileIsCurrent(store.root, filePath, file, before, expectedSize) {
+		return nil, artifactError(ports.ArtifactErrorFileChanged, nil)
+	}
+	return content, nil
+}
+
+type artifactObservedReader struct {
+	reader  io.Reader
+	observe func(int)
+}
+
+func (reader artifactObservedReader) Read(buffer []byte) (int, error) {
+	count, err := reader.reader.Read(buffer)
+	reader.observe(count)
+	return count, err
+}
+
+func (store *Store) readPrivateFileBounded(filePath string, maximumSize int64) ([]byte, error) {
+	before, err := store.root.Lstat(filePath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		return nil, artifactError(ports.ArtifactErrorIO, nil)
+	}
+	if maximumSize < 0 || !privateFileValid(before, before.Size(), os.Geteuid()) {
+		return nil, artifactError(ports.ArtifactErrorFileInvalid, nil)
+	}
+	if before.Size() > maximumSize {
+		return nil, artifactError(ports.ArtifactErrorSizeMismatch, nil)
+	}
+	file, err := store.root.OpenFile(filePath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, artifactError(ports.ArtifactErrorFileChanged, nil)
+	}
+	defer file.Close()
+	if !privateFileIsCurrent(store.root, filePath, file, before, before.Size()) {
+		return nil, artifactError(ports.ArtifactErrorFileChanged, nil)
+	}
+	limit := maximumSize
+	if limit < math.MaxInt64 {
+		limit++
+	}
+	content, err := io.ReadAll(io.LimitReader(file, limit))
+	if err != nil {
+		return nil, artifactError(ports.ArtifactErrorIO, err)
+	}
+	if int64(len(content)) > maximumSize {
+		return nil, artifactError(ports.ArtifactErrorSizeMismatch, nil)
+	}
+	if !privateFileIsCurrent(store.root, filePath, file, before, int64(len(content))) {
 		return nil, artifactError(ports.ArtifactErrorFileChanged, nil)
 	}
 	return content, nil

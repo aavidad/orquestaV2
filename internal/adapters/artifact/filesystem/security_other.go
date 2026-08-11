@@ -36,6 +36,10 @@ func (store *Store) readVerifiedBlob(string, string, int64) ([]byte, error) {
 	return nil, unsupportedFilesystemError()
 }
 
+func (store *Store) readPrivateFileBounded(string, int64) ([]byte, error) {
+	return nil, unsupportedFilesystemError()
+}
+
 func (*Store) publishNoReplace(string, string) (bool, error) {
 	return false, unsupportedFilesystemError()
 }
