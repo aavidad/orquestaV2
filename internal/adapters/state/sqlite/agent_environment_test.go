@@ -2,7 +2,6 @@ package sqlite
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,7 +13,7 @@ import (
 	"orquesta/internal/ports"
 )
 
-func TestPreservacionEntornoConManifestFisicoFallaCerradoHastaMigracion(t *testing.T) {
+func TestPreservacionEntornoConManifestFisicoEsDurableEIdempotente(t *testing.T) {
 	ctx := context.Background()
 	sistema := newSQLiteV15System(t, 2)
 	sistema.external.requierePreservacion = true
@@ -52,38 +51,36 @@ func TestPreservacionEntornoConManifestFisicoFallaCerradoHastaMigracion(t *testi
 	comprobante.ManifiestoFisicoRef = "physical-manifest:a06"
 	comprobante.ManifiestoFisicoDigest = strings.Repeat("e", 64)
 
-	assertRechazoManifest := func(repository *Repository) {
-		t.Helper()
-		guardado, creadoAhora, registerErr := repository.RegistrarPreservacionEntornoAgente(ctx, comprobante)
-		var stateErr *application.StateError
-		if creadoAhora || !reflect.DeepEqual(guardado, application.ComprobantePreservacionEntornoAgente{}) ||
-			!errors.As(registerErr, &stateErr) || stateErr.Code != application.StateInvalid ||
-			stateErr.Cause == nil || stateErr.Cause.Error() != agentEnvironmentPhysicalManifestMigrationRequired {
-			t.Fatalf("writer B12 no falló cerrado: creado=%v got=%+v err=%v cause=%v",
-				creadoAhora, guardado, registerErr, stateErr)
-		}
+	persistido, creadoAhora, err := sistema.repository.RegistrarPreservacionEntornoAgente(ctx, comprobante)
+	if err != nil || !creadoAhora || !reflect.DeepEqual(persistido, comprobante) {
+		t.Fatalf("manifest receipt persistido creado=%v got=%+v err=%v", creadoAhora, persistido, err)
 	}
-	assertSinFilas := func(repository *Repository) {
-		t.Helper()
-		var filas int
-		if countErr := repository.db.QueryRow(`SELECT COUNT(*) FROM agent_environment_receipts`).Scan(&filas); countErr != nil || filas != 0 {
-			t.Fatalf("rechazo mutó receipts: filas=%d err=%v", filas, countErr)
-		}
+	repetido, creadoAhora, err := sistema.repository.RegistrarPreservacionEntornoAgente(ctx, comprobante)
+	if err != nil || creadoAhora || !reflect.DeepEqual(repetido, comprobante) {
+		t.Fatalf("manifest receipt repetido creado=%v got=%+v err=%v", creadoAhora, repetido, err)
 	}
-
-	assertRechazoManifest(sistema.repository)
-	assertSinFilas(sistema.repository)
 	sqliteTestNoError(t, sistema.repository.Close())
 	reiniciado := openSQLiteV15Repository(t, sistema.path, sistema.clock.Now)
-	assertSinFilas(reiniciado)
-	assertRechazoManifest(reiniciado)
-	assertSinFilas(reiniciado)
-
-	legacy := comprobante
-	legacy.ManifiestoFisicoRef, legacy.ManifiestoFisicoDigest = "", ""
-	persistido, creadoAhora, err := reiniciado.RegistrarPreservacionEntornoAgente(ctx, legacy)
-	if err != nil || !creadoAhora || !reflect.DeepEqual(persistido, legacy) {
-		t.Fatalf("writer legacy vacío cambió: creado=%v got=%+v err=%v", creadoAhora, persistido, err)
+	recuperado, creadoAhora, err := reiniciado.RegistrarPreservacionEntornoAgente(ctx, comprobante)
+	if err != nil || creadoAhora || !reflect.DeepEqual(recuperado, comprobante) {
+		t.Fatalf("manifest receipt tras reinicio creado=%v got=%+v err=%v", creadoAhora, recuperado, err)
+	}
+	connection, err := reiniciado.db.Conn(ctx)
+	sqliteTestNoError(t, err)
+	defer connection.Close()
+	_, err = connection.ExecContext(ctx, `DROP TRIGGER agent_environment_receipts_immutable_update`)
+	sqliteTestNoError(t, err)
+	_, err = connection.ExecContext(ctx, `PRAGMA ignore_check_constraints=ON`)
+	sqliteTestNoError(t, err)
+	_, err = connection.ExecContext(ctx, `
+UPDATE agent_environment_receipts SET physical_manifest_digest=NULL WHERE ref=?`, comprobante.Ref)
+	sqliteTestNoError(t, err)
+	_, err = connection.ExecContext(ctx, `PRAGMA ignore_check_constraints=OFF`)
+	sqliteTestNoError(t, err)
+	if _, _, err := leerPreservacionEntorno(
+		ctx, reiniciado.db, consultaPreservacionEntorno+` WHERE ref=?`, comprobante.Ref,
+	); err == nil || !strings.Contains(sqliteTestErrorChain(err), "sqlite.agent_environment_receipt_corrupt") {
+		t.Fatalf("manifest físico parcial se degradó a legacy: %s", sqliteTestErrorChain(err))
 	}
 }
 

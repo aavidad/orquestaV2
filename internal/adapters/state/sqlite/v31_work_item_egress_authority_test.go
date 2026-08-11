@@ -154,13 +154,15 @@ func TestV31MigrationKeepsV30AuthorityAsExplicitNoEgress(t *testing.T) {
 	sqliteTestNoError(t, system.repository.Close())
 	database := openFastV18MigrationFixture(t, system.path)
 	mustV10Exec(t, database, `
+ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_digest;
+ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_ref;
 DROP TABLE microvm_host_launch_authorities;
 DROP INDEX effect_attempts_microvm_host_launch_scope_idx;
 DROP TRIGGER work_item_authorities_egress_shape_guard;
 ALTER TABLE work_item_authorities DROP COLUMN egress_policy_canonical_payload;
 ALTER TABLE work_item_authorities DROP COLUMN egress_policy_payload_sha256;
 ALTER TABLE work_item_authorities DROP COLUMN egress_policy_ref;
-DELETE FROM schema_migrations WHERE version IN (31,32);
+DELETE FROM schema_migrations WHERE version IN (31,32,33,34);
 PRAGMA user_version=30`)
 	sqliteTestNoError(t, database.Close())
 

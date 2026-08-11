@@ -661,7 +661,9 @@ WHERE ref=?`,
 		"action_consumption_effect_receipt_guard", "effect_receipts_causal_guard")
 	mustV10Exec(
 		t, system.repository.db,
-		`DROP TABLE agent_placement_bindings; DROP TABLE agent_quota_observations;
+		`ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_digest;
+ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_ref;
+DROP TABLE agent_placement_bindings; DROP TABLE agent_quota_observations;
 DROP TABLE agent_capacity_transitions; DROP TABLE agent_capacity_reservations;
 DROP TABLE agent_capacity_observations; DROP TABLE agent_environment_receipts;
 DROP TABLE microvm_host_launch_authorities;
@@ -689,9 +691,9 @@ DROP TABLE wizard_gaps_input_receipts`,
 	mustV10Exec(
 		t,
 		system.repository.db,
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		recoverySchemaV23, recoverySchemaV38Physical, recoverySchemaV38Capacity, recoverySchemaV38Claim, recoverySchemaV38Environment, recoverySchemaV38EnvironmentGate, recoverySchemaV38AttemptLease, recoverySchemaV38RecoveryClaim, recoverySchemaV38PreservationRatchet, recoverySchemaV38RecoveryRequeue,
-		recoverySchemaV38EgressAuthority, recoverySchemaV38MicroVMHostLaunch, recoverySchemaV38MicroVMHostSession,
+		recoverySchemaV38EgressAuthority, recoverySchemaV38MicroVMHostLaunch, recoverySchemaV38MicroVMHostSession, recoverySchemaV38PhysicalManifest,
 	)
 	mustV10Exec(
 		t,

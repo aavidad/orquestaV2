@@ -105,7 +105,7 @@ func TestV33MigrationPreservesValidV32Authority(t *testing.T) {
 		`SELECT COUNT(*) FROM schema_migrations WHERE version=?`,
 		recoverySchemaV38MicroVMHostSession,
 	).Scan(&receipt))
-	if version != recoverySchemaV38MicroVMHostSession || receipt != 1 {
+	if version != recoverySchemaLatest || receipt != 1 {
 		t.Fatalf("migrated version=%d receipt=%d", version, receipt)
 	}
 }
@@ -209,6 +209,12 @@ func downgradeV33MicroVMHostSessionToCanonicalV32(t *testing.T, database *sql.DB
 		t.Fatal(err)
 	}
 	defer transaction.Rollback()
+	if _, err := transaction.Exec(`ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_digest`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := transaction.Exec(`ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_ref`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := transaction.Exec(`DROP TRIGGER microvm_host_launch_authorities_causal_insert`); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +222,8 @@ func downgradeV33MicroVMHostSessionToCanonicalV32(t *testing.T, database *sql.DB
 		t.Fatal(err)
 	}
 	if _, err := transaction.Exec(
-		`DELETE FROM schema_migrations WHERE version=?`, recoverySchemaV38MicroVMHostSession,
+		`DELETE FROM schema_migrations WHERE version IN (?,?)`,
+		recoverySchemaV38MicroVMHostSession, recoverySchemaV38PhysicalManifest,
 	); err != nil {
 		t.Fatal(err)
 	}

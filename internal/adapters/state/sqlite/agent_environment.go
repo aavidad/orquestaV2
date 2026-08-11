@@ -12,20 +12,12 @@ import (
 	"orquesta/internal/ports"
 )
 
-const consultaPreservacionEntorno = `SELECT ref,idempotency_key,project_ref,goal_ref,work_item_ref,execution_ref,workspace_ref,workspace_binding_digest,base_oid,object_format,change_set_ref,change_digest,state,execution_attempt,external_ref,fence,bundle_ref,bundle_digest,inventory_ref,inventory_digest,configuration_digest,rootfs_digest,seal_digest,provider_receipt_ref,sealed_at,preserved_at,recorded_at FROM agent_environment_receipts`
-
-const agentEnvironmentPhysicalManifestMigrationRequired = "sqlite.agent_environment_physical_manifest_migration_required"
+const consultaPreservacionEntorno = `SELECT ref,idempotency_key,project_ref,goal_ref,work_item_ref,execution_ref,workspace_ref,workspace_binding_digest,base_oid,object_format,change_set_ref,change_digest,state,execution_attempt,external_ref,fence,bundle_ref,bundle_digest,inventory_ref,inventory_digest,configuration_digest,rootfs_digest,seal_digest,provider_receipt_ref,sealed_at,preserved_at,recorded_at,physical_manifest_ref,physical_manifest_digest FROM agent_environment_receipts`
+const consultaPreservacionEntornoV25 = `SELECT ref,idempotency_key,project_ref,goal_ref,work_item_ref,execution_ref,workspace_ref,workspace_binding_digest,base_oid,object_format,change_set_ref,change_digest,state,execution_attempt,external_ref,fence,bundle_ref,bundle_digest,inventory_ref,inventory_digest,configuration_digest,rootfs_digest,seal_digest,provider_receipt_ref,sealed_at,preserved_at,recorded_at,NULL,NULL FROM agent_environment_receipts`
 
 func (r *Repository) RegistrarPreservacionEntornoAgente(ctx context.Context, comprobante application.ComprobantePreservacionEntornoAgente) (application.ComprobantePreservacionEntornoAgente, bool, error) {
 	comprobante.Resultado.SelladoEn, comprobante.Resultado.PreservadoEn = comprobante.Resultado.SelladoEn.Round(0).UTC(), comprobante.Resultado.PreservadoEn.Round(0).UTC()
 	comprobante.RegistradoEn = comprobante.RegistradoEn.Round(0).UTC()
-	// B12 cannot persist the physical-manifest pair losslessly before schema
-	// migration 034. Fail before opening a transaction; never report a durable
-	// lifecycle preservation while silently dropping its physical binding.
-	if comprobante.ManifiestoFisicoRef != "" || comprobante.ManifiestoFisicoDigest != "" {
-		return application.ComprobantePreservacionEntornoAgente{}, false,
-			invalid(errors.New(agentEnvironmentPhysicalManifestMigrationRequired))
-	}
 	if application.ValidarComprobantePreservacionEntornoAgente(comprobante) != nil {
 		return application.ComprobantePreservacionEntornoAgente{}, false, invalid(errors.New("sqlite.agent_environment_receipt_invalid"))
 	}
@@ -54,8 +46,10 @@ func (r *Repository) RegistrarPreservacionEntornoAgente(ctx context.Context, com
 	resultado := comprobante.Resultado
 	cambio := sql.NullString{String: comprobante.CambioRef.String(), Valid: comprobante.CambioRef.String() != ""}
 	digestCambio := sql.NullString{String: comprobante.DigestCambio, Valid: comprobante.DigestCambio != ""}
-	_, err = tx.ExecContext(ctx, `INSERT INTO agent_environment_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		comprobante.Ref, comprobante.ClaveIdempotencia, comprobante.ProyectoRef.String(), comprobante.ObjetivoRef.String(), comprobante.ItemRef.String(), comprobante.EjecucionRef.String(), comprobante.EspacioTrabajoRef.String(), comprobante.DigestBindingEspacio, comprobante.BaseOID, string(comprobante.FormatoObjeto), cambio, digestCambio, string(resultado.Estado), resultado.IntentoEjecucion, resultado.IdentidadExterna, resultado.Cerca, resultado.PaqueteRef.String(), resultado.PaqueteDigest, resultado.InventarioRef.String(), resultado.InventarioDigest, resultado.ConfiguracionDigest, resultado.RootFSDigest, resultado.SelloDigest, resultado.ComprobanteRef, requiredTime(resultado.SelladoEn), requiredTime(resultado.PreservadoEn), requiredTime(comprobante.RegistradoEn))
+	manifiestoRef := sql.NullString{String: comprobante.ManifiestoFisicoRef, Valid: comprobante.ManifiestoFisicoRef != ""}
+	manifiestoDigest := sql.NullString{String: comprobante.ManifiestoFisicoDigest, Valid: comprobante.ManifiestoFisicoDigest != ""}
+	_, err = tx.ExecContext(ctx, `INSERT INTO agent_environment_receipts(ref,idempotency_key,project_ref,goal_ref,work_item_ref,execution_ref,workspace_ref,workspace_binding_digest,base_oid,object_format,change_set_ref,change_digest,state,execution_attempt,external_ref,fence,bundle_ref,bundle_digest,inventory_ref,inventory_digest,configuration_digest,rootfs_digest,seal_digest,provider_receipt_ref,sealed_at,preserved_at,recorded_at,physical_manifest_ref,physical_manifest_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		comprobante.Ref, comprobante.ClaveIdempotencia, comprobante.ProyectoRef.String(), comprobante.ObjetivoRef.String(), comprobante.ItemRef.String(), comprobante.EjecucionRef.String(), comprobante.EspacioTrabajoRef.String(), comprobante.DigestBindingEspacio, comprobante.BaseOID, string(comprobante.FormatoObjeto), cambio, digestCambio, string(resultado.Estado), resultado.IntentoEjecucion, resultado.IdentidadExterna, resultado.Cerca, resultado.PaqueteRef.String(), resultado.PaqueteDigest, resultado.InventarioRef.String(), resultado.InventarioDigest, resultado.ConfiguracionDigest, resultado.RootFSDigest, resultado.SelloDigest, resultado.ComprobanteRef, requiredTime(resultado.SelladoEn), requiredTime(resultado.PreservadoEn), requiredTime(comprobante.RegistradoEn), manifiestoRef, manifiestoDigest)
 	if err != nil {
 		return application.ComprobantePreservacionEntornoAgente{}, false, mapDatabaseError(err)
 	}
@@ -74,12 +68,20 @@ func leerPreservacionEntorno(ctx context.Context, source queryer, consulta strin
 }
 
 func validarRecuperacionPreservacionEntorno(ctx context.Context, tx *sql.Tx) error {
+	consulta := consultaPreservacionEntorno
+	conManifiesto, err := sqliteTableHasColumn(ctx, tx, "agent_environment_receipts", "physical_manifest_ref")
+	if err != nil {
+		return err
+	}
+	if !conManifiesto {
+		consulta = consultaPreservacionEntornoV25
+	}
 	refs, err := readSingleColumn(ctx, tx, `SELECT ref FROM agent_environment_receipts ORDER BY ref`)
 	if err != nil {
 		return err
 	}
 	for _, ref := range refs {
-		comprobante, encontrado, readErr := leerPreservacionEntorno(ctx, tx, consultaPreservacionEntorno+` WHERE ref=?`, ref)
+		comprobante, encontrado, readErr := leerPreservacionEntorno(ctx, tx, consulta+` WHERE ref=?`, ref)
 		if readErr != nil || !encontrado {
 			return errors.New("sqlite.recovery_agent_environment_receipt_invalid")
 		}
@@ -105,10 +107,10 @@ type escanerFila interface{ Scan(...any) error }
 func escanearPreservacionEntorno(fila escanerFila) (application.ComprobantePreservacionEntornoAgente, error) {
 	var c application.ComprobantePreservacionEntornoAgente
 	var proyecto, objetivo, item, ejecucion, espacio, paquete, inventario string
-	var cambio, digestCambio sql.NullString
+	var cambio, digestCambio, manifiestoRef, manifiestoDigest sql.NullString
 	var intento, cerca, sellado, preservado, registrado int64
 	r := &c.Resultado
-	err := fila.Scan(&c.Ref, &c.ClaveIdempotencia, &proyecto, &objetivo, &item, &ejecucion, &espacio, &c.DigestBindingEspacio, &c.BaseOID, &c.FormatoObjeto, &cambio, &digestCambio, &r.Estado, &intento, &r.IdentidadExterna, &cerca, &paquete, &r.PaqueteDigest, &inventario, &r.InventarioDigest, &r.ConfiguracionDigest, &r.RootFSDigest, &r.SelloDigest, &r.ComprobanteRef, &sellado, &preservado, &registrado)
+	err := fila.Scan(&c.Ref, &c.ClaveIdempotencia, &proyecto, &objetivo, &item, &ejecucion, &espacio, &c.DigestBindingEspacio, &c.BaseOID, &c.FormatoObjeto, &cambio, &digestCambio, &r.Estado, &intento, &r.IdentidadExterna, &cerca, &paquete, &r.PaqueteDigest, &inventario, &r.InventarioDigest, &r.ConfiguracionDigest, &r.RootFSDigest, &r.SelloDigest, &r.ComprobanteRef, &sellado, &preservado, &registrado, &manifiestoRef, &manifiestoDigest)
 	if err != nil {
 		return c, mapDatabaseError(err)
 	}
@@ -138,6 +140,13 @@ func escanearPreservacionEntorno(fila escanerFila) (application.ComprobantePrese
 	}
 	if refErr == nil {
 		r.InventarioRef, refErr = goal.NewArtifactRef(inventario)
+	}
+	if refErr == nil {
+		if manifiestoRef.Valid != manifiestoDigest.Valid {
+			refErr = errors.New("sqlite.agent_environment_physical_manifest_partial")
+		} else if manifiestoRef.Valid {
+			c.ManifiestoFisicoRef, c.ManifiestoFisicoDigest = manifiestoRef.String, manifiestoDigest.String
+		}
 	}
 	r.IntentoEjecucion, r.Cerca = uint64(intento), uint64(cerca)
 	r.SelladoEn, r.PreservadoEn, c.RegistradoEn = time.Unix(0, sellado).UTC(), time.Unix(0, preservado).UTC(), time.Unix(0, registrado).UTC()
