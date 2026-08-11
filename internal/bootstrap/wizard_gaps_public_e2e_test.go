@@ -63,7 +63,7 @@ func TestV23WizardGapsNoOpReplayIsExactAfterLaterMutationAndRestart(
 		noOpView.RequestOutcome.Kind != "wizard_gaps_noop" ||
 		noOpView.RequestOutcome.ReceiptRef == "" ||
 		noOpView.RequestOutcome.ReceiptRef == noOpView.Intake.ReceiptRef ||
-		noOpView.EvaluationReplayExact {
+		!noOpView.EvaluationReplayExact {
 		t.Fatalf("no-op=%+v seed=%+v", noOpView, seedView)
 	}
 	later := dispatchV23IntakeCommand(
@@ -101,7 +101,7 @@ func TestV23WizardGapsNoOpReplayIsExactAfterLaterMutationAndRestart(
 		replayedView.Intake.ReceiptRef != noOpView.Intake.ReceiptRef ||
 		!replayedView.RequestRefReserved ||
 		replayedView.RequestOutcome != noOpView.RequestOutcome ||
-		replayedView.EvaluationReplayExact {
+		!replayedView.EvaluationReplayExact {
 		t.Fatalf("replayed=%+v no_op=%+v", replayed, noOp)
 	}
 }
@@ -336,7 +336,7 @@ func assertV23WizardGapsPublicResult(
 		output.Evaluation.SchemaVersion != gaps.SchemaVersion ||
 		len(output.Evaluation.Issues) == 0 ||
 		len(output.Evaluation.Questions) == 0 ||
-		output.EvaluationReplayExact ||
+		!output.EvaluationReplayExact ||
 		!output.RequestRefReserved ||
 		output.RequestOutcome.Kind != "intake_mutation" ||
 		output.RequestOutcome.ReceiptRef != output.Intake.ReceiptRef ||
