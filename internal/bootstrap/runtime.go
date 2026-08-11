@@ -744,9 +744,16 @@ func abrirControladoresCuota(
 	espera, cancelar := context.WithTimeout(ctx, setup.snapshot.RuntimeCapacityObservationTimeout())
 	defer cancelar()
 	for _, controlador := range controladores {
-		if err := controlador.EsperarInicial(espera); err != nil {
+		initialErr := controlador.EsperarInicial(espera)
+		if ctxErr := ctx.Err(); ctxErr != nil {
 			_ = cerrarControladoresCuota(controladores, setup.snapshot.ServerShutdownTimeout())
-			return nil, err
+			return nil, ctxErr
+		}
+		if initialErr != nil {
+			// An absent initial observation keeps launch admission fail-closed in
+			// application, but it must not take down the control plane. Keeping
+			// the controller alive also preserves its reconnect loop.
+			continue
 		}
 	}
 	return controladores, nil
