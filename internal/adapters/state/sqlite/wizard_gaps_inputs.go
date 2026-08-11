@@ -227,6 +227,12 @@ WHERE actor_ref = ? AND project_ref = ? AND request_ref = ?`,
 			errors.New("sqlite.wizard_gaps_input_replay_conflict"),
 		)
 	}
+	receipt.ResultSnapshot, err = readWizardGapsResultSnapshot(
+		ctx, source, *receipt,
+	)
+	if err != nil {
+		return application.WizardGapsInputRecord{}, false, err
+	}
 	record.SourceRecord, err = readIntakeRecordByReceipt(
 		ctx, source, receipt.SourceIntakeReceiptRef,
 	)
@@ -303,7 +309,10 @@ INSERT INTO wizard_gaps_input_receipts(
 		receipt.EvaluatorIdentity.SemanticDigest,
 		receipt.AuthorizationReceiptRef,
 	)
-	return mapDatabaseError(err)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	return insertWizardGapsResultSnapshot(ctx, transaction, receipt)
 }
 
 func encodeWizardGapsInput(
