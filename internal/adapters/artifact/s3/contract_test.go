@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"orquesta/internal/adapters/artifact/contracttest"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
+	"orquesta/internal/testsupport/artifactcontract"
 )
 
 func TestStorePassesSharedArtifactContractWithInjectedFake(t *testing.T) {
 	backend := &s3ContractBackend{client: newMemoryClient()}
-	contracttest.Run(t, contracttest.Backend{
+	artifactcontract.Run(t, artifactcontract.Backend{
 		Open:                   backend.open,
 		LogicalObjectCount:     backend.logicalObjectCount,
 		TamperContent:          backend.tamperContent,
@@ -26,7 +26,7 @@ func TestStorePassesSharedArtifactContractWithInjectedFake(t *testing.T) {
 
 type s3ContractBackend struct{ client *memoryClient }
 
-func (backend *s3ContractBackend) open(t testing.TB, project goal.ProjectRef) contracttest.Handle {
+func (backend *s3ContractBackend) open(t testing.TB, project goal.ProjectRef) artifactcontract.Handle {
 	t.Helper()
 	store, err := New(backend.client, Options{
 		Bucket: "contract-artifacts", ProjectRef: project, MaxObjectBytes: 8192,
@@ -35,20 +35,20 @@ func (backend *s3ContractBackend) open(t testing.TB, project goal.ProjectRef) co
 	if err != nil {
 		t.Fatal(err)
 	}
-	return contracttest.Handle{Store: store}
+	return artifactcontract.Handle{Store: store}
 }
 
 func (backend *s3ContractBackend) logicalObjectCount(testing.TB) int {
 	return backend.client.objectCount()
 }
 
-func (backend *s3ContractBackend) tamperContent(t testing.TB, handle contracttest.Handle, stored ports.StoredArtifact, content []byte) {
+func (backend *s3ContractBackend) tamperContent(t testing.TB, handle artifactcontract.Handle, stored ports.StoredArtifact, content []byte) {
 	t.Helper()
 	store := handle.Store.(*Store)
 	backend.client.tamperContent(store.locator(stored.Digest), content)
 }
 
-func (backend *s3ContractBackend) tamperMetadata(t testing.TB, handle contracttest.Handle, stored ports.StoredArtifact) {
+func (backend *s3ContractBackend) tamperMetadata(t testing.TB, handle artifactcontract.Handle, stored ports.StoredArtifact) {
 	t.Helper()
 	store := handle.Store.(*Store)
 	key := memoryKey(store.locator(stored.Digest))
@@ -62,7 +62,7 @@ func (backend *s3ContractBackend) tamperMetadata(t testing.TB, handle contractte
 	backend.client.objects[key] = object
 }
 
-func (backend *s3ContractBackend) tamperOversizedContent(t testing.TB, handle contracttest.Handle, stored ports.StoredArtifact, content []byte) {
+func (backend *s3ContractBackend) tamperOversizedContent(t testing.TB, handle artifactcontract.Handle, stored ports.StoredArtifact, content []byte) {
 	t.Helper()
 	store := handle.Store.(*Store)
 	locator := store.locator(stored.Digest)

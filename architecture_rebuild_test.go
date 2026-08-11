@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	rebuildArchitectureEnvLoader         = "internal/config/env_loader.go"
-	rebuildArchitectureLauncherContract  = "orquesta/internal/testattestorprotocol/launcher"
-	rebuildArchitectureRawDriveProtocol  = "orquesta/internal/testattestorprotocol/rawdrive"
-	rebuildArchitectureCodexWorkProtocol = "orquesta/internal/agentprotocol/codexwork"
+	rebuildArchitectureEnvLoader                   = "internal/config/env_loader.go"
+	rebuildArchitectureLauncherContract            = "orquesta/internal/testattestorprotocol/launcher"
+	rebuildArchitectureRawDriveProtocol            = "orquesta/internal/testattestorprotocol/rawdrive"
+	rebuildArchitectureCodexWorkProtocol           = "orquesta/internal/agentprotocol/codexwork"
+	rebuildArchitectureArtifactContractTestSupport = "orquesta/internal/testsupport/artifactcontract"
 )
 
 type rebuildArchitectureImport struct {
@@ -276,6 +277,24 @@ func TestRebuildArchitecture(t *testing.T) {
 			"orquesta/internal/adapters/agent/claude",
 		); reason == "" {
 			t.Error("adapter accepted a sibling adapter")
+		}
+		if reason := rebuildArchitectureAdapterImportReason(
+			"internal/adapters/artifact/filesystem/contract_test.go",
+			rebuildArchitectureArtifactContractTestSupport,
+		); reason != "" {
+			t.Errorf("artifact contract test rejected shared test support: %s", reason)
+		}
+		if reason := rebuildArchitectureAdapterImportReason(
+			"internal/adapters/artifact/filesystem/store.go",
+			rebuildArchitectureArtifactContractTestSupport,
+		); reason == "" {
+			t.Error("production adapter accepted test-only support")
+		}
+		if reason := rebuildArchitectureAdapterImportReason(
+			"internal/adapters/artifact/filesystem/contract_test.go",
+			rebuildArchitectureArtifactContractTestSupport+"/mutant",
+		); reason == "" {
+			t.Error("adapter accepted unrecognized shared test support")
 		}
 	})
 
@@ -898,6 +917,9 @@ func rebuildArchitectureCredentialsImportReason(importPath string) string {
 
 func rebuildArchitectureAdapterImportReason(filePath, importPath string) string {
 	if rebuildArchitectureIsSharedAdapterProtocol(importPath) {
+		return ""
+	}
+	if strings.HasSuffix(filePath, "_test.go") && importPath == rebuildArchitectureArtifactContractTestSupport {
 		return ""
 	}
 	directorio := "orquesta/" + filepath.ToSlash(filepath.Dir(filePath))

@@ -884,7 +884,9 @@ func validateConsumptionReceipt(receipt application.ActionConsumptionReceipt) er
 		return errors.New("sqlite.consumption_receipt_invalid")
 	}
 	switch receipt.Kind {
-	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionStopAgent,
+	case application.ActionLaunchAgent, application.ActionObserveAgent,
+		application.ActionQuiesceAgent, application.ActionPreserveAgentEnvironment,
+		application.ActionCloseAgentEnvironment, application.ActionStopAgent,
 		application.ActionPrepareWorkspace, application.ActionAdmitMailbox, application.ActionRevokeSession:
 		if receipt.MailboxMessageRef.String() != "" || receipt.ChangeRef.String() != "" {
 			return errors.New("sqlite.consumption_receipt_mailbox_unexpected")
@@ -924,7 +926,9 @@ func validateAction(action application.ActionRecord) error {
 		return errors.New("sqlite.action_invalid")
 	}
 	switch action.Kind {
-	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionDeliverMailbox,
+	case application.ActionLaunchAgent, application.ActionObserveAgent,
+		application.ActionQuiesceAgent, application.ActionPreserveAgentEnvironment,
+		application.ActionCloseAgentEnvironment, application.ActionDeliverMailbox,
 		application.ActionPrepareWorkspace, application.ActionAdmitMailbox, application.ActionRevokeSession:
 		if action.ControlRef != "" || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" ||
 			action.ReviewGateDigest != "" || action.CouncilResolution != nil {

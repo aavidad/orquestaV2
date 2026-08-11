@@ -6,7 +6,7 @@
     "OPS-13"
   ],
   "status": "implemented_foundation_not_accredited",
-  "suite_path": "internal/adapters/artifact/contracttest",
+  "suite_path": "internal/testsupport/artifactcontract",
   "adapters": [
     "filesystem_project_aware",
     "s3_fake_injected"

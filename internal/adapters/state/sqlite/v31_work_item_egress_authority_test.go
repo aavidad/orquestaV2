@@ -153,6 +153,7 @@ func TestV31MigrationKeepsV30AuthorityAsExplicitNoEgress(t *testing.T) {
 	created := system.submit(t, "request:v31-migrate-no-egress")
 	sqliteTestNoError(t, system.repository.Close())
 	database := openFastV18MigrationFixture(t, system.path)
+	downgradeV35AgentEnvironmentLifecycleToCanonicalV34(t, database)
 	mustV10Exec(t, database, `
 ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_digest;
 ALTER TABLE agent_environment_receipts DROP COLUMN physical_manifest_ref;

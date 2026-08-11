@@ -104,7 +104,8 @@ INSERT INTO effect_receipts(
 
 func validSQLiteEffectStatus(status application.EffectStatus) bool {
 	switch status {
-	case application.EffectStatusAccepted, application.EffectStatusStopped,
+	case application.EffectStatusAccepted, application.EffectStatusQuiesced,
+		application.EffectStatusPreserved, application.EffectStatusClosed, application.EffectStatusStopped,
 		application.EffectStatusAlreadyStopped, application.EffectStatusAlreadyCompleted,
 		application.EffectStatusAlreadyFailed, application.EffectStatusPrepared,
 		application.EffectStatusCommitted, application.EffectStatusAttestedPassed,
@@ -120,6 +121,12 @@ func validSQLiteEffectStatusForKind(kind application.EffectKind, status applicat
 	switch kind {
 	case application.EffectKindAgentLaunch:
 		return status == application.EffectStatusAccepted
+	case application.EffectKindAgentQuiesce:
+		return status == application.EffectStatusQuiesced
+	case application.EffectKindAgentPreserve:
+		return status == application.EffectStatusPreserved
+	case application.EffectKindAgentClose:
+		return status == application.EffectStatusClosed
 	case application.EffectKindAgentStop:
 		return status == application.EffectStatusStopped ||
 			status == application.EffectStatusAlreadyStopped ||

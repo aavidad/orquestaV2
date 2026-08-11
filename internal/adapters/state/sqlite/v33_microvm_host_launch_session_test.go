@@ -189,6 +189,7 @@ WHERE authority.execution_ref=? AND authority.action_fence=?`,
 
 func downgradeV33MicroVMHostSessionToCanonicalV32(t *testing.T, database *sql.DB) {
 	t.Helper()
+	downgradeV35AgentEnvironmentLifecycleToCanonicalV34(t, database)
 	migrations, err := loadMigrations()
 	if err != nil {
 		t.Fatal(err)

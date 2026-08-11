@@ -14,14 +14,14 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"orquesta/internal/adapters/artifact/contracttest"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
+	"orquesta/internal/testsupport/artifactcontract"
 )
 
 func TestProjectStorePassesSharedArtifactContract(t *testing.T) {
 	backend := &filesystemContractBackend{root: privateTestDirectory(t)}
-	contracttest.Run(t, contracttest.Backend{
+	artifactcontract.Run(t, artifactcontract.Backend{
 		Open:                   backend.open,
 		LogicalObjectCount:     backend.logicalObjectCount,
 		TamperContent:          backend.tamperContent,
@@ -212,7 +212,7 @@ type filesystemContractBackend struct {
 	readCount atomic.Int64
 }
 
-func (backend *filesystemContractBackend) open(t testing.TB, project goal.ProjectRef) contracttest.Handle {
+func (backend *filesystemContractBackend) open(t testing.TB, project goal.ProjectRef) artifactcontract.Handle {
 	t.Helper()
 	store, err := OpenForProject(backend.root, project)
 	if err != nil {
@@ -226,7 +226,7 @@ func (backend *filesystemContractBackend) open(t testing.TB, project goal.Projec
 		return closeErr
 	}
 	t.Cleanup(func() { _ = closeFn() })
-	return contracttest.Handle{Store: store, Close: closeFn}
+	return artifactcontract.Handle{Store: store, Close: closeFn}
 }
 
 func (backend *filesystemContractBackend) logicalObjectCount(t testing.TB) int {
@@ -244,7 +244,7 @@ func (backend *filesystemContractBackend) logicalObjectCount(t testing.TB) int {
 	return count
 }
 
-func (backend *filesystemContractBackend) tamperContent(t testing.TB, handle contracttest.Handle, stored ports.StoredArtifact, content []byte) {
+func (backend *filesystemContractBackend) tamperContent(t testing.TB, handle artifactcontract.Handle, stored ports.StoredArtifact, content []byte) {
 	t.Helper()
 	store := handle.Store.(*Store)
 	if err := os.WriteFile(filepath.Join(backend.root, filepath.FromSlash(store.blobPath(stored.Digest))), content, 0o600); err != nil {
@@ -252,7 +252,7 @@ func (backend *filesystemContractBackend) tamperContent(t testing.TB, handle con
 	}
 }
 
-func (backend *filesystemContractBackend) tamperMetadata(t testing.TB, handle contracttest.Handle, stored ports.StoredArtifact) {
+func (backend *filesystemContractBackend) tamperMetadata(t testing.TB, handle artifactcontract.Handle, stored ports.StoredArtifact) {
 	t.Helper()
 	store := handle.Store.(*Store)
 	name := filepath.Join(backend.root, filepath.FromSlash(store.metadataPath(stored.Digest)))

@@ -62,11 +62,13 @@ WHERE action.recovery_effect_attempt_ref IS NOT NULL AND
 			"sqlite.recovery_v28_effect_receipt_attempt_invalid",
 			`SELECT COUNT(*) FROM effect_receipts receipt
 LEFT JOIN effect_attempts attempt ON attempt.ref=receipt.attempt_ref
+LEFT JOIN effect_intents intent ON intent.ref=attempt.intent_ref
 WHERE attempt.ref IS NULL OR receipt.action_ref<>attempt.action_ref
  OR receipt.action_fence<>attempt.action_fence
  OR receipt.confirmed_at<attempt.started_at
 	 OR (attempt.claim_lease_until IS NOT NULL
-	     AND receipt.confirmed_at>=attempt.claim_lease_until)`,
+	     AND receipt.confirmed_at>=attempt.claim_lease_until
+	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close'))`,
 		},
 		{
 			"sqlite.recovery_v28_effect_consumption_claim_invalid",
@@ -77,6 +79,30 @@ WHERE NOT (
  (action.recovery_effect_attempt_ref IS NULL
   AND receipt.action_fence=consumed.fence
   AND receipt.confirmed_at=consumed.consumed_at)
+ OR
+ (consumed.kind IN ('quiesce_agent','preserve_agent_environment','close_agent_environment')
+  AND action.recovery_effect_attempt_ref IS NULL
+  AND receipt.action_fence=consumed.fence
+  AND receipt.confirmed_at<=consumed.consumed_at
+  AND consumed.claim_token=action.claim_token
+  AND consumed.worker_ref=action.claimed_by
+  AND consumed.delivery_attempt=action.delivery_attempt
+  AND consumed.consumed_at=action.completed_at
+  AND consumed.outcome='completed'
+  AND consumed.error_code=''
+  AND EXISTS (
+   SELECT 1 FROM effect_attempts attempt
+   JOIN effect_intents intent ON intent.ref=attempt.intent_ref
+   WHERE attempt.ref=receipt.attempt_ref
+    AND attempt.action_ref=consumed.action_ref
+    AND attempt.action_fence=consumed.fence
+    AND attempt.goal_ref=consumed.goal_ref
+    AND attempt.work_item_ref=consumed.work_item_ref
+    AND attempt.execution_ref=consumed.execution_ref
+    AND intent.kind=CASE consumed.kind
+     WHEN 'quiesce_agent' THEN 'agent_quiesce'
+     WHEN 'preserve_agent_environment' THEN 'agent_environment_preserve'
+     WHEN 'close_agent_environment' THEN 'agent_environment_close' END))
  OR
  (consumed.kind='launch_agent'
   AND action.recovery_effect_attempt_ref=receipt.attempt_ref
@@ -112,8 +138,12 @@ WHERE attempt.ref IS NULL OR intent.ref IS NULL OR action.ref IS NULL
  OR receipt.actor_ref<>attempt.actor_ref OR receipt.action_ref<>attempt.action_ref
  OR receipt.action_fence<>attempt.action_fence OR receipt.idempotency_key<>attempt.idempotency_key
 	 OR receipt.confirmed_at<attempt.started_at
-	 OR (attempt.claim_lease_until IS NOT NULL AND receipt.confirmed_at>=attempt.claim_lease_until)
+	 OR (attempt.claim_lease_until IS NOT NULL AND receipt.confirmed_at>=attempt.claim_lease_until
+	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close'))
  OR (intent.kind='agent_launch' AND receipt.status<>'accepted')
+ OR (intent.kind='agent_quiesce' AND receipt.status<>'quiesced')
+ OR (intent.kind='agent_environment_preserve' AND receipt.status<>'preserved')
+ OR (intent.kind='agent_environment_close' AND receipt.status<>'closed')
  OR (intent.kind='agent_stop' AND receipt.status NOT IN ('stopped','already_stopped','already_completed','already_failed'))
  OR (intent.kind='prepare_workspace' AND receipt.status<>'prepared')
  OR (intent.kind='commit_change' AND receipt.status<>'committed')
@@ -130,17 +160,24 @@ SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents inten
   OR (execution.state IN ('running','succeeded','stopped','canceled') AND receipt.ref IS NULL))))
 +(SELECT COUNT(*) FROM action_consumption_receipts consumed JOIN outbox action ON action.ref=consumed.action_ref
  LEFT JOIN effect_receipts receipt ON receipt.ref=consumed.effect_receipt_ref
- WHERE consumed.governance_version<>action.governance_version OR consumed.consumed_at>=action.claimed_until
+ WHERE consumed.governance_version<>action.governance_version
+ OR (consumed.consumed_at>=action.claimed_until
+     AND consumed.kind NOT IN ('quiesce_agent','preserve_agent_environment','close_agent_environment'))
  OR (receipt.ref IS NOT NULL AND (receipt.action_ref<>consumed.action_ref OR NOT (
       (action.recovery_effect_attempt_ref IS NULL AND receipt.action_fence=consumed.fence
-       AND receipt.confirmed_at=consumed.consumed_at)
+       AND ((consumed.kind IN ('quiesce_agent','preserve_agent_environment','close_agent_environment')
+             AND receipt.confirmed_at<=consumed.consumed_at)
+            OR (consumed.kind NOT IN ('quiesce_agent','preserve_agent_environment','close_agent_environment')
+                AND receipt.confirmed_at=consumed.consumed_at)))
       OR (consumed.kind='launch_agent' AND action.recovery_effect_attempt_ref=receipt.attempt_ref
        AND receipt.action_fence<consumed.fence
        AND NOT EXISTS(SELECT 1 FROM effect_attempts current
           WHERE current.action_ref=consumed.action_ref AND current.action_fence=consumed.fence)))))
  OR (consumed.governance_version=1 AND consumed.kind='launch_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL)
- OR (consumed.governance_version=1 AND consumed.kind IN ('prepare_workspace','commit_change','attest_test','integrate_change')
+ OR (consumed.governance_version=1 AND consumed.kind IN (
+      'quiesce_agent','preserve_agent_environment','close_agent_environment',
+      'prepare_workspace','commit_change','attest_test','integrate_change')
   AND consumed.outcome='completed' AND consumed.error_code='' AND receipt.ref IS NULL)
  OR (consumed.governance_version=1 AND consumed.kind='stop_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL AND EXISTS(SELECT 1 FROM effect_attempts attempt

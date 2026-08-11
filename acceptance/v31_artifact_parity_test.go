@@ -10,7 +10,10 @@ import (
 	"testing"
 )
 
-const v31ArtifactParityFixturePath = "acceptance/fixtures/v31_artifact_parity.json"
+const (
+	v31ArtifactParityFixturePath = "acceptance/fixtures/v31_artifact_parity.json"
+	v31ArtifactParitySuitePath   = "internal/testsupport/artifactcontract"
+)
 
 type v31ArtifactParityFixture struct {
 	SchemaVersion    int      `json:"schema_version"`
@@ -30,9 +33,13 @@ func TestAcceptanceV31ArtifactParityFoundation(t *testing.T) {
 		fixture.ContractID != "AC-V31-POSTGRES-S3-MULTIHOST" ||
 		!reflect.DeepEqual(fixture.CapabilityIDs, []string{"OPS-13"}) ||
 		fixture.Status != "implemented_foundation_not_accredited" ||
-		fixture.SuitePath != "internal/adapters/artifact/contracttest" ||
+		fixture.SuitePath != v31ArtifactParitySuitePath ||
 		!reflect.DeepEqual(fixture.Adapters, []string{"filesystem_project_aware", "s3_fake_injected"}) {
 		t.Fatalf("invalid V31 artifact parity identity: %+v", fixture)
+	}
+	info, err := os.Stat(filepath.Join(evidenceRepositoryRoot(t), fixture.SuitePath, "suite.go"))
+	if err != nil || info.IsDir() {
+		t.Fatalf("artifact contract suite path is not materialized: path=%q info=%v err=%v", fixture.SuitePath, info, err)
 	}
 	wantInvariants := []string{
 		"content_addressed_put",

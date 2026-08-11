@@ -657,6 +657,7 @@ WHERE ref=?`,
 			)
 		},
 	)
+	downgradeV35AgentEnvironmentLifecycleToCanonicalV34(t, system.repository.db)
 	legacyTriggers := canonicalWizardSchemaTriggers(t, recoverySchemaV23WizardGaps,
 		"action_consumption_effect_receipt_guard", "effect_receipts_causal_guard")
 	mustV10Exec(

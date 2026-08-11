@@ -88,7 +88,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"action_consumption_receipts", "agent_capacity_observations", "agent_capacity_reservations", "agent_capacity_transitions", "agent_environment_receipts", "agent_placement_bindings", "agent_quota_observations", "app_specs", "artifact_occurrences", "artifacts", "attestation_test_outcomes", "attestations", "authorization_receipts",
+		"action_consumption_receipts", "agent_capacity_observations", "agent_capacity_reservations", "agent_capacity_transitions", "agent_environment_lifecycles", "agent_environment_receipts", "agent_placement_bindings", "agent_quota_observations", "app_specs", "artifact_occurrences", "artifacts", "attestation_test_outcomes", "attestations", "authorization_receipts",
 		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets",
 		"command_invocations", "command_outcomes", "controls",
 		"council_decisions", "council_facts", "council_rounds", "council_skips",

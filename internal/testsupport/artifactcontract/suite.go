@@ -1,7 +1,7 @@
-// Package contracttest defines one reusable ArtifactStore behavior suite for
-// concrete adapters. Backend hooks only expose physical fault injection and
+// Package artifactcontract defines one reusable ArtifactStore behavior suite
+// for concrete adapters. Backend hooks only expose physical fault injection and
 // observation; every semantic assertion runs unchanged for every adapter.
-package contracttest
+package artifactcontract
 
 import (
 	"bytes"

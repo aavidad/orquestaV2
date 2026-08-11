@@ -55,8 +55,11 @@ WHERE (item.governance_version=1)<>(authority.work_item_ref IS NOT NULL) OR (aut
 SELECT COUNT(*) FROM outbox action LEFT JOIN effect_intents intent ON intent.ref=action.effect_intent_ref
 LEFT JOIN work_items item ON item.goal_ref=action.goal_ref AND item.ref=action.work_item_ref
 LEFT JOIN executions execution ON execution.goal_ref=action.goal_ref AND execution.ref=action.execution_ref
-WHERE (action.governance_version=0 AND action.effect_intent_ref IS NOT NULL) OR (action.governance_version=1 AND
- (action.kind NOT IN ('launch_agent','stop_agent','prepare_workspace','commit_change','attest_test','integrate_change')
+WHERE (action.kind IN ('quiesce_agent','preserve_agent_environment','close_agent_environment')
+       AND (action.governance_version<>1 OR action.effect_intent_ref IS NULL))
+ OR (action.governance_version=0 AND action.effect_intent_ref IS NOT NULL) OR (action.governance_version=1 AND
+ (action.kind NOT IN ('launch_agent','quiesce_agent','preserve_agent_environment','close_agent_environment',
+                      'stop_agent','prepare_workspace','commit_change','attest_test','integrate_change')
   OR intent.ref IS NULL OR intent.action_ref<>action.ref
   OR intent.action_kind<>action.kind OR intent.goal_ref<>action.goal_ref OR intent.work_item_ref<>action.work_item_ref
   OR intent.execution_ref<>action.execution_ref OR intent.plan_generation<>action.plan_generation
@@ -206,8 +209,13 @@ WHERE attempt.ref IS NULL OR intent.ref IS NULL OR action.ref IS NULL
  OR receipt.app_spec_generation<>attempt.app_spec_generation OR receipt.spec_hash<>attempt.spec_hash
  OR receipt.actor_ref<>attempt.actor_ref OR receipt.action_ref<>attempt.action_ref
  OR receipt.action_fence<>attempt.action_fence OR receipt.idempotency_key<>attempt.idempotency_key
- OR receipt.confirmed_at<attempt.started_at OR receipt.confirmed_at>=action.claimed_until
+ OR receipt.confirmed_at<attempt.started_at
+ OR (receipt.confirmed_at>=action.claimed_until
+     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close'))
  OR (intent.kind='agent_launch' AND receipt.status<>'accepted')
+ OR (intent.kind='agent_quiesce' AND receipt.status<>'quiesced')
+ OR (intent.kind='agent_environment_preserve' AND receipt.status<>'preserved')
+ OR (intent.kind='agent_environment_close' AND receipt.status<>'closed')
  OR (intent.kind='agent_stop' AND receipt.status NOT IN ('stopped','already_stopped','already_completed','already_failed'))
  OR (intent.kind='prepare_workspace' AND receipt.status<>'prepared')
  OR (intent.kind='commit_change' AND receipt.status<>'committed')
@@ -224,11 +232,16 @@ SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents inten
   OR (execution.state IN ('running','succeeded','stopped','canceled') AND receipt.ref IS NULL))))
 +(SELECT COUNT(*) FROM action_consumption_receipts consumed JOIN outbox action ON action.ref=consumed.action_ref
  LEFT JOIN effect_receipts receipt ON receipt.ref=consumed.effect_receipt_ref
- WHERE consumed.governance_version<>action.governance_version OR consumed.consumed_at>=action.claimed_until OR (receipt.ref IS NOT NULL AND
+ WHERE consumed.governance_version<>action.governance_version
+ OR (consumed.consumed_at>=action.claimed_until
+     AND consumed.kind NOT IN ('quiesce_agent','preserve_agent_environment','close_agent_environment'))
+ OR (receipt.ref IS NOT NULL AND
   (receipt.action_ref<>consumed.action_ref OR receipt.action_fence<>consumed.fence))
  OR (consumed.governance_version=1 AND consumed.kind='launch_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL)
- OR (consumed.governance_version=1 AND consumed.kind IN ('prepare_workspace','commit_change','attest_test','integrate_change')
+ OR (consumed.governance_version=1 AND consumed.kind IN (
+      'quiesce_agent','preserve_agent_environment','close_agent_environment',
+      'prepare_workspace','commit_change','attest_test','integrate_change')
   AND consumed.outcome='completed' AND consumed.error_code='' AND receipt.ref IS NULL)
  OR (consumed.governance_version=1 AND consumed.kind='stop_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL AND EXISTS(SELECT 1 FROM effect_attempts attempt

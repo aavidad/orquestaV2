@@ -419,7 +419,9 @@ func admitClaimEffect(
 		candidate.action.EffectIntent = intent
 		return application.EffectApproval{}, err == nil, err
 	}
-	if candidate.action.Kind != application.ActionLaunchAgent && candidate.action.Kind != application.ActionStopAgent &&
+	if candidate.action.Kind != application.ActionLaunchAgent && candidate.action.Kind != application.ActionQuiesceAgent &&
+		candidate.action.Kind != application.ActionPreserveAgentEnvironment &&
+		candidate.action.Kind != application.ActionCloseAgentEnvironment && candidate.action.Kind != application.ActionStopAgent &&
 		candidate.action.Kind != application.ActionPrepareWorkspace && candidate.action.Kind != application.ActionCommitChange &&
 		candidate.action.Kind != application.ActionAttestTest && candidate.action.Kind != application.ActionIntegrateChange {
 		return application.EffectApproval{}, true, nil
@@ -683,7 +685,7 @@ SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.plan_generation, o.work_item_generation, o.available_at, g.project_ref,
        o.delivery_attempt, wi.role_key, e.state, e.purpose,
 	   e.provider_ref, e.model_ref, e.agent_ref,e.attempt_no,COALESCE(e.replaces_execution_ref,''),
-       CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
+       CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'quiesce_agent' THEN 6 WHEN 'preserve_agent_environment' THEN 7 WHEN 'close_agent_environment' THEN 8 WHEN 'observe_agent' THEN 9 ELSE 10 END,
        CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
        CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END
 FROM outbox o
@@ -698,16 +700,42 @@ LEFT JOIN fairness_cursors goal_cursor
 WHERE o.completed_at IS NULL
   AND o.retired_at IS NULL
   AND o.quarantined_at IS NULL
-  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox', 'revoke_execution_session')
+  AND o.kind IN ('launch_agent', 'observe_agent', 'quiesce_agent', 'preserve_agent_environment', 'close_agent_environment', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox', 'revoke_execution_session')
   AND (o.governance_version = 1 OR o.kind = 'observe_agent'
        OR (o.kind = 'stop_agent' AND e.state IN ('succeeded', 'failed', 'canceled', 'stopped'))
        OR (o.governance_version = 0 AND o.last_error_code <> 'governance.legacy_reauthorization_required'))
+  AND (o.kind NOT IN ('quiesce_agent','preserve_agent_environment','close_agent_environment') OR (
+      o.governance_version=1 AND o.effect_intent_ref IS NOT NULL
+      AND EXISTS (
+       SELECT 1 FROM effect_intents lifecycle_intent
+       WHERE lifecycle_intent.ref=o.effect_intent_ref AND lifecycle_intent.action_ref=o.ref
+        AND lifecycle_intent.action_kind=o.kind AND lifecycle_intent.goal_ref=o.goal_ref
+        AND lifecycle_intent.work_item_ref=o.work_item_ref
+        AND lifecycle_intent.execution_ref=o.execution_ref
+        AND lifecycle_intent.plan_generation=o.plan_generation
+        AND lifecycle_intent.kind=CASE o.kind
+         WHEN 'quiesce_agent' THEN 'agent_quiesce'
+         WHEN 'preserve_agent_environment' THEN 'agent_environment_preserve'
+         WHEN 'close_agent_environment' THEN 'agent_environment_close' END)
+      AND EXISTS (
+       SELECT 1 FROM agent_environment_lifecycles lifecycle
+       WHERE lifecycle.execution_ref=o.execution_ref AND lifecycle.goal_ref=o.goal_ref
+        AND lifecycle.work_item_ref=o.work_item_ref
+        AND lifecycle.token_state=CASE o.kind
+         WHEN 'quiesce_agent' THEN 'active'
+         WHEN 'preserve_agent_environment' THEN 'quiesced'
+         WHEN 'close_agent_environment' THEN 'preserved' END
+        AND ((o.kind='quiesce_agent' AND lifecycle.revision=1
+              AND lifecycle.claim_action_ref IS NULL AND lifecycle.attempt_ref IS NULL
+              AND lifecycle.next_action_ref IS NULL AND lifecycle.ready_to_finalize=0)
+             OR lifecycle.next_action_ref=o.ref OR lifecycle.claim_action_ref=o.ref))
+  ))
   AND o.available_at <= ?
   AND (o.claim_token IS NULL OR o.claimed_until <= ?)
   AND NOT EXISTS (
       SELECT 1 FROM outbox leased
       WHERE leased.goal_ref = o.goal_ref AND leased.work_item_ref = o.work_item_ref
-        AND leased.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox')
+        AND leased.kind IN ('launch_agent', 'observe_agent', 'quiesce_agent', 'preserve_agent_environment', 'close_agent_environment', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox')
         AND leased.ref <> o.ref AND leased.completed_at IS NULL
         AND leased.retired_at IS NULL AND leased.quarantined_at IS NULL
         AND leased.claim_token IS NOT NULL AND leased.claimed_until > ?
@@ -747,7 +775,7 @@ WHERE o.completed_at IS NULL
         AND recovery_attempt.intent_ref=o.effect_intent_ref
   ))
   AND (? = 0 OR (
-      CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
+      CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'quiesce_agent' THEN 6 WHEN 'preserve_agent_environment' THEN 7 WHEN 'close_agent_environment' THEN 8 WHEN 'observe_agent' THEN 9 ELSE 10 END,
       CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
       CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END,
       o.available_at,
@@ -755,7 +783,7 @@ WHERE o.completed_at IS NULL
   ) > (?, ?, ?, ?, ?))
 -- Stop is urgent. Governed launches use hierarchical round-robin before
 -- their FIFO tie-break; observations run after no launch fits admission.
-ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
+ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'quiesce_agent' THEN 6 WHEN 'preserve_agent_environment' THEN 7 WHEN 'close_agent_environment' THEN 8 WHEN 'observe_agent' THEN 9 ELSE 10 END,
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END,
 	     o.available_at,

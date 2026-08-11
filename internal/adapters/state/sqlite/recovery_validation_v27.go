@@ -6,6 +6,53 @@ import (
 )
 
 func validateRecoveryV27EffectAttemptClaimLease(ctx context.Context, tx *sql.Tx) error {
+	lateReceiptQuery := `SELECT COUNT(*) FROM effect_receipts receipt
+JOIN effect_attempts attempt ON attempt.ref=receipt.attempt_ref
+WHERE attempt.claim_lease_until IS NOT NULL
+ AND receipt.confirmed_at>=attempt.claim_lease_until`
+	var lifecycleTables int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_schema
+WHERE type='table' AND name='agent_environment_lifecycles'`).Scan(&lifecycleTables); err != nil {
+		return err
+	}
+	if lifecycleTables == 1 {
+		lateReceiptQuery = `SELECT COUNT(*) FROM effect_receipts receipt
+JOIN effect_attempts attempt ON attempt.ref=receipt.attempt_ref
+JOIN effect_intents intent ON intent.ref=attempt.intent_ref
+JOIN outbox action ON action.ref=attempt.action_ref
+WHERE attempt.claim_lease_until IS NOT NULL
+ AND receipt.confirmed_at>=attempt.claim_lease_until
+ AND NOT (
+  intent.kind IN ('agent_quiesce','agent_environment_preserve','agent_environment_close')
+  AND EXISTS (
+   SELECT 1 FROM action_consumption_receipts consumed
+   JOIN agent_environment_lifecycles lifecycle ON lifecycle.execution_ref=consumed.execution_ref
+   WHERE consumed.action_ref=attempt.action_ref
+    AND consumed.effect_receipt_ref=receipt.ref
+    AND consumed.goal_ref=attempt.goal_ref
+    AND consumed.work_item_ref=attempt.work_item_ref
+    AND consumed.execution_ref=attempt.execution_ref
+    AND consumed.fence=attempt.action_fence
+    AND consumed.claim_token=action.claim_token
+    AND consumed.worker_ref=action.claimed_by
+    AND consumed.delivery_attempt=action.delivery_attempt
+    AND consumed.consumed_at=action.completed_at
+    AND consumed.consumed_at>=receipt.confirmed_at
+    AND consumed.governance_version=1
+    AND consumed.outcome='completed'
+    AND consumed.error_code=''
+    AND consumed.kind=CASE intent.kind
+     WHEN 'agent_quiesce' THEN 'quiesce_agent'
+     WHEN 'agent_environment_preserve' THEN 'preserve_agent_environment'
+     WHEN 'agent_environment_close' THEN 'close_agent_environment' END
+    AND action.kind=consumed.kind
+    AND action.effect_intent_ref=intent.ref
+    AND action.goal_ref=attempt.goal_ref
+    AND action.work_item_ref=attempt.work_item_ref
+    AND action.execution_ref=attempt.execution_ref
+    AND lifecycle.goal_ref=attempt.goal_ref
+    AND lifecycle.work_item_ref=attempt.work_item_ref))`
+	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{
 			"sqlite.recovery_v27_effect_attempt_claim_lease_invalid",
@@ -15,10 +62,7 @@ WHERE attempt.claim_lease_until IS NOT NULL
 		},
 		{
 			"sqlite.recovery_v27_effect_receipt_outside_claim_lease",
-			`SELECT COUNT(*) FROM effect_receipts receipt
-JOIN effect_attempts attempt ON attempt.ref=receipt.attempt_ref
-WHERE attempt.claim_lease_until IS NOT NULL
- AND receipt.confirmed_at>=attempt.claim_lease_until`,
+			lateReceiptQuery,
 		},
 		{
 			"sqlite.recovery_v27_effect_attempt_claim_lease_missing_proof",
