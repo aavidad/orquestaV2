@@ -97,7 +97,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		"intake_dossier_confirmations", "intake_dossier_generation_receipts", "intake_dossiers", "intake_receipts", "intake_states", "integration_receipts", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",
 		"membership_audit_receipts", "merge_observations", "microvm_host_launch_authorities", "outbox", "principals", "project_memberships", "projects", "repositories", "review_records", "schema_migrations",
-		"wizard_gaps_input_receipts", "wizard_gaps_outcomes",
+		"wizard_gaps_input_receipts", "wizard_gaps_outcomes", "wizard_gaps_result_snapshots",
 		"work_item_authorities", "work_item_dependencies", "work_item_fences", "work_item_required_test_arguments", "work_item_required_tests", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
 		"workspace_binding_write_scopes", "workspace_bindings", "workspaces",
 	}
