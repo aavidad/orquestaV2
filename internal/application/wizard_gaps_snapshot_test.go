@@ -25,7 +25,7 @@ func TestWizardGapsApplicationBindsExactResultSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if replayed.Changed || replayed.EvaluationReplayExact {
+	if replayed.Changed || !replayed.EvaluationReplayExact {
 		t.Fatalf("replayed changed=%t exact=%t", replayed.Changed, replayed.EvaluationReplayExact)
 	}
 	assertWizardGapsResultSnapshot(t, record.Receipt, replayed)
@@ -69,7 +69,7 @@ func assertWizardGapsResultSnapshot(t *testing.T, receipt WizardGapsInputReceipt
 	snapshot := receipt.ResultSnapshot
 	if wizardGapsResultSnapshotEmpty(snapshot) ||
 		snapshot.InputReceiptRef != receipt.Ref ||
-		result.EvaluationReplayExact ||
+		!result.EvaluationReplayExact ||
 		result.EvaluationSnapshot.Ref != snapshot.Ref ||
 		result.EvaluationSnapshot.Digest != snapshot.Digest ||
 		!bytes.Equal(result.EvaluationSnapshot.Bytes, snapshot.Bytes) {

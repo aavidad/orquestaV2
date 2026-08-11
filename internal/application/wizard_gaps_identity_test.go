@@ -180,7 +180,7 @@ func TestWizardGapsHistoricalEvaluatorReplaySurvivesRegistryEvolution(
 		t.Fatal(err)
 	}
 	if replayed.Changed || !replayed.RequestRefReserved ||
-		replayed.EvaluationReplayExact ||
+		!replayed.EvaluationReplayExact ||
 		replayed.EvaluatorIdentity != v1Identity ||
 		replayed.Record.Receipt != first.Record.Receipt {
 		t.Fatalf(

@@ -19,7 +19,7 @@ func TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !result.Changed || result.Record.State.Revision() != 2 ||
-		result.EvaluationReplayExact ||
+		!result.EvaluationReplayExact ||
 		result.Record.Receipt.Operation != IntakeOperationApply ||
 		result.Record.Receipt.RequestRef != request.RequestRef ||
 		!result.RequestRefReserved ||
