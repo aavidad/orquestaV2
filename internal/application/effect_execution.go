@@ -274,17 +274,35 @@ func validateEffectReceipt(claim ActionClaim, attempt EffectAttempt, receipt Eff
 		receipt.ActionRef != claim.Action.Ref || receipt.ActionFence != attempt.ActionFence ||
 		!confirmationClaimValid ||
 		receipt.IdempotencyKey != intent.IdempotencyKey || receipt.ConfirmedAt.Before(attempt.StartedAt) ||
-		!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil) ||
+		(effectReceiptRequiresLiveLease(intent.Kind) && !receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil)) ||
 		governance.ValidateResourceUsage(receipt.Usage) != nil {
 		return errors.New("application.effect_receipt_invalid")
 	}
 	return nil
 }
 
+// Lifecycle calls may remain physically in flight after the claim lease that
+// fenced their EffectAttempt expires. Their terminal receipt resolves that
+// same attempt; it never authorizes a replacement physical call.
+func effectReceiptRequiresLiveLease(kind EffectKind) bool {
+	switch kind {
+	case EffectKindAgentQuiesce, EffectKindAgentPreserve, EffectKindAgentClose:
+		return false
+	default:
+		return true
+	}
+}
+
 func validEffectStatus(kind EffectKind, status EffectStatus) bool {
 	switch kind {
 	case EffectKindAgentLaunch:
 		return status == EffectStatusAccepted
+	case EffectKindAgentQuiesce:
+		return status == EffectStatusQuiesced
+	case EffectKindAgentPreserve:
+		return status == EffectStatusPreserved
+	case EffectKindAgentClose:
+		return status == EffectStatusClosed
 	case EffectKindAgentStop:
 		return status == EffectStatusStopped || status == EffectStatusAlreadyStopped ||
 			status == EffectStatusAlreadyCompleted || status == EffectStatusAlreadyFailed
@@ -303,7 +321,8 @@ func validEffectStatus(kind EffectKind, status EffectStatus) bool {
 
 func actionUsesEffectLedger(kind ActionKind) bool {
 	switch kind {
-	case ActionLaunchAgent, ActionStopAgent, ActionPrepareWorkspace, ActionCommitChange, ActionAttestTest, ActionIntegrateChange:
+	case ActionLaunchAgent, ActionQuiesceAgent, ActionPreserveAgentEnvironment, ActionCloseAgentEnvironment,
+		ActionStopAgent, ActionPrepareWorkspace, ActionCommitChange, ActionAttestTest, ActionIntegrateChange:
 		return true
 	default:
 		return false

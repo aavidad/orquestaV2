@@ -203,6 +203,18 @@ type AgentEnvironmentLifecycle interface {
 	Close(context.Context, AgentCloseRequest) (AgentCloseReceipt, error)
 }
 
+// AgentEnvironmentLifecycleReconciler is a separate read-only recovery
+// boundary. Each method asks the adapter for the historical receipt of the
+// original request: it must not execute Quiesce, Preserve, or Close and must
+// not create a new physical attempt. An absent or still-pending receipt is
+// reported as an adapter error; successful receipts remain subject to the
+// existing exact receipt validators.
+type AgentEnvironmentLifecycleReconciler interface {
+	ReconcileQuiesce(context.Context, AgentQuiesceRequest) (AgentQuiesceReceipt, error)
+	ReconcilePreserve(context.Context, AgentPreserveRequest) (AgentPreserveReceipt, error)
+	ReconcileClose(context.Context, AgentCloseRequest) (AgentCloseReceipt, error)
+}
+
 func ValidateAgentEnvironmentInspectReceipt(
 	request AgentEnvironmentInspectRequest,
 	receipt AgentEnvironmentInspectReceipt,

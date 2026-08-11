@@ -70,6 +70,16 @@ func TestComprobantePreservacionEntornoAgenteAceptaBindingFisicoOpcionalAtomico(
 	for name, mutate := range map[string]func(*ComprobantePreservacionEntornoAgente){
 		"missing ref":    func(value *ComprobantePreservacionEntornoAgente) { value.ManifiestoFisicoRef = "" },
 		"missing digest": func(value *ComprobantePreservacionEntornoAgente) { value.ManifiestoFisicoDigest = "" },
+		"oversize ref": func(value *ComprobantePreservacionEntornoAgente) {
+			value.ManifiestoFisicoRef = strings.Repeat("x", 513)
+		},
+		"nul ref": func(value *ComprobantePreservacionEntornoAgente) { value.ManifiestoFisicoRef = "physical\x00manifest" },
+		"surrounding space": func(value *ComprobantePreservacionEntornoAgente) {
+			value.ManifiestoFisicoRef = " physical-manifest:one"
+		},
+		"invalid digest": func(value *ComprobantePreservacionEntornoAgente) {
+			value.ManifiestoFisicoDigest = strings.Repeat("A", 64)
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			changed := bound

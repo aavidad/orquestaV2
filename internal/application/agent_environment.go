@@ -2,7 +2,9 @@ package application
 
 import (
 	"errors"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
@@ -17,8 +19,7 @@ const (
 
 type ComprobantePreservacionEntornoAgente struct {
 	Ref, ClaveIdempotencia, DigestBindingEspacio, BaseOID, DigestCambio string
-	// Optional as an atomic pair for historical A06 compatibility. The B12
-	// SQLite writer cannot persist this pair until its separate migration 034.
+	// Optional as an atomic pair for historical A06 compatibility.
 	ManifiestoFisicoRef, ManifiestoFisicoDigest string
 	ProyectoRef                                 goal.ProjectRef
 	ObjetivoRef                                 goal.GoalRef
@@ -38,7 +39,7 @@ func ValidarComprobantePreservacionEntornoAgente(comprobante ComprobantePreserva
 	if !validApplicationRef(comprobante.Ref) || !validApplicationRef(comprobante.ClaveIdempotencia) ||
 		comprobante.ProyectoRef.String() == "" || comprobante.ObjetivoRef.String() == "" || comprobante.ItemRef.String() == "" ||
 		comprobante.EjecucionRef != comprobante.Resultado.EjecucionRef ||
-		(manifiestoPresente && (!validApplicationRef(comprobante.ManifiestoFisicoRef) ||
+		(manifiestoPresente && (!validPhysicalManifestRef(comprobante.ManifiestoFisicoRef) ||
 			!validEffectDigest(comprobante.ManifiestoFisicoDigest))) ||
 		validarEspacioPreservacionEntornoAgente(comprobante, cambioPresente) != nil ||
 		ports.ValidarResultadoPreservacionEntornoAgente(comprobante.Resultado) != nil ||
@@ -46,6 +47,11 @@ func ValidarComprobantePreservacionEntornoAgente(comprobante ComprobantePreserva
 		return errors.New("application.agent_environment_receipt_invalid")
 	}
 	return nil
+}
+
+func validPhysicalManifestRef(value string) bool {
+	return value != "" && len(value) <= 512 && utf8.ValidString(value) &&
+		strings.TrimSpace(value) == value && !strings.ContainsRune(value, '\x00')
 }
 
 func ValidarCausalidadPreservacionEntornoAgente(comprobante ComprobantePreservacionEntornoAgente, registro GoalRecord) error {

@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"reflect"
@@ -10,6 +11,40 @@ import (
 
 	"orquesta/internal/goal"
 )
+
+type agentEnvironmentReadOnlyReconcilerStub struct{}
+
+func (agentEnvironmentReadOnlyReconcilerStub) ReconcileQuiesce(
+	context.Context, AgentQuiesceRequest,
+) (AgentQuiesceReceipt, error) {
+	return AgentQuiesceReceipt{}, nil
+}
+
+func (agentEnvironmentReadOnlyReconcilerStub) ReconcilePreserve(
+	context.Context, AgentPreserveRequest,
+) (AgentPreserveReceipt, error) {
+	return AgentPreserveReceipt{}, nil
+}
+
+func (agentEnvironmentReadOnlyReconcilerStub) ReconcileClose(
+	context.Context, AgentCloseRequest,
+) (AgentCloseReceipt, error) {
+	return AgentCloseReceipt{}, nil
+}
+
+var _ AgentEnvironmentLifecycleReconciler = agentEnvironmentReadOnlyReconcilerStub{}
+
+func TestAgentEnvironmentLifecycleReconcilerIsSeparateReadOnlyBoundary(t *testing.T) {
+	contract := reflect.TypeOf((*AgentEnvironmentLifecycleReconciler)(nil)).Elem()
+	if contract.NumMethod() != 3 {
+		t.Fatalf("reconciler methods=%d want=3", contract.NumMethod())
+	}
+	for _, mutation := range []string{"Inspect", "Quiesce", "Preserve", "Close"} {
+		if _, found := contract.MethodByName(mutation); found {
+			t.Fatalf("read-only reconciler exposes mutation method %q", mutation)
+		}
+	}
+}
 
 func validAgentEnvironmentSubject(t *testing.T) AgentEnvironmentLifecycleSubject {
 	t.Helper()
