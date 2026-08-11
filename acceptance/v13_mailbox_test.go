@@ -121,18 +121,24 @@ func TestAcceptanceV13Mailbox(t *testing.T) {
 			authorityFixture.Lifecycle,
 		)
 		v05AssertContractualLineageDoesNotCloseGoalEarly(t)
-		for _, relative := range []string{
-			"acceptance/v06_atomic_state_outbox_test.go",
-			"acceptance/v09_recovery_backup_test.go",
+		for _, contract := range []struct {
+			relative                          string
+			newCount, limitCount, helperCount int
+			helperMarker                      string
+		}{
+			{"acceptance/v06_atomic_state_outbox_test.go", 1, 1, 1, "func v06NewOrchestrator("},
+			{"acceptance/v09_recovery_backup_test.go", 0, 0, 1, "v06NewOrchestrator("},
 		} {
+			relative := contract.relative
 			content, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(relative)))
 			if err != nil {
 				t.Fatal(err)
 			}
 			text := string(content)
-			if strings.Count(text, "application.New(application.Dependencies{") != 1 ||
-				strings.Count(text, "MaxMailboxEnvelopeBytes:") != 1 {
-				t.Errorf("%s does not wire the one canonical mailbox envelope limit", relative)
+			if strings.Count(text, "application.New(application.Dependencies{") != contract.newCount ||
+				strings.Count(text, "MaxMailboxEnvelopeBytes:") != contract.limitCount ||
+				strings.Count(text, contract.helperMarker) != contract.helperCount {
+				t.Errorf("%s does not use the one shared canonical mailbox envelope wiring", relative)
 			}
 		}
 	})

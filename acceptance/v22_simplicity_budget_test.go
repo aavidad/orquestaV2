@@ -94,13 +94,7 @@ func v22PhysicalLines(t *testing.T, path string) int {
 
 func v22AssertSingleAuthorities(t *testing.T, root string) {
 	t.Helper()
-	state, err := os.ReadDir(filepath.Join(root, "internal/adapters/state"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(state) != 1 || !state[0].IsDir() || state[0].Name() != "sqlite" {
-		t.Errorf("V22 top-level state stores=%v want [sqlite]", state)
-	}
+	v22AssertSQLiteIsTheOnlyComposedStateAdapter(t, root)
 	for _, check := range []struct{ dir, name string }{{"internal/application", "Orchestrator"}, {"internal/bootstrap", "scheduler"}, {"internal/adapters/agent/codex", "Adapter"}} {
 		if got := v22NamedStructs(t, filepath.Join(root, check.dir), check.name); got != 1 {
 			t.Errorf("V22 %s.%s declarations=%d want=1", check.dir, check.name, got)
@@ -112,6 +106,31 @@ func v22AssertSingleAuthorities(t *testing.T, root string) {
 	}
 	if len(paths) != 1 {
 		t.Errorf("V22 command registry count=%d want=1", len(paths))
+	}
+}
+
+func v22AssertSQLiteIsTheOnlyComposedStateAdapter(t *testing.T, root string) {
+	t.Helper()
+	path := filepath.Join(root, "internal", "bootstrap", "runtime.go")
+	tree, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+	composedSQLite, composedPostgres := false, false
+	for _, specification := range tree.Imports {
+		importPath, err := strconv.Unquote(specification.Path.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch importPath {
+		case "orquesta/internal/adapters/state/sqlite":
+			composedSQLite = true
+		case "orquesta/internal/adapters/state/postgres":
+			composedPostgres = true
+		}
+	}
+	if !composedSQLite || composedPostgres {
+		t.Errorf("V22 active state composition sqlite=%t postgres=%t", composedSQLite, composedPostgres)
 	}
 }
 

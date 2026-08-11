@@ -460,6 +460,10 @@ func v21CollectWizardTypedKeys(target map[string]string) {
 	for _, pack := range wizardcatalog.BuiltIn().Packs() {
 		for _, question := range pack.Questions() {
 			if !strings.HasPrefix(question.Slot().String(), "domains.") {
+				add(catalogSource, question.HelpKey().String(), question.ExampleKey().String())
+				for _, option := range question.Options() {
+					add(catalogSource, option.HelpKey().String(), option.ExampleKey().String())
+				}
 				continue
 			}
 			add(
@@ -587,6 +591,33 @@ func v21CollectGoKeys(t *testing.T, root, path string, target map[string]string)
 			}
 		}
 	}
+	for _, declaration := range tree.Decls {
+		generic, ok := declaration.(*ast.GenDecl)
+		if !ok || generic.Tok != token.VAR {
+			continue
+		}
+		for _, specification := range generic.Specs {
+			values, ok := specification.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for index, name := range values.Names {
+				if !strings.HasSuffix(name.Name, "MessageKeys") || index >= len(values.Values) {
+					continue
+				}
+				composite, ok := values.Values[index].(*ast.CompositeLit)
+				if !ok {
+					continue
+				}
+				for _, element := range composite.Elts {
+					pair, ok := element.(*ast.KeyValueExpr)
+					if ok {
+						addExpression(pair.Value)
+					}
+				}
+			}
+		}
+	}
 	ast.Inspect(tree, func(node ast.Node) bool {
 		composite, ok := node.(*ast.CompositeLit)
 		if ok {
@@ -616,11 +647,28 @@ func v21CollectGoKeys(t *testing.T, root, path string, target map[string]string)
 			if function.Name == "writeCatalogText" {
 				index = 3
 			}
+			if function.Name == "writeCredentialProvisionDiagnostic" {
+				index = 4
+			}
 		}
 		if index < 0 || len(call.Args) <= index {
 			return true
 		}
 		addExpression(call.Args[index])
+		return true
+	})
+	ast.Inspect(tree, func(node ast.Node) bool {
+		assignment, ok := node.(*ast.AssignStmt)
+		if !ok {
+			return true
+		}
+		for index, left := range assignment.Lhs {
+			name, ok := left.(*ast.Ident)
+			if !ok || name.Name != "messageKey" || index >= len(assignment.Rhs) {
+				continue
+			}
+			addExpression(assignment.Rhs[index])
+		}
 		return true
 	})
 }

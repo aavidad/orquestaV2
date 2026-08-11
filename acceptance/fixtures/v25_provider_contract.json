@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "FOUNDATION-V25-PROVIDER-CONTRACT",
-  "status": "foundation_only_unwired",
+  "status": "query_only_unwired_to_launch",
   "capabilities_accredited": [],
   "related_acceptance_contract": {
     "id": "AC-V25-PROVIDER-ADAPTERS",
@@ -21,7 +21,9 @@
     "internal/ports/provider_contract.go",
     "internal/application/provider_catalog.go",
     "internal/application/provider_routing.go",
+    "internal/application/orchestrator.go",
     "internal/application/provider_contract_test.go",
+    "internal/application/provider_catalog_orchestrator_test.go",
     "acceptance/v25_provider_contract_test.go",
     "acceptance/fixtures/v25_provider_contract.json"
   ],
@@ -30,14 +32,20 @@
     "application_decides_routes",
     "fallback_is_explicit",
     "unknown_fails_closed",
-    "provider_facts_never_write_goal_lifecycle"
+    "provider_facts_never_write_goal_lifecycle",
+    "orchestrator_clock_is_canonical",
+    "sources_normalized_once_at_composition",
+    "query_only_unwired_to_launch"
   ],
   "contract_cases": [
     "provider_absent",
     "quota_unknown",
     "quota_exhausted",
     "isolated_provider_failure",
-    "no_inferred_model_or_capability_parity"
+    "no_inferred_model_or_capability_parity",
+    "ambiguous_composition_rejected",
+    "canonical_clock_refresh",
+    "query_does_not_write_lifecycle"
   ],
   "forbidden_import_boundaries": [
     "orquesta/internal/adapters/",

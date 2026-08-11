@@ -70,6 +70,7 @@ type v02Lifecycle struct {
 	SchedulerMethod       string   `json:"scheduler_method"`
 	ClaimMethod           string   `json:"claim_method"`
 	AllowedSchedulerTypes []string `json:"allowed_scheduler_types"`
+	ClaimDelegateTypes    []string `json:"claim_delegate_types"`
 }
 
 type v02GoFile struct {
@@ -149,6 +150,47 @@ func TestAcceptanceV02AuthorityRulesReceipt(t *testing.T) {
 		ExecutedNotBefore:       "2026-07-14T00:00:00+02:00",
 		TrustedBaseGitCommitOID: "a8bff609492f312fe2d6bf8ccccde02b6e5c8426",
 	})
+}
+
+func TestV02ClaimAuthorityAllowsOnlyWriterAndWhitelistedDelegation(t *testing.T) {
+	lifecycle := v02Lifecycle{
+		WriterPackage: "orquesta/internal/application",
+		WriterType:    "Orchestrator",
+	}
+	allowed := v02StringSet([]string{"orquesta/internal/bootstrap.scheduler"})
+	tests := []struct {
+		name                           string
+		callerPackage, callerType      string
+		receiverPackage, receiverType  string
+		wantAllowed, wantWriterReceipt bool
+	}{
+		{
+			name: "writer may claim through repository", callerPackage: lifecycle.WriterPackage, callerType: lifecycle.WriterType,
+			receiverPackage: "orquesta/internal/ports", receiverType: "StateRepository", wantAllowed: true, wantWriterReceipt: true,
+		},
+		{
+			name: "allowed scheduler delegates to writer", callerPackage: "orquesta/internal/bootstrap", callerType: "scheduler",
+			receiverPackage: lifecycle.WriterPackage, receiverType: lifecycle.WriterType, wantAllowed: true,
+		},
+		{
+			name: "allowed scheduler cannot bypass writer", callerPackage: "orquesta/internal/bootstrap", callerType: "scheduler",
+			receiverPackage: "orquesta/internal/ports", receiverType: "StateRepository",
+		},
+		{
+			name: "unknown caller cannot invoke writer claim", callerPackage: "orquesta/internal/bootstrap", callerType: "otherScheduler",
+			receiverPackage: lifecycle.WriterPackage, receiverType: lifecycle.WriterType,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			gotAllowed, gotWriterReceipt := v02ClaimCallAuthority(
+				lifecycle, allowed, test.callerPackage, test.callerType, test.receiverPackage, test.receiverType,
+			)
+			if gotAllowed != test.wantAllowed || gotWriterReceipt != test.wantWriterReceipt {
+				t.Fatalf("authority=(allowed=%t writer=%t), want (allowed=%t writer=%t)", gotAllowed, gotWriterReceipt, test.wantAllowed, test.wantWriterReceipt)
+			}
+		})
+	}
 }
 
 func v02SurfaceDigest(t *testing.T, repositoryRoot string, surface v02FrozenSurface) (int, string) {
@@ -712,6 +754,7 @@ func v02AssertSingleWriterAndScheduler(t *testing.T, sources v02SourceSet, lifec
 	seenSchedulerOperations := make(map[string]struct{})
 	schedulerDeclarations := 0
 	allowedSchedulerTypes := v02StringSet(lifecycle.AllowedSchedulerTypes)
+	claimDelegateTypes := v02StringSet(lifecycle.ClaimDelegateTypes)
 	pureTransitionHelpers := v02StringSet(lifecycle.PureTransitionHelpers)
 
 	for _, file := range sources.Files {
@@ -749,7 +792,7 @@ func v02AssertSingleWriterAndScheduler(t *testing.T, sources v02SourceSet, lifec
 				}
 				v02InspectCalls(
 					t, sources, file, typed, info, lifecycle, mutationSet, pureTransitionHelpers,
-					seenMutations, seenPureTransitionHelpers, seenSchedulerOperations,
+					claimDelegateTypes, seenMutations, seenPureTransitionHelpers, seenSchedulerOperations,
 				)
 			}
 		}
@@ -819,6 +862,7 @@ func v02InspectCalls(
 	lifecycle v02Lifecycle,
 	mutations map[string]struct{},
 	pureTransitionHelpers map[string]struct{},
+	claimDelegateTypes map[string]struct{},
 	seen map[string]struct{},
 	seenPureTransitionHelpers map[string]struct{},
 	seenSchedulerOperations map[string]struct{},
@@ -860,15 +904,32 @@ func v02InspectCalls(
 			}
 		}
 		if method == lifecycle.ClaimMethod {
-			if file.PackagePath != lifecycle.WriterPackage || callerReceiver != lifecycle.WriterType {
+			allowed, writerReceipt := v02ClaimCallAuthority(
+				lifecycle, claimDelegateTypes, file.PackagePath, callerReceiver, receiverPackage, receiverType,
+			)
+			if !allowed {
 				position := sources.FileSet.Position(selector.Pos())
 				t.Errorf("%s:%d claims scheduler work outside %s.%s", file.Path, position.Line, lifecycle.WriterPackage, lifecycle.WriterType)
-			} else {
+			} else if writerReceipt {
 				seenSchedulerOperations[method] = struct{}{}
 			}
 		}
 		return true
 	})
+}
+
+func v02ClaimCallAuthority(
+	lifecycle v02Lifecycle,
+	claimDelegateTypes map[string]struct{},
+	callerPackage, callerType, receiverPackage, receiverType string,
+) (allowed bool, writerReceipt bool) {
+	callerIsWriter := callerPackage == lifecycle.WriterPackage && callerType == lifecycle.WriterType
+	if callerIsWriter {
+		return true, true
+	}
+	_, allowedScheduler := claimDelegateTypes[callerPackage+"."+callerType]
+	claimsThroughWriter := receiverPackage == lifecycle.WriterPackage && receiverType == lifecycle.WriterType
+	return allowedScheduler && claimsThroughWriter, false
 }
 
 func v02ReceiverName(info *types.Info, function *ast.FuncDecl) string {

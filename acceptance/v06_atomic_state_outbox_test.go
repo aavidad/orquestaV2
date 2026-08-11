@@ -457,6 +457,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	capacityCandidates := v06CapacityCandidates(t, first, clock)
 
 	type claimResult struct {
 		claim application.ActionClaim
@@ -476,6 +477,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 			claim, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
 				WorkerRef: fmt.Sprintf("worker:v06-%02d", index), Token: fmt.Sprintf("claim:v06-%02d", index),
 				LeaseDuration: lease, Capabilities: capabilities, BudgetPolicy: v06BudgetPolicy(t, clock.Now()),
+				CapacityCandidates: capacityCandidates,
 			})
 			results <- claimResult{claim: claim, found: found, err: err}
 		}(index, repository)
@@ -498,7 +500,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	clock.Advance(lease + time.Nanosecond)
 	reclaimed, found, err := second.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:v06-reclaimer", Token: "claim:v06-reclaimer", LeaseDuration: lease, Capabilities: capabilities,
-		BudgetPolicy: v06BudgetPolicy(t, clock.Now()),
+		BudgetPolicy: v06BudgetPolicy(t, clock.Now()), CapacityCandidates: capacityCandidates,
 	})
 	if err != nil || !found || reclaimed.Action.Ref != stale.Action.Ref || reclaimed.Fence != stale.Fence+1 ||
 		reclaimed.DeliveryAttempt != stale.DeliveryAttempt+1 {
@@ -649,11 +651,12 @@ func v06NewOrchestrator(
 	clock *v06Clock,
 	ids *v06IDs,
 	agent *v06Agent,
-	artifacts *v06ArtifactStore,
+	artifacts application.ArtifactStore,
 	fixture v06Fixture,
 ) *application.Orchestrator {
 	t.Helper()
 	policy := v06BudgetPolicy(t, clock.Now())
+	capacitySource := v06ProvisionCapacity(t, repository, artifacts, clock)
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: artifacts, Clock: clock, IDs: ids,
 		MaxOutputBytes:          1 << 20,
@@ -667,11 +670,110 @@ func v06NewOrchestrator(
 		ObservationDelay:        v06Duration(t, fixture.ClockAndRetry.ObservationDelay),
 		ExecutionTimeout:        v06Duration(t, fixture.ClockAndRetry.ExecutionTimeout),
 		AgentCapabilities:       agent.capabilities,
+		CapacityObservationWait: time.Second,
+		CapacitySources:         []application.FuenteCapacidadColocacionAgente{capacitySource},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return orchestrator
+}
+
+func v06ProvisionCapacity(
+	t *testing.T,
+	repository application.StateRepository,
+	artifacts application.ArtifactStore,
+	clock *v06Clock,
+) application.FuenteCapacidadColocacionAgente {
+	t.Helper()
+	placement, err := ports.NewAgentPlacementRef("placement:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := application.RegistrarObservacionCuota(
+		context.Background(), repository, artifacts,
+		application.AgentQuotaObservation{
+			PlacementRef: placement, WindowRef: "quota-window:v06",
+			Status: application.AgentQuotaAvailable, Quality: governance.UsageQualityExact,
+			ObservedAt: clock.Now(), ExpiresAt: clock.Now().Add(2 * time.Hour),
+		},
+		[]byte(`{"status":"available","fixture":"v06"}`),
+	); err != nil {
+		t.Fatalf("provision V06 quota: %v", err)
+	}
+	return v06CapacitySource(clock, placement)
+}
+
+func v06CapacitySource(
+	clock *v06Clock,
+	placement ports.AgentPlacementRef,
+) application.FuenteCapacidadColocacionAgente {
+	return application.FuenteCapacidadColocacionAgente{
+		PlacementRef: placement, SourceRef: "capacity-source:v06", PoolRef: "capacity-pool:v06",
+		BaseMedicion: application.BaseMedicionCapacidadBruta,
+		Observer:     v06CapacityObserver{clock: clock},
+	}
+}
+
+func v06CapacityCandidates(
+	t *testing.T,
+	repository application.StateRepository,
+	clock *v06Clock,
+) []application.AgentCapacityPlacementCandidate {
+	t.Helper()
+	placement, err := ports.NewAgentPlacementRef("placement:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	quota, found, err := repository.CurrentAgentQuotaObservation(context.Background(), placement)
+	if err != nil || !found {
+		t.Fatalf("read V06 quota: found=%t err=%v", found, err)
+	}
+	source := v06CapacitySource(clock, placement)
+	observation, err := source.Observer.ObserveCapacity(context.Background(), source.SourceRef, source.PoolRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submission, err := application.NuevaEntregaObservacionCapacidad(observation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []application.AgentCapacityPlacementCandidate{{
+		PlacementRef: placement,
+		Physical:     submission,
+		Quota: application.AgentPlacementObservationPresentation{
+			ObservationRef: quota.Ref, ObservationRevision: quota.Revision,
+		},
+	}}
+}
+
+type v06CapacityObserver struct{ clock *v06Clock }
+
+func (observer v06CapacityObserver) ObserveCapacity(
+	ctx context.Context,
+	source application.AgentCapacitySourceRef,
+	pool application.AgentCapacityPoolRef,
+) (application.AgentCapacityObservation, error) {
+	if err := ctx.Err(); err != nil {
+		return application.AgentCapacityObservation{}, err
+	}
+	now := observer.clock.Now()
+	notApplicable := application.AgentCapacityDimension{
+		Applicability: application.AgentCapacityApplicabilityNotApplicable,
+	}
+	return application.AgentCapacityObservation{
+		SourceRef: source, PoolRef: pool, WindowRef: "capacity-window:v06",
+		Status: application.AgentCapacityAvailable, Quality: governance.UsageQualityExact,
+		ObservedAt: now, ExpiresAt: now.Add(time.Hour),
+		Resources: application.AgentCapacityResources{
+			Slots: application.AgentCapacityDimension{
+				Applicability: application.AgentCapacityApplicabilityApplicable,
+				Limit:         application.AgentCapacityAmount{Present: true, Value: 70},
+				Remaining:     application.AgentCapacityAmount{Present: true, Value: 70},
+			},
+			Seconds: notApplicable, Messages: notApplicable, Tokens: notApplicable, Credits: notApplicable,
+		},
+	}, nil
 }
 
 // v06BudgetPolicy supplies the same explicit governance dependency required

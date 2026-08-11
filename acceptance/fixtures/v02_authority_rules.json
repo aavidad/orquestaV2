@@ -26,7 +26,8 @@
   "product_module": "orquesta",
   "product_roots": [
     "internal",
-    "cmd/orquesta"
+    "cmd/orquesta",
+    "cmd/orquesta-codex-work-executor"
   ],
   "legacy_import_prefixes": [
     "orquesta/modulos"
@@ -41,7 +42,8 @@
     {
       "root": "cmd",
       "exclude_prefixes": [
-        "cmd/orquesta"
+        "cmd/orquesta",
+        "cmd/orquesta-codex-work-executor"
       ],
       "file_count": 546,
       "digest": "sha256:544a804caf7b6f733e667d16eebaaaf151f68a4fce05bd4f2b786fcad649fb82"
@@ -110,6 +112,9 @@
     "allowed_scheduler_types": [
       "orquesta/internal/bootstrap.scheduler",
       "orquesta/internal/config.SchedulerConfig"
+    ],
+    "claim_delegate_types": [
+      "orquesta/internal/bootstrap.scheduler"
     ]
   }
 }

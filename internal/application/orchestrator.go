@@ -43,6 +43,7 @@ type Dependencies struct {
 	ExecutionSessions       ports.ExecutionSessionBroker
 	PostArtifactMailbox     PostArtifactMailboxAdmitter
 	EgressPolicies          EgressPolicyResolver
+	ProviderCatalogSources  []ProviderCatalogSource
 	CapacitySources         []FuenteCapacidadColocacionAgente
 	CapacityObservationWait time.Duration
 }
@@ -77,11 +78,16 @@ type Orchestrator struct {
 	executionSessions       ports.ExecutionSessionBroker
 	postArtifactMailbox     PostArtifactMailboxAdmitter
 	egressPolicies          EgressPolicyResolver
+	providerCatalogSources  []normalizedProviderCatalogSource
 	capacitySources         []FuenteCapacidadColocacionAgente
 	capacityObservationWait time.Duration
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
+	providerCatalogSources, providerCatalogErr := normalizeProviderCatalogSources(dependencies.ProviderCatalogSources)
+	if providerCatalogErr != nil {
+		return nil, providerCatalogErr
+	}
 	capacitySources, capacityErr := normalizarFuentesCapacidadColocacion(dependencies.CapacitySources)
 	if capacityErr != nil {
 		return nil, errors.New("application.agent_capacity_sources_invalid")
@@ -202,6 +208,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		executionSessions:       dependencies.ExecutionSessions,
 		postArtifactMailbox:     dependencies.PostArtifactMailbox,
 		egressPolicies:          dependencies.EgressPolicies,
+		providerCatalogSources:  providerCatalogSources,
 		capacitySources:         capacitySources,
 		capacityObservationWait: dependencies.CapacityObservationWait,
 	}, nil

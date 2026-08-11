@@ -15,6 +15,11 @@ import (
 	"orquesta/internal/identity"
 )
 
+var v20CommandInterfaceFiles = []string{
+	"internal/interfaces/httpapi/interface.go", "internal/interfaces/mcp/v20_commands.go",
+	"internal/interfaces/cli/runner.go",
+}
+
 func v20AssertMigrationAndBehaviorGates(t *testing.T, repositoryRoot string, fixture v20Fixture) {
 	t.Helper()
 	matches, err := filepath.Glob(filepath.Join(repositoryRoot, filepath.FromSlash(fixture.MigrationContract.FileGlob)))
@@ -145,9 +150,7 @@ func TestInterfacesDependOnDispatcherAndNeverWriteLifecycle(t *testing.T) {
 	for _, marker := range fixture.ForbiddenInterfaceMarkers {
 		lifecycleCalls[strings.TrimSuffix(marker, "(")] = true
 	}
-	for _, relative := range []string{
-		"internal/interfaces/httpapi", "internal/interfaces/mcp", "internal/interfaces/cli",
-	} {
+	for _, relative := range v20CommandInterfaceFiles {
 		importsDispatcher := false
 		v20WalkGo(t, filepath.Join(repositoryRoot, filepath.FromSlash(relative)), false, func(path string, file *ast.File) {
 			for _, specification := range file.Imports {

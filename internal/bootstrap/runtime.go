@@ -294,7 +294,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	artifacts, err := filesystem.Open(setup.snapshot.ArtifactFilesystemRoot())
+	artifacts, err := openBuildArtifacts(setup.snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -721,6 +721,14 @@ func openBuildRepository(
 		}
 	}
 	return repository, nil
+}
+
+func openBuildArtifacts(snapshot config.Snapshot) (*filesystem.Store, error) {
+	projectRef, err := goal.NewProjectRef(snapshot.ProjectDefault())
+	if err != nil {
+		return nil, errors.New("bootstrap.artifact_project_ref_invalid")
+	}
+	return filesystem.OpenForProject(snapshot.ArtifactFilesystemRoot(), projectRef)
 }
 
 func abrirControladoresCuota(

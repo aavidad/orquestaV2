@@ -368,9 +368,9 @@ func v20AssertGeneratedBindings(t *testing.T, repositoryRoot string, fixture v20
 
 func v20AssertInterfacesContainNoLifecycle(t *testing.T, repositoryRoot string, fixture v20Fixture) {
 	t.Helper()
-	for _, relative := range []string{
-		"internal/interfaces/httpapi", "internal/interfaces/mcp", "internal/interfaces/cli", "sdk/commands",
-	} {
+	paths := append([]string(nil), v20CommandInterfaceFiles...)
+	paths = append(paths, "sdk/commands")
+	for _, relative := range paths {
 		source := v20ReadProductionGo(t, filepath.Join(repositoryRoot, filepath.FromSlash(relative)))
 		for _, forbidden := range fixture.ForbiddenInterfaceImports {
 			if strings.Contains(source, `"`+forbidden+`"`) {

@@ -53,6 +53,44 @@ func ObserveProviderCatalog(
 	if err != nil {
 		return ProviderCatalog{}, err
 	}
+	return observeNormalizedProviderCatalog(ctx, now, normalized)
+}
+
+// ObserveProviderCatalog reads the sources bound at composition time using the
+// orchestrator clock. It is a query only: it never claims work or writes Goal
+// lifecycle state.
+func (orchestrator *Orchestrator) ObserveProviderCatalog(ctx context.Context) (ProviderCatalog, error) {
+	if orchestrator == nil || orchestrator.clock == nil {
+		return ProviderCatalog{}, ErrProviderCatalogInvalid
+	}
+	return observeNormalizedProviderCatalog(
+		ctx,
+		orchestrator.clock.Now().Round(0).UTC(),
+		orchestrator.providerCatalogSources,
+	)
+}
+
+// RouteProviderModel resolves an explicit request against one fresh query. It
+// deliberately does not bind the decision to an Action or launch an adapter.
+func (orchestrator *Orchestrator) RouteProviderModel(
+	ctx context.Context,
+	request ProviderRouteRequest,
+) (ProviderRouteDecision, error) {
+	catalog, err := orchestrator.ObserveProviderCatalog(ctx)
+	if err != nil {
+		return ProviderRouteDecision{}, err
+	}
+	return RouteProviderModel(catalog, request)
+}
+
+func observeNormalizedProviderCatalog(
+	ctx context.Context,
+	now time.Time,
+	normalized []normalizedProviderCatalogSource,
+) (ProviderCatalog, error) {
+	if ctx == nil || now.IsZero() {
+		return ProviderCatalog{}, ErrProviderCatalogInvalid
+	}
 	catalog := ProviderCatalog{
 		observedAt: now,
 		providers:  make(map[string]ports.ProviderCatalogObservation, len(normalized)),

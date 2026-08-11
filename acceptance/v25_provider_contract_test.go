@@ -1,6 +1,7 @@
 package acceptance_test
 
 import (
+	"context"
 	"encoding/json"
 	"go/parser"
 	"go/token"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"orquesta/internal/application"
@@ -47,6 +49,13 @@ type v25ProviderRequiredTest struct {
 	RejectNoTestsToRun bool   `json:"reject_no_tests_to_run"`
 }
 
+type v25ProviderCatalogQuerySurface interface {
+	ObserveProviderCatalog(context.Context) (application.ProviderCatalog, error)
+	RouteProviderModel(context.Context, application.ProviderRouteRequest) (application.ProviderRouteDecision, error)
+}
+
+var _ v25ProviderCatalogQuerySurface = (*application.Orchestrator)(nil)
+
 func TestAcceptanceV25ProviderContractFoundation(t *testing.T) {
 	root := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v25ProviderContractFixture](
@@ -56,12 +65,13 @@ func TestAcceptanceV25ProviderContractFoundation(t *testing.T) {
 	assertV25ProviderSourceBoundary(t, root, fixture)
 	assertV25ProviderRoadmapRemainsUnaccredited(t, root, fixture)
 	assertV25ProviderObserverHasNoLifecycleAuthority(t)
+	assertV25ProviderQueryOnlyComposition(t, root)
 }
 
 func assertV25ProviderFoundationEnvelope(t *testing.T, root string, fixture v25ProviderContractFixture) {
 	t.Helper()
 	if fixture.SchemaVersion != 1 || fixture.ContractID != "FOUNDATION-V25-PROVIDER-CONTRACT" ||
-		fixture.Status != "foundation_only_unwired" || len(fixture.CapabilitiesAccredited) != 0 {
+		fixture.Status != "query_only_unwired_to_launch" || len(fixture.CapabilitiesAccredited) != 0 {
 		t.Fatalf("invalid V25 foundation envelope: %+v", fixture)
 	}
 	if fixture.RelatedAcceptanceContract != (v25AcceptanceContract{ID: "AC-V25-PROVIDER-ADAPTERS", Status: "planned"}) {
@@ -78,7 +88,9 @@ func assertV25ProviderFoundationEnvelope(t *testing.T, root string, fixture v25P
 		"internal/ports/provider_contract.go",
 		"internal/application/provider_catalog.go",
 		"internal/application/provider_routing.go",
+		"internal/application/orchestrator.go",
 		"internal/application/provider_contract_test.go",
+		"internal/application/provider_catalog_orchestrator_test.go",
 		"acceptance/v25_provider_contract_test.go",
 		"acceptance/fixtures/v25_provider_contract.json",
 	})
@@ -88,6 +100,9 @@ func assertV25ProviderFoundationEnvelope(t *testing.T, root string, fixture v25P
 		"fallback_is_explicit",
 		"unknown_fails_closed",
 		"provider_facts_never_write_goal_lifecycle",
+		"orchestrator_clock_is_canonical",
+		"sources_normalized_once_at_composition",
+		"query_only_unwired_to_launch",
 	})
 	assertV25ProviderStrings(t, fixture.ContractCases, []string{
 		"provider_absent",
@@ -95,6 +110,9 @@ func assertV25ProviderFoundationEnvelope(t *testing.T, root string, fixture v25P
 		"quota_exhausted",
 		"isolated_provider_failure",
 		"no_inferred_model_or_capability_parity",
+		"ambiguous_composition_rejected",
+		"canonical_clock_refresh",
+		"query_does_not_write_lifecycle",
 	})
 	assertV25ProviderStrings(t, fixture.Deferred, []string{
 		"concrete provider adapters",
@@ -203,6 +221,24 @@ func assertV25ProviderObserverHasNoLifecycleAuthority(t *testing.T) {
 		actual = append(actual, contract.Method(index).Name)
 	}
 	assertV25ProviderStrings(t, actual, []string{"ObserveProviderCatalog", "ProviderRef"})
+}
+
+func assertV25ProviderQueryOnlyComposition(t *testing.T, root string) {
+	t.Helper()
+	dependencies := reflect.TypeOf(application.Dependencies{})
+	field, found := dependencies.FieldByName("ProviderCatalogSources")
+	if !found || field.Type != reflect.TypeOf([]application.ProviderCatalogSource(nil)) {
+		t.Fatalf("provider catalog dependency missing or invalid: %+v found=%t", field, found)
+	}
+	processing, err := os.ReadFile(filepath.Join(root, "internal/application/processing.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"ProviderCatalog", "RouteProviderModel"} {
+		if strings.Contains(string(processing), forbidden) {
+			t.Fatalf("V25 query-only catalog wired into processing through %q", forbidden)
+		}
+	}
 }
 
 func assertV25ProviderStrings(t *testing.T, actual, expected []string) {

@@ -1,9 +1,11 @@
 package scripts_test
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -41,15 +43,45 @@ assert not ({"kill","system","popen"} & set(names))
 
 func TestF3R2ShellSyntax(t *testing.T) {
 	root := scriptsRootF3R2(t)
-	paths := []string{
-		filepath.Join(root, "orquesta_server_drain.sh"),
-		filepath.Join(root, "test_orquesta_server_drain.sh"),
-		filepath.Join(root, "orquesta_test_batches.sh"),
-		filepath.Join(root, "test_orquesta_test_batches.sh"),
-		filepath.Join(root, "lib/isolated_test_env.sh"),
+	relatives := []string{
+		"orquesta_server_drain.sh",
+		"test_orquesta_server_drain.sh",
+		"orquesta_test_batches.sh",
+		"test_orquesta_test_batches.sh",
+		"lib/isolated_test_env.sh",
+	}
+	paths := make([]string, 0, len(relatives))
+	for _, relative := range relatives {
+		paths = append(paths, f3R2ShellSyntaxPath(t, root, relative))
 	}
 	args := append([]string{"-n"}, paths...)
 	if output, err := exec.Command("bash", args...).CombinedOutput(); err != nil {
 		t.Fatalf("bash -n F3-R2: %v\n%s", err, output)
 	}
+}
+
+func f3R2ShellSyntaxPath(t *testing.T, scriptsRoot, relative string) string {
+	t.Helper()
+	path := filepath.Join(scriptsRoot, filepath.FromSlash(relative))
+	if _, err := os.Stat(path); err == nil {
+		return path
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat F3-R2 shell %s: %v", relative, err)
+	}
+
+	repositoryRoot := filepath.Dir(scriptsRoot)
+	repositoryPath := filepath.ToSlash(filepath.Join("scripts", relative))
+	index, err := exec.Command("git", "-C", repositoryRoot, "ls-files", "-v", "--", repositoryPath).CombinedOutput()
+	if err != nil || !strings.HasPrefix(string(index), "S ") {
+		t.Fatalf("missing non-sparse F3-R2 shell %s: index=%q err=%v", relative, index, err)
+	}
+	payload, err := exec.Command("git", "-C", repositoryRoot, "show", "HEAD:"+repositoryPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("read sparse F3-R2 shell %s: %v\n%s", relative, err, payload)
+	}
+	materialized := filepath.Join(t.TempDir(), filepath.Base(relative))
+	if err := os.WriteFile(materialized, payload, 0o600); err != nil {
+		t.Fatalf("materialize sparse F3-R2 shell %s: %v", relative, err)
+	}
+	return materialized
 }
