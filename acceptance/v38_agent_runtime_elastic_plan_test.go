@@ -177,6 +177,18 @@ func TestV38AgentRuntimeElasticPlanRejectsSemanticDrift(t *testing.T) {
 		!v38IsPrematureEvidence("otra.json", []byte(`{"vertical":"agent_runtime_elastic"}`)) {
 		t.Fatal("el cierre de evidencia V38 no cubre nombres y registros")
 	}
+	if !v38IsNonAccreditingCandidate("candidates/v38/b04.json", map[string]any{
+		"schema": "orquesta.v38.b04_compatibility.v1", "status": "exercised_without_kvm",
+		"limitations": []any{"no_physical_microvm", "no_v38_promotion"},
+	}) || v38IsNonAccreditingCandidate("candidates/v38/b04.json", map[string]any{
+		"schema": "orquesta.v38.b04_compatibility.v1", "status": "accredited",
+		"limitations": []any{"no_v38_promotion"},
+	}) || v38IsNonAccreditingCandidate("candidates/v38/b04.json", map[string]any{
+		"schema": "orquesta.v38.b04_compatibility.v1", "status": "exercised_without_kvm",
+		"limitations": []any{"no_physical_microvm"},
+	}) {
+		t.Fatal("la excepción de candidato V38 admite una promoción o rechaza el candidato no acreditable")
+	}
 }
 
 func TestV38AgentRuntimeElasticPlanRejectsInvalidJSON(t *testing.T) {

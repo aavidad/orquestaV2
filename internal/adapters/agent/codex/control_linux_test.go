@@ -816,7 +816,10 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		if err != nil || cooperative.Status != ports.AgentStopPending {
 			t.Fatalf("cooperative Stop() = %+v, %v", cooperative, err)
 		}
-		if elapsed := time.Since(started); elapsed > time.Second {
+		// The real identity inspection scans /proc once before returning
+		// pending. Its duration depends on host process pressure; the contract
+		// forbids waiting for provider settlement, not a sub-second /proc scan.
+		if elapsed := time.Since(started); elapsed > 2*time.Second {
 			t.Fatalf("cooperative Stop() blocked resident caller for %s", elapsed)
 		}
 		if err := syscall.Kill(grandchild, 0); err != nil {

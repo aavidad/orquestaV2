@@ -34,8 +34,8 @@ func v38AssertNoPrematureEvidence(t *testing.T, evidenceRoot string) {
 		if err != nil {
 			return err
 		}
+		var record any
 		if filepath.Ext(path) == ".json" {
-			var record any
 			if err := json.Unmarshal(data, &record); err != nil {
 				return fmt.Errorf("evidencia JSON ilegible %s: %w", path, err)
 			}
@@ -49,7 +49,7 @@ func v38AssertNoPrematureEvidence(t *testing.T, evidenceRoot string) {
 		if err != nil {
 			return err
 		}
-		if v38IsPrematureEvidence(relative, data) {
+		if v38IsPrematureEvidence(relative, data) && !v38IsNonAccreditingCandidate(relative, record) {
 			return fmt.Errorf("V38 planificada anticipa evidencia en %q", relative)
 		}
 		return nil
@@ -57,6 +57,32 @@ func v38AssertNoPrematureEvidence(t *testing.T, evidenceRoot string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func v38IsNonAccreditingCandidate(path string, record any) bool {
+	lowerPath := strings.ToLower(filepath.ToSlash(path))
+	if !strings.HasPrefix(lowerPath, "candidates/v38/") || filepath.Ext(lowerPath) != ".json" {
+		return false
+	}
+	object, ok := record.(map[string]any)
+	if !ok {
+		return false
+	}
+	schema, schemaOK := object["schema"].(string)
+	status, statusOK := object["status"].(string)
+	if !schemaOK || !strings.HasPrefix(schema, "orquesta.v38.") || !statusOK || status != "exercised_without_kvm" {
+		return false
+	}
+	limitations, ok := object["limitations"].([]any)
+	if !ok {
+		return false
+	}
+	for _, limitation := range limitations {
+		if limitation == "no_v38_promotion" {
+			return true
+		}
+	}
+	return false
 }
 
 func v38IsPrematureEvidence(path string, data []byte) bool {
