@@ -402,6 +402,7 @@ func TestV23WizardGapsInputRecoveryRejectsCoherentMutationSelectionTamper(
 	_, err = service.ApplyWizardGaps(context.Background(), request)
 	sqliteTestNoError(t, err)
 	record := sqliteWizardGapsInputRecord(t, system, request)
+	oldInputRef := record.Receipt.Ref
 	record.Receipt.Selections = []application.WizardGapsSelectionInput{{
 		Dimension: string(gaps.DimensionU1),
 		Option:    "intake-option:wizard.u1.team",
@@ -413,15 +414,14 @@ func TestV23WizardGapsInputRecoveryRejectsCoherentMutationSelectionTamper(
 		string(selectionsJSON),
 	)
 	record.Receipt.Ref = v23TestWizardGapsInputRef(record.Receipt)
-	rewriteRecoveryTrigger(
+	rewriteWizardGapsInputAndSnapshot(
 		t,
 		system.repository.db,
-		"wizard_gaps_input_receipts_immutable_update",
-		func() {
-			mustV10Exec(
-				t,
-				system.repository.db,
-				`UPDATE wizard_gaps_input_receipts
+		nil,
+		oldInputRef,
+		record.Receipt,
+		func(transaction *sql.Tx) {
+			_, err := transaction.Exec(`UPDATE wizard_gaps_input_receipts
 SET ref=?, selections_json=?, selections_digest=?
 WHERE request_ref=?`,
 				record.Receipt.Ref,
@@ -429,6 +429,7 @@ WHERE request_ref=?`,
 				record.Receipt.SelectionsDigest,
 				request.RequestRef,
 			)
+			sqliteTestNoError(t, err)
 		},
 	)
 	requireWizardGapsInputRecoveryError(
@@ -455,6 +456,7 @@ func TestV23WizardGapsInputRejectsCoherentMutationFingerprintTamper(
 	_, err = service.ApplyWizardGaps(context.Background(), request)
 	sqliteTestNoError(t, err)
 	record := sqliteWizardGapsInputRecord(t, system, request)
+	oldInputRef := record.Receipt.Ref
 	oldOutcomeRef := record.OutcomeRecord.Receipt.Ref
 	record.OutcomeRecord.Receipt.RequestFingerprint = strings.Repeat("a", 64)
 	record.OutcomeRecord.Receipt.Ref = v23TestIntakeReceiptRef(
@@ -462,20 +464,16 @@ func TestV23WizardGapsInputRejectsCoherentMutationFingerprintTamper(
 	)
 	record.Receipt.OutcomeReceiptRef = record.OutcomeRecord.Receipt.Ref
 	record.Receipt.Ref = v23TestWizardGapsInputRef(record.Receipt)
-	rewriteRecoveryTriggers(
+	rewriteWizardGapsInputAndSnapshot(
 		t,
 		system.repository.db,
 		[]string{
 			"intake_receipts_immutable_update",
 			"intake_states_revision_guard",
-			"wizard_gaps_input_receipts_immutable_update",
 		},
-		func() {
-			transaction, err := system.repository.db.Begin()
-			sqliteTestNoError(t, err)
-			defer transaction.Rollback()
-			_, err = transaction.Exec(`PRAGMA defer_foreign_keys=ON`)
-			sqliteTestNoError(t, err)
+		oldInputRef,
+		record.Receipt,
+		func(transaction *sql.Tx) {
 			_, err = transaction.Exec(`
 UPDATE intake_receipts
 SET ref=?, request_fingerprint=?
@@ -500,7 +498,6 @@ WHERE request_ref=?`,
 				request.RequestRef,
 			)
 			sqliteTestNoError(t, err)
-			sqliteTestNoError(t, transaction.Commit())
 		},
 	)
 	hydrated := sqliteWizardGapsInputRecord(t, system, request)
@@ -533,6 +530,7 @@ func TestV23WizardGapsInputRecoveryRejectsCoherentNoOpOutcomeTamper(
 	result, err := service.ApplyWizardGaps(context.Background(), request)
 	sqliteTestNoError(t, err)
 	record := sqliteWizardGapsInputRecord(t, system, request)
+	oldInputRef := record.Receipt.Ref
 	outcome, found, err := system.repository.ReplayWizardGapsNoOp(
 		context.Background(),
 		application.WizardGapsNoOpReplayRequest{
@@ -575,21 +573,21 @@ WHERE ref=?`,
 	)
 	record.Receipt.OutcomeReceiptRef = outcome.Ref
 	record.Receipt.Ref = v23TestWizardGapsInputRef(record.Receipt)
-	rewriteRecoveryTrigger(
+	rewriteWizardGapsInputAndSnapshot(
 		t,
 		system.repository.db,
-		"wizard_gaps_input_receipts_immutable_update",
-		func() {
-			mustV10Exec(
-				t,
-				system.repository.db,
-				`UPDATE wizard_gaps_input_receipts
+		nil,
+		oldInputRef,
+		record.Receipt,
+		func(transaction *sql.Tx) {
+			_, err := transaction.Exec(`UPDATE wizard_gaps_input_receipts
 SET ref=?, outcome_receipt_ref=?
 WHERE request_ref=?`,
 				record.Receipt.Ref,
 				outcome.Ref,
 				request.RequestRef,
 			)
+			sqliteTestNoError(t, err)
 		},
 	)
 	if result.RequestOutcome.ReceiptRef != oldOutcomeRef {
@@ -853,6 +851,40 @@ SELECT sql FROM sqlite_schema WHERE type='trigger' AND name=?`,
 	for _, statement := range statements {
 		mustV10Exec(t, database, statement)
 	}
+}
+
+func rewriteWizardGapsInputAndSnapshot(
+	t *testing.T,
+	database *sql.DB,
+	extraTriggers []string,
+	oldInputRef string,
+	receipt application.WizardGapsInputReceipt,
+	mutate func(*sql.Tx),
+) {
+	t.Helper()
+	triggers := append([]string(nil), extraTriggers...)
+	triggers = append(triggers,
+		"wizard_gaps_input_receipts_immutable_update",
+		"wizard_gaps_result_snapshots_immutable_update",
+	)
+	rewriteRecoveryTriggers(t, database, triggers, func() {
+		transaction, err := database.Begin()
+		sqliteTestNoError(t, err)
+		defer transaction.Rollback()
+		_, err = transaction.Exec(`PRAGMA defer_foreign_keys=ON`)
+		sqliteTestNoError(t, err)
+		mutate(transaction)
+		snapshotRef := "wizard-gaps-result-snapshot:" + canonicalFingerprint(
+			"orquesta.wizard.gaps.result-snapshot-binding.v1",
+			receipt.Ref,
+			receipt.ResultSnapshot.Digest,
+		)
+		_, err = transaction.Exec(`
+UPDATE wizard_gaps_result_snapshots SET ref=?,input_receipt_ref=?
+WHERE input_receipt_ref=?`, snapshotRef, receipt.Ref, oldInputRef)
+		sqliteTestNoError(t, err)
+		sqliteTestNoError(t, transaction.Commit())
+	})
 }
 
 func v23TestWizardGapsNoOpRef(
