@@ -108,6 +108,7 @@ func ejecutarAyudanteCuota(contador string) {
 		os.Exit(2)
 	}
 	fmt.Printf("{\"method\":\"configWarning\",\"params\":{\"message\":\"advisory\"}}\n")
+	fmt.Printf("{\"method\":\"remoteControl/status/changed\",\"params\":{\"status\":\"disconnected\"}}\n")
 	reinicio := int64(2_000 + intento*1_000)
 	fmt.Printf("{\"id\":1,\"result\":%s}\n", cargaCuotaAyudante(reinicio))
 	if intento == 1 {

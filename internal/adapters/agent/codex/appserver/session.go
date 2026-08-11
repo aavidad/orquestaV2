@@ -6,7 +6,6 @@ import (
 
 const quotaReadMethod = "account/rateLimits/read"
 const quotaUpdatedMethod = "account/rateLimits/updated"
-const configWarningMethod = "configWarning"
 
 type ClientInfo struct {
 	Name    string `json:"name"`
@@ -87,10 +86,13 @@ func (session *Session) Accept(message Message) (string, error) {
 		if session.state != 3 {
 			return "", ErrSequence
 		}
-		if message.Method != quotaUpdatedMethod && message.Method != configWarningMethod {
-			return "", ErrMethodNotAllowed
+		if message.Method == quotaUpdatedMethod {
+			return message.Method, nil
 		}
-		return message.Method, nil
+		// Notifications unrelated to quota are advisory for this read-only
+		// session. Ignore them without inspecting their payload; server requests
+		// and uncorrelated responses remain rejected below.
+		return "", nil
 	}
 	if message.Kind != KindSuccess && message.Kind != KindFailure {
 		return "", ErrMethodNotAllowed

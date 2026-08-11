@@ -117,10 +117,13 @@ func TestSessionSequenceAllowlistAndCorrelation(t *testing.T) {
 	if _, err := session.Accept(mustRead(t, `{"id":99,"result":{}}`)); !errors.Is(err, ErrUnknownID) {
 		t.Fatal(err)
 	}
-	if method, err := session.Accept(mustRead(t, `{"method":"configWarning","params":{"message":"advisory"}}`)); err != nil || method != "configWarning" {
+	if method, err := session.Accept(mustRead(t, `{"method":"configWarning","params":{"message":"advisory"}}`)); err != nil || method != "" {
 		t.Fatal(method, err)
 	}
-	if _, err := session.Accept(mustRead(t, `{"method":"thread/started","params":{}}`)); !errors.Is(err, ErrMethodNotAllowed) {
+	if method, err := session.Accept(mustRead(t, `{"method":"remoteControl/status/changed","params":{"status":"disconnected"}}`)); err != nil || method != "" {
+		t.Fatal(method, err)
+	}
+	if _, err := session.Accept(mustRead(t, `{"id":"server","method":"thread/start","params":{}}`)); !errors.Is(err, ErrMethodNotAllowed) {
 		t.Fatal(err)
 	}
 	if method, err := session.Accept(mustRead(t, `{"method":"account/rateLimits/updated","params":{"raw":true}}`)); err != nil || method == "" {
