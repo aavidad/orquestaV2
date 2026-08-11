@@ -140,6 +140,23 @@ func readWizardGapsInput(
 	source queryer,
 	request application.WizardGapsInputReplayRequest,
 ) (application.WizardGapsInputRecord, bool, error) {
+	return readWizardGapsInputRecord(ctx, source, request, true)
+}
+
+func readWizardGapsInputWithoutResultSnapshot(
+	ctx context.Context,
+	source queryer,
+	request application.WizardGapsInputReplayRequest,
+) (application.WizardGapsInputRecord, bool, error) {
+	return readWizardGapsInputRecord(ctx, source, request, false)
+}
+
+func readWizardGapsInputRecord(
+	ctx context.Context,
+	source queryer,
+	request application.WizardGapsInputReplayRequest,
+	withResultSnapshot bool,
+) (application.WizardGapsInputRecord, bool, error) {
 	var record application.WizardGapsInputRecord
 	receipt := &record.Receipt
 	var (
@@ -227,11 +244,13 @@ WHERE actor_ref = ? AND project_ref = ? AND request_ref = ?`,
 			errors.New("sqlite.wizard_gaps_input_replay_conflict"),
 		)
 	}
-	receipt.ResultSnapshot, err = readWizardGapsResultSnapshot(
-		ctx, source, *receipt,
-	)
-	if err != nil {
-		return application.WizardGapsInputRecord{}, false, err
+	if withResultSnapshot {
+		receipt.ResultSnapshot, err = readWizardGapsResultSnapshot(
+			ctx, source, *receipt,
+		)
+		if err != nil {
+			return application.WizardGapsInputRecord{}, false, err
+		}
 	}
 	record.SourceRecord, err = readIntakeRecordByReceipt(
 		ctx, source, receipt.SourceIntakeReceiptRef,
