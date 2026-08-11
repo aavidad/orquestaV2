@@ -26,6 +26,8 @@ func TestWizardGapsSnapshotSchemaMigrationIsLossless(t *testing.T) {
 	sqliteTestNoError(t, applyRecoveryMigrationPrefix(ctx, database, migrations[:recoverySchemaV23]))
 	_, err = database.Exec(`PRAGMA foreign_keys=ON`)
 	sqliteTestNoError(t, err)
+	_, err = database.Exec(migrations[recoverySchemaV23WizardGapsSnapshot-1].sql)
+	sqliteTestNoError(t, err)
 
 	now := time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC)
 	repository := &Repository{db: database, writer: database, now: func() time.Time { return now }}
@@ -46,6 +48,9 @@ func TestWizardGapsSnapshotSchemaMigrationIsLossless(t *testing.T) {
 	sqliteTestNoError(t, err)
 	snapshotRef := "wizard-gaps-result-snapshot:" + strings.Repeat("a", 64)
 	before := sqliteWizardGapsInputRecord(t, system, request)
+	_, err = database.Exec(`DROP TABLE wizard_gaps_result_snapshots`)
+	sqliteTestNoError(t, err)
+	before.Receipt.ResultSnapshot = application.WizardGapsResultSnapshot{}
 
 	sqliteTestNoError(t, applyMigrations(ctx, database))
 	after := sqliteWizardGapsInputRecord(t, system, request)
