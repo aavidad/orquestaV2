@@ -6,6 +6,7 @@ import (
 
 const quotaReadMethod = "account/rateLimits/read"
 const quotaUpdatedMethod = "account/rateLimits/updated"
+const configWarningMethod = "configWarning"
 
 type ClientInfo struct {
 	Name    string `json:"name"`
@@ -86,7 +87,7 @@ func (session *Session) Accept(message Message) (string, error) {
 		if session.state != 3 {
 			return "", ErrSequence
 		}
-		if message.Method != quotaUpdatedMethod {
+		if message.Method != quotaUpdatedMethod && message.Method != configWarningMethod {
 			return "", ErrMethodNotAllowed
 		}
 		return message.Method, nil
