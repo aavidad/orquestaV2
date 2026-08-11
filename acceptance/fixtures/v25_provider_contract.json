@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "contract_id": "FOUNDATION-V25-PROVIDER-CONTRACT",
+  "status": "foundation_only_unwired",
+  "capabilities_accredited": [],
+  "related_acceptance_contract": {
+    "id": "AC-V25-PROVIDER-ADAPTERS",
+    "status": "planned"
+  },
+  "related_roadmap_capabilities": [
+    {"id": "ORC-07", "status": "declared", "evidence_refs": []},
+    {"id": "ORC-26", "status": "declared", "evidence_refs": []},
+    {"id": "ORC-27", "status": "declared", "evidence_refs": []},
+    {"id": "ORC-29", "status": "declared", "evidence_refs": []},
+    {"id": "AGT-02", "status": "declared", "evidence_refs": []},
+    {"id": "AGT-09", "status": "declared", "evidence_refs": []},
+    {"id": "AGT-11", "status": "declared", "evidence_refs": []},
+    {"id": "AGT-12", "status": "declared", "evidence_refs": []}
+  ],
+  "foundation_files": [
+    "internal/ports/provider_contract.go",
+    "internal/application/provider_catalog.go",
+    "internal/application/provider_routing.go",
+    "internal/application/provider_contract_test.go",
+    "acceptance/v25_provider_contract_test.go",
+    "acceptance/fixtures/v25_provider_contract.json"
+  ],
+  "authority_rules": [
+    "providers_observe_only",
+    "application_decides_routes",
+    "fallback_is_explicit",
+    "unknown_fails_closed",
+    "provider_facts_never_write_goal_lifecycle"
+  ],
+  "contract_cases": [
+    "provider_absent",
+    "quota_unknown",
+    "quota_exhausted",
+    "isolated_provider_failure",
+    "no_inferred_model_or_capability_parity"
+  ],
+  "forbidden_import_boundaries": [
+    "orquesta/internal/adapters/",
+    "orquesta/internal/bootstrap/",
+    "orquesta/cmd/"
+  ],
+  "deferred": [
+    "concrete provider adapters",
+    "provider-specific configuration and bootstrap",
+    "cost latency confidence and sample scoring policy",
+    "adapters composition and gates required to accredit related roadmap capabilities",
+    "durable integration with the existing agent lifecycle",
+    "real provider end-to-end evidence",
+    "V25 acceptance accreditation"
+  ],
+  "required_tests": [
+    {
+      "command": "go test -mod=vendor -count=1 ./internal/application -run '^TestProvider'",
+      "name_prefix": "TestProvider",
+      "reject_no_tests_to_run": true
+    },
+    {
+      "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV25ProviderContractFoundation$'",
+      "name_prefix": "TestAcceptanceV25ProviderContractFoundation",
+      "reject_no_tests_to_run": true
+    }
+  ]
+}
