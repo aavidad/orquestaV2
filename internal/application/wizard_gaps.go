@@ -74,8 +74,8 @@ type ApplyWizardGapsResult struct {
 	Record             IntakeRecord
 	Evaluation         gaps.Result
 	EvaluationSnapshot WizardGapsResultSnapshot
-	// EvaluationReplayExact remains false until the exact evaluation result
-	// snapshot is persisted by the next causal cut.
+	// EvaluationReplayExact is true only when Evaluation was restored from the
+	// exact durable result snapshot attached to the input receipt.
 	EvaluationReplayExact bool
 	Changed               bool
 	// RequestRefReserved is true when either an Intake mutation receipt or an
@@ -89,7 +89,8 @@ type ApplyWizardGapsResult struct {
 // ValidateApplyWizardGapsResult keeps public adapters from projecting a
 // request as durable without exposing the exact receipt that owns it.
 func ValidateApplyWizardGapsResult(result ApplyWizardGapsResult) error {
-	if !result.RequestRefReserved || result.EvaluationReplayExact ||
+	hasExactSnapshot := !wizardGapsResultSnapshotEmpty(result.EvaluationSnapshot)
+	if !result.RequestRefReserved || result.EvaluationReplayExact != hasExactSnapshot ||
 		result.RequestOutcome.ReceiptRef == "" ||
 		result.InputDurability.ReceiptRef == "" ||
 		result.InputDurability.SourceIntakeReceiptRef == "" ||
@@ -496,10 +497,11 @@ func (service *WizardGapsService) replayWizardGapsInput(
 	}
 	result := ApplyWizardGapsResult{
 		Record: record.OutcomeRecord, Evaluation: evaluation,
-		EvaluationSnapshot: cloneWizardGapsResultSnapshot(snapshot),
-		RequestRefReserved: true,
-		InputDurability:    wizardGapsDurability(record.Receipt),
-		EvaluatorIdentity:  evaluator.Identity(),
+		EvaluationSnapshot:    cloneWizardGapsResultSnapshot(snapshot),
+		EvaluationReplayExact: !wizardGapsResultSnapshotEmpty(snapshot),
+		RequestRefReserved:    true,
+		InputDurability:       wizardGapsDurability(record.Receipt),
+		EvaluatorIdentity:     evaluator.Identity(),
 		RequestOutcome: WizardGapsRequestOutcome{
 			Kind:       record.Receipt.OutcomeKind,
 			ReceiptRef: record.Receipt.OutcomeReceiptRef,
