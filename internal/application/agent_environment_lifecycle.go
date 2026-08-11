@@ -63,8 +63,33 @@ type AgentEnvironmentLifecycleSnapshot struct {
 	RecordedAt             time.Time
 }
 
-// AgentEnvironmentLifecyclePreEffectState carries the data a future atomic CAS
-// must use to append Attempt and replace Snapshot with its ambiguous frontier.
+// AgentEnvironmentLifecycleInitialState is the only admissible durable birth of
+// the projection. The writer inserts Snapshot iff no lifecycle row exists for
+// its exact Execution; an exact replay returns the stored snapshot without
+// inventing another physical inspection fact.
+type AgentEnvironmentLifecycleInitialState struct {
+	Snapshot    AgentEnvironmentLifecycleSnapshot
+	OperationAt time.Time
+}
+
+// AgentEnvironmentLifecycleStoredState is the restart read model. Claim and
+// Attempt are absent only at the initial active frontier. Once an effect was
+// attempted they remain the original authority even after its claim lease
+// expires; a later reader must never replace them with a new claim.
+type AgentEnvironmentLifecycleStoredState struct {
+	Snapshot     AgentEnvironmentLifecycleSnapshot
+	Claim        ActionClaim
+	Attempt      EffectAttempt
+	HasAttempt   bool
+	Preservation *ComprobantePreservacionEntornoAgente
+	NextAction   *ActionRecord
+	// ReadyToFinalize is durable response state, not a second authority. It is
+	// true exactly when Snapshot is already closed.
+	ReadyToFinalize bool
+}
+
+// AgentEnvironmentLifecyclePreEffectState carries the data an atomic CAS uses
+// to append Attempt and replace Snapshot with its ambiguous frontier.
 type AgentEnvironmentLifecyclePreEffectState struct {
 	Claim                         ActionClaim
 	ExpectedRevision              uint64
@@ -88,7 +113,38 @@ type AgentEnvironmentLifecyclePostEffectState struct {
 	EffectReceipt      *EffectReceipt
 	ConsumptionReceipt ActionConsumptionReceipt
 	PreservationFact   *ComprobantePreservacionEntornoAgente
-	OperationAt        time.Time
+	// NextAction is application-owned continuation. Quiesce terminal requires
+	// Preserve; Preserve terminal requires Close. It is stored atomically with
+	// this terminal CAS. Close has no next lifecycle action.
+	NextAction *ActionRecord
+	// ReadyToFinalize is true only for the durable closed physical frontier.
+	// It is a convenience projection; Snapshot.Token remains authority.
+	ReadyToFinalize bool
+	OperationAt     time.Time
+}
+
+// AgentEnvironmentLifecycleStore is one cohesive durable application port.
+// Initial, attempted, and terminal writes are separate CAS boundaries because
+// the physical call occurs strictly between attempted and terminal. No method
+// invokes the physical provider. RecordAttempt atomically appends the exact
+// EffectAttempt and attempted Snapshot. RecordTerminal additionally stores the
+// application-selected NextAction, when present. A false write result means a
+// CAS winner or exact replay exists and the caller must read that durable state;
+// it never authorizes executing the caller's candidate effect.
+type AgentEnvironmentLifecycleStore interface {
+	AgentEnvironmentLifecycleTerminalWriter
+	GetAgentEnvironmentLifecycle(
+		context.Context,
+		goal.ExecutionRef,
+	) (AgentEnvironmentLifecycleStoredState, bool, error)
+	RecordAgentEnvironmentLifecycleInitial(
+		context.Context,
+		AgentEnvironmentLifecycleInitialState,
+	) (AgentEnvironmentLifecycleSnapshot, bool, error)
+	RecordAgentEnvironmentLifecycleAttempt(
+		context.Context,
+		AgentEnvironmentLifecyclePreEffectState,
+	) (AgentEnvironmentLifecycleSnapshot, bool, error)
 }
 
 // AgentEnvironmentLifecycleTerminalWriter is the durable, lifecycle-specific
@@ -97,8 +153,9 @@ type AgentEnvironmentLifecyclePostEffectState struct {
 // atomically stores attempted -> terminal. It does not use generic recovery
 // claims, re-authorize the effect, or fence the original claim lease at commit.
 // A successful call therefore appends one terminal EffectReceipt, one matching
-// ActionConsumptionReceipt, an optional preservation fact, and one snapshot
-// revision while making zero calls to the physical lifecycle provider.
+// ActionConsumptionReceipt, an optional preservation fact, the application-
+// selected next action, and one snapshot revision while making zero calls to
+// the physical lifecycle provider. ReadyToFinalize is accepted only for closed.
 type AgentEnvironmentLifecycleTerminalWriter interface {
 	RecordAgentEnvironmentLifecycleTerminal(
 		context.Context,

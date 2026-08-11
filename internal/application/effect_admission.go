@@ -361,6 +361,103 @@ func (orchestrator *Orchestrator) stopAction(
 	}, EffectApprovalSourceDirectorDecision, at)
 }
 
+// BuildAgentEnvironmentLifecycleAction derives the next physical lifecycle
+// intent from the durable application snapshot. The provider never selects the
+// transition: active->quiesce, quiesced->preserve, preserved->close is fixed by
+// application and each step receives its own effect admission.
+func (orchestrator *Orchestrator) BuildAgentEnvironmentLifecycleAction(
+	record GoalRecord,
+	snapshot AgentEnvironmentLifecycleSnapshot,
+	kind ActionKind,
+	at time.Time,
+) (ActionRecord, error) {
+	if orchestrator == nil || at.IsZero() || at.Before(snapshot.RecordedAt) ||
+		validateAgentEnvironmentLifecycleSnapshot(snapshot) != nil {
+		return ActionRecord{}, errAgentEnvironmentLifecycleStateInvalid
+	}
+	wantKind, ok := agentEnvironmentLifecycleAction(snapshot.Token.State)
+	if !ok || kind != wantKind || kind == ActionStopAgent {
+		return ActionRecord{}, errAgentEnvironmentLifecycleStateInvalid
+	}
+	item, itemFound := record.Goal.WorkItem(snapshot.Subject.WorkItemRef)
+	execution, executionFound := executionByRef(record.Executions, snapshot.Subject.ExecutionRef)
+	authority, authorityFound := workItemAuthorityFor(record.WorkItemAuthorities, snapshot.Subject.WorkItemRef)
+	if !itemFound || !executionFound || !authorityFound || record.Goal.State() != goal.GoalStateRunning ||
+		record.Goal.Ref() != snapshot.Subject.GoalRef ||
+		execution.GoalRef != snapshot.Subject.GoalRef || execution.WorkItemRef != snapshot.Subject.WorkItemRef ||
+		execution.PlanGeneration != snapshot.Subject.PlanGeneration ||
+		execution.AppSpecGeneration != snapshot.Subject.AppSpecGeneration || execution.AttemptNo != snapshot.Subject.ExecutionAttempt ||
+		execution.SpecHash != snapshot.Subject.SpecHash || execution.ProviderRef != snapshot.Subject.ProviderRef ||
+		execution.ModelRef != snapshot.Subject.ModelRef || execution.AgentRef != snapshot.Subject.AgentRef ||
+		execution.ExternalRef != snapshot.Subject.ExternalRef || !execution.RequierePreservacionEntorno ||
+		terminalExecutionState(execution.State) || validateWorkItemAuthority(record.Goal, authority) != nil {
+		return ActionRecord{}, errAgentEnvironmentLifecycleStateInvalid
+	}
+	policy, err := historicalEffectPolicy(record)
+	if err != nil {
+		return ActionRecord{}, err
+	}
+	actionRef := agentEnvironmentLifecycleActionRef(kind, execution.Ref)
+	intent := EffectIntent{
+		Ref:        "effect-intent:" + actionRef,
+		RequestRef: authority.AuthorizationReceipt.Decision().Request().RequestRef(),
+		RequestFingerprint: effectAdmissionFingerprint(
+			actionRef, authority.AuthorizationReceipt.Ref(), policy.PolicyHash,
+		),
+		ActionRef: actionRef, ActionKind: kind, Kind: lifecycleEffectKindForAction(kind),
+		Subject: effectSubject(record.Goal, item, execution), ProposedBy: authority.PrincipalRef,
+		Permission: authority.Permission, Authority: authority.AuthorizationReceipt,
+		Demand:              governance.BudgetDemand{Ref: "budget-demand:" + actionRef},
+		SecurityCriticality: item.SecurityCriticality(), ReasoningEffort: item.ReasoningEffort(),
+		PolicyHash: policy.PolicyHash, PolicyRevision: policy.PolicyRevision,
+		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.ApprovalTTL,
+		TargetDigest:   agentEnvironmentLifecycleTargetDigest(snapshot, kind),
+		IdempotencyKey: "lifecycle:" + string(kind) + ":" + execution.IdempotencyKey,
+		CreatedAt:      at.UTC(),
+	}
+	return orchestrator.finalizeEffectAction(intent, ActionRecord{
+		Ref: actionRef, Kind: kind, GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AvailableAt: at.UTC(),
+	}, authority.Source, at)
+}
+
+func agentEnvironmentLifecycleActionRef(kind ActionKind, executionRef goal.ExecutionRef) string {
+	switch kind {
+	case ActionQuiesceAgent:
+		return "action:quiesce-agent:" + executionRef.String()
+	case ActionPreserveAgentEnvironment:
+		return "action:preserve-agent-environment:" + executionRef.String()
+	case ActionCloseAgentEnvironment:
+		return "action:close-agent-environment:" + executionRef.String()
+	default:
+		return ""
+	}
+}
+
+func agentEnvironmentLifecycleTargetDigest(
+	snapshot AgentEnvironmentLifecycleSnapshot,
+	kind ActionKind,
+) string {
+	fields := []string{
+		"target:agent-environment-lifecycle:v1", string(kind),
+		snapshot.Subject.GoalRef.String(), snapshot.Subject.WorkItemRef.String(),
+		snapshot.Subject.ExecutionRef.String(),
+		strconv.FormatUint(uint64(snapshot.Subject.PlanGeneration), 10),
+		strconv.FormatUint(uint64(snapshot.Subject.AppSpecGeneration), 10),
+		strconv.FormatUint(snapshot.Subject.ExecutionAttempt, 10), snapshot.Subject.SpecHash,
+		snapshot.Subject.ProviderRef, snapshot.Subject.ModelRef, snapshot.Subject.AgentRef,
+		snapshot.Subject.ExternalRef, snapshot.Token.PhysicalToken.String(),
+		snapshot.Token.Revision.String(), snapshot.Token.Fence.String(), string(snapshot.Token.State),
+	}
+	if kind == ActionCloseAgentEnvironment {
+		fields = append(fields, snapshot.Preservation.ApplicationReceiptRef,
+			snapshot.Preservation.PhysicalManifest.ManifestRef,
+			snapshot.Preservation.PhysicalManifest.ManifestSHA256)
+	}
+	return effectAdmissionFingerprint(fields...)
+}
+
 func (orchestrator *Orchestrator) finalizeEffectAction(intent EffectIntent, action ActionRecord, source EffectApprovalSource, at time.Time) (ActionRecord, error) {
 	intent.Digest = EffectIntentDigest(intent)
 	action.EffectIntentRef, action.EffectIntent = intent.Ref, intent
