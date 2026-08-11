@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "contract_id": "FOUNDATION-V25-CODEX-PROVIDER-CATALOG",
+  "status": "foundation_only_unwired",
+  "capabilities_accredited": [],
+  "related_acceptance_contract": {
+    "id": "AC-V25-PROVIDER-ADAPTERS",
+    "status": "planned"
+  },
+  "related_roadmap_capabilities": [
+    {"id": "AGT-02", "status": "declared", "evidence_refs": []},
+    {"id": "AGT-12", "status": "declared", "evidence_refs": []}
+  ],
+  "provider_ref": "provider:codex",
+  "foundation_files": [
+    "internal/adapters/agent/codex/provider_catalog.go",
+    "internal/adapters/agent/codex/provider_catalog_test.go",
+    "acceptance/v25_codex_provider_catalog_test.go",
+    "acceptance/fixtures/v25_codex_provider_catalog.json"
+  ],
+  "observed_facts": [
+    "provider_ref_is_stable_codex_identity",
+    "model_ref_is_exact_configured_or_logical_default",
+    "local_adapter_shutdown_is_observed_as_unavailable"
+  ],
+  "fail_closed_facts": [
+    "live_local_adapter_does_not_prove_remote_availability",
+    "provider_quota_is_unknown",
+    "provider_usage_is_unknown",
+    "model_capabilities_are_not_inferred",
+    "model_reasoning_efforts_are_not_inferred"
+  ],
+  "authority_rules": [
+    "source_is_read_only",
+    "source_does_not_write_goal_lifecycle",
+    "observation_window_is_explicit_not_defaulted",
+    "application_remains_routing_authority"
+  ],
+  "forbidden_imports": [
+    "orquesta/internal/application",
+    "orquesta/internal/goal",
+    "orquesta/internal/bootstrap",
+    "orquesta/internal/adapters/state/sqlite"
+  ],
+  "deferred": [
+    "canonical configuration and bootstrap composition",
+    "trustworthy live provider availability observation",
+    "provider quota observation integration",
+    "provider advertised model capability discovery",
+    "isolated real Codex provider catalog end-to-end evidence",
+    "V25 acceptance accreditation"
+  ],
+  "required_tests": [
+    {
+      "command": "go test -mod=vendor -count=1 ./internal/adapters/agent/codex -run '^TestCodexProviderCatalog'",
+      "name_prefix": "TestCodexProviderCatalog",
+      "reject_no_tests_to_run": true
+    },
+    {
+      "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV25CodexProviderCatalogFoundation$'",
+      "name_prefix": "TestAcceptanceV25CodexProviderCatalogFoundation",
+      "reject_no_tests_to_run": true
+    }
+  ]
+}
