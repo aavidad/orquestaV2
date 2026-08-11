@@ -1,0 +1,87 @@
+{
+  "schema": "orquesta.v23.wizard.candidate_gate.v1",
+  "recorded_at": "2026-08-11T16:46:13Z",
+  "status": "rework_required",
+  "candidate": false,
+  "sealed": false,
+  "subject": {
+    "repository": "https://github.com/aavidad/orquestaV2.git",
+    "branch": "integracion/v23-intake-durable",
+    "commit_oid": "4811ab38a469d7940e5e0c19ca6390deb1e90c6b",
+    "tree_oid": "f54ffbecac7ee8162ea5d546801df66d6b6892bd",
+    "source_archive_sha256": "a8c0254e319c8ebd4f25c62aeaa1e689475b535dac2c9ddef5458a0f5dc77736"
+  },
+  "subjects": [
+    {
+      "path": "acceptance/fixtures/v23_wizard.json",
+      "sha256": "d4231f371464b871f2bde535710424ac842541a91814c6e78ace64a91c34529f"
+    },
+    {
+      "path": "acceptance/v23_wizard_test.go",
+      "sha256": "51747a618d86ac2510cdeddec6441d085926bb70bc4ffd9108bc4b1b80ca04b1"
+    },
+    {
+      "path": "acceptance/v23_wizard_snapshot_test.go",
+      "sha256": "c81d94f6579223f62849bf4b0c0a685a62fa7c0db045e3e6e8f7ff49c1226459"
+    },
+    {
+      "path": "acceptance/v23_wizard_dossier_generation_test.go",
+      "sha256": "373e9db49f85b0b395fced8762fafce902107ad276e968d81615ceaf95bcf0fc"
+    },
+    {
+      "path": "acceptance/v23_wizard_help_test.go",
+      "sha256": "c1731ea10beda34c1de546168c9fa5df8ab104829cc88f944eb631bbd79cffff"
+    },
+    {
+      "path": "internal/adapters/state/sqlite/migrations/036_wizard_gaps_result_snapshots.sql",
+      "sha256": "12a13020bf2cc540e54ad4a3ef55446289bff1d58b4e2569e1e7d0269d8da536"
+    }
+  ],
+  "gates": [
+    {
+      "id": "v23_acceptance",
+      "argv": ["go", "test", "-mod=vendor", "-count=1", "./acceptance", "-run", "^Test.*V23.*$"],
+      "result": "passed",
+      "package_seconds": 0.628,
+      "wall_seconds": 1.06,
+      "max_rss_kb": 291004,
+      "output": "ok orquesta/acceptance 0.628s"
+    },
+    {
+      "id": "v23_race",
+      "argv": ["go", "test", "-mod=vendor", "-race", "-count=1", "./internal/application", "./internal/adapters/state/sqlite"],
+      "result": "failed",
+      "wall_seconds": 608.19,
+      "max_rss_kb": 608644,
+      "package_results": [
+        {"package": "orquesta/internal/application", "result": "passed", "seconds": 5.016},
+        {"package": "orquesta/internal/adapters/state/sqlite", "result": "failed", "seconds": 600.023}
+      ],
+      "failure": {
+        "code": "candidate_gate.race_timeout",
+        "timeout": "10m0s",
+        "running_test": "TestClaimLeaseUsesSelectedActionKind/normal_action",
+        "frontier": "internal/adapters/state/sqlite.applyMigrationSteps",
+        "exit_code": 1,
+        "output": "panic: test timed out after 10m0s"
+      }
+    },
+    {
+      "id": "rebuild_architecture",
+      "argv": ["go", "test", "-mod=vendor", "-count=1", ".", "-run", "^TestRebuildArchitecture$"],
+      "result": "passed",
+      "package_seconds": 1.038,
+      "wall_seconds": 1.23,
+      "max_rss_kb": 130968,
+      "output": "ok orquesta 1.038s"
+    }
+  ],
+  "admission": {
+    "primary_review_allowed": false,
+    "adversarial_review_allowed": false,
+    "seal_allowed": false,
+    "reason": "required race gate failed"
+  },
+  "retry_policy": "No retry is admissible until a separate causal incident resolves the declared timeout budget or the aggregate SQLite race cost.",
+  "next_causal_dependency": "operator_decision:v23_10_race_timeout_budget_or_optimization"
+}
