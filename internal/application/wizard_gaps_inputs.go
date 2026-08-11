@@ -15,9 +15,9 @@ import (
 const wizardGapsInputReceiptSchema = "orquesta.wizard.gaps.input-receipt.v1"
 
 // WizardGapsInputReceipt is the immutable, content-addressed account of the
-// exact inputs accepted by one public Wizard gaps request. The evaluation
-// result is deliberately not embedded: persisting its exact snapshot is the
-// next causal cut and EvaluationReplayExact must remain false until then.
+// exact inputs accepted by one public Wizard gaps request. ResultSnapshot is
+// an attached causal binding and is not part of Ref; the next SQLite cut must
+// persist it atomically before EvaluationReplayExact can become true.
 type WizardGapsInputReceipt struct {
 	Ref                     string
 	RequestRef              string
@@ -38,6 +38,7 @@ type WizardGapsInputReceipt struct {
 	SelectionsDigest        string
 	EvaluatorIdentity       intake.DerivationIdentity
 	AuthorizationReceiptRef string
+	ResultSnapshot          WizardGapsResultSnapshot
 }
 
 type WizardGapsInputReplayRequest struct {
@@ -114,6 +115,7 @@ func buildWizardGapsInputReceipt(
 	packRefsDigest string,
 	selections []WizardGapsSelectionInput,
 	selectionsDigest string,
+	evaluation gaps.Result,
 ) (WizardGapsInputReceipt, error) {
 	receipt := WizardGapsInputReceipt{
 		RequestRef: request.RequestRef, RequestFingerprint: request.RequestFingerprint,
@@ -142,6 +144,13 @@ func buildWizardGapsInputReceipt(
 		)
 	}
 	receipt.Ref = wizardGapsInputReceiptRef(receipt)
+	receipt.ResultSnapshot, err = buildWizardGapsResultSnapshot(
+		receipt.Ref,
+		evaluation,
+	)
+	if err != nil {
+		return WizardGapsInputReceipt{}, err
+	}
 	return receipt, nil
 }
 
@@ -274,6 +283,15 @@ func ValidateWizardGapsInputEvaluation(record WizardGapsInputRecord) error {
 		evaluated.selectionsDigest != record.Receipt.SelectionsDigest ||
 		!equalWizardGapsSelections(evaluated.selections, record.Receipt.Selections) {
 		return wizardGapsInputConflict("historical-selections", err)
+	}
+	if !wizardGapsResultSnapshotEmpty(record.Receipt.ResultSnapshot) {
+		if _, err := validateWizardGapsResultSnapshot(
+			record.Receipt.Ref,
+			record.Receipt.ResultSnapshot,
+			evaluated.result,
+		); err != nil {
+			return wizardGapsInputConflict("result-snapshot", err)
+		}
 	}
 	change, err := wizardGapsChangeWithReconciliation(
 		record.SourceRecord.State,

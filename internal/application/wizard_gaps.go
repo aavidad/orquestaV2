@@ -71,8 +71,9 @@ type WizardGapsRequestOutcome struct {
 }
 
 type ApplyWizardGapsResult struct {
-	Record     IntakeRecord
-	Evaluation gaps.Result
+	Record             IntakeRecord
+	Evaluation         gaps.Result
+	EvaluationSnapshot WizardGapsResultSnapshot
 	// EvaluationReplayExact remains false until the exact evaluation result
 	// snapshot is persisted by the next causal cut.
 	EvaluationReplayExact bool
@@ -96,6 +97,15 @@ func ValidateApplyWizardGapsResult(result ApplyWizardGapsResult) error {
 		!validWizardGapsCanonicalHash(result.InputDurability.FactsDigest) ||
 		!validWizardGapsCanonicalHash(result.InputDurability.PackRefsDigest) {
 		return errors.New("application.wizard_gaps_request_outcome_invalid")
+	}
+	if !wizardGapsResultSnapshotEmpty(result.EvaluationSnapshot) {
+		if _, err := validateWizardGapsResultSnapshot(
+			result.InputDurability.ReceiptRef,
+			result.EvaluationSnapshot,
+			result.Evaluation,
+		); err != nil {
+			return errors.New("application.wizard_gaps_request_outcome_invalid")
+		}
 	}
 	switch result.RequestOutcome.Kind {
 	case WizardGapsRequestOutcomeIntakeMutation:
@@ -299,6 +309,7 @@ func (service *WizardGapsService) ApplyWizardGaps(
 			packRefsDigest,
 			evaluated.selections,
 			evaluated.selectionsDigest,
+			evaluated.result,
 		)
 		if err != nil {
 			return ApplyWizardGapsResult{}, err
@@ -347,6 +358,7 @@ func (service *WizardGapsService) ApplyWizardGaps(
 		packRefsDigest,
 		evaluated.selections,
 		evaluated.selectionsDigest,
+		evaluated.result,
 	)
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
@@ -418,6 +430,20 @@ func (service *WizardGapsService) replayWizardGapsInput(
 	if evaluated.selectionsDigest != record.Receipt.SelectionsDigest {
 		return ApplyWizardGapsResult{}, &StateError{Code: StateConflict}
 	}
+	evaluation := evaluated.result
+	snapshot := record.Receipt.ResultSnapshot
+	if !wizardGapsResultSnapshotEmpty(snapshot) {
+		evaluation, err = validateWizardGapsResultSnapshot(
+			record.Receipt.Ref,
+			snapshot,
+			evaluated.result,
+		)
+		if err != nil {
+			return ApplyWizardGapsResult{}, &StateError{
+				Code: StateConflict, Cause: err,
+			}
+		}
+	}
 	change, err := wizardGapsChangeWithReconciliation(
 		record.SourceRecord.State,
 		record.Receipt.Origin,
@@ -469,7 +495,8 @@ func (service *WizardGapsService) replayWizardGapsInput(
 		return ApplyWizardGapsResult{}, &StateError{Code: StateConflict}
 	}
 	result := ApplyWizardGapsResult{
-		Record: record.OutcomeRecord, Evaluation: evaluated.result,
+		Record: record.OutcomeRecord, Evaluation: evaluation,
+		EvaluationSnapshot: cloneWizardGapsResultSnapshot(snapshot),
 		RequestRefReserved: true,
 		InputDurability:    wizardGapsDurability(record.Receipt),
 		EvaluatorIdentity:  evaluator.Identity(),
