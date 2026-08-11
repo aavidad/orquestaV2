@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "fixture_id": "v31_postgres_state_foundation",
+  "contract_id": "AC-V31-POSTGRES-S3-MULTIHOST",
+  "capability_ids": [
+    "OPS-11"
+  ],
+  "status": "implemented_foundation_not_accredited",
+  "adapter_path": "internal/adapters/state/postgres",
+  "implemented_behaviors": [
+    "serializable_atomic_snapshot_event_outbox_transaction",
+    "postgresql_transaction_time_is_authoritative",
+    "expected_revision_generation_token_fence_and_lease_cas",
+    "stale_fence_rolls_back_before_event_and_outbox",
+    "database_and_context_failures_never_commit"
+  ],
+  "deferred_gates": [
+    "concrete_postgresql_driver_and_complete_schema",
+    "shared_sqlite_postgresql_state_repository_suite",
+    "real_postgresql_cluster_concurrency_and_multihost",
+    "migration_and_cutover_without_dual_write",
+    "sealed_candidate_receipt"
+  ]
+}
