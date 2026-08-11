@@ -687,6 +687,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"command_registry_binding",
 		"durable_cas_persistence_and_restart",
 		"durable_dossier_persistence",
+		"dossier_generation",
 		"public_dossier_commands",
 		"causal_plan_creation",
 		"canonical_round_default",
@@ -704,19 +705,20 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"wizard_catalog_foundation_and_15_domain_packs",
 		"wizard_gap_explicit_outcome_receipt",
 		"wizard_gap_input_receipt_durability",
+		"wizard_gap_exact_evaluation_snapshot_and_replay",
 		"wizard_gap_noop_request_reservation_and_historical_replay",
 		"wizard_gap_reconciliation",
+		"wizard_help_surface",
 	}) {
 		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
 	}
 	wantDeferred := []string{
-		"dossier_generation", "roadmap_promotion", "seal_and_receipt",
-		"wizard_gap_exact_evaluation_snapshot_and_replay", "wizard_help_surface",
+		"roadmap_promotion", "seal_and_receipt",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
 	}
-	if fixture.NextDependency != "wizard_gap_exact_evaluation_snapshot_before_replay" {
+	if fixture.NextDependency != "v23_10_candidate_gate" {
 		t.Fatalf("invalid next dependency: %q", fixture.NextDependency)
 	}
 	wantCandidateFiles := []string{
@@ -743,6 +745,9 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		}
 	}
 	wantIntegrationFiles := []string{
+		"acceptance/v23_wizard_dossier_generation_test.go",
+		"acceptance/v23_wizard_help_test.go",
+		"acceptance/v23_wizard_snapshot_test.go",
 		"docs/reconstruccion/corte_v23_comandos_dossier_2026-07-26.md",
 		"docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md",
 		"docs/reconstruccion/corte_v23_inputs_wizard_durables_2026-07-28.md",
@@ -776,6 +781,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/application/wizard_gaps_inputs.go",
 		"internal/application/wizard_gaps_inputs_test.go",
 		"internal/application/wizard_gaps_preflight.go",
+		"internal/application/wizard_gaps_snapshot.go",
+		"internal/application/wizard_gaps_snapshot_test.go",
 		"internal/application/wizard_gaps_test.go",
 		"internal/application/wizard_stage_plan.go",
 		"internal/application/wizard_stage_plan_test.go",
@@ -788,6 +795,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/adapters/state/sqlite/intake.go",
 		"internal/adapters/state/sqlite/migrations/020_wizard_gaps_outcomes.sql",
 		"internal/adapters/state/sqlite/migrations/021_wizard_gaps_inputs.sql",
+		"internal/adapters/state/sqlite/migrations/036_wizard_gaps_result_snapshots.sql",
 		"internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
 		"internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql",
 		"internal/adapters/state/sqlite/migrations/017_intake.sql",
@@ -803,12 +811,17 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/adapters/state/sqlite/wizard_gaps_outcomes_test.go",
 		"internal/adapters/state/sqlite/wizard_gaps_inputs.go",
 		"internal/adapters/state/sqlite/wizard_gaps_inputs_test.go",
+		"internal/adapters/state/sqlite/wizard_gaps_snapshot_validation.go",
+		"internal/adapters/state/sqlite/wizard_gaps_snapshot_validation_test.go",
+		"internal/adapters/state/sqlite/wizard_gaps_snapshots.go",
+		"internal/adapters/state/sqlite/wizard_gaps_snapshots_test.go",
 		"internal/bootstrap/command_registry_upgrade_e2e_test.go",
 		"internal/bootstrap/command_surfaces.go",
 		"internal/bootstrap/intake_e2e_test.go",
 		"internal/bootstrap/runtime.go",
 		"internal/bootstrap/wizard_dossier_e2e_test.go",
 		"internal/bootstrap/wizard_gaps_public_e2e_test.go",
+		"internal/bootstrap/wizard_gaps_snapshot_e2e_test.go",
 		"internal/commands/handlers_intake.go",
 		"internal/commands/handlers_wizard_dossier.go",
 		"internal/commands/handlers_wizard_dossier_input.go",
@@ -922,16 +935,107 @@ func assertV23PublicCommandBindings(t *testing.T, bindings []v23WizardBinding) {
 	}
 }
 
+func TestAcceptanceV23WizardCapabilityClassification(t *testing.T) {
+	root := evidenceRepositoryRoot(t)
+	fixture := loadV23WizardFixture(t, root)
+	assertV23CapabilityClassification(t, fixture.Classification)
+	if fixture.SealStatus != "not_sealed" || fixture.ReceiptPath != "" {
+		t.Fatalf("classification task attempted to seal V23: %+v", fixture)
+	}
+	integrated := make(map[string]struct{}, len(fixture.IntegrationFiles))
+	for _, path := range fixture.IntegrationFiles {
+		integrated[path] = struct{}{}
+	}
+	candidates := make(map[string]struct{}, len(fixture.Classification.Candidate))
+	for _, id := range fixture.Classification.Candidate {
+		candidates[id] = struct{}{}
+	}
+	declarations := v23PackageTestDeclarations(t, root, "acceptance")
+	for _, evidence := range []struct {
+		capabilities []string
+		path, test   string
+	}{
+		{[]string{"WIZ-03", "WIZ-04", "WIZ-05", "WIZ-07"},
+			"acceptance/v23_wizard_dossier_generation_test.go",
+			"TestV23DossierGenerationContractUsesCanonicalProjection"},
+		{[]string{"WIZ-06", "WIZ-08", "WIZ-09"},
+			"acceptance/v23_wizard_help_test.go",
+			"TestV23WizardHelpSurfaceIsCompleteAndReadOnly"},
+		{[]string{"WIZ-22"}, "acceptance/v23_wizard_snapshot_test.go",
+			"TestV23WizardGapExactReplay"},
+	} {
+		if _, found := integrated[evidence.path]; !found || declarations[evidence.test] != 1 {
+			t.Fatalf("classification evidence missing file=%s test=%s", evidence.path, evidence.test)
+		}
+		for _, id := range evidence.capabilities {
+			if _, promoted := candidates[id]; !promoted {
+				t.Fatalf("evidence-backed capability %s is not candidate", id)
+			}
+		}
+	}
+
+	roadmapFile, err := os.Open(filepath.Join(root, "product", "roadmap.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer roadmapFile.Close()
+	var roadmap struct {
+		Capabilities []struct {
+			ID                  string   `json:"id"`
+			OwnerContext        string   `json:"owner_context"`
+			AcceptanceContracts []string `json:"acceptance_contracts"`
+		} `json:"capability_entries"`
+	}
+	if err := json.NewDecoder(roadmapFile).Decode(&roadmap); err != nil {
+		t.Fatal(err)
+	}
+	classified := make(map[string]struct{}, 26)
+	for _, values := range [][]string{fixture.Classification.Candidate, fixture.Classification.Partial,
+		fixture.Classification.Pending, fixture.Classification.Rejected} {
+		for _, id := range values {
+			classified[id] = struct{}{}
+		}
+	}
+	formalOwners := 0
+	for _, capability := range roadmap.Capabilities {
+		ownsV23 := false
+		if capability.OwnerContext == "wizard" {
+			for _, contract := range capability.AcceptanceContracts {
+				if contract == "AC-V23-WIZARD" {
+					ownsV23 = true
+					break
+				}
+			}
+		}
+		if !ownsV23 {
+			continue
+		}
+		formalOwners++
+		if _, found := classified[capability.ID]; !found {
+			t.Fatalf("formal V23 capability %s is not classified", capability.ID)
+		}
+	}
+	if formalOwners != len(classified) {
+		t.Fatalf("V23 formal owners=%d classified=%d", formalOwners, len(classified))
+	}
+	for _, transfer := range fixture.ScopeTransfers {
+		if _, counted := classified[transfer.CapabilityID]; counted {
+			t.Fatalf("transferred capability %s counted in V23", transfer.CapabilityID)
+		}
+	}
+}
+
 func assertV23CapabilityClassification(t *testing.T, classification v23WizardClassification) {
 	t.Helper()
 	want := v23WizardClassification{
 		Candidate: []string{
-			"WIZ-03", "WIZ-04", "WIZ-05", "WIZ-07", "WIZ-15", "WIZ-18", "WIZ-23",
+			"WIZ-03", "WIZ-04", "WIZ-05", "WIZ-06", "WIZ-07", "WIZ-08",
+			"WIZ-09", "WIZ-15", "WIZ-18", "WIZ-22", "WIZ-23",
 		},
 		Partial: []string{
-			"WIZ-01", "WIZ-02", "WIZ-06", "WIZ-08", "WIZ-09", "WIZ-11",
+			"WIZ-01", "WIZ-02", "WIZ-11",
 			"WIZ-16", "WIZ-17", "WIZ-19", "WIZ-20", "WIZ-21",
-			"WIZ-22", "WIZ-24", "WIZ-25", "STG-01", "STG-03", "STG-07",
+			"WIZ-24", "WIZ-25", "STG-01", "STG-03", "STG-07",
 		},
 		Pending:  []string{},
 		Rejected: []string{"WIZ-12", "WIZ-14"},

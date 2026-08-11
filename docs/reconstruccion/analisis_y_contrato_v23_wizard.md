@@ -29,6 +29,32 @@ que V23 esté completa.
 > corte posterior de confirmación está en
 > `docs/reconstruccion/corte_v23_comandos_dossier_2026-07-26.md`.
 
+## Recalculo candidato V23-09 — 2026-08-11
+
+V23 continúa `partial_green_unsealed` y `not_sealed`. Este recalculo no emite
+receipt ni promueve `product/roadmap.json`; únicamente mueve a `candidate` lo
+que ya tiene test exacto en el árbol integrado:
+
+| Capacidades | Evidencia exacta | Alcance cerrado |
+|---|---|---|
+| `WIZ-03`, `WIZ-04`, `WIZ-05`, `WIZ-07` | `acceptance/v23_wizard_dossier_generation_test.go` · `TestV23DossierGenerationContractUsesCanonicalProjection` | `dossier_generation` |
+| `WIZ-06`, `WIZ-08`, `WIZ-09` | `acceptance/v23_wizard_help_test.go` · `TestV23WizardHelpSurfaceIsCompleteAndReadOnly` | `wizard_help_surface` |
+| `WIZ-22` | `acceptance/v23_wizard_snapshot_test.go` · `TestV23WizardGapExactReplay` | `wizard_gap_exact_evaluation_snapshot_and_replay` |
+
+El snapshot exacto se restaura desde bytes durables ligados a revisión,
+catálogo y receipt; schema 21 conserva explícitamente replay no exacto. La
+generación de dossier reutiliza `NewIntakeDossierProjection`. La ayuda reutiliza
+`ReemitContext` y las claves públicas help/example del catálogo es/en. No hay
+segundo writer, generador, serializador ni estado por canal.
+
+`UI-05` y `WIZ-13` siguen transferidas a `AC-V24-WEB-ADMIN`; `WIZ-10` sigue
+transferida a `AC-V28-DOMAIN-PLUGINS`. Ninguna cuenta dentro de las 26
+capacidades cuyo dueño formal continúa siendo `AC-V23-WIZARD`.
+
+Siguiente dependencia causal: `v23_10_candidate_gate`. Hasta congelar sujetos,
+ejecutar el gate candidato y obtener dos reviews independientes PASS, V23 no
+está sellada ni acreditada.
+
 Contexto causal:
 
 - proyecto: `project:v23`;
