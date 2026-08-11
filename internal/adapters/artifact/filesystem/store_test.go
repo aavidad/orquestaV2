@@ -42,6 +42,33 @@ func TestStorePutGetIsContentAddressedAndIdempotent(t *testing.T) {
 	}
 }
 
+func TestOpenRetainsLegacySingleProjectLayout(t *testing.T) {
+	root := privateTestDirectory(t)
+	store, err := Open(root)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("legacy layout")}
+	stored, err := store.Put(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Put() error = %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, filepath.FromSlash(blobPath(stored.Digest)))); err != nil {
+		t.Fatalf("legacy blob path: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(root, "projects")); !os.IsNotExist(err) {
+		t.Fatalf("legacy Open created project namespace: %v", err)
+	}
+	content, err := store.Get(context.Background(), stored.Ref, stored.Size)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if content.MediaType != "" || string(content.Content) != string(request.Content) {
+		t.Fatalf("legacy content = %+v", content)
+	}
+}
+
 func TestStoreUsesPrivateFilesAndRejectsCorruption(t *testing.T) {
 	root := privateTestDirectory(t)
 	store, err := Open(root)
