@@ -1,0 +1,22 @@
+{
+  "document_kind": "legacy_go_function_snapshot_index",
+  "schema_version": 1,
+  "algorithm": "legacy-go-function-snapshot-index.v1",
+  "source_root": "modulos",
+  "census_sha256": "sha256:5e8f30dc3c6640c57f595e3757cc6e07ba4be6eb36a6bcdd094152a2967fddfc",
+  "git_index_snapshot_sha256": "sha256:119e9c3b0bbe8b0fa19548be76502441454062dc8b68c21d62dd17227a923f52",
+  "jsonl_sha256": "sha256:87f80c47f4853e2f94be3805eb42a6ec66700f2801593340e269b76c71766176",
+  "jsonl_bytes": 15035476,
+  "production_file_count": 1945,
+  "function_count": 10822,
+  "method_count": 2382,
+  "declaration_count": 13204,
+  "unique_occurrence_count": 13204,
+  "unique_declaration_count": 13204,
+  "unique_variant_count": 13185,
+  "contains_bodies": false,
+  "semantic_assessment_state": "structural_only_join_legacy_reuse_assessments",
+  "authority": "derived_advisory_read_model",
+  "canonical_state_change": false,
+  "claims_accreditation": false
+}

@@ -1,0 +1,72 @@
+{
+  "document_kind": "legacy_cmd_go_function_snapshot_index",
+  "schema_version": 1,
+  "algorithm": "legacy-go-function-snapshot-index.v1",
+  "identity_contract": "legacy-go-function-identity.v1-compatible",
+  "source_root": "cmd",
+  "scope": "cmd/** excluding cmd/orquesta/**, _test.go and non-production-only build tags",
+  "build_policy": {
+    "exclude_test_suffix": "_test.go",
+    "excluded_new_surface_prefix": "cmd/orquesta/",
+    "excluded_nonproduction_build_tags": [
+      "ignore",
+      "tools",
+      "test",
+      "integration"
+    ],
+    "tracked_go_file_count": 540,
+    "excluded_new_surface_go_file_count": 11,
+    "excluded_test_file_count": 216,
+    "platform_variants_included": true,
+    "platform_constrained_file_count": 9,
+    "nonproduction_build_tag_excluded_file_count": 0
+  },
+  "census_sha256": "sha256:57c71e0c9ecc9f2c5119b96509c67eabb2ba226b373a38779f1bec870fef14a4",
+  "git_index_snapshot_sha256": "sha256:4aa958974859d0d1a3ed1ebb48c6cb3951be84492b698626d0070fee2de801bf",
+  "jsonl_sha256": "sha256:23b3c34ac48514c3d16e1843190071d2e1434e3038aa7c7b55fd27a889655b5f",
+  "jsonl_bytes": 2567549,
+  "package_count": 4,
+  "production_file_count": 313,
+  "function_count": 1960,
+  "method_count": 379,
+  "declaration_count": 2339,
+  "unique_occurrence_count": 2339,
+  "unique_declaration_count": 2338,
+  "unique_variant_count": 2336,
+  "path_counts": [
+    {
+      "path": "cmd/orquesta-cli",
+      "production_file_count": 1,
+      "function_count": 1,
+      "method_count": 0,
+      "declaration_count": 1
+    },
+    {
+      "path": "cmd/orquesta-codex-work-executor",
+      "production_file_count": 1,
+      "function_count": 4,
+      "method_count": 0,
+      "declaration_count": 4
+    },
+    {
+      "path": "cmd/orquesta-guardian",
+      "production_file_count": 31,
+      "function_count": 196,
+      "method_count": 18,
+      "declaration_count": 214
+    },
+    {
+      "path": "cmd/orquesta-server",
+      "production_file_count": 280,
+      "function_count": 1759,
+      "method_count": 361,
+      "declaration_count": 2120
+    }
+  ],
+  "contains_bodies": false,
+  "semantic_assessment_state": "structural_only_not_semantically_assessed",
+  "authority": "derived_advisory_read_model",
+  "canonical_state_change": false,
+  "claims_historical_green": false,
+  "claims_accreditation": false
+}

@@ -1,0 +1,14 @@
+{
+  "document_kind": "legacy_reuse_assessments_manifest",
+  "schema_version": 1,
+  "jsonl_sha256": "sha256:b3a358143e96ddec2019149902471c052fe59ffc3ce264e1a6d42de717b5150d",
+  "jsonl_bytes": 766951,
+  "assessment_count": 235,
+  "unique_characterization_ref_count": 235,
+  "function_behavior_link_count": 347,
+  "unique_function_occurrence_count": 306,
+  "snapshot_census_sha256": "sha256:5e8f30dc3c6640c57f595e3757cc6e07ba4be6eb36a6bcdd094152a2967fddfc",
+  "authority": "derived_advisory_read_model",
+  "canonical_state_change": false,
+  "claims_accreditation": false
+}
