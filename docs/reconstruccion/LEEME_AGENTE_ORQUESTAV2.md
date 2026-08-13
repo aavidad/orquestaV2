@@ -5,6 +5,12 @@ Fecha: 2026-07-30.
 Handoff operativo vigente:
 `docs/reconstruccion/handoff_continuacion_agente_2026-07-30.md`.
 
+Estado específico del inventario y reutilización legacy:
+`docs/reconstruccion/handoff_continuacion_inventario_legacy_2026-08-13.md`.
+
+Guía y consulta local para decidir si V1 ya resolvía el problema:
+`docs/reconstruccion/guia_reutilizacion_legacy_para_agentes_2026-08-13.md`.
+
 Fotografía histórica de parada, no orden operativa vigente:
 `docs/reconstruccion/HANDOFF_PARADA_ORQUESTAV2_2026-07-26.md`.
 
@@ -101,6 +107,55 @@ tests inequívocamente legacy. No se borraron:
 No desactives el sparse-checkout ni copies paquetes desde la consulta. Si una
 lección antigua aporta valor, exprésala como contrato o test de la arquitectura
 nueva.
+
+`legacy` significa aquí «sin autoridad de runtime», no «sin valor». Contratos,
+invariantes, negativos, casos reales y decisiones históricas se conservan con
+procedencia y se contrastan antes de reimplementarlos en el núcleo nuevo.
+
+Antes de volver a diseñar o implementar una función/tarea, ejecuta el preflight
+con la intención concreta, sin IA ni red:
+
+```bash
+scripts/preflight_reutilizacion_legacy.sh \
+  --capability ID \
+  --path RUTA_V2 \
+  --operation OPERACION \
+  --task 'CONDUCTA QUE SE VA A IMPLEMENTAR' \
+  --function 'NOMBRE O FIRMA, SI EXISTE'
+```
+
+La salida compacta indica cómo lo intentó V1, aciertos, fallos, mecanismo,
+encaje y evidencia V2, y la acción recomendada. Si no hay enlace de función
+exacto lo declara; una coincidencia textual solo ordena candidatos. Es
+advisory: nunca cambia el estado de una capability.
+
+Para buscar directamente cualquier función o método de V1, incluso si aún no
+tiene valoración semántica:
+
+```bash
+scripts/consultar_funciones_legacy.sh --name NOMBRE --json
+```
+
+Para consumir el inventario desde otra aplicación, usa la capa general con una
+ruta absoluta; no exige estar dentro de OrquestaV2 ni recibe capabilities o
+decisiones V2:
+
+```bash
+/home/alberto/Trabajo/orquestaV2/scripts/consultar_catalogo_funciones_legacy_v1.sh \
+  --name NOMBRE --json
+```
+
+Devuelve firma, procedencia, mecanismo, aciertos, fallos, pruebas, estado de
+licencia y condiciones, siempre sin cuerpo y con `code_reuse_authorized=false`.
+La capa específica de OrquestaV2 es el preflight anterior.
+
+Una ficha `structural_only_not_semantically_assessed` prueba identidad y firma,
+no utilidad, verde histórico ni permiso para copiar.
+
+El corte local inventariado cubre 184/184 familias de problema del ledger y
+15.543 declaraciones Go del snapshot visible (`modulos/**` más el `cmd/**`
+legacy, nunca `cmd/orquesta/**`). Consulta el resumen vigente; no interpretes
+ese 100 % como porcentaje del producto V2 ni como verde histórico.
 
 ## Gate antes de afirmar “compila”
 

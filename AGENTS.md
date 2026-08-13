@@ -261,15 +261,36 @@ Antes de diseñar o modificar un módulo o función, consulta el read-model loca
 sin IA:
 
 ```bash
-scripts/consultar_lecciones_legacy.sh \
+scripts/preflight_reutilizacion_legacy.sh \
   --capability ID \
   --path RUTA \
-  --operation OPERACION
+  --operation OPERACION \
+  --task 'CONDUCTA A IMPLEMENTAR' \
+  --function 'NOMBRE O FIRMA, SI EXISTE'
 ```
 
-La salida es advisory: enlaza lecciones, invariantes y pruebas existentes, pero
-no bloquea trabajo ni crea autoridad de cierre. Una consulta sin coincidencia
-se documenta como hueco; no se sustituye por un rail de palabras.
+El preflight incluye `consultar_lecciones_legacy.sh`, las fichas profundas, las
+pistas semánticas del ledger y el censo de funciones. La salida es advisory:
+enlaza lecciones, invariantes y pruebas existentes, pero no bloquea trabajo ni
+crea autoridad de cierre. Una pista sin evaluación profunda exige abrir su
+fuente y caracterizar aciertos/fallos; una consulta sin coincidencia se
+documenta como hueco y no se sustituye por un rail de palabras.
+
+El inventario conserva dos capas distintas. Cualquier otra aplicación puede
+consultar el catálogo general, desde cualquier directorio y sin adoptar
+capabilities o decisiones de OrquestaV2:
+
+```bash
+/home/alberto/Trabajo/orquestaV2/scripts/consultar_catalogo_funciones_legacy_v1.sh \
+  --name NOMBRE --json
+```
+
+Esa capa devuelve identidad, firma, mecanismo, aciertos, fallos, pruebas y
+condiciones de reutilización sin cuerpos. La licencia y autoría por función
+permanecen `not_declared...` hasta revisarlas; por tanto nunca autoriza copiar
+código. Solo el preflight específico anterior cruza el catálogo con roadmap,
+capability, aceptación y evidencia de OrquestaV2 y produce
+`reuse | reimplement | characterize | reject`.
 
 ```text
 capability IDs:

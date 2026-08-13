@@ -2,6 +2,11 @@
 
 Fecha: 2026-07-30.
 
+> **RELEVO HISTÓRICO.** La pausa del lote 07 fue levantada por una orden nueva
+> del operador el 2026-08-13. El estado vigente de este frente vive en
+> `handoff_continuacion_inventario_legacy_2026-08-13.md`. Este documento sigue
+> siendo la fotografía autoritativa de los lotes 01–06 en su fecha.
+
 ## 1. Corte operativo
 
 El inventario queda **pausado por orden del operador** después del lote 06.
