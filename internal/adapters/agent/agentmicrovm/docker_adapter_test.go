@@ -384,12 +384,13 @@ func (fixture *dockerAdapterFixture) mustAdapter(t *testing.T, journal ports.Age
 }
 
 type dockerJournalStub struct {
-	records            map[ports.AgentProviderRequestKey]ports.AgentProviderRequest
-	events             *[]string
-	recordErrors       map[ports.AgentProviderRequestStage]error
-	bindErr            error
-	corruptResultStage ports.AgentProviderRequestStage
-	afterRecord        func(ports.AgentProviderRequestStage)
+	records             map[ports.AgentProviderRequestKey]ports.AgentProviderRequest
+	events              *[]string
+	recordErrors        map[ports.AgentProviderRequestStage]error
+	bindErr, resolveErr error
+	corruptResultStage  ports.AgentProviderRequestStage
+	afterRecord         func(ports.AgentProviderRequestStage)
+	resolveHook         func()
 }
 
 func newDockerJournalStub(events *[]string) *dockerJournalStub {
@@ -461,7 +462,13 @@ func (journal *dockerJournalStub) BindAgentProviderLaunch(_ context.Context, key
 }
 
 func (journal *dockerJournalStub) ResolveAgentProviderRequest(_ context.Context, key ports.AgentProviderRequestKey) (ports.AgentProviderRequest, bool, error) {
+	if journal.resolveHook != nil {
+		journal.resolveHook()
+	}
 	*journal.events = append(*journal.events, "resolve:"+string(key.Stage))
+	if journal.resolveErr != nil {
+		return ports.AgentProviderRequest{}, false, journal.resolveErr
+	}
 	request, found := journal.records[key]
 	return ports.CloneAgentProviderRequest(request), found, nil
 }

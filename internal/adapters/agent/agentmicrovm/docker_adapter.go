@@ -45,6 +45,7 @@ type DockerSigner interface {
 
 var _ DockerClient = (*microvm.Cliente)(nil)
 var _ DockerSigner = (*CredentialSigner)(nil)
+var _ dockerObservationClient = (*microvm.Cliente)(nil)
 
 type DockerConfig struct {
 	Client         DockerClient
@@ -65,6 +66,7 @@ type DockerConfig struct {
 // the published sibling client and never owns Docker transport or lifecycle.
 type DockerAdapter struct {
 	client       DockerClient
+	observer     dockerObservationClient
 	signer       DockerSigner
 	journal      ports.AgentProviderRequestJournal
 	capabilities ports.AgentCapabilities
@@ -87,8 +89,12 @@ func NewDockerAdapter(config DockerConfig) (*DockerAdapter, error) {
 		config.Capabilities.RequierePreservacionEntorno || !validDockerPhysicalConfig(config) {
 		return nil, fail(CodeConfigurationInvalid, nil)
 	}
+	observer, ok := config.Client.(dockerObservationClient)
+	if !ok || nilInterface(observer) {
+		return nil, fail(CodeObservationClientInvalid, nil)
+	}
 	return &DockerAdapter{
-		client: config.Client, signer: config.Signer, journal: config.Journal,
+		client: config.Client, observer: observer, signer: config.Signer, journal: config.Journal,
 		capabilities: cloneCapabilities(config.Capabilities), placement: config.PlacementRef,
 		model: config.ProviderModel, renderer: config.PromptRenderer,
 		imageRef: config.ImageRef, executorRef: config.ExecutorRef,
