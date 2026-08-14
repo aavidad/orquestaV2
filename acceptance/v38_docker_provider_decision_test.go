@@ -45,6 +45,7 @@ func TestV38DockerProviderDecisionMatchesCanonicalRoadmap(t *testing.T) {
 	}
 	v38AssertNoPrematureEvidence(t, filepath.Join(root, "product/evidence"))
 	v38DockerAssertPublishedModuleWithoutReplace(t, root)
+	v38DockerAssertClientAdoptionBlocked(t, root, fixture["client_adoption_gate"].(map[string]any))
 	v38DockerAssertNoDirectRuntime(t, root)
 }
 
@@ -67,6 +68,7 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 		{"firecracker_incompleto", []string{"v38_alignment", "firecracker_required_subgates"}, []any{"A", "B"}},
 		{"evidencia_nueva", []string{"v38_alignment", "new_evidence"}, true},
 		{"wiring_anticipado", []string{"implementation_state", "runtime_wiring"}, "present"},
+		{"cliente_disponible", []string{"client_adoption_gate", "status"}, "ready"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -88,17 +90,19 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 }
 
 func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
-	if !agentFirecrackerHasExactKeys(fixture, "schema_version", "fixture_id", "decision", "v38_alignment", "implementation_state") ||
-		fixture["schema_version"] != float64(1) || fixture["fixture_id"] != "v38_docker_provider_decision" {
+	if !agentFirecrackerHasExactKeys(fixture, "schema_version", "fixture_id", "decision", "v38_alignment", "implementation_state", "client_adoption_gate") ||
+		fixture["schema_version"] != float64(2) || fixture["fixture_id"] != "v38_docker_provider_decision" {
 		return false
 	}
 	decision, decisionOK := fixture["decision"].(map[string]any)
 	alignment, alignmentOK := fixture["v38_alignment"].(map[string]any)
 	state, stateOK := fixture["implementation_state"].(map[string]any)
-	if !decisionOK || !alignmentOK || !stateOK ||
+	gate, gateOK := fixture["client_adoption_gate"].(map[string]any)
+	if !decisionOK || !alignmentOK || !stateOK || !gateOK ||
 		!agentFirecrackerHasExactKeys(decision, "id", "status", "capability_refs", "provider", "transport", "adapter_boundary", "selection", "client_adoption", "engine_owner", "orquesta_docker_socket", "forbidden_sharing", "fallback", "v38_accreditation", "test_refs") ||
 		!agentFirecrackerHasExactKeys(alignment, "canonical_vertical", "capability_id", "capability_status", "acceptance_contract", "contract_status", "firecracker_required_subgates", "firecracker_global_accreditation", "docker_accreditation", "new_capability", "new_acceptance_contract", "new_receipt", "new_evidence") ||
-		!agentFirecrackerHasExactKeys(state, "runtime_wiring", "docker_client_usage", "docker_engine_smoke", "local_replace") {
+		!agentFirecrackerHasExactKeys(state, "runtime_wiring", "docker_client_usage", "docker_engine_smoke", "local_replace") ||
+		!agentFirecrackerHasExactKeys(gate, "status", "pinned_module_version", "observed_external_candidate_commit", "required_symbols", "unblock", "forbidden_resolutions", "next_safe_dependency") {
 		return false
 	}
 	return decision["id"] == "agent_runtime_docker_provider" && decision["status"] == "planned_not_applied" &&
@@ -115,7 +119,43 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 		alignment["acceptance_contract"] == "AC-V38-AGENT-RUNTIME-ELASTIC" && alignment["contract_status"] == "planned" &&
 		reflect.DeepEqual(alignment["firecracker_required_subgates"], []any{"A", "B", "C"}) && alignment["firecracker_global_accreditation"] == "only_after_a_b_c_pass_on_same_candidate" &&
 		alignment["docker_accreditation"] == "none" && alignment["new_capability"] == false && alignment["new_acceptance_contract"] == false && alignment["new_receipt"] == false && alignment["new_evidence"] == false &&
-		state["runtime_wiring"] == "absent" && state["docker_client_usage"] == "absent_in_this_cut" && state["docker_engine_smoke"] == "not_claimed" && state["local_replace"] == "forbidden"
+		state["runtime_wiring"] == "absent" && state["docker_client_usage"] == "absent_in_this_cut" && state["docker_engine_smoke"] == "not_claimed" && state["local_replace"] == "forbidden" &&
+		gate["status"] == "blocked_current_pinned_module_lacks_docker_contract" && gate["pinned_module_version"] == "v0.0.0-20260805221511-928ef309a173" &&
+		gate["observed_external_candidate_commit"] == "2768389c82c02e4eeb3599152037fe3a52e2dc76" && reflect.DeepEqual(gate["required_symbols"], []any{"NegociarDocker", "PrepararContenedor", "LanzarORecuperarContenedor"}) &&
+		gate["unblock"] == "published_versioned_module_available_in_authorized_local_supply_chain" && reflect.DeepEqual(gate["forbidden_resolutions"], []any{"copy_external_worktree", "local_replace", "go_work", "remote_download"}) &&
+		gate["next_safe_dependency"] == "v38_firecracker_b_local_contract_gates"
+}
+
+func v38DockerAssertClientAdoptionBlocked(t *testing.T, root string, gate map[string]any) {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pinned := false
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		pinned = pinned || len(fields) >= 2 && fields[0] == v38DockerClientModule && fields[1] == gate["pinned_module_version"]
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "vendor", filepath.FromSlash(v38DockerClientModule)))
+	if err != nil || !pinned {
+		t.Fatalf("el módulo bloqueado no coincide con go.mod/vendor: pinned=%v err=%v", pinned, err)
+	}
+	var source strings.Builder
+	for _, entry := range entries {
+		if !entry.IsDir() && filepath.Ext(entry.Name()) == ".go" {
+			content, readErr := os.ReadFile(filepath.Join(root, "vendor", filepath.FromSlash(v38DockerClientModule), entry.Name()))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			source.Write(content)
+		}
+	}
+	for _, symbol := range agentFirecrackerStringSlice(t, gate["required_symbols"]) {
+		if strings.Contains(source.String(), symbol) {
+			t.Fatalf("el módulo fijado ya contiene %s pero el bloqueo sigue abierto", symbol)
+		}
+	}
 }
 
 func v38DockerAssertPublishedModuleWithoutReplace(t *testing.T, root string) {

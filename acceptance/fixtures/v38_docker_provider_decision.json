@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
@@ -48,5 +48,23 @@
     "docker_client_usage": "absent_in_this_cut",
     "docker_engine_smoke": "not_claimed",
     "local_replace": "forbidden"
+  },
+  "client_adoption_gate": {
+    "status": "blocked_current_pinned_module_lacks_docker_contract",
+    "pinned_module_version": "v0.0.0-20260805221511-928ef309a173",
+    "observed_external_candidate_commit": "2768389c82c02e4eeb3599152037fe3a52e2dc76",
+    "required_symbols": [
+      "NegociarDocker",
+      "PrepararContenedor",
+      "LanzarORecuperarContenedor"
+    ],
+    "unblock": "published_versioned_module_available_in_authorized_local_supply_chain",
+    "forbidden_resolutions": [
+      "copy_external_worktree",
+      "local_replace",
+      "go_work",
+      "remote_download"
+    ],
+    "next_safe_dependency": "v38_firecracker_b_local_contract_gates"
   }
 }
