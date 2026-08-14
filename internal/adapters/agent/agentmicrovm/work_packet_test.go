@@ -78,6 +78,23 @@ func TestBuildWorkPacketV1ExactDeterministicAndAllowlisted(t *testing.T) {
 	}
 }
 
+func TestBuildProviderWorkPacketV1ReusesNeutralSealWithoutPhysicalEgress(t *testing.T) {
+	request := validLaunchRequest(t)
+	renderer := &recordingWorkPacketRenderer{output: "execute inside the selected provider"}
+	packet, raw, err := buildProviderWorkPacketV1(request, "gpt-5.6", renderer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if packet.ControlledEgressProxy != "" || renderer.calls != 1 ||
+		!reflect.DeepEqual(renderer.prompt, ports.AgentPromptFromLaunchRequest(request)) {
+		t.Fatalf("provider packet=%+v renderer=%+v", packet, renderer)
+	}
+	decoded, err := codexwork.DecodeWorkPacketV1(raw)
+	if err != nil || decoded != packet {
+		t.Fatalf("round trip=%+v err=%v", decoded, err)
+	}
+}
+
 func TestBuildWorkPacketV1ProjectsOnlySignedControlledEgress(t *testing.T) {
 	request := withEgressAuthority(t, validLaunchRequest(t), validEgressGrant())
 	binding := profileBinding(request, validDescriptor(t, true))

@@ -43,30 +43,66 @@ func BuildWorkPacketV1(
 	model string,
 	renderer PromptRenderer,
 ) (codexwork.WorkPacketV1, []byte, error) {
-	if !validWorkPacketToken(model, 128) {
-		return codexwork.WorkPacketV1{}, nil, fail(CodeWorkPacketModelInvalid, nil)
-	}
-	if nilInterface(renderer) {
-		return codexwork.WorkPacketV1{}, nil, fail(CodeWorkPacketRendererInvalid, nil)
-	}
-	if governance.ValidateReasoningEffort(request.ReasoningEffort) != nil {
-		return codexwork.WorkPacketV1{}, nil, fail(CodeWorkPacketEffortInvalid, nil)
-	}
-	tokenBudget, timeBudgetMS, err := workPacketBudgets(request)
+	tokenBudget, timeBudgetMS, err := validateWorkPacketV1(request, model, renderer)
 	if err != nil {
 		return codexwork.WorkPacketV1{}, nil, err
-	}
-	if request.MaxOutputBytes <= 0 || uint64(request.MaxOutputBytes) > codexwork.MaxOutputBytesV1 {
-		return codexwork.WorkPacketV1{}, nil, fail(CodeWorkPacketOutputInvalid, nil)
-	}
-	if err := ports.ValidateAgentLaunchRequest(request); err != nil {
-		return codexwork.WorkPacketV1{}, nil, fail(CodeWorkPacketRequestInvalid, nil)
 	}
 	expected, compileErr := Compile(request, binding, request.EffectAuthority.ActionFence)
 	if compileErr != nil || !reflect.DeepEqual(compiled, expected) {
 		return codexwork.WorkPacketV1{}, nil, fail(CodeWorkPacketCompilationMismatch, nil)
 	}
+	return encodeWorkPacketV1(
+		request, model, renderer, tokenBudget, timeBudgetMS, compiled.Plan.Egreso != nil,
+	)
+}
 
+func buildProviderWorkPacketV1(
+	request ports.AgentLaunchRequest,
+	model string,
+	renderer PromptRenderer,
+) (codexwork.WorkPacketV1, []byte, error) {
+	tokenBudget, timeBudgetMS, err := validateWorkPacketV1(request, model, renderer)
+	if err != nil {
+		return codexwork.WorkPacketV1{}, nil, err
+	}
+	return encodeWorkPacketV1(request, model, renderer, tokenBudget, timeBudgetMS, false)
+}
+
+func validateWorkPacketV1(
+	request ports.AgentLaunchRequest,
+	model string,
+	renderer PromptRenderer,
+) (uint64, uint64, error) {
+	if !validWorkPacketToken(model, 128) {
+		return 0, 0, fail(CodeWorkPacketModelInvalid, nil)
+	}
+	if nilInterface(renderer) {
+		return 0, 0, fail(CodeWorkPacketRendererInvalid, nil)
+	}
+	if governance.ValidateReasoningEffort(request.ReasoningEffort) != nil {
+		return 0, 0, fail(CodeWorkPacketEffortInvalid, nil)
+	}
+	tokenBudget, timeBudgetMS, err := workPacketBudgets(request)
+	if err != nil {
+		return 0, 0, err
+	}
+	if request.MaxOutputBytes <= 0 || uint64(request.MaxOutputBytes) > codexwork.MaxOutputBytesV1 {
+		return 0, 0, fail(CodeWorkPacketOutputInvalid, nil)
+	}
+	if err := ports.ValidateAgentLaunchRequest(request); err != nil {
+		return 0, 0, fail(CodeWorkPacketRequestInvalid, nil)
+	}
+	return tokenBudget, timeBudgetMS, nil
+}
+
+func encodeWorkPacketV1(
+	request ports.AgentLaunchRequest,
+	model string,
+	renderer PromptRenderer,
+	tokenBudget uint64,
+	timeBudgetMS uint64,
+	controlledEgress bool,
+) (codexwork.WorkPacketV1, []byte, error) {
 	prompt, renderErr := renderer.RenderAgentPrompt(ports.AgentPromptFromLaunchRequest(request))
 	if renderErr != nil {
 		return codexwork.WorkPacketV1{}, nil, fail(CodeWorkPacketRenderFailed, nil)
@@ -88,7 +124,7 @@ func BuildWorkPacketV1(
 		ExecutionRef:     request.ExecutionRef.String(),
 		EffectAttemptRef: request.EffectAuthority.EffectAttemptRef,
 	}
-	if compiled.Plan.Egreso != nil {
+	if controlledEgress {
 		packet.ControlledEgressProxy = codexwork.ControlledEgressProxyURLV1
 	}
 	// Marshal a prompt-free packet first. The final JSON cannot be smaller than
