@@ -161,6 +161,11 @@ result="$(jq -s \
   --argjson limit "$limit" '
     def behavior_by_ref($ref):
       first($behaviors[0][] | select(.characterization_ref == $ref));
+    def consumer_neutral_text:
+      test("\\bV2\\b|OrquestaV2|roadmap|acceptance_contract|evidence V2"; "i") |
+      not;
+    def neutral_strings($values):
+      [$values[] | select(consumer_neutral_text)];
     def observations_by_ref($ref):
       [$observations[] |
         select((.behavior_refs | index($ref)) != null) |
@@ -173,7 +178,7 @@ result="$(jq -s \
           result,
           verification_kind,
           test_refs,
-          limitations
+          limitations: neutral_strings(.limitations // [])
         }
       ];
     def general_assessments($ref):
@@ -188,16 +193,39 @@ result="$(jq -s \
           problem: $behavior.problem,
           historical_result: $assessment.historical_green_state,
           historical_result_independently_verified: false,
-          result_reason: $assessment.green_rationale,
-          mechanism: $behavior.decision_authority,
-          mechanism_scope:
-            "characterized_historical_problem_not_consumer_architecture_decision",
-          worked_claims: ($behavior.worked // []),
-          failures_and_limitations: ($behavior.did_not_work // []),
-          preserve: ($behavior.preserve // []),
-          avoid: ($behavior.avoid // []),
-          relation: $link.relation,
-          semantic_rationale: $link.semantic_rationale,
+          result_reason:
+            (if ($assessment.green_rationale | consumer_neutral_text) then
+              $assessment.green_rationale else null end),
+          result_reason_state:
+            (if ($assessment.green_rationale | consumer_neutral_text) then
+              "consumer_neutral_historical_assessment"
+            else "consumer_specific_assessment_omitted" end),
+          mechanism: {
+            relation: $link.relation,
+            description:
+              (if ($link.semantic_rationale | consumer_neutral_text) then
+                $link.semantic_rationale else null end),
+            description_state:
+              (if ($link.semantic_rationale | consumer_neutral_text) then
+                "reviewed_consumer_neutral_function_role"
+              else "exact_relation_requires_consumer_neutral_review" end)
+          },
+          worked_claims: neutral_strings($behavior.worked // []),
+          failures_and_limitations:
+            neutral_strings($behavior.did_not_work // []),
+          preserve: neutral_strings($behavior.preserve // []),
+          avoid: neutral_strings($behavior.avoid // []),
+          consumer_specific_context_omitted:
+            (($assessment.green_rationale | consumer_neutral_text | not) or
+              ($link.semantic_rationale | consumer_neutral_text | not) or
+              ((neutral_strings($behavior.worked // []) | length) !=
+                (($behavior.worked // []) | length)) or
+              ((neutral_strings($behavior.did_not_work // []) | length) !=
+                (($behavior.did_not_work // []) | length)) or
+              ((neutral_strings($behavior.preserve // []) | length) !=
+                (($behavior.preserve // []) | length)) or
+              ((neutral_strings($behavior.avoid // []) | length) !=
+                (($behavior.avoid // []) | length))),
           source_evidence: ($behavior.evidence // []),
           snapshot_test_observations:
             observations_by_ref($assessment.characterization_ref),

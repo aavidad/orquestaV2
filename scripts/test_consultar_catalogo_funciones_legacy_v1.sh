@@ -36,13 +36,19 @@ jq -e '
   (.[0].behavior_assessments | length) >= 1 and
   all(.[0].behavior_assessments[];
     (.problem | length) > 20 and
-    (.result_reason | length) > 20 and
-    (.mechanism | length) > 20 and
+    ((.result_reason == null) or (.result_reason | length) > 20) and
+    (.result_reason_state |
+      IN("consumer_neutral_historical_assessment",
+        "consumer_specific_assessment_omitted")) and
+    (.mechanism.relation | length) > 0 and
+    ((.mechanism.description == null) or
+      (.mechanism.description | length) > 20) and
+    (.mechanism.description_state |
+      IN("reviewed_consumer_neutral_function_role",
+        "exact_relation_requires_consumer_neutral_review")) and
     (.worked_claims | type) == "array" and
     (.failures_and_limitations | type) == "array" and
     (.snapshot_test_observations | type) == "array" and
-    (.relation | length) > 0 and
-    (.semantic_rationale | length) > 20 and
     (has("capability_id") | not) and
     (has("v2") | not) and
     (has("reuse_kind") | not)) and
@@ -68,6 +74,20 @@ jq -e --arg ref "$structural_ref" '
   .[0].code_reuse_authorized == false and
   .[0].contains_body == false
 ' <<<"$structural" >/dev/null
+
+# Este enlace contenía una recomendación específica de V2 en el assessment
+# original. La capa general conserva la relación exacta, no aquella decisión.
+consumer_specific_ref="sha256:47f4cbda127759fe9307ff4173d47873f10953a4c40c885a009be6b75cf4439a"
+neutralized="$(cd /tmp && "$query" --occurrence-ref "$consumer_specific_ref" --json)"
+jq -e '
+  length == 1 and
+  any(.[0].behavior_assessments[];
+    .consumer_specific_context_omitted == true and
+    .mechanism.description == null and
+    .mechanism.description_state ==
+      "exact_relation_requires_consumer_neutral_review") and
+  (tojson | test("\\bV2\\b|OrquestaV2|roadmap|acceptance_contract|evidence V2"; "i") | not)
+' <<<"$neutralized" >/dev/null
 
 if (cd /tmp && "$query" --name FunctionThatNeverExistedV0 >/dev/null 2>&1); then
   printf 'Una función ausente no debe devolver éxito.\n' >&2
