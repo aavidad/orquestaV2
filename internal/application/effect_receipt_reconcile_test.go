@@ -73,7 +73,8 @@ func TestMalformedStopReceiptReconcilesWithSameEffectKey(t *testing.T) {
 			durable = ports.AgentStopReceipt{
 				ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 				PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-				ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+				ExecutionAttempt: request.ExecutionAttempt, StopEffectAttemptRef: request.StopEffectAttemptRef,
+				StopActionFence: request.StopActionFence, SpecHash: request.SpecHash,
 				ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
 				ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
 				Status: ports.AgentStopped, ReceiptRef: "receipt:stop:reconciled", ConfirmedAt: agent.now().UTC(),
@@ -82,7 +83,7 @@ func TestMalformedStopReceiptReconcilesWithSameEffectKey(t *testing.T) {
 		if !returnedMalformed {
 			returnedMalformed = true
 			malformed := durable
-			malformed.SpecHash = ""
+			malformed.StopActionFence++
 			return malformed, nil
 		}
 		return durable, nil

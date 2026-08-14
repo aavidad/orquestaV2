@@ -85,20 +85,22 @@ type stopCompletionRecord struct {
 }
 
 type stopHashDocument struct {
-	ExecutionRef      string              `json:"execution_ref"`
-	GoalRef           string              `json:"goal_ref"`
-	WorkItemRef       string              `json:"work_item_ref"`
-	PlanGeneration    uint64              `json:"plan_generation"`
-	AppSpecGeneration uint64              `json:"app_spec_generation"`
-	ExecutionAttempt  uint64              `json:"execution_attempt"`
-	LaunchActionFence uint64              `json:"launch_action_fence"`
-	SpecHash          string              `json:"spec_hash"`
-	ProviderRef       string              `json:"provider_ref"`
-	ModelRef          string              `json:"model_ref"`
-	AgentRef          string              `json:"agent_ref"`
-	ExternalRef       string              `json:"external_ref"`
-	Mode              ports.AgentStopMode `json:"mode"`
-	IdempotencyKey    string              `json:"idempotency_key"`
+	ExecutionRef         string              `json:"execution_ref"`
+	GoalRef              string              `json:"goal_ref"`
+	WorkItemRef          string              `json:"work_item_ref"`
+	PlanGeneration       uint64              `json:"plan_generation"`
+	AppSpecGeneration    uint64              `json:"app_spec_generation"`
+	ExecutionAttempt     uint64              `json:"execution_attempt"`
+	LaunchActionFence    uint64              `json:"launch_action_fence"`
+	StopEffectAttemptRef string              `json:"stop_effect_attempt_ref"`
+	StopActionFence      uint64              `json:"stop_action_fence"`
+	SpecHash             string              `json:"spec_hash"`
+	ProviderRef          string              `json:"provider_ref"`
+	ModelRef             string              `json:"model_ref"`
+	AgentRef             string              `json:"agent_ref"`
+	ExternalRef          string              `json:"external_ref"`
+	Mode                 ports.AgentStopMode `json:"mode"`
+	IdempotencyKey       string              `json:"idempotency_key"`
 }
 
 func hashStopRequest(request ports.AgentStopRequest) (string, error) {
@@ -106,8 +108,9 @@ func hashStopRequest(request ports.AgentStopRequest) (string, error) {
 		ExecutionRef: request.ExecutionRef.String(), GoalRef: request.GoalRef.String(),
 		WorkItemRef: request.WorkItemRef.String(), PlanGeneration: uint64(request.PlanGeneration),
 		AppSpecGeneration: uint64(request.AppSpecGeneration), ExecutionAttempt: request.ExecutionAttempt,
-		LaunchActionFence: request.LaunchActionFence,
-		SpecHash:          request.SpecHash, ProviderRef: request.ProviderRef, ModelRef: request.ModelRef,
+		LaunchActionFence: request.LaunchActionFence, StopEffectAttemptRef: request.StopEffectAttemptRef,
+		StopActionFence: request.StopActionFence,
+		SpecHash:        request.SpecHash, ProviderRef: request.ProviderRef, ModelRef: request.ModelRef,
 		AgentRef: request.AgentRef, ExternalRef: request.ExternalRef, Mode: request.Mode,
 		IdempotencyKey: request.IdempotencyKey,
 	})

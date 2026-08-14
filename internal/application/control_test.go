@@ -421,6 +421,12 @@ func TestControlsStopCompletionCASAndUnsupportedMode(t *testing.T) {
 		item, _ = stopped.Goal.WorkItem(item.Ref())
 		execution, _ = executionByRef(stopped.Executions, execution.Ref)
 		control := mustControlByRequest(t, stopped, request.RequestRef)
+		stopRequest := effects.stopRequests[0]
+		stopAttempt, found := effectAttemptByRef(stopped.EffectAttempts, stopRequest.StopEffectAttemptRef)
+		if !found || stopAttempt.ActionRef != "action:stop:"+control.Ref+":"+execution.Ref.String() ||
+			stopAttempt.ActionFence != stopRequest.StopActionFence {
+			t.Fatalf("stop effect authority request=%+v attempt=%+v found=%v", stopRequest, stopAttempt, found)
+		}
 		if execution.State != ExecutionStopped || item.State() != goal.WorkItemStateInterrupted ||
 			stopped.Goal.IsTerminal() || control.Status != ControlConfirmed || system.stopCount() != 1 {
 			t.Fatalf("stop-first CAS: Goal=%s item=%s execution=%s control=%s stops=%d",
@@ -1020,7 +1026,8 @@ func (controller *idempotentStopController) Stop(
 	receipt := ports.AgentStopReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, StopEffectAttemptRef: request.StopEffectAttemptRef,
+		StopActionFence: request.StopActionFence, SpecHash: request.SpecHash,
 		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
 		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
 		Status: ports.AgentStopped, ReceiptRef: "receipt:idempotent:" + request.ExecutionRef.String(),

@@ -14,7 +14,8 @@ func validAgentStopRequest(t *testing.T) AgentStopRequest {
 	return AgentStopRequest{
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef, WorkItemRef: launch.WorkItemRef,
 		PlanGeneration: launch.PlanGeneration, AppSpecGeneration: launch.AppSpecGeneration,
-		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: 11, SpecHash: launch.SpecHash,
+		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: 11,
+		StopEffectAttemptRef: "effect-attempt:stop:1", StopActionFence: 13, SpecHash: launch.SpecHash,
 		ProviderRef: launch.ProviderRef, ModelRef: launch.ModelRef, AgentRef: launch.AgentRef,
 		ExternalRef: launch.ExternalRef, Mode: AgentStopCooperative, IdempotencyKey: "stop:1",
 	}
@@ -24,7 +25,8 @@ func validAgentStopReceipt(request AgentStopRequest, status AgentStopStatus) Age
 	receipt := AgentStopReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, StopEffectAttemptRef: request.StopEffectAttemptRef,
+		StopActionFence: request.StopActionFence, SpecHash: request.SpecHash,
 		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
 		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
 		Status: status,
@@ -55,6 +57,8 @@ func TestAgentStopRequestRejectsEveryInvalidIdentityMutation(t *testing.T) {
 		"app spec":        func(value *AgentStopRequest) { value.AppSpecGeneration = 0 },
 		"attempt":         func(value *AgentStopRequest) { value.ExecutionAttempt = 0 },
 		"launch fence":    func(value *AgentStopRequest) { value.LaunchActionFence = 0 },
+		"effect attempt":  func(value *AgentStopRequest) { value.StopEffectAttemptRef = "" },
+		"action fence":    func(value *AgentStopRequest) { value.StopActionFence = 0 },
 		"hash missing":    func(value *AgentStopRequest) { value.SpecHash = "" },
 		"hash invalid":    func(value *AgentStopRequest) { value.SpecHash = "ABC" },
 		"provider":        func(value *AgentStopRequest) { value.ProviderRef = " provider:fake" },
@@ -156,6 +160,10 @@ func TestAgentStopReceiptRejectsEveryCausalMutation(t *testing.T) {
 		"plan":      func(value *AgentStopReceipt) { value.PlanGeneration++ },
 		"app spec":  func(value *AgentStopReceipt) { value.AppSpecGeneration++ },
 		"attempt":   func(value *AgentStopReceipt) { value.ExecutionAttempt++ },
+		"effect attempt": func(value *AgentStopReceipt) {
+			value.StopEffectAttemptRef = "effect-attempt:stop:other"
+		},
+		"action fence": func(value *AgentStopReceipt) { value.StopActionFence++ },
 		"hash": func(value *AgentStopReceipt) {
 			value.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		},

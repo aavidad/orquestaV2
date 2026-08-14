@@ -27,7 +27,8 @@ func stopForControl(launch ports.AgentLaunchReceipt, mode ports.AgentStopMode, k
 	return ports.AgentStopRequest{
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef, WorkItemRef: launch.WorkItemRef,
 		PlanGeneration: launch.PlanGeneration, AppSpecGeneration: launch.AppSpecGeneration,
-		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: launch.LaunchActionFence, SpecHash: launch.SpecHash,
+		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: launch.LaunchActionFence,
+		StopEffectAttemptRef: "effect-attempt:fake-stop", StopActionFence: 13, SpecHash: launch.SpecHash,
 		ProviderRef: launch.ProviderRef, ModelRef: launch.ModelRef, AgentRef: launch.AgentRef,
 		ExternalRef: launch.ExternalRef, Mode: mode, IdempotencyKey: key,
 	}
@@ -82,10 +83,17 @@ func TestFakeStopIsSelectiveAndIdempotent(t *testing.T) {
 	if err != nil || already.Status != ports.AgentStopAlreadyStopped {
 		t.Fatalf("second-key stopped truth = %+v, %v", already, err)
 	}
-	conflict := request
-	conflict.Mode = ports.AgentStopCooperative
-	if _, err := adapter.Stop(context.Background(), conflict); err == nil || err.Error() != "fake_agent.stop_conflict" {
-		t.Fatalf("same-key mutation error = %v", err)
+	conflicts := map[string]func(*ports.AgentStopRequest){
+		"mode":           func(value *ports.AgentStopRequest) { value.Mode = ports.AgentStopCooperative },
+		"effect attempt": func(value *ports.AgentStopRequest) { value.StopEffectAttemptRef = "effect-attempt:fake-stop:other" },
+		"action fence":   func(value *ports.AgentStopRequest) { value.StopActionFence++ },
+	}
+	for name, mutate := range conflicts {
+		conflict := request
+		mutate(&conflict)
+		if _, err := adapter.Stop(context.Background(), conflict); err == nil || err.Error() != "fake_agent.stop_conflict" {
+			t.Fatalf("same-key %s mutation error = %v", name, err)
+		}
 	}
 }
 

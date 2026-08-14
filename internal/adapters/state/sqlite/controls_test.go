@@ -459,7 +459,8 @@ func (agent *sqliteTerminalStopAgent) Stop(
 	return ports.AgentStopReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, StopEffectAttemptRef: request.StopEffectAttemptRef,
+		StopActionFence: request.StopActionFence, SpecHash: request.SpecHash,
 		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
 		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
 		Status: ports.AgentStopped, ReceiptRef: "receipt:unexpected-physical-stop", ConfirmedAt: agent.clock.Now(),
@@ -513,7 +514,8 @@ func (agent *sqliteMultiControlAgent) Stop(
 	return ports.AgentStopReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, StopEffectAttemptRef: request.StopEffectAttemptRef,
+		StopActionFence: request.StopActionFence, SpecHash: request.SpecHash,
 		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
 		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
 		Status: ports.AgentStopped, ReceiptRef: "receipt:sqlite-stop:" + request.ExecutionRef.String(),

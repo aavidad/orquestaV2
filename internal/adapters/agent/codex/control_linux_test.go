@@ -324,6 +324,17 @@ func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
 	if _, err := adapter.Stop(ctx, crossed); ports.AgentContractErrorCode(err) != "agent.stop_launch_action_fence_mismatch" {
 		t.Fatalf("Stop(crossed fence) error = %v", err)
 	}
+	for name, mutate := range map[string]func(*ports.AgentStopRequest){
+		"effect attempt": func(value *ports.AgentStopRequest) { value.StopEffectAttemptRef = "effect-attempt:codex-stop:other" },
+		"action fence":   func(value *ports.AgentStopRequest) { value.StopActionFence++ },
+	} {
+		candidate := stop
+		mutate(&candidate)
+		candidateHash, err := hashStopRequest(candidate)
+		if err != nil || candidateHash == stopHash {
+			t.Fatalf("stop hash omitted %s: hash=%q err=%v", name, candidateHash, err)
+		}
+	}
 	receipt, err := adapter.Stop(ctx, stop)
 	if err != nil || receipt.Status != ports.AgentStopped {
 		t.Fatalf("Stop(B) = %+v, %v", receipt, err)
@@ -340,6 +351,55 @@ func TestControlLaunchReceiptRejectsMissingDurableFence(t *testing.T) {
 	adapter := &Adapter{}
 	if _, err := adapter.controlLaunchReceipt(launchRecord{SchemaVersion: stateSchemaVersion}, ports.AgentStopRequest{}); ErrorCode(err) != CodeLegacyControlMetadataUnknown {
 		t.Fatalf("missing launch fence error = %v", err)
+	}
+}
+
+func TestReopenedStopRejectsCrossedEffectAuthorityBeforeSignal(t *testing.T) {
+	for name, mutate := range map[string]func(*ports.AgentStopRequest){
+		"effect-attempt": func(value *ports.AgentStopRequest) { value.StopEffectAttemptRef = "effect-attempt:codex-stop:other" },
+		"action-fence":   func(value *ports.AgentStopRequest) { value.StopActionFence++ },
+	} {
+		t.Run(name, func(t *testing.T) {
+			config := durableControlProcessTreeTestConfig(t)
+			request := testRequest(t, "crossed-stop-"+name, "crossed stop authority", 1024)
+			command, process, launch := seedUnownedLiveProcess(t, config, request)
+			cleanupSeededProcess(t, command, process)
+			stop := stopRequestForLaunch(launch, ports.AgentStopForced, "stop:crossed-authority")
+			requestHash, err := hashStopRequest(stop)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seeder, err := New(config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runPath := executionPath(request.ExecutionRef)
+			if _, err := seeder.ensureStopRequest(runPath, requestHash, stop); err != nil {
+				t.Fatal(err)
+			}
+			if err := seeder.root.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			crossed := stop
+			mutate(&crossed)
+			reopened := openTestAdapter(t, config)
+			receipt, err := reopened.Stop(context.Background(), crossed)
+			if ErrorCode(err) != CodeStopConflict || receipt != (ports.AgentStopReceipt{}) {
+				t.Fatalf("Stop(crossed authority)=%+v err=%v code=%q", receipt, err, ErrorCode(err))
+			}
+			if identity, inspectErr := platformInspectProcess(process); inspectErr != nil || identity != processIdentityAlive {
+				t.Fatalf("crossed authority touched process identity=%v err=%v", identity, inspectErr)
+			}
+			for _, fileName := range []string{
+				stopSignalIntentName(stop.IdempotencyKey), stopSignalName(stop.IdempotencyKey),
+				stopCompletionName, terminalFileName,
+			} {
+				if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), fileName)); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("crossed authority created %s: %v", fileName, err)
+				}
+			}
+		})
 	}
 }
 
@@ -1461,7 +1521,8 @@ func stopRequestForLaunch(launch ports.AgentLaunchReceipt, mode ports.AgentStopM
 	return ports.AgentStopRequest{
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef, WorkItemRef: launch.WorkItemRef,
 		PlanGeneration: launch.PlanGeneration, AppSpecGeneration: launch.AppSpecGeneration,
-		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: launch.LaunchActionFence, SpecHash: launch.SpecHash,
+		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: launch.LaunchActionFence,
+		StopEffectAttemptRef: "effect-attempt:codex-stop", StopActionFence: 13, SpecHash: launch.SpecHash,
 		ProviderRef: launch.ProviderRef, ModelRef: launch.ModelRef, AgentRef: launch.AgentRef,
 		ExternalRef: launch.ExternalRef, Mode: mode, IdempotencyKey: idempotency,
 	}

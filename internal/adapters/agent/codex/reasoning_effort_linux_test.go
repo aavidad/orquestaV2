@@ -212,7 +212,8 @@ func TestStopV3QuarantinesWithoutFabricatingCausalMetadata(t *testing.T) {
 	stop := ports.AgentStopRequest{
 		ExecutionRef: request.ExecutionRef, GoalRef: otherGoal, WorkItemRef: otherWorkItem,
 		PlanGeneration: request.PlanGeneration + 10, AppSpecGeneration: request.AppSpecGeneration + 10,
-		ExecutionAttempt: request.ExecutionAttempt + 10, LaunchActionFence: 1, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt + 10, LaunchActionFence: 1,
+		StopEffectAttemptRef: "effect-attempt:codex-stop", StopActionFence: 13, SpecHash: request.SpecHash,
 		ProviderRef: ProviderRef, ModelRef: adapter.modelRef(), AgentRef: AgentRef,
 		ExternalRef: "codex:" + filepath.Base(runPath), Mode: ports.AgentStopForced,
 		IdempotencyKey: "stop:v3-unknown-causal-metadata",

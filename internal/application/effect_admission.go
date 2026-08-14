@@ -563,8 +563,8 @@ func launchTargetDigestWithEgress(fields []string, authority ports.AgentLaunchEg
 }
 
 func stopTargetDigest(control ControlRecord, request ports.AgentStopRequest) string {
-	// LaunchActionFence is derived from the accepted launch only when the stop
-	// executes: the control intent may be created while launch is dispatching.
+	// Both fences are derived only when the stop executes: launch may still be
+	// dispatching and the stop EffectAttempt does not exist at intent creation.
 	return effectAdmissionFingerprint(
 		"target:stop:v1", string(control.Operation), string(control.Target), string(request.Mode),
 		request.ExecutionRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),

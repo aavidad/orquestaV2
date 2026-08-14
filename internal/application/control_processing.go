@@ -56,6 +56,10 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	if err != nil {
 		return err
 	}
+	request.StopEffectAttemptRef, request.StopActionFence = attempt.Ref, attempt.ActionFence
+	if err := ports.ValidateAgentStopRequest(request); err != nil {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
 	effectCtx, cancel := orchestrator.actionCallContext(ctx, claim)
 	receipt, stopErr := orchestrator.controller.Stop(effectCtx, request)
 	cancel()

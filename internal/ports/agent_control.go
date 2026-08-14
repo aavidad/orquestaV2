@@ -32,39 +32,43 @@ type AgentControlCapabilities struct {
 }
 
 type AgentStopRequest struct {
-	ExecutionRef      goal.ExecutionRef
-	GoalRef           goal.GoalRef
-	WorkItemRef       goal.WorkItemRef
-	PlanGeneration    goal.PlanGeneration
-	AppSpecGeneration goal.AppSpecGeneration
-	ExecutionAttempt  uint64
-	LaunchActionFence uint64
-	SpecHash          string
-	ProviderRef       string
-	ModelRef          string
-	AgentRef          string
-	ExternalRef       string
-	Mode              AgentStopMode
-	IdempotencyKey    string
+	ExecutionRef         goal.ExecutionRef
+	GoalRef              goal.GoalRef
+	WorkItemRef          goal.WorkItemRef
+	PlanGeneration       goal.PlanGeneration
+	AppSpecGeneration    goal.AppSpecGeneration
+	ExecutionAttempt     uint64
+	LaunchActionFence    uint64
+	StopEffectAttemptRef string
+	StopActionFence      uint64
+	SpecHash             string
+	ProviderRef          string
+	ModelRef             string
+	AgentRef             string
+	ExternalRef          string
+	Mode                 AgentStopMode
+	IdempotencyKey       string
 }
 
 type AgentStopReceipt struct {
-	ExecutionRef      goal.ExecutionRef
-	GoalRef           goal.GoalRef
-	WorkItemRef       goal.WorkItemRef
-	PlanGeneration    goal.PlanGeneration
-	AppSpecGeneration goal.AppSpecGeneration
-	ExecutionAttempt  uint64
-	SpecHash          string
-	ProviderRef       string
-	ModelRef          string
-	AgentRef          string
-	ExternalRef       string
-	Mode              AgentStopMode
-	IdempotencyKey    string
-	Status            AgentStopStatus
-	ReceiptRef        string
-	ConfirmedAt       time.Time
+	ExecutionRef         goal.ExecutionRef
+	GoalRef              goal.GoalRef
+	WorkItemRef          goal.WorkItemRef
+	PlanGeneration       goal.PlanGeneration
+	AppSpecGeneration    goal.AppSpecGeneration
+	ExecutionAttempt     uint64
+	StopEffectAttemptRef string
+	StopActionFence      uint64
+	SpecHash             string
+	ProviderRef          string
+	ModelRef             string
+	AgentRef             string
+	ExternalRef          string
+	Mode                 AgentStopMode
+	IdempotencyKey       string
+	Status               AgentStopStatus
+	ReceiptRef           string
+	ConfirmedAt          time.Time
 }
 
 func SupportsAgentStopMode(capabilities AgentControlCapabilities, mode AgentStopMode) bool {
@@ -94,6 +98,10 @@ func ValidateAgentStopRequest(request AgentStopRequest) error {
 		return stopContractError("execution_attempt_required")
 	case request.LaunchActionFence == 0:
 		return stopContractError("launch_action_fence_required")
+	case !validAgentReceiptRef(request.StopEffectAttemptRef):
+		return stopContractError("effect_attempt_ref_required")
+	case request.StopActionFence == 0:
+		return stopContractError("action_fence_required")
 	case request.SpecHash == "":
 		return stopContractError("spec_hash_required")
 	case !goal.IsCanonicalAppSpecHash(request.SpecHash):
@@ -160,6 +168,8 @@ func ValidateAgentStopReceipt(request AgentStopRequest, receipt AgentStopReceipt
 		{receipt.PlanGeneration == request.PlanGeneration, "plan_generation"},
 		{receipt.AppSpecGeneration == request.AppSpecGeneration, "app_spec_generation"},
 		{receipt.ExecutionAttempt == request.ExecutionAttempt, "execution_attempt"},
+		{receipt.StopEffectAttemptRef == request.StopEffectAttemptRef, "effect_attempt_ref"},
+		{receipt.StopActionFence == request.StopActionFence, "action_fence"},
 		{receipt.SpecHash == request.SpecHash, "spec_hash"},
 		{receipt.ProviderRef == request.ProviderRef, "provider_ref"},
 		{receipt.ModelRef == request.ModelRef, "model_ref"},

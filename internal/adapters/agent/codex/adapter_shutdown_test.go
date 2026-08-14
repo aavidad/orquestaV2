@@ -249,8 +249,9 @@ func stopRequestFromReceipt(
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef,
 		WorkItemRef: launch.WorkItemRef, PlanGeneration: launch.PlanGeneration,
 		AppSpecGeneration: launch.AppSpecGeneration, ExecutionAttempt: launch.ExecutionAttempt,
-		LaunchActionFence: launch.LaunchActionFence,
-		SpecHash:          launch.SpecHash, ProviderRef: launch.ProviderRef,
+		LaunchActionFence:    launch.LaunchActionFence,
+		StopEffectAttemptRef: "effect-attempt:codex-stop", StopActionFence: 13,
+		SpecHash: launch.SpecHash, ProviderRef: launch.ProviderRef,
 		ModelRef: launch.ModelRef, AgentRef: launch.AgentRef,
 		ExternalRef: launch.ExternalRef, Mode: mode, IdempotencyKey: idempotency,
 	}
