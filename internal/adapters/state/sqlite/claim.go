@@ -1080,7 +1080,7 @@ func requirementKey(candidate claimCandidate) claimRequirementKey {
 }
 
 func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.ActionClaim) error {
-	if err := validateClaim(claim); err != nil {
+	if err := validateEffectRecoveryClaim(claim); err != nil {
 		return invalid(err)
 	}
 	var kind, goalValue, itemValue, executionValue string

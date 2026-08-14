@@ -1508,6 +1508,32 @@ func (repository *memoryRepository) ValidateAgentLaunchRecoveryClaim(
 	return nil
 }
 
+func (repository *memoryRepository) ValidateAgentStopRecoveryClaim(
+	ctx context.Context,
+	claim ActionClaim,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	action, found := repository.actions[claim.Action.Ref]
+	now := repository.now().Round(0).UTC()
+	if !found || now.IsZero() || claim.Disposition != ActionClaimDispositionRecoverEffect ||
+		!memoryClaimMatches(action, claim, now) || !reflect.DeepEqual(action.record, claim.Action) {
+		return &StateError{Code: StateConflict}
+	}
+	record, found := repository.records[claim.Action.GoalRef]
+	if !found {
+		return &StateError{Code: StateConflict}
+	}
+	attempt, err := SelectAgentStopRecoveryAttempt(record, claim)
+	if err != nil || attempt.Ref != claim.RecoveryEffectAttemptRef {
+		return &StateError{Code: StateConflict}
+	}
+	return nil
+}
+
 func reservaCapacidadMemoria(accion ActionRecord, candidato AgentCapacityPlacementCandidate, cerca uint64, ahora time.Time) AgentCapacityReservation {
 	demanda, _ := AgentCapacityDemandFromBudget(accion.EffectIntent.Demand)
 	return AgentCapacityReservation{Ref: "capacity-reservation:" + accion.Ref, ObservationRef: candidato.Physical.Ref, ObservationRevision: 1,

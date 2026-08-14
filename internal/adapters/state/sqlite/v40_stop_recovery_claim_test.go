@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -45,12 +46,27 @@ func TestV40RecoveryValidationAcceptsReleasedStopRecoveryClaim(t *testing.T) {
 	system, original, attempt, _ := seedSQLiteAgentProviderStopRequest(t, "v40-stop-released")
 	system.clock.Advance(original.LeaseUntil.Sub(system.clock.Now()) + time.Nanosecond)
 	claim := claimV40StopRecovery(t, system, "claim:v40-stop-released")
-	availableAt := claim.LeaseUntil.Add(time.Minute)
-	_, err := system.repository.db.Exec(`UPDATE outbox
-SET available_at=?,claim_token=NULL,claimed_by=NULL,claimed_until=NULL,
-    last_error_code='agent.stop_reconciliation_pending'
-WHERE ref=?`, requiredTime(availableAt), claim.Action.Ref)
+	if err := system.repository.ValidateAgentStopRecoveryClaim(context.Background(), claim); err != nil {
+		t.Fatalf("current Stop recovery rejected: %s", sqliteTestErrorChain(err))
+	}
+	restarted := openSQLiteV15Repository(t, system.path, system.clock.Now)
+	if err := restarted.ValidateAgentStopRecoveryClaim(context.Background(), claim); err != nil {
+		t.Fatalf("restart rejected current Stop recovery: %s", sqliteTestErrorChain(err))
+	}
+	record, err := system.repository.GetGoal(context.Background(), claim.Action.GoalRef)
 	sqliteTestNoError(t, err)
+	execution, found := sqliteExecutionByRef(record.Executions, claim.Action.ExecutionRef)
+	if !found {
+		t.Fatal("Stop recovery execution missing")
+	}
+	availableAt := claim.LeaseUntil.Add(time.Minute)
+	sqliteTestNoError(t, system.repository.RequeueAction(context.Background(), application.ActionRequeuedState{
+		Claim: claim, Execution: execution, AvailableAt: availableAt,
+		OperationAt: system.clock.Now(), ErrorCode: "agent.stop_reconciliation_pending",
+	}))
+	if err := restarted.ValidateAgentStopRecoveryClaim(context.Background(), claim); !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("released Stop claim remained current: %s", sqliteTestErrorChain(err))
+	}
 	requireV40StopRecoveryValidation(t, system, true)
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
 		t.Fatalf("released Stop recovery failed full validation: %s", sqliteTestErrorChain(err))
@@ -61,6 +77,74 @@ WHERE ref=?`, requiredTime(availableAt), claim.Action.Ref)
 claim_token IS NOT NULL FROM outbox WHERE ref=?`, claim.Action.Ref).Scan(&recoveryRef, &claimed))
 	if recoveryRef != attempt.Ref || claimed != 0 {
 		t.Fatalf("released Stop recovery ref=%q claimed=%d", recoveryRef, claimed)
+	}
+	system.clock.Advance(availableAt.Sub(system.clock.Now()))
+	next := claimV40StopRecovery(t, system, "claim:v40-stop-released-next")
+	if next.RecoveryEffectAttemptRef != attempt.Ref || next.Fence <= claim.Fence ||
+		next.DeliveryAttempt != claim.DeliveryAttempt+1 {
+		t.Fatalf("reclaimed Stop recovery next=%+v previous=%+v", next, claim)
+	}
+	if err := restarted.ValidateAgentStopRecoveryClaim(context.Background(), next); err != nil {
+		t.Fatalf("reclaimed Stop recovery rejected: %s", sqliteTestErrorChain(err))
+	}
+}
+
+func TestV40ValidateAgentStopRecoveryClaimRejectsCrossedCASWithoutMutation(t *testing.T) {
+	system, original, _, _ := seedSQLiteAgentProviderStopRequest(t, "v40-stop-validate-crossed")
+	system.clock.Advance(original.LeaseUntil.Sub(system.clock.Now()) + time.Nanosecond)
+	claim := claimV40StopRecovery(t, system, "claim:v40-stop-validate-crossed")
+	before := readV28RecoveryOutbox(t, system.repository.db, claim.Action.Ref)
+	mutations := map[string]func(*application.ActionClaim){
+		"token":       func(value *application.ActionClaim) { value.Token += ":crossed" },
+		"worker":      func(value *application.ActionClaim) { value.WorkerRef += ":crossed" },
+		"fence":       func(value *application.ActionClaim) { value.Fence++ },
+		"lease":       func(value *application.ActionClaim) { value.LeaseUntil = value.LeaseUntil.Add(time.Nanosecond) },
+		"attempt ref": func(value *application.ActionClaim) { value.RecoveryEffectAttemptRef += ":crossed" },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			candidate := claim
+			mutate(&candidate)
+			if err := system.repository.ValidateAgentStopRecoveryClaim(context.Background(), candidate); !application.IsStateError(err, application.StateConflict) {
+				t.Fatalf("crossed %s error=%s", name, sqliteTestErrorChain(err))
+			}
+		})
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := system.repository.ValidateAgentStopRecoveryClaim(ctx, claim); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled validation error=%s", sqliteTestErrorChain(err))
+	}
+	if after := readV28RecoveryOutbox(t, system.repository.db, claim.Action.Ref); after != before {
+		t.Fatalf("crossed validation mutated outbox before=%+v after=%+v", before, after)
+	}
+}
+
+func TestV40StopRecoveryRequeueDoesNotEnableTerminalMutation(t *testing.T) {
+	system, original, _, _ := seedSQLiteAgentProviderStopRequest(t, "v40-stop-terminal-gate")
+	system.clock.Advance(original.LeaseUntil.Sub(system.clock.Now()) + time.Nanosecond)
+	claim := claimV40StopRecovery(t, system, "claim:v40-stop-terminal-gate")
+	before := readV28RecoveryOutbox(t, system.repository.db, claim.Action.Ref)
+	operationAt := system.clock.Now().UTC()
+	err := system.repository.QuarantineAction(context.Background(), application.ActionQuarantinedState{
+		Claim: claim, ErrorCode: "application.effect_unknown_applied", OperationAt: operationAt,
+		Event: application.EventRecord{
+			Ref: "event:v40-stop-terminal-gate", Kind: "action.quarantined",
+			GoalRef: claim.Action.GoalRef, WorkItemRef: claim.Action.WorkItemRef,
+			ExecutionRef: claim.Action.ExecutionRef, OccurredAt: operationAt,
+		},
+	})
+	if !application.IsStateError(err, application.StateInvalid) {
+		t.Fatalf("terminal Stop recovery mutation error=%s", sqliteTestErrorChain(err))
+	}
+	if after := readV28RecoveryOutbox(t, system.repository.db, claim.Action.Ref); after != before {
+		t.Fatalf("terminal gate mutated outbox before=%+v after=%+v", before, after)
+	}
+	var consumptions int
+	sqliteTestNoError(t, system.repository.db.QueryRow(`SELECT COUNT(*) FROM action_consumption_receipts
+WHERE action_ref=?`, claim.Action.Ref).Scan(&consumptions))
+	if consumptions != 0 {
+		t.Fatalf("terminal gate consumptions=%d", consumptions)
 	}
 }
 

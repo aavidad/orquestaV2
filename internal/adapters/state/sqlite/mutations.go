@@ -87,7 +87,8 @@ func (repository *Repository) RequeueAction(ctx context.Context, state applicati
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
-		if state.Claim.Disposition == application.ActionClaimDispositionRecoverEffect {
+		if state.Claim.Disposition == application.ActionClaimDispositionRecoverEffect &&
+			state.Claim.Action.Kind == application.ActionLaunchAgent {
 			if err := requireAgentLaunchRecoveryCurrentBindings(ctx, transaction, state.Claim); err != nil {
 				return err
 			}

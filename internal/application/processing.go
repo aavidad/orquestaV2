@@ -76,10 +76,14 @@ func (orchestrator *Orchestrator) processClaim(
 ) (ProcessResult, error) {
 	result := ProcessResult{Processed: true, GoalRef: claim.Action.GoalRef, Action: claim.Action.Kind}
 	if claim.Disposition == ActionClaimDispositionRecoverEffect {
-		if claim.Action.Kind != ActionLaunchAgent {
+		switch claim.Action.Kind {
+		case ActionLaunchAgent:
+			return result, orchestrator.processAgentLaunchRecovery(ctx, claim)
+		case ActionStopAgent:
+			return result, orchestrator.processAgentStopRecovery(ctx, claim)
+		default:
 			return result, &StateError{Code: StateConflict}
 		}
-		return result, orchestrator.processAgentLaunchRecovery(ctx, claim)
 	}
 	if claim.RecoveryEffectAttemptRef != "" {
 		return result, &StateError{Code: StateConflict}

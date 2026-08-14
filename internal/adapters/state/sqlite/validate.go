@@ -964,7 +964,15 @@ func validReviewDigest(value string) bool {
 }
 
 func validateClaim(claim application.ActionClaim) error {
-	if err := validateClaimBase(claim); err != nil {
+	return validateClaimWithStopRecovery(claim, false)
+}
+
+func validateEffectRecoveryClaim(claim application.ActionClaim) error {
+	return validateClaimWithStopRecovery(claim, true)
+}
+
+func validateClaimWithStopRecovery(claim application.ActionClaim, allowStopRecovery bool) error {
+	if err := validateClaimBaseWithStopRecovery(claim, allowStopRecovery); err != nil {
 		return err
 	}
 	requerida := claim.Action.Kind == application.ActionLaunchAgent && claim.Action.EffectIntentRef != "" &&
@@ -984,6 +992,10 @@ func validateClaim(claim application.ActionClaim) error {
 }
 
 func validateClaimBase(claim application.ActionClaim) error {
+	return validateClaimBaseWithStopRecovery(claim, false)
+}
+
+func validateClaimBaseWithStopRecovery(claim application.ActionClaim, allowStopRecovery bool) error {
 	if !validText(claim.Token) || !validText(claim.WorkerRef) || claim.DeliveryAttempt == 0 ||
 		claim.DeliveryAttempt > maxSQLiteInteger || claim.Fence == 0 ||
 		claim.Fence > maxSQLiteInteger || claim.LeaseUntil.IsZero() {
@@ -1003,7 +1015,9 @@ func validateClaimBase(claim application.ActionClaim) error {
 			return errors.New("sqlite.claim_disposition_invalid")
 		}
 	case application.ActionClaimDispositionRecoverEffect:
-		if claim.Action.Kind != application.ActionLaunchAgent || claim.Action.EffectIntentRef == "" ||
+		if (claim.Action.Kind != application.ActionLaunchAgent &&
+			(!allowStopRecovery || claim.Action.Kind != application.ActionStopAgent)) ||
+			claim.Action.EffectIntentRef == "" ||
 			!validText(claim.RecoveryEffectAttemptRef) ||
 			claim.RetryBudgetExhaustion != (application.RetryBudgetExhaustion{}) {
 			return errors.New("sqlite.claim_disposition_invalid")
@@ -1176,7 +1190,7 @@ func validateLaunchEffectReceipt(state application.LaunchAcceptedState) error {
 }
 
 func validateRequeued(state application.ActionRequeuedState) error {
-	if err := validateClaim(state.Claim); err != nil {
+	if err := validateEffectRecoveryClaim(state.Claim); err != nil {
 		return err
 	}
 	if err := validateExecution(state.Execution); err != nil {
@@ -1189,15 +1203,29 @@ func validateRequeued(state application.ActionRequeuedState) error {
 	}
 	if state.Claim.Disposition == application.ActionClaimDispositionRecoverEffect {
 		intent := state.Claim.Action.EffectIntent
-		if state.Claim.Action.Kind != application.ActionLaunchAgent ||
-			state.Execution.State != application.ExecutionDispatching ||
-			!validText(state.Claim.RecoveryEffectAttemptRef) ||
+		if !validText(state.Claim.RecoveryEffectAttemptRef) ||
 			state.Claim.Action.EffectIntentRef == "" || state.Claim.Action.EffectIntentRef != intent.Ref ||
-			state.Execution.BudgetReservationRef == "" ||
-			state.Execution.BudgetReservationRef != state.Claim.BudgetReservationRef ||
-			state.Execution.EffectIntentRef == "" ||
-			state.Execution.EffectIntentRef != state.Claim.Action.EffectIntentRef ||
 			state.BudgetSettlement != nil || state.ClearEffectBinding {
+			return errors.New("sqlite.requeue_recovery_effect_invalid")
+		}
+		switch state.Claim.Action.Kind {
+		case application.ActionLaunchAgent:
+			if state.Execution.State != application.ExecutionDispatching ||
+				state.Execution.BudgetReservationRef == "" ||
+				state.Execution.BudgetReservationRef != state.Claim.BudgetReservationRef ||
+				state.Execution.EffectIntentRef == "" ||
+				state.Execution.EffectIntentRef != state.Claim.Action.EffectIntentRef {
+				return errors.New("sqlite.requeue_recovery_effect_invalid")
+			}
+		case application.ActionStopAgent:
+			if state.Execution.State != application.ExecutionRunning ||
+				state.Claim.BudgetReservationRef != "" ||
+				state.Claim.BudgetReservation != (governance.BudgetReservation{}) ||
+				state.Claim.CapacityReservation != (application.AgentCapacityReservation{}) ||
+				state.Claim.ReferenciaColocacion.String() != "" {
+				return errors.New("sqlite.requeue_recovery_effect_invalid")
+			}
+		default:
 			return errors.New("sqlite.requeue_recovery_effect_invalid")
 		}
 	}

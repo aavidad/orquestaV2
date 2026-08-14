@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
@@ -17,6 +18,7 @@ type agentStopRecoveryFixture struct {
 	attempt   EffectAttempt
 	control   ControlRecord
 	execution ExecutionRecord
+	system    *controlTestSystem
 }
 
 func newAgentStopRecoveryFixture(t *testing.T) agentStopRecoveryFixture {
@@ -53,8 +55,14 @@ func newAgentStopRecoveryFixture(t *testing.T) agentStopRecoveryFixture {
 	claim.Disposition = ActionClaimDispositionRecoverEffect
 	claim.RecoveryEffectAttemptRef = attempt.Ref
 	claim.LeaseUntil = attempt.ClaimLeaseUntil.Add(time.Minute)
+	system.repository.mu.Lock()
+	action := system.repository.actions[claim.Action.Ref]
+	action.token, action.workerRef = claim.Token, claim.WorkerRef
+	action.deliveryAttempt, action.fence, action.lease = claim.DeliveryAttempt, claim.Fence, claim.LeaseUntil
+	system.repository.actions[claim.Action.Ref] = action
+	system.repository.mu.Unlock()
 	return agentStopRecoveryFixture{
-		record: record, claim: claim, attempt: attempt, control: control, execution: execution,
+		record: record, claim: claim, attempt: attempt, control: control, execution: execution, system: system,
 	}
 }
 
@@ -77,6 +85,246 @@ func TestBuildAgentStopRecoveryRequestUsesExactDurableAuthority(t *testing.T) {
 	if err != nil || selected != fixture.attempt {
 		t.Fatalf("preflight attempt=%+v want=%+v err=%v", selected, fixture.attempt, err)
 	}
+}
+
+func TestProcessAgentStopRecoveryRequeuesOnlyReadOnlyPendingOutcomes(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status ports.AgentStopStatus
+		err    error
+	}{
+		{"pending", ports.AgentStopPending, nil},
+		{"unsupported", ports.AgentStopUnsupported, nil},
+		{"temporary failure", "", temporaryAgentTestError{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newAgentStopRecoveryFixture(t)
+			controller := &agentStopRecoveryProcessorController{status: test.status, err: test.err,
+				confirmedAt: fixture.system.clock.Now()}
+			fixture.system.orchestrator.controller = controller
+			wantRequest, _, err := BuildAgentStopRecoveryRequest(fixture.record, fixture.claim)
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+			if err != nil || !result.Processed || result.Action != ActionStopAgent ||
+				len(controller.reconciles) != 1 || !reflect.DeepEqual(controller.reconciles[0], wantRequest) ||
+				controller.stops != 0 || controller.capabilityCalls != 0 {
+				t.Fatalf("result=%+v err=%v reconciles=%+v stops=%d capabilities=%d",
+					result, err, controller.reconciles, controller.stops, controller.capabilityCalls)
+			}
+			fixture.system.repository.mu.Lock()
+			action := fixture.system.repository.actions[fixture.claim.Action.Ref]
+			record := fixture.system.repository.records[fixture.claim.Action.GoalRef]
+			fixture.system.repository.mu.Unlock()
+			if action.token != "" || action.workerRef != "" || !action.lease.IsZero() ||
+				len(record.EffectAttempts) != len(fixture.record.EffectAttempts) ||
+				len(record.EffectReceipts) != 1 || len(record.ConsumptionReceipts) != 1 {
+				t.Fatalf("released action=%+v attempts=%+v receipts=%+v consumptions=%+v",
+					action, record.EffectAttempts, record.EffectReceipts, record.ConsumptionReceipts)
+			}
+			if err := fixture.system.repository.ValidateAgentStopRecoveryClaim(
+				context.Background(), fixture.claim,
+			); !IsStateError(err, StateConflict) {
+				t.Fatalf("released claim remained current: %v", err)
+			}
+		})
+	}
+}
+
+func TestProcessAgentStopRecoveryLeavesTerminalAndInvalidResultsUnconsumed(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		status ports.AgentStopStatus
+		err    error
+		mutate func(*ports.AgentStopReceipt)
+	}{
+		{"stopped", ports.AgentStopped, nil, nil},
+		{"already stopped", ports.AgentStopAlreadyStopped, nil, nil},
+		{"already completed", ports.AgentStopAlreadyCompleted, nil, nil},
+		{"already failed", ports.AgentStopAlreadyFailed, nil, nil},
+		{"permanent failure", "", errors.New("provider response invalid"), nil},
+		{"crossed receipt", ports.AgentStopPending, nil, func(receipt *ports.AgentStopReceipt) {
+			receipt.StopActionFence++
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture := newAgentStopRecoveryFixture(t)
+			controller := &agentStopRecoveryProcessorController{status: test.status, err: test.err, mutate: test.mutate,
+				confirmedAt: fixture.system.clock.Now()}
+			fixture.system.orchestrator.controller = controller
+			before := fixture.system.effects(t)
+			result, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+			if !result.Processed || result.Action != ActionStopAgent || !IsStateError(err, StateConflict) ||
+				len(controller.reconciles) != 1 || controller.stops != 0 || controller.capabilityCalls != 0 {
+				t.Fatalf("result=%+v err=%v reconciles=%d stops=%d capabilities=%d",
+					result, err, len(controller.reconciles), controller.stops, controller.capabilityCalls)
+			}
+			fixture.system.assertEffects(t, before)
+		})
+	}
+}
+
+func TestProcessAgentStopRecoveryFencesClaimProviderAndCancellationBeforeMutation(t *testing.T) {
+	t.Run("pre-canceled", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		controller := &agentStopRecoveryProcessorController{status: ports.AgentStopPending}
+		fixture.system.orchestrator.controller = controller
+		before := fixture.system.effects(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := fixture.system.orchestrator.ProcessClaim(ctx, fixture.claim)
+		if !errors.Is(err, context.Canceled) || len(controller.reconciles) != 0 || controller.stops != 0 {
+			t.Fatalf("pre-cancel err=%v reconciles=%d stops=%d", err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.assertEffects(t, before)
+	})
+	t.Run("crossed durable claim", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		controller := &agentStopRecoveryProcessorController{status: ports.AgentStopPending}
+		fixture.system.orchestrator.controller = controller
+		before := fixture.system.effects(t)
+		crossed := fixture.claim
+		crossed.Fence++
+		_, err := fixture.system.orchestrator.ProcessClaim(context.Background(), crossed)
+		if !IsStateError(err, StateConflict) || len(controller.reconciles) != 0 || controller.stops != 0 {
+			t.Fatalf("crossed err=%v reconciles=%d stops=%d", err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.assertEffects(t, before)
+	})
+	t.Run("crossed provider composition", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		controller := &agentStopRecoveryProcessorController{status: ports.AgentStopPending}
+		fixture.system.orchestrator.controller = controller
+		fixture.system.orchestrator.agentCapabilities.ProviderRef = "provider:crossed"
+		before := fixture.system.effects(t)
+		_, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+		if !IsStateError(err, StateConflict) || len(controller.reconciles) != 0 || controller.stops != 0 {
+			t.Fatalf("provider err=%v reconciles=%d stops=%d", err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.assertEffects(t, before)
+	})
+	t.Run("claim expires during preparation", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		controller := &agentStopRecoveryProcessorController{status: ports.AgentStopPending}
+		fixture.system.orchestrator.controller = controller
+		fixture.system.orchestrator.state = &agentStopRecoveryGetGoalHookState{
+			StateRepository: fixture.system.repository,
+			hook: func() {
+				fixture.system.clock.Advance(fixture.claim.LeaseUntil.Sub(fixture.system.clock.Now()))
+			},
+		}
+		before := fixture.system.effects(t)
+		_, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+		if !IsStateError(err, StateConflict) || len(controller.reconciles) != 0 || controller.stops != 0 {
+			t.Fatalf("expired err=%v reconciles=%d stops=%d", err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.assertEffects(t, before)
+	})
+	t.Run("authority revoked after claim", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		controller := &agentStopRecoveryProcessorController{status: ports.AgentStopPending}
+		fixture.system.orchestrator.controller = controller
+		intent := fixture.claim.Action.EffectIntent
+		fixture.system.accessStore.setRole(intent.ProposedBy, intent.Subject.ProjectRef, "")
+		result, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+		if err != nil || !result.Processed || len(controller.reconciles) != 0 || controller.stops != 0 {
+			t.Fatalf("revoked result=%+v err=%v reconciles=%d stops=%d",
+				result, err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.repository.mu.Lock()
+		action := fixture.system.repository.actions[fixture.claim.Action.Ref]
+		fixture.system.repository.mu.Unlock()
+		if action.token != "" || action.workerRef != "" || !action.lease.IsZero() {
+			t.Fatalf("revoked claim was not requeued: %+v", action)
+		}
+	})
+	t.Run("cancel during reconcile", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		controller := &agentStopRecoveryProcessorController{status: ports.AgentStopPending, hook: cancel}
+		fixture.system.orchestrator.controller = controller
+		before := fixture.system.effects(t)
+		_, err := fixture.system.orchestrator.ProcessClaim(ctx, fixture.claim)
+		if !errors.Is(err, context.Canceled) || len(controller.reconciles) != 1 || controller.stops != 0 {
+			t.Fatalf("cancel err=%v reconciles=%d stops=%d", err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.assertEffects(t, before)
+	})
+}
+
+type agentStopRecoveryGetGoalHookState struct {
+	StateRepository
+	hook func()
+}
+
+func (state *agentStopRecoveryGetGoalHookState) GetGoal(
+	ctx context.Context,
+	ref goal.GoalRef,
+) (GoalRecord, error) {
+	record, err := state.StateRepository.GetGoal(ctx, ref)
+	hook := state.hook
+	state.hook = nil
+	if hook != nil {
+		hook()
+	}
+	return record, err
+}
+
+type agentStopRecoveryProcessorController struct {
+	status          ports.AgentStopStatus
+	err             error
+	confirmedAt     time.Time
+	hook            func()
+	mutate          func(*ports.AgentStopReceipt)
+	capabilityCalls int
+	stops           int
+	reconciles      []ports.AgentStopRequest
+}
+
+func (controller *agentStopRecoveryProcessorController) ControlCapabilities(
+	context.Context,
+) (ports.AgentControlCapabilities, error) {
+	controller.capabilityCalls++
+	return ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}, nil
+}
+
+func (controller *agentStopRecoveryProcessorController) Stop(
+	context.Context,
+	ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	controller.stops++
+	return ports.AgentStopReceipt{}, errors.New("test.second_stop_forbidden")
+}
+
+func (controller *agentStopRecoveryProcessorController) ReconcileStop(
+	_ context.Context,
+	request ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	controller.reconciles = append(controller.reconciles, request)
+	if controller.hook != nil {
+		controller.hook()
+	}
+	if controller.err != nil {
+		return ports.AgentStopReceipt{}, controller.err
+	}
+	receipt := ports.AgentStopReceipt{
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, StopEffectAttemptRef: request.StopEffectAttemptRef,
+		StopActionFence: request.StopActionFence, SpecHash: request.SpecHash,
+		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
+		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
+		Status: controller.status,
+	}
+	if controller.status == ports.AgentStopped || controller.status == ports.AgentStopAlreadyStopped ||
+		controller.status == ports.AgentStopAlreadyCompleted || controller.status == ports.AgentStopAlreadyFailed {
+		receipt.ReceiptRef, receipt.ConfirmedAt = "receipt:stop-recovery:"+request.ExecutionRef.String(), controller.confirmedAt
+	}
+	if controller.mutate != nil {
+		controller.mutate(&receipt)
+	}
+	return receipt, nil
 }
 
 func TestPreflightAgentStopRecoveryRejectsSettledCrossedAndNonUniqueHistory(t *testing.T) {

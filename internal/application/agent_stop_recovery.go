@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -9,6 +10,87 @@ import (
 )
 
 var ErrAgentStopRecoveryInvalid = errors.New("application.agent_stop_recovery_invalid")
+
+const (
+	agentStopRecoveryApprovalRequiredCode = "governance.effect_approval_required"
+	agentStopReconciliationPendingCode    = "agent.stop_reconciliation_pending"
+)
+
+func (orchestrator *Orchestrator) processAgentStopRecovery(
+	ctx context.Context,
+	claim ActionClaim,
+) error {
+	if ctx == nil {
+		return errors.New("application.context_required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := orchestrator.state.ValidateAgentStopRecoveryClaim(ctx, claim); err != nil {
+		return err
+	}
+	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
+	if err != nil {
+		return err
+	}
+	request, _, err := BuildAgentStopRecoveryRequest(record, claim)
+	execution, found := executionForAction(record, claim.Action)
+	if err != nil || !found || !agentStopRecoveryProviderMatches(request, orchestrator.agentCapabilities) {
+		return &StateError{Code: StateConflict}
+	}
+	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
+		return orchestrator.requeueStop(ctx, claim, execution, agentStopRecoveryApprovalRequiredCode)
+	}
+	reconciler, err := AgentStopReconcilerFrom(orchestrator.controller)
+	if err != nil {
+		return &StateError{Code: StateConflict}
+	}
+	if err := orchestrator.state.ValidateAgentStopRecoveryClaim(ctx, claim); err != nil {
+		return err
+	}
+	return orchestrator.reconcileAgentStopRecovery(ctx, claim, execution, reconciler, request)
+}
+
+func (orchestrator *Orchestrator) reconcileAgentStopRecovery(
+	ctx context.Context,
+	claim ActionClaim,
+	execution ExecutionRecord,
+	reconciler AgentStopReconciler,
+	request ports.AgentStopRequest,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	receipt, err := reconciler.ReconcileStop(ctx, request)
+	if cancellationErr := agentLaunchRecoveryCancellation(ctx, err); cancellationErr != nil {
+		return cancellationErr
+	}
+	if err != nil {
+		if isTemporaryAgentError(err) {
+			return orchestrator.requeueStop(ctx, claim, execution, agentStopReconciliationPendingCode)
+		}
+		return &StateError{Code: StateConflict}
+	}
+	if err := ports.ValidateAgentStopReceipt(request, receipt); err != nil {
+		return &StateError{Code: StateConflict}
+	}
+	switch receipt.Status {
+	case ports.AgentStopPending, ports.AgentStopUnsupported:
+		return orchestrator.requeueStop(ctx, claim, execution, agentStopReconciliationPendingCode)
+	default:
+		// A terminal observation remains leased and unconsumed until the next
+		// cut can persist its historical receipt and terminal snapshot atomically.
+		return &StateError{Code: StateConflict}
+	}
+}
+
+func agentStopRecoveryProviderMatches(
+	request ports.AgentStopRequest,
+	capabilities ports.AgentCapabilities,
+) bool {
+	return request.ProviderRef == capabilities.ProviderRef && request.ModelRef == capabilities.ModelRef &&
+		request.AgentRef == capabilities.AgentRef
+}
 
 // SelectAgentStopRecoveryAttempt returns the sole ambiguous physical Stop
 // attempt bound to a newly fenced recovery claim. Recovery is read-only: a
