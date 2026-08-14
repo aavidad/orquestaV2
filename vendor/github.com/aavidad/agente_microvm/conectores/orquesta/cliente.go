@@ -3,11 +3,14 @@ package microvm
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,9 +21,29 @@ import (
 )
 
 const (
-	maximoRespuestaBytes  int64  = 12*1024*1024 + 1
-	maximoEnteroDurableV1 uint64 = 1<<63 - 1
+	maximoRespuestaBytes                       int64  = 12*1024*1024 + 1
+	maximoEnteroDurableV1                      uint64 = 1<<63 - 1
+	MaximoManifiestoPreservacionBytesV1               = 1_048_576
+	maximoManifiestoPreservacionBase64                = (MaximoManifiestoPreservacionBytesV1 + 2) / 3 * 4
+	maximoRespuestaManifiestoPreservacionBytes        = int64(maximoManifiestoPreservacionBase64 + 4*1024 + 1)
+	protocoloManifiestoPreservacionV1                 = "agentmicrovm.preservacion.v1"
 )
+
+var esquemaRespuestaManifiestoPreservacionV1 = esquemaObjetoJSONEstricto{
+	"referencia":        esquemaEscalarJSONEstricto,
+	"cerca":             esquemaEscalarJSONEstricto,
+	"revision_trabajo":  esquemaEscalarJSONEstricto,
+	"manifiesto_ref":    esquemaEscalarJSONEstricto,
+	"manifiesto_sha256": esquemaEscalarJSONEstricto,
+	"manifiesto_bytes":  esquemaEscalarJSONEstricto,
+	"sellada_unix_ms":   esquemaEscalarJSONEstricto,
+	"contenido_base64":  esquemaEscalarJSONEstricto,
+}
+
+var esquemaProblemaV1 = esquemaObjetoJSONEstricto{
+	"codigo":  esquemaEscalarJSONEstricto,
+	"detalle": esquemaEscalarJSONEstricto,
+}
 
 // Cliente consume la API local sin conocer tipos internos de Agente MicroVM.
 type Cliente struct {
@@ -44,7 +67,12 @@ func Nuevo(rutaSocket string) (*Cliente, error) {
 		},
 	}
 	return &Cliente{
-		http: &http.Client{Transport: transporte},
+		http: &http.Client{
+			Transport: transporte,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 	}, nil
 }
 
@@ -335,6 +363,39 @@ func (c *Cliente) Preservar(
 	)
 }
 
+// RecuperarManifiestoPreservacion lee el sello exacto sin mutar lifecycle ni CAS.
+func (c *Cliente) RecuperarManifiestoPreservacion(
+	ctx context.Context,
+	referencia string,
+	solicitud SolicitudRecuperacionManifiestoPreservacion,
+) (RespuestaManifiestoPreservacion, error) {
+	if err := validarSolicitudRecuperacionManifiesto(referencia, solicitud); err != nil {
+		return RespuestaManifiestoPreservacion{}, err
+	}
+	parametros := url.Values{}
+	parametros.Set("cerca", strconv.FormatUint(solicitud.Cerca, 10))
+	parametros.Set("revision_trabajo", strconv.FormatUint(solicitud.RevisionTrabajo, 10))
+	parametros.Set("manifiesto_ref", solicitud.ManifiestoRef)
+	parametros.Set("manifiesto_sha256", solicitud.ManifiestoSHA256)
+	parametros.Set("manifiesto_bytes", strconv.FormatUint(solicitud.ManifiestoBytes, 10))
+	respuesta, err := solicitarEstrictoAcotado[RespuestaManifiestoPreservacion](
+		ctx,
+		c,
+		http.MethodGet,
+		rutaEjecucion(referencia, "/preservacion/manifiesto")+"?"+parametros.Encode(),
+		"",
+		nil,
+		maximoRespuestaManifiestoPreservacionBytes,
+	)
+	if err != nil {
+		return RespuestaManifiestoPreservacion{}, err
+	}
+	if err := validarRespuestaManifiesto(referencia, solicitud, respuesta); err != nil {
+		return RespuestaManifiestoPreservacion{}, err
+	}
+	return respuesta, nil
+}
+
 func (c *Cliente) Cerrar(
 	ctx context.Context,
 	clave string,
@@ -425,6 +486,50 @@ func solicitarEstricto[T any](
 	return solicitarDecodificando[T](ctx, cliente, metodo, ruta, clave, cuerpo, true)
 }
 
+func solicitarEstrictoConEstado[T any](
+	ctx context.Context,
+	cliente *Cliente,
+	metodo string,
+	ruta string,
+	clave string,
+	cuerpo []byte,
+	estadoEsperado int,
+) (T, error) {
+	return solicitarDecodificandoAcotadoConEstado[T](
+		ctx,
+		cliente,
+		metodo,
+		ruta,
+		clave,
+		cuerpo,
+		true,
+		maximoRespuestaBytes,
+		estadoEsperado,
+		true,
+	)
+}
+
+func solicitarEstrictoAcotado[T any](
+	ctx context.Context,
+	cliente *Cliente,
+	metodo string,
+	ruta string,
+	clave string,
+	cuerpo []byte,
+	maximoRespuesta int64,
+) (T, error) {
+	return solicitarDecodificandoAcotado[T](
+		ctx,
+		cliente,
+		metodo,
+		ruta,
+		clave,
+		cuerpo,
+		true,
+		maximoRespuesta,
+	)
+}
+
 func solicitarDecodificando[T any](
 	ctx context.Context,
 	cliente *Cliente,
@@ -433,6 +538,54 @@ func solicitarDecodificando[T any](
 	clave string,
 	cuerpo []byte,
 	estricto bool,
+) (T, error) {
+	return solicitarDecodificandoAcotado[T](
+		ctx,
+		cliente,
+		metodo,
+		ruta,
+		clave,
+		cuerpo,
+		estricto,
+		maximoRespuestaBytes,
+	)
+}
+
+func solicitarDecodificandoAcotado[T any](
+	ctx context.Context,
+	cliente *Cliente,
+	metodo string,
+	ruta string,
+	clave string,
+	cuerpo []byte,
+	estricto bool,
+	maximoRespuesta int64,
+) (T, error) {
+	return solicitarDecodificandoAcotadoConEstado[T](
+		ctx,
+		cliente,
+		metodo,
+		ruta,
+		clave,
+		cuerpo,
+		estricto,
+		maximoRespuesta,
+		0,
+		false,
+	)
+}
+
+func solicitarDecodificandoAcotadoConEstado[T any](
+	ctx context.Context,
+	cliente *Cliente,
+	metodo string,
+	ruta string,
+	clave string,
+	cuerpo []byte,
+	estricto bool,
+	maximoRespuesta int64,
+	estadoEsperado int,
+	respuestaEstricta bool,
 ) (T, error) {
 	var cero T
 	if cliente == nil || cliente.http == nil {
@@ -458,27 +611,56 @@ func solicitarDecodificando[T any](
 		return cero, fmt.Errorf("solicitar agente microvm: %w", err)
 	}
 	defer respuesta.Body.Close()
-	if respuesta.Header.Get(CabeceraProtocolo) != ProtocoloLocal {
-		return cero, &ErrorProtocolo{Recibido: respuesta.Header.Get(CabeceraProtocolo)}
+	protocolos := respuesta.Header.Values(CabeceraProtocolo)
+	if len(protocolos) != 1 || protocolos[0] != ProtocoloLocal {
+		return cero, &ErrorProtocolo{Recibido: strings.Join(protocolos, ",")}
 	}
-	bytesRespuesta, err := io.ReadAll(io.LimitReader(respuesta.Body, maximoRespuestaBytes))
+	if respuestaEstricta {
+		tiposContenido := respuesta.Header.Values("Content-Type")
+		recibido := strings.Join(tiposContenido, ",")
+		if len(tiposContenido) != 1 {
+			return cero, &ErrorTipoContenido{Recibido: recibido}
+		}
+		tipoContenido, _, err := mime.ParseMediaType(tiposContenido[0])
+		if err != nil || tipoContenido != "application/json" {
+			return cero, &ErrorTipoContenido{Recibido: recibido}
+		}
+	}
+	bytesRespuesta, err := io.ReadAll(io.LimitReader(respuesta.Body, maximoRespuesta))
 	if err != nil {
 		return cero, fmt.Errorf("leer respuesta: %w", err)
 	}
-	if int64(len(bytesRespuesta)) >= maximoRespuestaBytes {
+	if int64(len(bytesRespuesta)) >= maximoRespuesta {
 		return cero, &ErrorRespuestaGrande{}
 	}
 	if respuesta.StatusCode < 200 || respuesta.StatusCode >= 300 {
 		problema := Problema{Codigo: "api.respuesta_rechazada"}
-		_ = json.Unmarshal(bytesRespuesta, &problema)
+		if respuestaEstricta {
+			var recibido Problema
+			if decodificarObjetoJSONEstricto(bytesRespuesta, esquemaProblemaV1, &recibido) {
+				problema = recibido
+			}
+		} else {
+			_ = json.Unmarshal(bytesRespuesta, &problema)
+		}
 		return cero, &ErrorRespuesta{
 			Estado:  respuesta.StatusCode,
 			Codigo:  problema.Codigo,
 			Detalle: problema.Detalle,
 		}
 	}
+	if estadoEsperado != 0 && respuesta.StatusCode != estadoEsperado {
+		return cero, &ErrorRespuesta{
+			Estado:  respuesta.StatusCode,
+			Codigo:  "api.estado_inesperado",
+			Detalle: http.StatusText(respuesta.StatusCode),
+		}
+	}
 	if len(bytesRespuesta) == 0 {
 		return cero, errors.New("agente microvm devolvio una respuesta vacia")
+	}
+	if !jsonSinClavesDuplicadas(bytesRespuesta) {
+		return cero, errors.New("decodificar respuesta: JSON invalido o con claves duplicadas")
 	}
 	if !estricto {
 		if err := json.Unmarshal(bytesRespuesta, &cero); err != nil {
@@ -752,9 +934,118 @@ func codigoErrorSesionValido(codigo string) bool {
 
 func errorSesion(codigo string) error { return &ErrorSesionTrabajoV1{Codigo: codigo} }
 
+func validarSolicitudRecuperacionManifiesto(
+	referencia string,
+	solicitud SolicitudRecuperacionManifiestoPreservacion,
+) error {
+	if !referenciaValida(referencia, "ejecucion:", 96) ||
+		solicitud.Cerca == 0 || solicitud.Cerca > maximoEnteroDurableV1 ||
+		solicitud.RevisionTrabajo == 0 || solicitud.RevisionTrabajo > maximoEnteroDurableV1 ||
+		solicitud.ManifiestoRef != solicitud.ManifiestoSHA256 ||
+		!digestValido(solicitud.ManifiestoSHA256) ||
+		solicitud.ManifiestoBytes == 0 ||
+		solicitud.ManifiestoBytes > MaximoManifiestoPreservacionBytesV1 {
+		return &ErrorContenido{Causa: "solicitud_manifiesto_invalida"}
+	}
+	return nil
+}
+
+func validarRespuestaManifiesto(
+	referencia string,
+	solicitud SolicitudRecuperacionManifiestoPreservacion,
+	respuesta RespuestaManifiestoPreservacion,
+) error {
+	if respuesta.Referencia != referencia || respuesta.Cerca != solicitud.Cerca ||
+		respuesta.RevisionTrabajo != solicitud.RevisionTrabajo ||
+		respuesta.ManifiestoRef != solicitud.ManifiestoRef ||
+		respuesta.ManifiestoSHA256 != solicitud.ManifiestoSHA256 ||
+		respuesta.ManifiestoRef != respuesta.ManifiestoSHA256 ||
+		respuesta.ManifiestoBytes != solicitud.ManifiestoBytes ||
+		respuesta.SelladaUnixMS == 0 || respuesta.SelladaUnixMS > maximoEnteroDurableV1 {
+		return &ErrorContenido{Causa: "respuesta_manifiesto_invalida"}
+	}
+	if len(respuesta.ContenidoBase64) > maximoManifiestoPreservacionBase64 ||
+		strings.ContainsAny(respuesta.ContenidoBase64, "\r\n") {
+		return &ErrorContenido{Causa: "base64_invalido"}
+	}
+	contenido, err := base64.StdEncoding.Strict().DecodeString(respuesta.ContenidoBase64)
+	if err != nil || base64.StdEncoding.EncodeToString(contenido) != respuesta.ContenidoBase64 {
+		return &ErrorContenido{Causa: "base64_invalido"}
+	}
+	if uint64(len(contenido)) != respuesta.ManifiestoBytes {
+		return &ErrorContenido{Causa: "tamano_manifiesto_invalido"}
+	}
+	digest := sha256.Sum256(contenido)
+	if hex.EncodeToString(digest[:]) != respuesta.ManifiestoSHA256 {
+		return &ErrorContenido{Causa: "digest_manifiesto_invalido"}
+	}
+	var sujeto struct {
+		Protocolo string `json:"protocolo"`
+		Contexto  struct {
+			Referencia      string `json:"referencia"`
+			Cerca           uint64 `json:"cerca"`
+			RevisionTrabajo uint64 `json:"revision_trabajo"`
+		} `json:"contexto"`
+	}
+	if !jsonSinClavesDuplicadas(contenido) || json.Unmarshal(contenido, &sujeto) != nil ||
+		sujeto.Protocolo != protocoloManifiestoPreservacionV1 ||
+		sujeto.Contexto.Referencia != referencia || sujeto.Contexto.Cerca != solicitud.Cerca ||
+		sujeto.Contexto.RevisionTrabajo != solicitud.RevisionTrabajo {
+		return &ErrorContenido{Causa: "sujeto_manifiesto_invalido"}
+	}
+	return nil
+}
+
 func validarEstructuraJSONSesion[T any](datos []byte) error {
 	var cero T
 	switch any(cero).(type) {
+	case RespuestaCapacidades:
+		var respuesta RespuestaCapacidades
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaCapacidadesDockerV1, &respuesta) {
+			return errors.New("respuesta JSON de capacidades Docker invalida")
+		}
+	case RespuestaContenedorV1:
+		return validarEstructuraRespuestaContenedor(datos)
+	case RespuestaOperacionContenedorV1:
+		return validarEstructuraRespuestaOperacionContenedor(datos)
+	case RespuestaOrden:
+		var respuesta RespuestaOrden
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaOrdenContenedorV1, &respuesta) {
+			return errors.New("respuesta JSON de orden contenedor invalida")
+		}
+	case RespuestaSincronizacionContenedorV1:
+		var respuesta RespuestaSincronizacionContenedorV1
+		if !decodificarObjetoJSONEstricto(
+			datos,
+			esquemaRespuestaSincronizacionContenedorV1,
+			&respuesta,
+		) {
+			return errors.New("respuesta JSON de sincronizacion contenedor invalida")
+		}
+	case RespuestaSincronizacionSalidaContenedorV1:
+		var respuesta RespuestaSincronizacionSalidaContenedorV1
+		if !decodificarObjetoJSONEstricto(
+			datos,
+			esquemaRespuestaSincronizacionSalidaContenedorV1,
+			&respuesta,
+		) {
+			return errors.New("respuesta JSON de salida contenedor invalida")
+		}
+	case RespuestaInicioSesionContenedorV1:
+		var respuesta RespuestaInicioSesionContenedorV1
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaInicioSesionContenedorV1, &respuesta) {
+			return errors.New("respuesta JSON de inicio de sesion contenedor invalida")
+		}
+	case RespuestaEntradaSesionContenedorV1:
+		var respuesta RespuestaEntradaSesionContenedorV1
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaEntradaSesionContenedorV1, &respuesta) {
+			return errors.New("respuesta JSON de entrada de sesion contenedor invalida")
+		}
+	case RespuestaEventosSesionContenedorV1:
+		var respuesta RespuestaEventosSesionContenedorV1
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaEventosSesionContenedorV1, &respuesta) {
+			return errors.New("respuesta JSON de eventos de sesion contenedor invalida")
+		}
 	case RespuestaReconciliacionEntradaSesionTrabajoV1:
 		objeto, err := objetoJSONConCampos(datos, []string{
 			"ejecucion_ref", "sesion_ref", "cerca", "estado", "comprobante",
@@ -799,8 +1090,71 @@ func validarEstructuraJSONSesion[T any](datos []byte) error {
 				return err
 			}
 		}
+	case RespuestaManifiestoPreservacion:
+		var respuesta RespuestaManifiestoPreservacion
+		if !decodificarObjetoJSONEstricto(
+			datos,
+			esquemaRespuestaManifiestoPreservacionV1,
+			&respuesta,
+		) {
+			return errors.New("respuesta JSON de manifiesto invalida")
+		}
 	}
 	return nil
+}
+
+func jsonSinClavesDuplicadas(datos []byte) bool {
+	if len(datos) == 0 || !utf8.Valid(datos) || !escapesUnicodeJSONValidos(datos) {
+		return false
+	}
+	decodificador := json.NewDecoder(bytes.NewReader(datos))
+	decodificador.UseNumber()
+	if !valorJSONSinClavesDuplicadas(decodificador) {
+		return false
+	}
+	_, err := decodificador.Token()
+	return errors.Is(err, io.EOF)
+}
+
+func valorJSONSinClavesDuplicadas(decodificador *json.Decoder) bool {
+	token, err := decodificador.Token()
+	if err != nil {
+		return false
+	}
+	delimitador, compuesto := token.(json.Delim)
+	if !compuesto {
+		return true
+	}
+	switch delimitador {
+	case '{':
+		vistos := map[string]struct{}{}
+		for decodificador.More() {
+			clave, err := decodificador.Token()
+			nombre, esCadena := clave.(string)
+			if err != nil || !esCadena {
+				return false
+			}
+			if _, duplicada := vistos[nombre]; duplicada {
+				return false
+			}
+			vistos[nombre] = struct{}{}
+			if !valorJSONSinClavesDuplicadas(decodificador) {
+				return false
+			}
+		}
+		cierre, err := decodificador.Token()
+		return err == nil && cierre == json.Delim('}')
+	case '[':
+		for decodificador.More() {
+			if !valorJSONSinClavesDuplicadas(decodificador) {
+				return false
+			}
+		}
+		cierre, err := decodificador.Token()
+		return err == nil && cierre == json.Delim(']')
+	default:
+		return false
+	}
 }
 
 func objetoJSONConCampos(datos []byte, esperados []string) (map[string]json.RawMessage, error) {

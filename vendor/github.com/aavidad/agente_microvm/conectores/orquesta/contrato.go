@@ -23,14 +23,26 @@ type RespuestaSalud struct {
 	Version   string `json:"version"`
 }
 
+// BackendEjecucionesV1 identifica el aislamiento elegido explícitamente por
+// el host. El cliente nunca lo infiere de KVM ni del socket Docker.
+type BackendEjecucionesV1 string
+
+const (
+	BackendEjecucionesFirecracker BackendEjecucionesV1 = "firecracker"
+	BackendEjecucionesDocker      BackendEjecucionesV1 = "docker"
+)
+
 type RespuestaCapacidades struct {
-	Protocolo              string   `json:"protocolo"`
-	Version                string   `json:"version"`
-	Operaciones            []string `json:"operaciones"`
-	KVMDisponible          bool     `json:"kvm_disponible"`
-	FirecrackerConfigurado bool     `json:"firecracker_configurado"`
-	FirecrackerEjecutable  bool     `json:"firecracker_ejecutable"`
-	MaximoEjecuciones      uint32   `json:"maximo_ejecuciones"`
+	Protocolo              string               `json:"protocolo"`
+	Version                string               `json:"version"`
+	Operaciones            []string             `json:"operaciones"`
+	KVMDisponible          bool                 `json:"kvm_disponible"`
+	FirecrackerConfigurado bool                 `json:"firecracker_configurado"`
+	FirecrackerEjecutable  bool                 `json:"firecracker_ejecutable"`
+	MaximoEjecuciones      uint32               `json:"maximo_ejecuciones"`
+	BackendEjecuciones     BackendEjecucionesV1 `json:"backend_ejecuciones"`
+	DockerConfigurado      bool                 `json:"docker_configurado"`
+	DockerEngineDisponible bool                 `json:"docker_engine_disponible"`
 }
 
 // SolicitudLanzamiento conserva los contratos firmados sin duplicar su schema en Go.
@@ -47,6 +59,15 @@ type SolicitudDetencion struct {
 type SolicitudPreservacion struct {
 	RevisionEsperada uint64 `json:"revision_esperada"`
 	Cerca            uint64 `json:"cerca"`
+}
+
+// SolicitudRecuperacionManifiestoPreservacion identifica un único sello durable.
+type SolicitudRecuperacionManifiestoPreservacion struct {
+	Cerca            uint64 `json:"cerca"`
+	RevisionTrabajo  uint64 `json:"revision_trabajo"`
+	ManifiestoRef    string `json:"manifiesto_ref"`
+	ManifiestoSHA256 string `json:"manifiesto_sha256"`
+	ManifiestoBytes  uint64 `json:"manifiesto_bytes"`
 }
 
 type SolicitudCierre struct {
@@ -286,6 +307,18 @@ type RespuestaPreservacion struct {
 	Artefactos       []ArtefactoPreservado `json:"artefactos"`
 	BytesUtiles      uint64                `json:"bytes_utiles"`
 	RevisionTrabajo  uint64                `json:"revision_trabajo"`
+}
+
+// RespuestaManifiestoPreservacion transporta un manifiesto exacto sin exponer rutas.
+type RespuestaManifiestoPreservacion struct {
+	Referencia       string `json:"referencia"`
+	Cerca            uint64 `json:"cerca"`
+	RevisionTrabajo  uint64 `json:"revision_trabajo"`
+	ManifiestoRef    string `json:"manifiesto_ref"`
+	ManifiestoSHA256 string `json:"manifiesto_sha256"`
+	ManifiestoBytes  uint64 `json:"manifiesto_bytes"`
+	SelladaUnixMS    uint64 `json:"sellada_unix_ms"`
+	ContenidoBase64  string `json:"contenido_base64"`
 }
 
 type Problema struct {

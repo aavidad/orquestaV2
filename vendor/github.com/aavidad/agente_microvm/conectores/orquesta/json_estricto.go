@@ -39,6 +39,17 @@ func esquemaObjetoEstricto(campos esquemaObjetoJSONEstricto) esquemaValorJSONEst
 	return esquemaValorJSONEstricto{clase: valorJSONObject, objeto: campos}
 }
 
+// esquemaObjetoEstrictoOpcional representa un objeto obligatorio cuya forma
+// de red admite `null`. La completitud del campo y, si existe, del objeto
+// anidado siguen siendo estrictas.
+func esquemaObjetoEstrictoOpcional(campos esquemaObjetoJSONEstricto) esquemaValorJSONEstricto {
+	return esquemaValorJSONEstricto{
+		clase:      valorJSONObject,
+		objeto:     campos,
+		admiteNulo: true,
+	}
+}
+
 func esquemaArrayEstricto(elemento esquemaValorJSONEstricto) esquemaValorJSONEstricto {
 	return esquemaValorJSONEstricto{clase: valorJSONArray, elemento: &elemento}
 }
@@ -112,7 +123,7 @@ func validarValorJSONEstricto(decoder *json.Decoder, esquema esquemaValorJSONEst
 		return false
 	}
 	if token == nil {
-		return esquema.clase == valorJSONEscalar && esquema.admiteNulo
+		return esquema.admiteNulo
 	}
 	switch esquema.clase {
 	case valorJSONEscalar:

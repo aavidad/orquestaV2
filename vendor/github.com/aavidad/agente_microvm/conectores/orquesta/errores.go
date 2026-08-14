@@ -18,6 +18,14 @@ func (e *ErrorProtocolo) Error() string {
 	return "microvm.protocolo_incompatible"
 }
 
+type ErrorTipoContenido struct {
+	Recibido string
+}
+
+func (e *ErrorTipoContenido) Error() string {
+	return "microvm.tipo_contenido_incompatible"
+}
+
 type ErrorRespuestaGrande struct{}
 
 func (e *ErrorRespuestaGrande) Error() string {

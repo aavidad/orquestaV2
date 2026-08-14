@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
@@ -45,26 +45,28 @@
   },
   "implementation_state": {
     "runtime_wiring": "absent",
-    "docker_client_usage": "absent_in_this_cut",
+    "docker_client_usage": "published_module_adopted_not_wired",
     "docker_engine_smoke": "not_claimed",
     "local_replace": "forbidden"
   },
   "client_adoption_gate": {
-    "status": "blocked_current_pinned_module_lacks_docker_contract",
-    "pinned_module_version": "v0.0.0-20260805221511-928ef309a173",
+    "status": "satisfied_published_module_ready_for_neutral_adapter",
+    "pinned_module_version": "v0.0.0-20260814005716-2768389c82c0",
+    "module_zip_sum": "h1:YRl+uPkDB0Glq34Hqq/4D7ZLu+LQa5LgCHl1WwlJars=",
+    "module_source": "authorized_local_gomodcache_private_zip",
     "observed_external_candidate_commit": "2768389c82c02e4eeb3599152037fe3a52e2dc76",
     "required_symbols": [
       "NegociarDocker",
       "PrepararContenedor",
       "LanzarORecuperarContenedor"
     ],
-    "unblock": "published_versioned_module_available_in_authorized_local_supply_chain",
+    "unblock": "satisfied_published_versioned_module_available_in_authorized_local_supply_chain",
     "forbidden_resolutions": [
       "copy_external_worktree",
       "local_replace",
       "go_work",
-      "remote_download"
+      "private_module_remote_download"
     ],
-    "next_safe_dependency": "v38_firecracker_b_local_contract_gates"
+    "next_safe_dependency": "v38_docker_neutral_agent_adapter"
   }
 }

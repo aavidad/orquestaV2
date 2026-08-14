@@ -14,16 +14,17 @@ import (
 )
 
 const (
-	EsquemaPlanLanzamiento      = "agentmicrovm.plan-lanzamiento.v1"
-	EsquemaConcesionLanzamiento = "agentmicrovm.concesion-lanzamiento.v1"
-	EsquemaConcesionEgreso      = "agentmicrovm.concesion-egreso.v1"
-	AudienciaLanzamiento        = "agentmicrovm.lanzamiento.v1"
-	AlgoritmoConcesion          = "ed25519"
-	VigenciaMaximaConcesion     = 5 * time.Minute
-	maximoDestinosEgreso        = 32
-	maximoPuertosDestino        = 16
-	maximoConexionesEgreso      = 256
-	maximoBytesEgreso           = uint64(1 << 30)
+	EsquemaPlanLanzamiento                 = "agentmicrovm.plan-lanzamiento.v1"
+	EsquemaConcesionLanzamiento            = "agentmicrovm.concesion-lanzamiento.v1"
+	EsquemaConcesionEgreso                 = "agentmicrovm.concesion-egreso.v1"
+	AudienciaLanzamiento                   = "agentmicrovm.lanzamiento.v1"
+	AlgoritmoConcesion                     = "ed25519"
+	VigenciaMaximaConcesion                = 5 * time.Minute
+	maximoDestinosEgreso                   = 32
+	maximoPuertosDestino                   = 16
+	maximoConexionesEgreso                 = 256
+	maximoBytesEgreso                      = uint64(1 << 30)
+	dominioReferenciaConcesionContenedorV1 = "agentmicrovm.concesion-lanzamiento-contenedor.v1\x00"
 )
 
 type ServicioVsock struct {
@@ -320,6 +321,62 @@ func (f *FirmanteConcesiones) Preparar(contexto ContextoAutorizado, plan PlanLan
 		return SolicitudLanzamiento{}, &ErrorConcesion{Codigo: "concesion.codificacion_fallida"}
 	}
 	return SolicitudLanzamiento{Plan: planJSON, Concesion: concesionJSON}, nil
+}
+
+// PrepararContenedor produce el envelope Docker exacto que el consumidor debe
+// persistir antes de intentar la admisión. No inventa referencias de Goal ni
+// modifica el plan físico suministrado.
+func (f *FirmanteConcesiones) PrepararContenedor(
+	plan PlanLanzamientoContenedorV1,
+	emitida time.Time,
+	vigencia time.Duration,
+) (SolicitudLanzarORecuperarContenedorV1, error) {
+	if f == nil || f.estado == nil {
+		return SolicitudLanzarORecuperarContenedorV1{}, &ErrorConcesion{Codigo: "concesion.firmante_destruido"}
+	}
+	f.estado.mu.RLock()
+	defer f.estado.mu.RUnlock()
+	if len(f.estado.privada) != ed25519.PrivateKeySize {
+		return SolicitudLanzarORecuperarContenedorV1{}, &ErrorConcesion{Codigo: "concesion.firmante_destruido"}
+	}
+	mensajePlan, err := MensajeCanonicoPlanLanzamientoContenedorV1(plan)
+	if err != nil {
+		return SolicitudLanzarORecuperarContenedorV1{}, err
+	}
+	emitidaUnixMS := emitida.UnixMilli()
+	expiraUnixMS := emitida.Add(vigencia).UnixMilli()
+	if emitidaUnixMS <= 0 || vigencia <= 0 || vigencia > VigenciaMaximaConcesion ||
+		expiraUnixMS <= emitidaUnixMS {
+		return SolicitudLanzarORecuperarContenedorV1{}, &ErrorConcesion{Codigo: "concesion.alcance_invalido"}
+	}
+	planSHA := sha256.Sum256(mensajePlan)
+	identidadConcesion := sha256.New()
+	_, _ = identidadConcesion.Write([]byte(dominioReferenciaConcesionContenedorV1))
+	_, _ = identidadConcesion.Write(planSHA[:])
+	_, _ = identidadConcesion.Write(binary.BigEndian.AppendUint64(nil, uint64(emitidaUnixMS)))
+	_, _ = identidadConcesion.Write(binary.BigEndian.AppendUint64(nil, uint64(expiraUnixMS)))
+	_, _ = identidadConcesion.Write([]byte(f.claveID))
+	_, _ = identidadConcesion.Write(f.estado.privada.Public().(ed25519.PublicKey))
+	contenido := contenidoConcesion{
+		Esquema: EsquemaConcesionLanzamiento, Audiencia: AudienciaLanzamiento,
+		ConcesionRef: "concesion:" + hex.EncodeToString(identidadConcesion.Sum(nil)),
+		RunRef:       plan.RunRef, Cerca: plan.Cerca, PlanSHA256: hex.EncodeToString(planSHA[:]),
+		EmitidaUnixMS: emitidaUnixMS, NoAntesUnixMS: emitidaUnixMS,
+		ExpiraUnixMS: expiraUnixMS, ClaveID: f.claveID, Algoritmo: AlgoritmoConcesion,
+	}
+	if !contenidoConcesionValido(contenido) {
+		return SolicitudLanzarORecuperarContenedorV1{}, &ErrorConcesion{Codigo: "concesion.alcance_invalido"}
+	}
+	concesion, err := json.Marshal(concesionLanzamientoFirmadaV1{
+		Contenido: contenido,
+		FirmaBase64: base64.StdEncoding.EncodeToString(
+			ed25519.Sign(f.estado.privada, mensajeConcesion(contenido)),
+		),
+	})
+	if err != nil {
+		return SolicitudLanzarORecuperarContenedorV1{}, &ErrorConcesion{Codigo: "concesion.codificacion_fallida"}
+	}
+	return SolicitudLanzarORecuperarContenedorV1{Plan: plan, Concesion: concesion}, nil
 }
 
 func mensajePlan(plan PlanLanzamiento) ([]byte, error) {
