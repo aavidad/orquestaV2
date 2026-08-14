@@ -86,7 +86,9 @@ func (signer *CredentialSigner) PrepararContenedor(
 	if err != nil {
 		return microvm.SolicitudLanzarORecuperarContenedorV1{}, err
 	}
-	signed.Plan.BultosRef = append([]string(nil), signed.Plan.BultosRef...)
+	if signed.Plan.BultosRef != nil {
+		signed.Plan.BultosRef = append([]string{}, signed.Plan.BultosRef...)
+	}
 	return signed, nil
 }
 

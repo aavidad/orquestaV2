@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -143,6 +144,7 @@ func TestCredentialSignerPreparesDockerReplayWithoutRetainingKey(t *testing.T) {
 		Version: 0,
 	}
 	if firstErr != nil || secondErr != nil || !bytes.Equal(firstRaw, secondRaw) ||
+		!reflect.DeepEqual(first.Plan, compiled.Plan) || !reflect.DeepEqual(second.Plan, compiled.Plan) ||
 		len(store.calls) != 2 || store.calls[0] != wantUse || store.calls[1] != wantUse ||
 		len(store.contexts) != 2 || store.contexts[0] != ctx || store.contexts[1] != ctx {
 		t.Fatalf("docker replay differs: first=%v second=%v uses=%d", firstErr, secondErr, len(store.calls))

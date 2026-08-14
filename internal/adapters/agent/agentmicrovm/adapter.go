@@ -735,6 +735,7 @@ func (err *Error) Temporary() bool {
 	switch err.Code {
 	case CodeCapabilitiesUnavailable, CodePhysicalUnavailable, CodeLaunchUnavailable,
 		CodeNegotiatedPhysicalCapacityUnavailable,
+		CodeDockerRecoveryPending,
 		CodeObservationUnavailable, CodeWorkRevisionUnavailable,
 		CodeSessionStartUnavailable, CodeSessionPending,
 		CodeSessionInputUnavailable, CodeSessionInputPending,
@@ -765,6 +766,7 @@ func (err *Error) DefinitelyNotApplied() bool {
 		CodeProfileBindingInvalid, CodeDescriptorInvalid, CodeControlBrokerRequired,
 		CodeGrantWindowInvalid, CodeLimitsInvalid, CodeLimitOverflow,
 		CodeContextInvalid, CodePlanInvalid,
+		CodeDockerAuthorityUnsupported, CodeDockerPlanInvalid,
 		CodeWorkPacketRequestInvalid, CodeWorkPacketCompilationMismatch,
 		CodeWorkPacketModelInvalid, CodeWorkPacketEffortInvalid,
 		CodeWorkPacketBudgetInvalid, CodeWorkPacketOutputInvalid,
