@@ -14,6 +14,7 @@ import (
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
 
 	"orquesta/internal/credentials"
+	"orquesta/internal/ports"
 )
 
 const testCredentialRef = credentials.CredentialRef("credential:microvm-launch-signing")
@@ -114,6 +115,152 @@ func TestCredentialSignerUsesExactAuthorityForEveryReplayAndProducesVerifiableSi
 		}
 	}
 	verifyCredentialGrant(t, first, privateKey.Public().(ed25519.PublicKey))
+}
+
+func TestCredentialSignerPreparesDockerReplayWithoutRetainingKey(t *testing.T) {
+	request := validLaunchRequest(t)
+	privateKey := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{9}, ed25519.SeedSize))
+	store := &credentialSignerStoreStub{material: append([]byte(nil), privateKey...)}
+	signer := mustCredentialSigner(t, store)
+	binding := validDockerPhysicalBinding(request)
+	compiled := mustCompileDocker(t, request, binding)
+	ctx := context.Background()
+
+	first, err := signer.PrepararContenedor(ctx, request, binding, compiled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := signer.PrepararContenedor(ctx, request, binding, compiled)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstRaw, firstErr := microvm.CodificarSolicitudLanzarORecuperarContenedorV1(first)
+	secondRaw, secondErr := microvm.CodificarSolicitudLanzarORecuperarContenedorV1(second)
+	wantUse := credentials.UseRequest{
+		ActorRef: request.ActorRef.String(), RequestRef: "request:microvm-launch:" + request.ExecutionRef.String(),
+		CredentialRef: testCredentialRef, OwnerRef: credentials.OwnerRef(request.ActorRef.String()),
+		ScopeRef: credentials.ScopeRef(request.ProjectRef.String()), PurposeRef: LaunchGrantSigningCredentialPurpose,
+		Version: 0,
+	}
+	if firstErr != nil || secondErr != nil || !bytes.Equal(firstRaw, secondRaw) ||
+		len(store.calls) != 2 || store.calls[0] != wantUse || store.calls[1] != wantUse ||
+		len(store.contexts) != 2 || store.contexts[0] != ctx || store.contexts[1] != ctx {
+		t.Fatalf("docker replay differs: first=%v second=%v uses=%d", firstErr, secondErr, len(store.calls))
+	}
+	planSHA, _ := microvm.CalcularSHA256PlanLanzamientoContenedorV1(compiled.Plan)
+	var grant struct {
+		Content credentialGrantContent `json:"contenido"`
+	}
+	if json.Unmarshal(first.Concesion, &grant) != nil || grant.Content.RunRef != compiled.Plan.RunRef ||
+		grant.Content.Cerca != compiled.Plan.Cerca || grant.Content.PlanSHA256 != planSHA {
+		t.Fatalf("grant does not bind Docker plan: %+v", grant.Content)
+	}
+	verifyCredentialGrant(t, microvm.SolicitudLanzamiento{Concesion: first.Concesion}, privateKey.Public().(ed25519.PublicKey))
+	for index, retained := range store.retained {
+		if material := retained.Bytes(); !bytes.Equal(material, make([]byte, ed25519.PrivateKeySize)) {
+			t.Fatalf("callback secret %d was not destroyed", index)
+		}
+	}
+}
+
+func TestCredentialSignerRejectsCrossedDockerAuthorityBeforeCredentialUse(t *testing.T) {
+	request := validLaunchRequest(t)
+	binding := validDockerPhysicalBinding(request)
+	mutations := []struct {
+		name   string
+		mutate func(*DockerCompilation)
+	}{
+		{"schema", func(value *DockerCompilation) { value.Plan.Esquema += ".other" }},
+		{"operation", func(value *DockerCompilation) { value.Plan.OperacionRef = "docker-launch:other" }},
+		{"execution", func(value *DockerCompilation) { value.Plan.EjecucionRef = "ejecucion:other" }},
+		{"run", func(value *DockerCompilation) { value.Plan.RunRef = "execution:other" }},
+		{"fence", func(value *DockerCompilation) { value.Plan.Cerca++ }},
+		{"spec", func(value *DockerCompilation) { value.Plan.EspecificacionRef = "app-spec:other" }},
+		{"bundles", func(value *DockerCompilation) { value.Plan.BultosRef = []string{"bundle:other"} }},
+		{"image", func(value *DockerCompilation) {
+			value.Plan.ImagenRef = "registry.invalid/other@sha256:" + strings.Repeat("f", 64)
+		}},
+		{"vcpu", func(value *DockerCompilation) { value.Plan.VCPU++ }},
+		{"memory", func(value *DockerCompilation) { value.Plan.MemoriaMiB++ }},
+		{"pids", func(value *DockerCompilation) { value.Plan.MaximoPIDs++ }},
+		{"time", func(value *DockerCompilation) { value.Plan.LimiteTiempoMS++ }},
+		{"disk", func(value *DockerCompilation) { value.Plan.LimiteDiscoPicoBytes++ }},
+		{"tokens", func(value *DockerCompilation) { value.Plan.LimiteTokensAgente++ }},
+		{"issued", func(value *DockerCompilation) { value.IssuedAt = value.IssuedAt.Add(1) }},
+		{"validity", func(value *DockerCompilation) { value.Validity++ }},
+		{"source fingerprint", func(value *DockerCompilation) { value.sourceFingerprint[0]++ }},
+	}
+	for _, mutation := range mutations {
+		t.Run(mutation.name, func(t *testing.T) {
+			store := &credentialSignerStoreStub{material: ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))}
+			compiled := mustCompileDocker(t, request, binding)
+			mutation.mutate(&compiled)
+			signed, err := mustCredentialSigner(t, store).PrepararContenedor(
+				context.Background(), request, binding, compiled,
+			)
+			if ErrorCode(err) != CodeSigningFailed || len(store.calls) != 0 ||
+				signed.Plan.OperacionRef != "" || len(signed.Concesion) != 0 {
+				t.Fatalf("signed=%+v err=%v uses=%d", signed, err, len(store.calls))
+			}
+		})
+	}
+}
+
+func TestCredentialSignerRejectsCrossedDockerSourceBeforeCredentialUse(t *testing.T) {
+	request := validLaunchRequest(t)
+	binding := validDockerPhysicalBinding(request)
+	compiled := mustCompileDocker(t, request, binding)
+	tests := []struct {
+		name    string
+		request ports.AgentLaunchRequest
+		binding DockerPhysicalBinding
+	}{
+		{"request", func() ports.AgentLaunchRequest {
+			changed := request
+			changed.Objective = "different authorized work"
+			return changed
+		}(), binding},
+		{"binding", request, func() DockerPhysicalBinding {
+			changed := binding
+			changed.MaxPIDs++
+			return changed
+		}()},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &credentialSignerStoreStub{material: ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))}
+			signed, err := mustCredentialSigner(t, store).PrepararContenedor(
+				context.Background(), test.request, test.binding, compiled,
+			)
+			if ErrorCode(err) != CodeSigningFailed || len(store.calls) != 0 ||
+				signed.Plan.OperacionRef != "" || len(signed.Concesion) != 0 {
+				t.Fatalf("signed=%+v err=%v uses=%d", signed, err, len(store.calls))
+			}
+		})
+	}
+}
+
+func validDockerPhysicalBinding(request ports.AgentLaunchRequest) DockerPhysicalBinding {
+	return DockerPhysicalBinding{
+		PlacementRef: request.ReferenciaColocacion,
+		ImageRef:     "registry.invalid/orquesta/agent@sha256:" + strings.Repeat("e", 64),
+		VCPU:         2,
+		MemoryMiB:    512,
+		MaxPIDs:      64,
+	}
+}
+
+func mustCompileDocker(
+	t *testing.T,
+	request ports.AgentLaunchRequest,
+	binding DockerPhysicalBinding,
+) DockerCompilation {
+	t.Helper()
+	compiled, err := CompileDockerLaunch(request, binding)
+	if err != nil {
+		t.Fatalf("CompileDockerLaunch() = %v", err)
+	}
+	return compiled
 }
 
 func TestCredentialSignerAcquiresCredentialAgainForAdapterReplay(t *testing.T) {

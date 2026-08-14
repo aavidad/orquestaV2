@@ -56,63 +56,84 @@ func (signer *CredentialSigner) Preparar(
 	issuedAt time.Time,
 	validity time.Duration,
 ) (microvm.SolicitudLanzamiento, error) {
-	if signer == nil || nilInterface(signer.store) {
-		return microvm.SolicitudLanzamiento{}, fail(CodeConfigurationInvalid, nil)
-	}
-	if err := ctx.Err(); err != nil {
+	var signed microvm.SolicitudLanzamiento
+	err := signer.useSigningKey(ctx, request, func(grantSigner *microvm.FirmanteConcesiones) error {
+		var prepareErr error
+		signed, prepareErr = grantSigner.Preparar(authorizedContext, plan, issuedAt, validity)
+		return prepareErr
+	})
+	if err != nil {
 		return microvm.SolicitudLanzamiento{}, err
 	}
+	return cloneSignedRequestUnchecked(signed), nil
+}
 
+func (signer *CredentialSigner) PrepararContenedor(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+	binding DockerPhysicalBinding,
+	compiled DockerCompilation,
+) (microvm.SolicitudLanzarORecuperarContenedorV1, error) {
+	if !validDockerCompilation(request, binding, compiled) {
+		return microvm.SolicitudLanzarORecuperarContenedorV1{}, fail(CodeSigningFailed, nil)
+	}
+	var signed microvm.SolicitudLanzarORecuperarContenedorV1
+	err := signer.useSigningKey(ctx, request, func(grantSigner *microvm.FirmanteConcesiones) error {
+		var prepareErr error
+		signed, prepareErr = grantSigner.PrepararContenedor(compiled.Plan, compiled.IssuedAt, compiled.Validity)
+		return prepareErr
+	})
+	if err != nil {
+		return microvm.SolicitudLanzarORecuperarContenedorV1{}, err
+	}
+	signed.Plan.BultosRef = append([]string(nil), signed.Plan.BultosRef...)
+	return signed, nil
+}
+
+func (signer *CredentialSigner) useSigningKey(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+	prepare func(*microvm.FirmanteConcesiones) error,
+) error {
+	if signer == nil || nilInterface(signer.store) || nilInterface(ctx) || prepare == nil {
+		return fail(CodeConfigurationInvalid, nil)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	useRequest := credentials.UseRequest{
-		ActorRef:      request.ActorRef.String(),
-		RequestRef:    "request:microvm-launch:" + request.ExecutionRef.String(),
-		CredentialRef: signer.credentialRef,
-		OwnerRef:      credentials.OwnerRef(request.ActorRef.String()),
-		ScopeRef:      credentials.ScopeRef(request.ProjectRef.String()),
-		PurposeRef:    LaunchGrantSigningCredentialPurpose,
-		Version:       0,
+		ActorRef: request.ActorRef.String(), RequestRef: "request:microvm-launch:" + request.ExecutionRef.String(),
+		CredentialRef: signer.credentialRef, OwnerRef: credentials.OwnerRef(request.ActorRef.String()),
+		ScopeRef: credentials.ScopeRef(request.ProjectRef.String()), PurposeRef: LaunchGrantSigningCredentialPurpose,
+		Version: 0,
 	}
 	if err := credentials.ValidateUseRequest(useRequest); err != nil {
-		return microvm.SolicitudLanzamiento{}, fail(CodeSigningFailed, err)
+		return fail(CodeSigningFailed, err)
 	}
-
-	var signed microvm.SolicitudLanzamiento
-	var signingErr error
-	_, useErr := signer.store.Use(ctx, useRequest, func(secret credentials.Secret) error {
+	_, err := signer.store.Use(ctx, useRequest, func(secret credentials.Secret) error {
 		defer secret.Destroy()
 		material := secret.Bytes()
 		defer clear(material)
 		if len(material) != ed25519.PrivateKeySize {
-			signingErr = fail(CodeSigningFailed, nil)
-			return signingErr
+			return fail(CodeSigningFailed, nil)
 		}
-
-		grantSigner, err := microvm.NuevoFirmanteConcesiones(
-			signer.keyID,
-			ed25519.PrivateKey(material),
-		)
-		if err != nil {
-			signingErr = fail(CodeSigningFailed, err)
-			return signingErr
+		grantSigner, signerErr := microvm.NuevoFirmanteConcesiones(signer.keyID, ed25519.PrivateKey(material))
+		if signerErr != nil {
+			return fail(CodeSigningFailed, signerErr)
 		}
 		defer grantSigner.Destruir()
-		signed, err = grantSigner.Preparar(authorizedContext, plan, issuedAt, validity)
-		if err != nil {
-			signingErr = fail(CodeSigningFailed, err)
-			return signingErr
+		if signerErr = prepare(grantSigner); signerErr != nil {
+			return fail(CodeSigningFailed, signerErr)
 		}
 		return nil
 	})
-	if signingErr != nil {
-		return microvm.SolicitudLanzamiento{}, signingErr
+	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return err
 	}
-	if useErr != nil {
-		if errors.Is(useErr, context.Canceled) || errors.Is(useErr, context.DeadlineExceeded) {
-			return microvm.SolicitudLanzamiento{}, useErr
-		}
-		return microvm.SolicitudLanzamiento{}, fail(CodeSigningFailed, useErr)
+	if ErrorCode(err) == CodeSigningFailed {
+		return err
 	}
-	return cloneSignedRequestUnchecked(signed), nil
+	return fail(CodeSigningFailed, err)
 }
 
 func validateSigningKeyID(keyID string) error {
