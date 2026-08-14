@@ -197,11 +197,10 @@ WHERE ref=? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at I
 	return requireOneRow(result)
 }
 
-// parkLaunchWithStaleAdmission handles the crash window after reservation but
-// before a provider attempt. Exact zero evidence releases that reservation;
-// once an attempt exists the binding stays charged and reusable with the same
-// external idempotency key until authority is restored or reconciled.
-func parkLaunchWithStaleAdmission(
+// parkEffectWithStaleAdmission handles the crash window after admission but
+// before recovery. Launch releases an unused reservation; an existing launch
+// or Stop attempt remains fenced until authority is restored or reconciled.
+func parkEffectWithStaleAdmission(
 	ctx context.Context,
 	tx *sql.Tx,
 	candidate claimCandidate,

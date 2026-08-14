@@ -6,28 +6,41 @@ import (
 )
 
 func validateRecoveryV28EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryEffectRecoveryClaim(ctx, tx, false)
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, false, false)
 }
 
 func validateRecoveryV30EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryEffectRecoveryClaim(ctx, tx, true)
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, false)
 }
 
-func validateRecoveryEffectRecoveryClaim(ctx context.Context, tx *sql.Tx, allowUnclaimedRetry bool) error {
+func validateRecoveryV40EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, true)
+}
+
+func validateRecoveryEffectRecoveryClaim(
+	ctx context.Context,
+	tx *sql.Tx,
+	allowUnclaimedRetry, allowStopPending bool,
+) error {
 	pendingClaim := `(action.claim_token IS NOT NULL AND action.claimed_by IS NOT NULL
            AND action.claimed_until IS NOT NULL)`
 	if allowUnclaimedRetry {
 		pendingClaim = `(` + pendingClaim + `
        OR (action.claim_token IS NULL AND action.claimed_by IS NULL
-           AND action.claimed_until IS NULL AND length(trim(action.last_error_code))>0))`
+		   AND action.claimed_until IS NULL AND length(trim(action.last_error_code))>0))`
+	}
+	validKind := `(action.kind='launch_agent' AND intent.kind='agent_launch')`
+	if allowStopPending {
+		validKind = `(` + validKind + ` OR (action.kind='stop_agent' AND intent.kind='agent_stop'))`
 	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{
 			"sqlite.recovery_v28_effect_recovery_claim_invalid",
 			`SELECT COUNT(*) FROM outbox action
 LEFT JOIN effect_attempts attempt ON attempt.ref=action.recovery_effect_attempt_ref
+LEFT JOIN effect_intents intent ON intent.ref=attempt.intent_ref
 WHERE action.recovery_effect_attempt_ref IS NOT NULL AND
- (action.kind<>'launch_agent' OR action.governance_version<>1
+	(NOT ` + validKind + ` OR action.governance_version<>1
 	  OR attempt.ref IS NULL OR attempt.action_ref<>action.ref
 	  OR attempt.intent_ref<>action.effect_intent_ref
 	  OR attempt.claim_lease_until IS NULL
@@ -48,7 +61,8 @@ WHERE action.recovery_effect_attempt_ref IS NOT NULL AND
            AND NOT EXISTS (SELECT 1 FROM budget_settlements settled
                            WHERE settled.causal_attempt_ref=peer.ref))=1)
     OR
-    ((action.completed_at IS NOT NULL OR action.quarantined_at IS NOT NULL)
+	(action.kind='launch_agent'
+	 AND (action.completed_at IS NOT NULL OR action.quarantined_at IS NOT NULL)
      AND EXISTS (SELECT 1 FROM action_consumption_receipts consumed
        LEFT JOIN effect_receipts receipt ON receipt.ref=consumed.effect_receipt_ref
        WHERE consumed.action_ref=action.ref AND consumed.fence=action.fence

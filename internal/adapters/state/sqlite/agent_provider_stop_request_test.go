@@ -262,15 +262,22 @@ func TestV39UpgradePreservesExactV38StopJournalAndHistory(t *testing.T) {
 		recoverySchemaV38AgentProviderStop).Scan(&checksumV38))
 
 	legacy := agentCapacityDatabase(t, filepath.Join(t.TempDir(), "canonical-v38.db"), recoverySchemaV38AgentProviderStop)
-	var legacyTrigger string
+	var legacyTrigger, legacyRecoveryTrigger string
 	sqliteTestNoError(t, legacy.QueryRow(`SELECT sql FROM sqlite_schema
 WHERE type='trigger' AND name='agent_provider_stop_requests_causal_insert'`).Scan(&legacyTrigger))
+	sqliteTestNoError(t, legacy.QueryRow(`SELECT sql FROM sqlite_schema
+WHERE type='trigger' AND name='outbox_recovery_effect_claim_guard'`).Scan(&legacyRecoveryTrigger))
 	sqliteTestNoError(t, legacy.Close())
 	_, err := system.repository.db.Exec(`DROP TRIGGER agent_provider_stop_requests_causal_insert`)
 	sqliteTestNoError(t, err)
 	_, err = system.repository.db.Exec(legacyTrigger)
 	sqliteTestNoError(t, err)
-	_, err = system.repository.db.Exec(`DELETE FROM schema_migrations WHERE version=?`, recoverySchemaV38AgentProviderStopKey)
+	_, err = system.repository.db.Exec(`DROP TRIGGER outbox_recovery_effect_claim_guard`)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(legacyRecoveryTrigger)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(`DELETE FROM schema_migrations WHERE version IN (?,?)`,
+		recoverySchemaV38AgentProviderStopKey, recoverySchemaV38StopRecoveryClaim)
 	sqliteTestNoError(t, err)
 	_, err = system.repository.db.Exec(`PRAGMA user_version=38`)
 	sqliteTestNoError(t, err)
