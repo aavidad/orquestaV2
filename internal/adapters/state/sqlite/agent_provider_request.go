@@ -34,7 +34,7 @@ func (repository *Repository) RecordAgentProviderRequest(
 	}
 	transaction, err := beginTransaction(ctx, repository)
 	if err != nil {
-		return ports.AgentProviderRequest{}, agentProviderRequestContextError(ctx, err)
+		return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
 	}
 	defer transaction.Rollback()
 
@@ -47,54 +47,22 @@ func (repository *Repository) RecordAgentProviderRequest(
 			return ports.AgentProviderRequest{}, conflict(errors.New("sqlite.agent_provider_request_conflict"))
 		}
 		if err := commit(transaction); err != nil {
-			return ports.AgentProviderRequest{}, agentProviderRequestContextError(ctx, err)
+			return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
 		}
 		return ports.CloneAgentProviderRequest(persisted), nil
 	}
 
-	result, err := transaction.ExecContext(ctx, `
+	_, err = transaction.ExecContext(ctx, `
 INSERT INTO agent_provider_requests(
  execution_ref,action_fence,stage,effect_attempt_ref,provider_ref,idempotency_key,
  target_ref,expected_revision,body,body_sha256
-)
-SELECT ?,?,?,?,?,?,?,?,?,?
-FROM effect_attempts attempt
-JOIN effect_intents intent ON intent.ref=attempt.intent_ref
-JOIN executions execution ON execution.ref=attempt.execution_ref
-WHERE attempt.ref=? AND attempt.execution_ref=? AND attempt.action_fence=?
- AND intent.kind='agent_launch' AND intent.execution_ref=attempt.execution_ref
- AND execution.state='dispatching'
- AND NOT EXISTS (SELECT 1 FROM effect_receipts receipt WHERE receipt.attempt_ref=attempt.ref)
- AND (?='launch' OR EXISTS (
-  SELECT 1 FROM agent_provider_requests launch
-  WHERE launch.execution_ref=? AND launch.action_fence=? AND launch.stage='launch'
-   AND launch.effect_attempt_ref=? AND launch.provider_ref=?
-   AND launch.launch_binding_ref=? AND launch.launch_binding_revision=?
- ))
- AND (?<>'session_input' OR EXISTS (
-  SELECT 1 FROM agent_provider_requests started
-  WHERE started.execution_ref=? AND started.action_fence=? AND started.stage='session_start'
-   AND started.effect_attempt_ref=? AND started.provider_ref=?
-   AND started.target_ref=? AND started.expected_revision=?
- ))`,
+) VALUES(?,?,?,?,?,?,?,?,?,?)`,
 		request.Key.ExecutionRef.String(), request.Key.ActionFence, string(request.Key.Stage),
 		request.EffectAttemptRef, request.ProviderRef, request.IdempotencyKey,
 		request.TargetRef, request.ExpectedRevision, request.Body, request.BodySHA256,
-		request.EffectAttemptRef, request.Key.ExecutionRef.String(), request.Key.ActionFence,
-		string(request.Key.Stage), request.Key.ExecutionRef.String(), request.Key.ActionFence,
-		request.EffectAttemptRef, request.ProviderRef, request.TargetRef, request.ExpectedRevision,
-		string(request.Key.Stage), request.Key.ExecutionRef.String(), request.Key.ActionFence,
-		request.EffectAttemptRef, request.ProviderRef, request.TargetRef, request.ExpectedRevision,
 	)
 	if err != nil {
 		return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
-	}
-	if rows != 1 {
-		return ports.AgentProviderRequest{}, conflict(errors.New("sqlite.agent_provider_request_causality_conflict"))
 	}
 	persisted, found, err = readAgentProviderRequest(ctx, transaction, request.Key)
 	if err != nil {
@@ -104,7 +72,7 @@ WHERE attempt.ref=? AND attempt.execution_ref=? AND attempt.action_fence=?
 		return ports.AgentProviderRequest{}, invalid(errors.New("sqlite.agent_provider_request_insert_invalid"))
 	}
 	if err := commit(transaction); err != nil {
-		return ports.AgentProviderRequest{}, agentProviderRequestContextError(ctx, err)
+		return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
 	}
 	return ports.CloneAgentProviderRequest(persisted), nil
 }
@@ -124,7 +92,7 @@ func (repository *Repository) BindAgentProviderLaunch(
 	}
 	transaction, err := beginTransaction(ctx, repository)
 	if err != nil {
-		return ports.AgentProviderRequest{}, agentProviderRequestContextError(ctx, err)
+		return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
 	}
 	defer transaction.Rollback()
 	persisted, found, err := readAgentProviderRequest(ctx, transaction, key)
@@ -139,7 +107,7 @@ func (repository *Repository) BindAgentProviderLaunch(
 			return ports.AgentProviderRequest{}, conflict(errors.New("sqlite.agent_provider_request_binding_conflict"))
 		}
 		if err := commit(transaction); err != nil {
-			return ports.AgentProviderRequest{}, agentProviderRequestContextError(ctx, err)
+			return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
 		}
 		return ports.CloneAgentProviderRequest(persisted), nil
 	}
@@ -152,14 +120,8 @@ func (repository *Repository) BindAgentProviderLaunch(
 UPDATE agent_provider_requests
 SET launch_binding_ref=?,launch_binding_revision=?
 WHERE execution_ref=? AND action_fence=? AND stage='launch'
- AND launch_binding_ref IS NULL AND launch_binding_revision IS NULL
- AND EXISTS (
-  SELECT 1 FROM effect_attempts attempt
-  JOIN executions execution ON execution.ref=attempt.execution_ref
-  WHERE attempt.ref=agent_provider_requests.effect_attempt_ref
-   AND execution.state='dispatching'
-   AND NOT EXISTS (SELECT 1 FROM effect_receipts receipt WHERE receipt.attempt_ref=attempt.ref)
- )`, externalRef, revision, key.ExecutionRef.String(), key.ActionFence)
+ AND launch_binding_ref IS NULL AND launch_binding_revision IS NULL`,
+		externalRef, revision, key.ExecutionRef.String(), key.ActionFence)
 	if err != nil {
 		return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
 	}
@@ -178,7 +140,7 @@ WHERE execution_ref=? AND action_fence=? AND stage='launch'
 		return ports.AgentProviderRequest{}, invalid(errors.New("sqlite.agent_provider_request_binding_write_invalid"))
 	}
 	if err := commit(transaction); err != nil {
-		return ports.AgentProviderRequest{}, agentProviderRequestContextError(ctx, err)
+		return ports.AgentProviderRequest{}, agentProviderRequestDatabaseError(ctx, err)
 	}
 	return ports.CloneAgentProviderRequest(persisted), nil
 }
@@ -193,20 +155,16 @@ func (repository *Repository) ResolveAgentProviderRequest(
 	if err := ctx.Err(); err != nil {
 		return ports.AgentProviderRequest{}, false, err
 	}
-	transaction, err := beginReadTransaction(ctx, repository)
+	database, err := repository.database()
 	if err != nil {
-		return ports.AgentProviderRequest{}, false, agentProviderRequestContextError(ctx, err)
+		return ports.AgentProviderRequest{}, false, agentProviderRequestDatabaseError(ctx, err)
 	}
-	defer transaction.Rollback()
-	persisted, found, err := readAgentProviderRequest(ctx, transaction, key)
+	persisted, found, err := readAgentProviderRequest(ctx, database, key)
 	if err != nil {
 		return ports.AgentProviderRequest{}, false, err
 	}
 	if !found {
 		return ports.AgentProviderRequest{}, false, nil
-	}
-	if err := commit(transaction); err != nil {
-		return ports.AgentProviderRequest{}, false, agentProviderRequestContextError(ctx, err)
 	}
 	return ports.CloneAgentProviderRequest(persisted), true, nil
 }
@@ -269,19 +227,10 @@ func sameAgentProviderRequestExceptLaunchBinding(left, right ports.AgentProvider
 	return sameAgentProviderRequest(left, right)
 }
 
-func agentProviderRequestContextError(ctx context.Context, err error) error {
+func agentProviderRequestDatabaseError(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
-	if ctx != nil {
-		if contextErr := ctx.Err(); contextErr != nil {
-			return contextErr
-		}
-	}
-	return err
-}
-
-func agentProviderRequestDatabaseError(ctx context.Context, err error) error {
 	if ctx != nil {
 		if contextErr := ctx.Err(); contextErr != nil {
 			return contextErr

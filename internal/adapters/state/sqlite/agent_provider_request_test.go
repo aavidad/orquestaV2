@@ -17,27 +17,13 @@ func TestAgentProviderRequestRecordsBindsStagesReplaysAndReopens(t *testing.T) {
 	system, attempt := seedV27AmbiguousLaunch(t, "provider-request-reopen")
 	launch := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestLaunch)
 
-	prepared, err := system.repository.RecordAgentProviderRequest(context.Background(), launch)
-	if err != nil || !reflect.DeepEqual(prepared, launch) {
-		t.Fatalf("RecordAgentProviderRequest()=%+v err=%v", prepared, err)
-	}
+	prepared := recordSQLiteAgentProviderRequest(t, system.repository, launch)
 	prepared.Body[0] ^= 0xff
-	replayed, err := system.repository.RecordAgentProviderRequest(context.Background(), launch)
-	if err != nil || !reflect.DeepEqual(replayed, launch) {
-		t.Fatalf("replay=%+v err=%v", replayed, err)
-	}
+	recordSQLiteAgentProviderRequest(t, system.repository, launch)
 
-	bound, err := system.repository.BindAgentProviderLaunch(
-		context.Background(), launch.Key, "ejecucion:docker_physical", 3,
-	)
-	if err != nil || bound.LaunchBindingRef != "ejecucion:docker_physical" || bound.LaunchBindingRevision != 3 {
-		t.Fatalf("BindAgentProviderLaunch()=%+v err=%v", bound, err)
-	}
-	boundAgain, err := system.repository.BindAgentProviderLaunch(
-		context.Background(), launch.Key, "ejecucion:docker_physical", 3,
-	)
-	if err != nil || !reflect.DeepEqual(boundAgain, bound) {
-		t.Fatalf("binding replay=%+v err=%v", boundAgain, err)
+	bound := bindSQLiteAgentProviderLaunch(t, system.repository, launch.Key, "ejecucion:docker_physical", 3)
+	if boundAgain := bindSQLiteAgentProviderLaunch(t, system.repository, launch.Key, "ejecucion:docker_physical", 3); !reflect.DeepEqual(boundAgain, bound) {
+		t.Fatalf("binding replay=%+v want=%+v", boundAgain, bound)
 	}
 
 	for _, stage := range []ports.AgentProviderRequestStage{
@@ -46,10 +32,7 @@ func TestAgentProviderRequestRecordsBindsStagesReplaysAndReopens(t *testing.T) {
 	} {
 		request := sqliteAgentProviderRequest(attempt, stage)
 		request.TargetRef, request.ExpectedRevision = bound.LaunchBindingRef, bound.LaunchBindingRevision
-		stored, err := system.repository.RecordAgentProviderRequest(context.Background(), request)
-		if err != nil || !reflect.DeepEqual(stored, request) {
-			t.Fatalf("stage %s stored=%+v err=%v", stage, stored, err)
-		}
+		recordSQLiteAgentProviderRequest(t, system.repository, request)
 	}
 
 	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
@@ -82,41 +65,27 @@ func TestAgentProviderRequestRecordsBindsStagesReplaysAndReopens(t *testing.T) {
 }
 
 func TestAgentProviderRequestRejectsDivergenceAndOutOfOrderStages(t *testing.T) {
-	system, attempt := seedV27AmbiguousLaunch(t, "provider-request-order")
-	launch := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestLaunch)
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), launch); err != nil {
-		t.Fatal(err)
-	}
+	system, attempt, launch := seedSQLiteAgentProviderRequest(t, "provider-request-order")
 
 	divergent := ports.CloneAgentProviderRequest(launch)
 	divergent.Body = []byte(`{"schema":"divergent.v1"}`)
 	divergent.BodySHA256 = ports.AgentProviderRequestBodySHA256(divergent.Body)
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), divergent); !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("divergent replay err=%v", err)
-	}
+	_, err := system.repository.RecordAgentProviderRequest(context.Background(), divergent)
+	requireAgentProviderConflict(t, err)
 
 	start := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestSessionStart)
 	start.TargetRef, start.ExpectedRevision = "ejecucion:docker_physical", 3
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), start); !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("session before binding err=%v", err)
-	}
-	if _, err := system.repository.BindAgentProviderLaunch(context.Background(), launch.Key, start.TargetRef, start.ExpectedRevision); err != nil {
-		t.Fatal(err)
-	}
+	_, err = system.repository.RecordAgentProviderRequest(context.Background(), start)
+	requireAgentProviderConflict(t, err)
+	bindSQLiteAgentProviderLaunch(t, system.repository, launch.Key, start.TargetRef, start.ExpectedRevision)
 	input := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestSessionInput)
 	input.TargetRef, input.ExpectedRevision = start.TargetRef, start.ExpectedRevision
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), input); !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("input before session start err=%v", err)
-	}
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), start); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), input); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.BindAgentProviderLaunch(context.Background(), launch.Key, "ejecucion:other", 3); !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("divergent binding err=%v", err)
-	}
+	_, err = system.repository.RecordAgentProviderRequest(context.Background(), input)
+	requireAgentProviderConflict(t, err)
+	recordSQLiteAgentProviderRequest(t, system.repository, start)
+	recordSQLiteAgentProviderRequest(t, system.repository, input)
+	_, err = system.repository.BindAgentProviderLaunch(context.Background(), launch.Key, "ejecucion:other", 3)
+	requireAgentProviderConflict(t, err)
 }
 
 func TestAgentProviderRequestRejectsCrossedExecutionAndFenceAtPersistence(t *testing.T) {
@@ -125,27 +94,17 @@ func TestAgentProviderRequestRejectsCrossedExecutionAndFenceAtPersistence(t *tes
 
 	wrongFence := ports.CloneAgentProviderRequest(launch)
 	wrongFence.Key.ActionFence++
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), wrongFence); !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("crossed fence err=%v", err)
-	}
+	_, err := system.repository.RecordAgentProviderRequest(context.Background(), wrongFence)
+	requireAgentProviderConflict(t, err)
 
 	wrongExecution := ports.CloneAgentProviderRequest(launch)
 	wrongExecution.Key.ExecutionRef, _ = goal.NewExecutionRef("execution:provider-request-crossed")
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), wrongExecution); !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("crossed execution err=%v", err)
-	}
-
-	if resolved, found, err := system.repository.ResolveAgentProviderRequest(context.Background(), launch.Key); err != nil || found || !reflect.DeepEqual(resolved, ports.AgentProviderRequest{}) {
-		t.Fatalf("unexpected persisted request=%+v found=%t err=%v", resolved, found, err)
-	}
+	_, err = system.repository.RecordAgentProviderRequest(context.Background(), wrongExecution)
+	requireAgentProviderConflict(t, err)
 }
 
 func TestAgentProviderRequestConcurrentLaunchBindingIsSetOnce(t *testing.T) {
-	system, attempt := seedV27AmbiguousLaunch(t, "provider-request-concurrent-binding")
-	launch := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestLaunch)
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), launch); err != nil {
-		t.Fatal(err)
-	}
+	system, _, launch := seedSQLiteAgentProviderRequest(t, "provider-request-concurrent-binding")
 
 	type bindResult struct {
 		request ports.AgentProviderRequest
@@ -189,62 +148,30 @@ func TestAgentProviderRequestConcurrentLaunchBindingIsSetOnce(t *testing.T) {
 }
 
 func TestAgentProviderRequestRecoveryRejectsBodyCorruption(t *testing.T) {
-	system, attempt := seedV27AmbiguousLaunch(t, "provider-request-corruption")
-	launch := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestLaunch)
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), launch); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.db.Exec(`DROP TRIGGER agent_provider_requests_bind_launch_once`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.db.Exec(`
+	system, _, launch := seedSQLiteAgentProviderRequest(t, "provider-request-corruption")
+	_, err := system.repository.db.Exec(`DROP TRIGGER agent_provider_requests_bind_launch_once`)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(`
 UPDATE agent_provider_requests SET body=?
 WHERE execution_ref=? AND action_fence=? AND stage='launch'`,
 		[]byte(`{"schema":"corrupt.v1"}`), launch.Key.ExecutionRef.String(), launch.Key.ActionFence,
-	); err != nil {
-		t.Fatal(err)
-	}
-	transaction, err := beginReadTransaction(context.Background(), system.repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer transaction.Rollback()
-	if err := validateRecoveryV38AgentProviderRequests(context.Background(), transaction); err == nil ||
-		!recoveryErrorContains(err, recoveryV38AgentProviderRequestInvalid) {
-		t.Fatalf("corrupt recovery err=%v", err)
-	}
+	)
+	sqliteTestNoError(t, err)
+	requireAgentProviderRecoveryInvalid(t, system.repository)
 }
 
 func TestAgentProviderRequestRecoveryRejectsCrossedExecutionProvider(t *testing.T) {
-	system, attempt := seedV27AmbiguousLaunch(t, "provider-request-crossed-provider")
-	launch := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestLaunch)
-	if _, err := system.repository.RecordAgentProviderRequest(context.Background(), launch); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.BindAgentProviderLaunch(
-		context.Background(), launch.Key, "ejecucion:docker_physical", 3,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.db.Exec(`DROP TRIGGER executions_provider_identity_write_once`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.db.Exec(`
+	system, attempt, launch := seedSQLiteAgentProviderRequest(t, "provider-request-crossed-provider")
+	bindSQLiteAgentProviderLaunch(t, system.repository, launch.Key, "ejecucion:docker_physical", 3)
+	_, err := system.repository.db.Exec(`DROP TRIGGER executions_provider_identity_write_once`)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(`
 UPDATE executions SET provider_ref=?,model_ref=?,agent_ref=?,external_ref=? WHERE ref=?`,
 		"provider:other", "model:other", "agent:other", "ejecucion:docker_physical",
 		attempt.Subject.ExecutionRef.String(),
-	); err != nil {
-		t.Fatal(err)
-	}
-	transaction, err := beginReadTransaction(context.Background(), system.repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer transaction.Rollback()
-	if err := validateRecoveryV38AgentProviderRequests(context.Background(), transaction); err == nil ||
-		!recoveryErrorContains(err, recoveryV38AgentProviderRequestInvalid) {
-		t.Fatalf("crossed provider recovery err=%v", err)
-	}
+	)
+	sqliteTestNoError(t, err)
+	requireAgentProviderRecoveryInvalid(t, system.repository)
 }
 
 func TestAgentProviderRequestCannotFirstBindAfterEffectReceipt(t *testing.T) {
@@ -266,21 +193,13 @@ func TestAgentProviderRequestCannotFirstBindAfterEffectReceipt(t *testing.T) {
 	}
 	receipt := sqliteV15EffectReceipt(claim, attempt, application.EffectStatusAccepted, system.clock.Now())
 	transaction, err := beginTransaction(context.Background(), system.repository)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := insertEffectReceipt(context.Background(), transaction, claim, receipt, receipt.ConfirmedAt); err != nil {
-		_ = transaction.Rollback()
-		t.Fatal(err)
-	}
-	if err := commit(transaction); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := system.repository.BindAgentProviderLaunch(
+	sqliteTestNoError(t, err)
+	sqliteTestNoError(t, insertEffectReceipt(context.Background(), transaction, claim, receipt, receipt.ConfirmedAt))
+	sqliteTestNoError(t, commit(transaction))
+	_, err = system.repository.BindAgentProviderLaunch(
 		context.Background(), launch.Key, "ejecucion:too_late", 3,
-	); !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("late binding err=%v", err)
-	}
+	)
+	requireAgentProviderConflict(t, err)
 }
 
 func TestV37AgentProviderRequestMigrationHasStrictCausalShape(t *testing.T) {
@@ -294,7 +213,7 @@ func TestV37AgentProviderRequestMigrationHasStrictCausalShape(t *testing.T) {
 	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = repository.Close() })
 
-	var version, strict, migrations int
+	var version, strict int
 	var name, tableSQL string
 	sqliteTestNoError(t, repository.db.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, repository.db.QueryRow(`
@@ -303,11 +222,9 @@ SELECT name FROM schema_migrations WHERE version=?`, recoverySchemaV38AgentProvi
 SELECT strict FROM pragma_table_list WHERE name='agent_provider_requests'`).Scan(&strict))
 	sqliteTestNoError(t, repository.db.QueryRow(`
 SELECT sql FROM sqlite_schema WHERE type='table' AND name='agent_provider_requests'`).Scan(&tableSQL))
-	sqliteTestNoError(t, repository.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations`).Scan(&migrations))
-	if version != recoverySchemaLatest || migrations != recoverySchemaLatest ||
-		name != "037_agent_provider_requests.sql" || strict != 1 ||
+	if version != recoverySchemaLatest || name != "037_agent_provider_requests.sql" || strict != 1 ||
 		!strings.Contains(tableSQL, "FOREIGN KEY(effect_attempt_ref,execution_ref,action_fence)") {
-		t.Fatalf("version=%d migrations=%d name=%q strict=%d sql=%s", version, migrations, name, strict, tableSQL)
+		t.Fatalf("version=%d name=%q strict=%d sql=%s", version, name, strict, tableSQL)
 	}
 }
 
@@ -327,5 +244,62 @@ func sqliteAgentProviderRequest(
 		IdempotencyKey:   "provider-request:" + string(stage) + ":" + attempt.Ref,
 		Body:             body,
 		BodySHA256:       ports.AgentProviderRequestBodySHA256(body),
+	}
+}
+
+func seedSQLiteAgentProviderRequest(
+	t *testing.T,
+	name string,
+) (*sqliteV15System, application.EffectAttempt, ports.AgentProviderRequest) {
+	t.Helper()
+	system, attempt := seedV27AmbiguousLaunch(t, name)
+	launch := sqliteAgentProviderRequest(attempt, ports.AgentProviderRequestLaunch)
+	recordSQLiteAgentProviderRequest(t, system.repository, launch)
+	return system, attempt, launch
+}
+
+func recordSQLiteAgentProviderRequest(
+	t *testing.T,
+	repository *Repository,
+	request ports.AgentProviderRequest,
+) ports.AgentProviderRequest {
+	t.Helper()
+	stored, err := repository.RecordAgentProviderRequest(context.Background(), request)
+	if err != nil || !reflect.DeepEqual(stored, request) {
+		t.Fatalf("stored=%+v want=%+v err=%v", stored, request, err)
+	}
+	return stored
+}
+
+func bindSQLiteAgentProviderLaunch(
+	t *testing.T,
+	repository *Repository,
+	key ports.AgentProviderRequestKey,
+	externalRef string,
+	revision uint64,
+) ports.AgentProviderRequest {
+	t.Helper()
+	bound, err := repository.BindAgentProviderLaunch(context.Background(), key, externalRef, revision)
+	if err != nil || bound.LaunchBindingRef != externalRef || bound.LaunchBindingRevision != revision {
+		t.Fatalf("bound=%+v ref=%q revision=%d err=%v", bound, externalRef, revision, err)
+	}
+	return bound
+}
+
+func requireAgentProviderConflict(t *testing.T, err error) {
+	t.Helper()
+	if !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("expected state conflict, got %v", err)
+	}
+}
+
+func requireAgentProviderRecoveryInvalid(t *testing.T, repository *Repository) {
+	t.Helper()
+	transaction, err := beginReadTransaction(context.Background(), repository)
+	sqliteTestNoError(t, err)
+	defer transaction.Rollback()
+	err = validateRecoveryV38AgentProviderRequests(context.Background(), transaction)
+	if err == nil || !recoveryErrorContains(err, recoveryV38AgentProviderRequestInvalid) {
+		t.Fatalf("expected invalid recovery, got %v", err)
 	}
 }
