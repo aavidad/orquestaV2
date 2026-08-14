@@ -703,6 +703,12 @@ func validDockerRemoteCapabilities() microvm.RespuestaCapacidades {
 		Protocolo: microvm.ProtocoloLocal, Version: "0.1.0",
 		BackendEjecuciones: microvm.BackendEjecucionesDocker,
 		DockerConfigurado:  true, DockerEngineDisponible: true, MaximoEjecuciones: 4,
+		Operaciones: []string{
+			"lanzar_o_recuperar_contenedor", "consultar_operacion_contenedor", "observar_contenedor",
+			"detener_contenedor", "ejecutar_orden_contenedor", "sincronizar_entrada_contenedor",
+			"sincronizar_salida_contenedor", "iniciar_sesion_contenedor", "enviar_entrada_sesion_contenedor",
+			"leer_eventos_sesion_contenedor",
+		},
 	}
 }
 

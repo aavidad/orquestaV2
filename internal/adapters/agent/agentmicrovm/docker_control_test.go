@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
 
+	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
 
@@ -18,7 +20,8 @@ func TestDockerAdapterAdvertisesOnlyNegotiatedForcedStop(t *testing.T) {
 	fixture := newDockerAdapterFixture(t)
 	capabilities, err := fixture.adapter.ControlCapabilities(context.Background())
 	if err != nil || capabilities != (ports.AgentControlCapabilities{ForcedStop: true}) ||
-		fixture.client.negotiations != 1 {
+		fixture.client.negotiations != 1 ||
+		!slices.Contains(fixture.client.capabilities.Operaciones, "detener_contenedor") {
 		t.Fatalf("capabilities=%+v negotiations=%d err=%v", capabilities, fixture.client.negotiations, err)
 	}
 	fixture.client.capabilityErr = errors.New("unavailable")
@@ -143,6 +146,78 @@ func TestDockerAdapterStopJournalFailureAndCancellationNeverReachProvider(t *tes
 	})
 }
 
+func TestDockerAdapterStopRejectsEveryCrossedDurableReplayBeforeEffect(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*ports.AgentProviderStopRequest)
+	}{
+		{"execution key", func(value *ports.AgentProviderStopRequest) {
+			other, err := goal.NewExecutionRef("execution:docker-stop-other")
+			if err != nil {
+				t.Fatal(err)
+			}
+			value.Key.ExecutionRef = other
+		}},
+		{"launch fence key", func(value *ports.AgentProviderStopRequest) { value.Key.LaunchActionFence++ }},
+		{"stop fence key", func(value *ports.AgentProviderStopRequest) { value.Key.StopActionFence++ }},
+		{"attempt", func(value *ports.AgentProviderStopRequest) { value.StopEffectAttemptRef = "effect-attempt:other" }},
+		{"provider", func(value *ports.AgentProviderStopRequest) { value.ProviderRef = "provider:other" }},
+		{"physical key", func(value *ports.AgentProviderStopRequest) { value.IdempotencyKey += "x" }},
+		{"target", func(value *ports.AgentProviderStopRequest) { value.TargetRef = "ejecucion:other" }},
+		{"revision", func(value *ports.AgentProviderStopRequest) { value.ExpectedRevision++ }},
+		{"body sha", func(value *ports.AgentProviderStopRequest) { value.BodySHA256 = strings.Repeat("0", 64) }},
+		{"body revision", func(value *ports.AgentProviderStopRequest) {
+			mutateDockerStopPhysical(t, value, func(physical *microvm.SolicitudDetenerContenedorV1) {
+				physical.RevisionEsperada++
+			})
+		}},
+		{"body fence", func(value *ports.AgentProviderStopRequest) {
+			mutateDockerStopPhysical(t, value, func(physical *microvm.SolicitudDetenerContenedorV1) {
+				physical.Cerca++
+			})
+		}},
+		{"non canonical body", func(value *ports.AgentProviderStopRequest) {
+			value.Body = append(value.Body, ' ')
+			value.BodySHA256 = ports.AgentProviderRequestBodySHA256(value.Body)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixture, request := newDockerStopFixture(t)
+			if _, err := fixture.adapter.Stop(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			stored := fixture.stopJournal.mustRecord(t, request)
+			test.mutate(&stored)
+			key := ports.AgentProviderStopRequestKey{ExecutionRef: request.ExecutionRef,
+				LaunchActionFence: request.LaunchActionFence, StopActionFence: request.StopActionFence}
+			fixture.stopJournal.records[key] = ports.CloneAgentProviderStopRequest(stored)
+			fixture.stopJournal.byPhysicalKey[stored.IdempotencyKey] = ports.CloneAgentProviderStopRequest(stored)
+			fixture.client.stopCalls = 0
+			_, err := fixture.adapter.Stop(context.Background(), request)
+			if ErrorCode(err) != CodeDockerJournalFailed || fixture.client.stopCalls != 0 {
+				t.Fatalf("err=%v calls=%d stored=%+v", err, fixture.client.stopCalls, stored)
+			}
+		})
+	}
+}
+
+func mutateDockerStopPhysical(t *testing.T, value *ports.AgentProviderStopRequest,
+	mutate func(*microvm.SolicitudDetenerContenedorV1)) {
+	t.Helper()
+	var physical microvm.SolicitudDetenerContenedorV1
+	if json.Unmarshal(value.Body, &physical) != nil {
+		t.Fatal("invalid fixture stop body")
+	}
+	mutate(&physical)
+	var err error
+	value.Body, err = microvm.CodificarSolicitudDetenerContenedorV1(physical)
+	if err != nil {
+		t.Fatalf("invalid mutated stop body: %v", err)
+	}
+	value.BodySHA256 = ports.AgentProviderRequestBodySHA256(value.Body)
+}
+
 func TestDockerAdapterStopRejectsEveryCrossedPhysicalReceipt(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -154,8 +229,12 @@ func TestDockerAdapterStopRejectsEveryCrossedPhysicalReceipt(t *testing.T) {
 		{"stop fence", func(value *microvm.RespuestaContenedorV1) { value.Cerca++ }},
 		{"vcpu", func(value *microvm.RespuestaContenedorV1) { value.VCPU++ }},
 		{"memory", func(value *microvm.RespuestaContenedorV1) { value.MemoriaMiB++ }},
+		{"missing liveness", func(value *microvm.RespuestaContenedorV1) { value.RecursoVivo = nil }},
 		{"liveness", func(value *microvm.RespuestaContenedorV1) { *value.RecursoVivo = true }},
+		{"missing engine", func(value *microvm.RespuestaContenedorV1) { value.EstadoMotor = nil }},
 		{"engine", func(value *microvm.RespuestaContenedorV1) { *value.EstadoMotor = "running" }},
+		{"pid", func(value *microvm.RespuestaContenedorV1) { value.Identidad.PIDObservado = 0 }},
+		{"execution", func(value *microvm.RespuestaContenedorV1) { value.Identidad.ExecutionLabel = "ejecucion:other" }},
 		{"run", func(value *microvm.RespuestaContenedorV1) { value.Identidad.RunLabel = "execution:other" }},
 		{"generation", func(value *microvm.RespuestaContenedorV1) { value.Identidad.Generation++ }},
 	}
