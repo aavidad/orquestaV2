@@ -28,12 +28,15 @@ func NewMicroVMSessionRef(value string) (MicroVMSessionRef, error) {
 func (ref MicroVMSessionRef) String() string { return ref.value }
 
 // MicroVMSessionOpenRequest binds one host-broker session to the existing
-// execution, access, effect and attestation authorities. The broker consumes
-// ChallengeRef atomically once; an exact retry may only replay its receipt.
+// execution, workspace, access, egress, effect and attestation authorities.
+// The broker consumes ChallengeRef atomically once; an exact retry may only
+// replay its receipt.
 type MicroVMSessionOpenRequest struct {
 	Session                  ExecutionSessionEnsureRequest
 	SessionRef               ExecutionSessionRef
+	ExecutionWorkspaceRef    ExecutionWorkspaceRef
 	AccessAuthority          AgentLaunchAccessAuthority
+	EgressAuthority          AgentLaunchEgressAuthority
 	EffectAuthority          AgentLaunchEffectAuthority
 	AttestationRef           goal.AttestationRef
 	AttestationSubjectDigest string
@@ -155,11 +158,19 @@ func ValidateMicroVMSessionOpenRequest(request MicroVMSessionOpenRequest) error 
 	if _, err := NewExecutionSessionRef(request.SessionRef.String()); err != nil {
 		return microVMSessionError("identity_invalid")
 	}
+	if request.ExecutionWorkspaceRef.String() != "" {
+		if _, err := NewExecutionWorkspaceRef(request.ExecutionWorkspaceRef.String()); err != nil {
+			return microVMSessionError("workspace_authority_invalid")
+		}
+	}
 	if request.AccessAuthority.ArtifactAccessRef.String() == "" ||
 		request.AccessAuthority.MCPAccessRef.String() == "" ||
 		request.AccessAuthority.MailboxEndpointRef.String() == "" ||
 		ValidateAgentLaunchAccessAuthority(request.SessionRef, request.AccessAuthority) != nil {
 		return microVMSessionError("access_authority_invalid")
+	}
+	if ValidateAgentLaunchEgressAuthority(request.EgressAuthority) != nil {
+		return microVMSessionError("egress_authority_invalid")
 	}
 	if ValidateAgentLaunchEffectAuthority(request.EffectAuthority) != nil {
 		return microVMSessionError("effect_authority_invalid")
@@ -267,12 +278,14 @@ func ValidateMicroVMSessionEndReceipt(open MicroVMSessionOpenRequest, opened Mic
 }
 
 func MicroVMSessionOpenDigest(request MicroVMSessionOpenRequest) string {
-	values := []string{"orquesta.microvm-session-open.v1", request.Session.ProjectRef.String(),
+	values := []string{"orquesta.microvm-session-open.v2", request.Session.ProjectRef.String(),
 		request.Session.GoalRef.String(), request.Session.WorkItemRef.String(), request.Session.ExecutionRef.String(),
 		strconv.FormatUint(request.Session.ExecutionAttempt, 10), request.Session.ReplacesExecutionRef.String(),
 		strconv.FormatUint(uint64(request.Session.PlanGeneration), 10), strconv.FormatUint(uint64(request.Session.AppSpecGeneration), 10),
-		request.Session.SpecHash, request.SessionRef.String(), request.AccessAuthority.ArtifactAccessRef.String(),
+		request.Session.SpecHash, request.SessionRef.String(), request.ExecutionWorkspaceRef.String(),
+		request.AccessAuthority.ArtifactAccessRef.String(),
 		request.AccessAuthority.MCPAccessRef.String(), request.AccessAuthority.MailboxEndpointRef.String(),
+		request.EgressAuthority.PolicyRef, request.EgressAuthority.PayloadSHA256,
 		request.EffectAuthority.AuthorizationReceiptRef, request.EffectAuthority.EffectApprovalRef,
 		request.EffectAuthority.EffectAttemptRef, strconv.FormatUint(request.EffectAuthority.ActionFence, 10),
 		request.EffectAuthority.StartedAt.UTC().Format(time.RFC3339Nano),

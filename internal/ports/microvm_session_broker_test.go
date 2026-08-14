@@ -2,6 +2,8 @@ package ports
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"reflect"
 	"strings"
 	"sync"
@@ -25,10 +27,18 @@ func TestMicroVMSessionOpenConsumesChallengeOnceAndReplaysOnlyExactRequest(t *te
 	if err != nil || !replay.Replayed || replay.ReceiptRef != first.ReceiptRef || !replay.OpenedAt.Equal(first.OpenedAt) {
 		t.Fatalf("exact retry did not replay receipt: %+v, err = %v", replay, err)
 	}
-	divergent := request
-	divergent.GuestImageDigest = digestOf("9")
-	if _, err = broker.Open(context.Background(), divergent); MicroVMSessionContractErrorCode(err) != "microvm_session.challenge_consumed" {
-		t.Fatalf("divergent challenge reuse error = %v", err)
+	for name, mutate := range map[string]func(*MicroVMSessionOpenRequest){
+		"image": func(v *MicroVMSessionOpenRequest) { v.GuestImageDigest = digestOf("9") },
+		"workspace": func(v *MicroVMSessionOpenRequest) {
+			v.ExecutionWorkspaceRef, _ = NewExecutionWorkspaceRef("workspace:microvm:other")
+		},
+		"egress": func(v *MicroVMSessionOpenRequest) { v.EgressAuthority = testMicroVMEgressAuthority("other") },
+	} {
+		divergent := request
+		mutate(&divergent)
+		if _, err = broker.Open(context.Background(), divergent); MicroVMSessionContractErrorCode(err) != "microvm_session.challenge_consumed" {
+			t.Fatalf("divergent %s challenge reuse error = %v", name, err)
+		}
 	}
 }
 
@@ -58,9 +68,13 @@ func TestMicroVMSessionOpenRejectsInvalidCausalityAuthorityDigestAndWindow(t *te
 		"replacement": func(v *MicroVMSessionOpenRequest) {
 			v.Session.ReplacesExecutionRef, _ = goal.NewExecutionRef("execution:old")
 		},
-		"spec":              func(v *MicroVMSessionOpenRequest) { v.Session.SpecHash = "bad" },
-		"session":           func(v *MicroVMSessionOpenRequest) { v.SessionRef = "execution-session:bad/path" },
+		"spec":    func(v *MicroVMSessionOpenRequest) { v.Session.SpecHash = "bad" },
+		"session": func(v *MicroVMSessionOpenRequest) { v.SessionRef = "execution-session:bad/path" },
+		"workspace": func(v *MicroVMSessionOpenRequest) {
+			v.ExecutionWorkspaceRef = ExecutionWorkspaceRef{value: " workspace:invalid"}
+		},
 		"access":            func(v *MicroVMSessionOpenRequest) { v.AccessAuthority.MCPAccessRef = "" },
+		"egress":            func(v *MicroVMSessionOpenRequest) { v.EgressAuthority.PayloadSHA256 = digestOf("9") },
 		"effect":            func(v *MicroVMSessionOpenRequest) { v.EffectAuthority.ActionFence = 0 },
 		"attestation":       func(v *MicroVMSessionOpenRequest) { v.AttestationRef = goal.AttestationRef{} },
 		"digest":            func(v *MicroVMSessionOpenRequest) { v.GuestImageDigest = "bad" },
@@ -92,8 +106,14 @@ func TestMicroVMSessionOpenDigestBindsEveryAuthorityFamily(t *testing.T) {
 	tests := map[string]func(*MicroVMSessionOpenRequest){
 		"causality": func(v *MicroVMSessionOpenRequest) { v.Session.PlanGeneration++ },
 		"session":   func(v *MicroVMSessionOpenRequest) { v.SessionRef = mustExecutionSessionRef("9") },
+		"workspace": func(v *MicroVMSessionOpenRequest) {
+			v.ExecutionWorkspaceRef, _ = NewExecutionWorkspaceRef("workspace:microvm:other")
+		},
 		"access": func(v *MicroVMSessionOpenRequest) {
 			v.AccessAuthority.MCPAccessRef, _ = NewExecutionMCPAccessRef("mcp-access:execution:sha256:" + digestOf("9"))
+		},
+		"egress": func(v *MicroVMSessionOpenRequest) {
+			v.EgressAuthority = testMicroVMEgressAuthority("other")
 		},
 		"effect":      func(v *MicroVMSessionOpenRequest) { v.EffectAuthority.ActionFence++ },
 		"attestation": func(v *MicroVMSessionOpenRequest) { v.AttestationSubjectDigest = digestOf("9") },
@@ -108,6 +128,19 @@ func TestMicroVMSessionOpenDigestBindsEveryAuthorityFamily(t *testing.T) {
 				t.Fatalf("digest unchanged after %s mutation", name)
 			}
 		})
+	}
+}
+
+func TestMicroVMSessionOpenPreservesExactAbsenceOfOptionalIsolationAuthorities(t *testing.T) {
+	request := validMicroVMOpen(t)
+	withAuthorities := MicroVMSessionOpenDigest(request)
+	request.ExecutionWorkspaceRef = ExecutionWorkspaceRef{}
+	request.EgressAuthority = AgentLaunchEgressAuthority{}
+	if err := ValidateMicroVMSessionOpenRequest(request); err != nil {
+		t.Fatalf("optional authority absence rejected: %v", err)
+	}
+	if MicroVMSessionOpenDigest(request) == withAuthorities {
+		t.Fatal("optional authority absence did not alter the sealed open request")
 	}
 }
 
@@ -426,13 +459,16 @@ func validMicroVMOpen(t *testing.T) MicroVMSessionOpenRequest {
 	artifact, _ := NewExecutionArtifactAccessRef("artifact-access:execution:sha256:" + digestOf("2"))
 	mcp, _ := NewExecutionMCPAccessRef("mcp-access:execution:sha256:" + digestOf("3"))
 	mailbox, _ := NewExecutionMailboxEndpointRef("mailbox-endpoint:execution:sha256:" + digestOf("4"))
+	workspace, _ := NewExecutionWorkspaceRef("workspace:microvm:one")
 	attestation, _ := goal.NewAttestationRef("attestation:microvm:boot")
 	started := time.Unix(1_700_000_000, 0).UTC()
 	return MicroVMSessionOpenRequest{
 		Session: ExecutionSessionEnsureRequest{ProjectRef: project, GoalRef: goalRef, WorkItemRef: work,
 			ExecutionRef: execution, ExecutionAttempt: 1, PlanGeneration: 2, AppSpecGeneration: 3, SpecHash: digestOf("a")},
-		SessionRef:      mustExecutionSessionRef("1"),
-		AccessAuthority: AgentLaunchAccessAuthority{ArtifactAccessRef: artifact, MCPAccessRef: mcp, MailboxEndpointRef: mailbox},
+		SessionRef:            mustExecutionSessionRef("1"),
+		ExecutionWorkspaceRef: workspace,
+		AccessAuthority:       AgentLaunchAccessAuthority{ArtifactAccessRef: artifact, MCPAccessRef: mcp, MailboxEndpointRef: mailbox},
+		EgressAuthority:       testMicroVMEgressAuthority("one"),
 		EffectAuthority: AgentLaunchEffectAuthority{AuthorizationReceiptRef: "authorization:microvm:1",
 			EffectApprovalRef: "approval:microvm:1", EffectAttemptRef: "attempt:microvm:1", ActionFence: 7,
 			StartedAt: started, ClaimLeaseUntil: started.Add(10 * time.Minute), ApprovalExpiresAt: started.Add(8 * time.Minute)},
@@ -441,6 +477,13 @@ func validMicroVMOpen(t *testing.T) MicroVMSessionOpenRequest {
 		ChallengeRef: digestRef(t, "challenge:sha256:", "5"), ChallengeExpiresAt: started.Add(3 * time.Minute),
 		RequestedAt: started.Add(time.Minute),
 	}
+}
+
+func testMicroVMEgressAuthority(suffix string) AgentLaunchEgressAuthority {
+	payload := []byte(`{"schema":"orquesta.egress-policy.v1","authority":"` + suffix + `"}`)
+	digest := sha256.Sum256(payload)
+	return AgentLaunchEgressAuthority{PolicyRef: "egress-policy:microvm:" + suffix,
+		PayloadSHA256: hex.EncodeToString(digest[:]), CanonicalPayload: payload}
 }
 
 func validMicroVMOpened(t *testing.T, request MicroVMSessionOpenRequest) MicroVMSessionOpenReceipt {

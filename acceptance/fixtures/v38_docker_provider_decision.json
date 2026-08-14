@@ -1,5 +1,5 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
@@ -54,6 +54,7 @@
   },
   "composition_gate": {
     "status": "blocked_external_contract_required",
+    "neutral_application_contract": "implemented_port_contract_not_runtime_wired_v2",
     "required_application_authorities": [
       "execution_workspace_ref",
       "artifact_access_ref",
@@ -61,7 +62,8 @@
       "mailbox_endpoint_ref",
       "egress_authority"
     ],
-    "published_contract_gap": "no_complete_isolated_application_authority_delegation",
+    "published_contract_gap": "docker_client_missing_complete_isolated_application_authority_delegation",
+    "external_unblock_dependency": "v38_docker_published_isolated_session_delegation",
     "forbidden_resolutions": [
       "drop_runtime_authority",
       "shared_database",
@@ -71,6 +73,7 @@
       "silent_fallback"
     ],
     "test_refs": [
+      "internal/ports/microvm_session_broker_test.go",
       "internal/application/execution_session_test.go",
       "internal/adapters/agent/agentmicrovm/docker_adapter_test.go"
     ]
@@ -98,6 +101,6 @@
       "go_work",
       "private_module_remote_download"
     ],
-    "next_safe_dependency": "v38_docker_isolated_session_access_contract"
+    "next_safe_dependency": "v38_docker_stop_durable_intent_contract"
   }
 }
