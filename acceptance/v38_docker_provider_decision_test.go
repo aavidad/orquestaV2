@@ -28,7 +28,10 @@ var (
 	_ func(*microvm.Cliente, context.Context, string, string, string, json.RawMessage) (microvm.RespuestaEntradaSesionContenedorV1, error)                     = (*microvm.Cliente).EnviarEntradaSesionContenedorCodificada
 	_ func(*microvm.Cliente, context.Context, string) (microvm.RespuestaContenedorV1, error)                                                                   = (*microvm.Cliente).ObservarContenedor
 	_ func(*microvm.Cliente, context.Context, string, string, microvm.ConsultaEventosSesionContenedorV1) (microvm.RespuestaEventosSesionContenedorV1, error)   = (*microvm.Cliente).LeerEventosSesionContenedor
+	_ func(microvm.SolicitudDetenerContenedorV1) (json.RawMessage, error)                                                                                      = microvm.CodificarSolicitudDetenerContenedorV1
+	_ func(*microvm.Cliente, context.Context, string, string, json.RawMessage) (microvm.RespuestaContenedorV1, error)                                          = (*microvm.Cliente).DetenerContenedorCodificada
 	_ ports.AgentProviderRequestJournal                                                                                                                        = (*sqlite.Repository)(nil)
+	_ ports.AgentProviderStopRequestJournal                                                                                                                    = (*sqlite.Repository)(nil)
 )
 
 func TestV38DockerProviderDecisionMatchesCanonicalRoadmap(t *testing.T) {
@@ -91,15 +94,18 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 		{"wiring_anticipado", []string{"implementation_state", "runtime_wiring"}, "present"},
 		{"launcher_ausente", []string{"implementation_state", "neutral_agent_launcher"}, "absent"},
 		{"observador_ausente", []string{"implementation_state", "neutral_agent_observer"}, "absent"},
+		{"controller_ausente", []string{"implementation_state", "neutral_agent_controller"}, "absent"},
 		{"journal_ausente", []string{"implementation_state", "prepared_request_journal"}, "absent"},
+		{"journal_stop_ausente", []string{"implementation_state", "durable_stop_request_journal"}, "absent"},
 		{"cliente_bloqueado", []string{"client_adoption_gate", "status"}, "blocked"},
 		{"superficie_observer_ausente", []string{"client_adoption_gate", "required_symbols"}, []any{"NegociarDocker"}},
+		{"superficie_stop_ausente", []string{"client_adoption_gate", "required_symbols"}, []any{"NegociarDocker", "DetenerContenedorCodificada"}},
 		{"composicion_anticipada", []string{"composition_gate", "status"}, "satisfied"},
 		{"contrato_neutral_ausente", []string{"composition_gate", "neutral_application_contract"}, "absent"},
 		{"autoridad_incompleta", []string{"composition_gate", "required_application_authorities"}, []any{"execution_workspace_ref"}},
 		{"bloqueo_externo_oculto", []string{"composition_gate", "external_unblock_dependency"}, "none"},
 		{"workaround_compartido", []string{"composition_gate", "forbidden_resolutions"}, []any{"shared_database"}},
-		{"dependencia_obsoleta", []string{"client_adoption_gate", "next_safe_dependency"}, "v38_docker_opt_in_runtime_composition"},
+		{"dependencia_obsoleta", []string{"client_adoption_gate", "next_safe_dependency"}, "v38_docker_stop_durable_intent_contract"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -122,7 +128,7 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 
 func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 	if !agentFirecrackerHasExactKeys(fixture, "schema_version", "fixture_id", "decision", "v38_alignment", "implementation_state", "composition_gate", "client_adoption_gate") ||
-		fixture["schema_version"] != float64(7) || fixture["fixture_id"] != "v38_docker_provider_decision" {
+		fixture["schema_version"] != float64(8) || fixture["fixture_id"] != "v38_docker_provider_decision" {
 		return false
 	}
 	decision, decisionOK := fixture["decision"].(map[string]any)
@@ -133,7 +139,7 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 	if !decisionOK || !alignmentOK || !stateOK || !compositionOK || !gateOK ||
 		!agentFirecrackerHasExactKeys(decision, "id", "status", "capability_refs", "provider", "transport", "adapter_boundary", "selection", "client_adoption", "engine_owner", "orquesta_docker_socket", "forbidden_sharing", "fallback", "v38_accreditation", "test_refs") ||
 		!agentFirecrackerHasExactKeys(alignment, "canonical_vertical", "capability_id", "capability_status", "acceptance_contract", "contract_status", "firecracker_required_subgates", "firecracker_global_accreditation", "docker_accreditation", "new_capability", "new_acceptance_contract", "new_receipt", "new_evidence") ||
-		!agentFirecrackerHasExactKeys(state, "runtime_wiring", "neutral_agent_launcher", "neutral_agent_observer", "docker_client_usage", "prepared_request_journal", "docker_engine_smoke", "local_replace") ||
+		!agentFirecrackerHasExactKeys(state, "runtime_wiring", "neutral_agent_launcher", "neutral_agent_observer", "neutral_agent_controller", "docker_client_usage", "prepared_request_journal", "durable_stop_request_journal", "docker_engine_smoke", "local_replace") ||
 		!agentFirecrackerHasExactKeys(composition, "status", "neutral_application_contract", "required_application_authorities", "published_contract_gap", "external_unblock_dependency", "forbidden_resolutions", "test_refs") ||
 		!agentFirecrackerHasExactKeys(gate, "status", "pinned_module_version", "module_zip_sum", "module_source", "observed_external_candidate_commit", "required_symbols", "unblock", "forbidden_resolutions", "next_safe_dependency") {
 		return false
@@ -153,12 +159,14 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 		reflect.DeepEqual(alignment["firecracker_required_subgates"], []any{"A", "B", "C"}) && alignment["firecracker_global_accreditation"] == "only_after_a_b_c_pass_on_same_candidate" &&
 		alignment["docker_accreditation"] == "none" && alignment["new_capability"] == false && alignment["new_acceptance_contract"] == false && alignment["new_receipt"] == false && alignment["new_evidence"] == false &&
 		state["runtime_wiring"] == "absent" && state["neutral_agent_launcher"] == "implemented_reviewed_not_runtime_wired" &&
-		state["neutral_agent_observer"] == "implemented_reviewed_not_runtime_wired" && state["docker_client_usage"] == "published_module_used_by_adapter_not_runtime_wired" &&
+		state["neutral_agent_observer"] == "implemented_reviewed_not_runtime_wired" && state["neutral_agent_controller"] == "implemented_reviewed_not_runtime_wired" &&
+		state["docker_client_usage"] == "published_module_used_by_adapter_not_runtime_wired" &&
 		state["prepared_request_journal"] == "same_state_repository_used_by_adapter_not_runtime_wired" &&
+		state["durable_stop_request_journal"] == "same_state_repository_used_by_adapter_not_runtime_wired" &&
 		state["docker_engine_smoke"] == "not_claimed" && state["local_replace"] == "forbidden" &&
 		composition["status"] == "blocked_external_contract_required" && composition["neutral_application_contract"] == "implemented_port_contract_not_runtime_wired_v2" && reflect.DeepEqual(composition["required_application_authorities"], []any{
-			"execution_workspace_ref", "artifact_access_ref", "mcp_access_ref", "mailbox_endpoint_ref", "egress_authority",
-		}) && composition["published_contract_gap"] == "docker_client_missing_complete_isolated_application_authority_delegation" &&
+		"execution_workspace_ref", "artifact_access_ref", "mcp_access_ref", "mailbox_endpoint_ref", "egress_authority",
+	}) && composition["published_contract_gap"] == "docker_client_missing_complete_isolated_application_authority_delegation" &&
 		composition["external_unblock_dependency"] == "v38_docker_published_isolated_session_delegation" &&
 		reflect.DeepEqual(composition["forbidden_resolutions"], []any{"drop_runtime_authority", "shared_database", "shared_filesystem", "shared_secrets", "orquesta_docker_socket", "silent_fallback"}) &&
 		reflect.DeepEqual(composition["test_refs"], []any{"internal/ports/microvm_session_broker_test.go", "internal/application/execution_session_test.go", "internal/adapters/agent/agentmicrovm/docker_adapter_test.go"}) &&
@@ -168,9 +176,10 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 		gate["observed_external_candidate_commit"] == "2768389c82c02e4eeb3599152037fe3a52e2dc76" && reflect.DeepEqual(gate["required_symbols"], []any{
 		"NegociarDocker", "PrepararContenedor", "LanzarORecuperarContenedorCodificada", "ConsultarOperacionContenedor",
 		"IniciarSesionContenedorCodificada", "EnviarEntradaSesionContenedorCodificada", "ObservarContenedor", "LeerEventosSesionContenedor",
+		"CodificarSolicitudDetenerContenedorV1", "DetenerContenedorCodificada",
 	}) &&
 		gate["unblock"] == "satisfied_published_versioned_module_available_in_authorized_local_supply_chain" && reflect.DeepEqual(gate["forbidden_resolutions"], []any{"copy_external_worktree", "local_replace", "go_work", "private_module_remote_download"}) &&
-		gate["next_safe_dependency"] == "v38_docker_stop_durable_intent_contract"
+		gate["next_safe_dependency"] == "v38_docker_published_isolated_session_delegation"
 }
 
 func v38DockerAssertCompositionBlockerReferences(t *testing.T, root string, composition map[string]any) {

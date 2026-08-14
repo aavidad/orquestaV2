@@ -1,5 +1,5 @@
 {
-  "schema_version": 7,
+  "schema_version": 8,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
@@ -47,8 +47,10 @@
     "runtime_wiring": "absent",
     "neutral_agent_launcher": "implemented_reviewed_not_runtime_wired",
     "neutral_agent_observer": "implemented_reviewed_not_runtime_wired",
+    "neutral_agent_controller": "implemented_reviewed_not_runtime_wired",
     "docker_client_usage": "published_module_used_by_adapter_not_runtime_wired",
     "prepared_request_journal": "same_state_repository_used_by_adapter_not_runtime_wired",
+    "durable_stop_request_journal": "same_state_repository_used_by_adapter_not_runtime_wired",
     "docker_engine_smoke": "not_claimed",
     "local_replace": "forbidden"
   },
@@ -92,7 +94,9 @@
       "IniciarSesionContenedorCodificada",
       "EnviarEntradaSesionContenedorCodificada",
       "ObservarContenedor",
-      "LeerEventosSesionContenedor"
+      "LeerEventosSesionContenedor",
+      "CodificarSolicitudDetenerContenedorV1",
+      "DetenerContenedorCodificada"
     ],
     "unblock": "satisfied_published_versioned_module_available_in_authorized_local_supply_chain",
     "forbidden_resolutions": [
@@ -101,6 +105,6 @@
       "go_work",
       "private_module_remote_download"
     ],
-    "next_safe_dependency": "v38_docker_stop_durable_intent_contract"
+    "next_safe_dependency": "v38_docker_published_isolated_session_delegation"
   }
 }
