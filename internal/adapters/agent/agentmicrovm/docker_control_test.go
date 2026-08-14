@@ -12,9 +12,12 @@ import (
 
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
 
+	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+var _ application.AgentStopReconciler = (*DockerAdapter)(nil)
 
 func TestDockerAdapterAdvertisesOnlyNegotiatedForcedStop(t *testing.T) {
 	fixture := newDockerAdapterFixture(t)
@@ -56,6 +59,173 @@ func TestDockerAdapterStopPersistsExactBytesBeforeEffectAndReplays(t *testing.T)
 	if json.Unmarshal(stored.Body, &physical) != nil || physical.RevisionEsperada != stored.ExpectedRevision ||
 		physical.Cerca != request.StopActionFence {
 		t.Fatalf("physical=%+v stored=%+v", physical, stored)
+	}
+}
+
+func TestDockerAdapterReconcileStopReadsExactJournalsWithoutRepeatingMutation(t *testing.T) {
+	fixture, request := newDockerStopFixture(t)
+	firstStop, err := fixture.adapter.Stop(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored := fixture.stopJournal.mustRecord(t, request)
+	var physicalRequest microvm.SolicitudDetenerContenedorV1
+	if json.Unmarshal(stored.Body, &physicalRequest) != nil {
+		t.Fatal("invalid durable stop body")
+	}
+	client := &dockerObservationClientStub{dockerClientStub: fixture.client,
+		physical: validDockerStoppedResponse(fixture.request, stored.TargetRef, physicalRequest)}
+	adapter := mustDockerObserverAdapter(t, fixture, client)
+	first, firstErr := adapter.ReconcileStop(context.Background(), request)
+
+	fixture.journal, fixture.stopJournal = fixture.journal.reopen(), fixture.stopJournal.reopen()
+	fixture.client.stopJournal = fixture.stopJournal
+	restarted := mustDockerObserverAdapter(t, fixture, client)
+	second, secondErr := restarted.ReconcileStop(context.Background(), request)
+	if firstErr != nil || secondErr != nil || !reflect.DeepEqual(first, second) ||
+		!reflect.DeepEqual(first, firstStop) || ports.ValidateAgentStopReceipt(request, first) != nil ||
+		fixture.client.stopCalls != 1 || !reflect.DeepEqual(client.observed, []string{stored.TargetRef, stored.TargetRef}) {
+		t.Fatalf("receipts=%+v/%+v stop=%+v errors=%v/%v stops=%d observed=%v",
+			first, second, firstStop, firstErr, secondErr, fixture.client.stopCalls, client.observed)
+	}
+}
+
+func TestDockerAdapterReconcileStopReportsExactPendingStateWithoutMutation(t *testing.T) {
+	fixture, request := newDockerStopFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	fixture.stopJournal.afterRecord = cancel
+	if _, err := fixture.adapter.Stop(ctx, request); ErrorCode(err) != CodeDockerStopCanceledBeforeSubmit {
+		t.Fatalf("seed journal error=%v", err)
+	}
+	fixture.stopJournal.afterRecord = nil
+	compiled := mustCompileDocker(t, fixture.request, fixture.binding)
+	client := &dockerObservationClientStub{dockerClientStub: fixture.client,
+		physical: validDockerContainerResponse(compiled.Plan, true)}
+	adapter := mustDockerObserverAdapter(t, fixture, client)
+	receipt, err := adapter.ReconcileStop(context.Background(), request)
+	if err != nil || receipt.Status != ports.AgentStopPending ||
+		ports.ValidateAgentStopReceipt(request, receipt) != nil || fixture.client.stopCalls != 0 ||
+		!reflect.DeepEqual(client.observed, []string{request.ExternalRef}) {
+		t.Fatalf("receipt=%+v err=%v stops=%d observed=%v", receipt, err, fixture.client.stopCalls, client.observed)
+	}
+}
+
+func TestDockerAdapterReconcileStopFailsClosedBeforeAnySecondMutation(t *testing.T) {
+	t.Run("missing durable stop", func(t *testing.T) {
+		fixture, request := newDockerStopFixture(t)
+		compiled := mustCompileDocker(t, fixture.request, fixture.binding)
+		client := &dockerObservationClientStub{dockerClientStub: fixture.client,
+			physical: validDockerContainerResponse(compiled.Plan, true)}
+		_, err := mustDockerObserverAdapter(t, fixture, client).ReconcileStop(context.Background(), request)
+		if ErrorCode(err) != CodeDockerStopNotRecorded || !isDefinitelyNotApplied(err) ||
+			fixture.client.stopCalls != 0 || len(client.observed) != 0 {
+			t.Fatalf("err=%v stops=%d observed=%v", err, fixture.client.stopCalls, client.observed)
+		}
+	})
+	t.Run("crossed durable stop", func(t *testing.T) {
+		fixture, request := newDockerStopFixture(t)
+		if _, err := fixture.adapter.Stop(context.Background(), request); err != nil {
+			t.Fatal(err)
+		}
+		stored := fixture.stopJournal.mustRecord(t, request)
+		stored.ExpectedRevision++
+		fixture.stopJournal.records[stored.Key] = stored
+		client := &dockerObservationClientStub{dockerClientStub: fixture.client}
+		_, err := mustDockerObserverAdapter(t, fixture, client).ReconcileStop(context.Background(), request)
+		if ErrorCode(err) != CodeDockerJournalFailed || fixture.client.stopCalls != 1 || len(client.observed) != 0 {
+			t.Fatalf("err=%v stops=%d observed=%v", err, fixture.client.stopCalls, client.observed)
+		}
+	})
+	for _, test := range []struct {
+		name   string
+		mutate func(*microvm.RespuestaContenedorV1)
+	}{
+		{"crossed stopped target", func(value *microvm.RespuestaContenedorV1) {
+			value.Referencia, value.Identidad.ExecutionLabel = "ejecucion:other", "ejecucion:other"
+		}},
+		{"crossed active fence", func(value *microvm.RespuestaContenedorV1) {
+			makeDockerStopResponseActive(value)
+			value.Cerca++
+		}},
+		{"crossed active generation", func(value *microvm.RespuestaContenedorV1) {
+			makeDockerStopResponseActive(value)
+			value.Identidad.Generation++
+		}},
+		{"coherent crossed active fence", func(value *microvm.RespuestaContenedorV1) {
+			makeDockerStopResponseActive(value)
+			value.Cerca++
+			value.Identidad.Generation = value.Cerca
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture, request := newDockerStopFixture(t)
+			if _, err := fixture.adapter.Stop(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			stored := fixture.stopJournal.mustRecord(t, request)
+			var physicalRequest microvm.SolicitudDetenerContenedorV1
+			if json.Unmarshal(stored.Body, &physicalRequest) != nil {
+				t.Fatal("invalid durable stop body")
+			}
+			physical := validDockerStoppedResponse(fixture.request, stored.TargetRef, physicalRequest)
+			test.mutate(&physical)
+			client := &dockerObservationClientStub{dockerClientStub: fixture.client, physical: physical}
+			_, err := mustDockerObserverAdapter(t, fixture, client).ReconcileStop(context.Background(), request)
+			if ErrorCode(err) != CodeDockerStopResponseInvalid || fixture.client.stopCalls != 1 || len(client.observed) != 1 {
+				t.Fatalf("err=%v stops=%d observed=%v", err, fixture.client.stopCalls, client.observed)
+			}
+		})
+	}
+}
+
+func makeDockerStopResponseActive(value *microvm.RespuestaContenedorV1) {
+	value.Estado = "activo"
+	value.Revision -= 2
+	value.Cerca--
+	value.Identidad.Generation--
+	*value.RecursoVivo, *value.EstadoMotor = true, "running"
+}
+
+func TestDockerAdapterReconcileStopPreservesReadOnlyFailureAndCancellation(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		physical error
+		cancel   bool
+	}{
+		{"transport", errors.New("observation unavailable"), false},
+		{"success after cancel", nil, true},
+		{"error after cancel", errors.New("observation after cancel"), true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			fixture, request := newDockerStopFixture(t)
+			if _, err := fixture.adapter.Stop(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			stored := fixture.stopJournal.mustRecord(t, request)
+			var physicalRequest microvm.SolicitudDetenerContenedorV1
+			if json.Unmarshal(stored.Body, &physicalRequest) != nil {
+				t.Fatal("invalid durable stop body")
+			}
+			client := &dockerObservationClientStub{dockerClientStub: fixture.client,
+				physical:    validDockerStoppedResponse(fixture.request, stored.TargetRef, physicalRequest),
+				physicalErr: test.physical}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if test.cancel {
+				client.physicalHook = cancel
+			}
+			receipt, err := mustDockerObserverAdapter(t, fixture, client).ReconcileStop(ctx, request)
+			if test.cancel {
+				if !errors.Is(err, context.Canceled) || ErrorCode(err) != "" {
+					t.Fatalf("cancellation=%v code=%q", err, ErrorCode(err))
+				}
+			} else if ErrorCode(err) != CodeObservationUnavailable || !isTemporary(err) {
+				t.Fatalf("transport=%v code=%q temporary=%t", err, ErrorCode(err), isTemporary(err))
+			}
+			if !reflect.DeepEqual(receipt, ports.AgentStopReceipt{}) || fixture.client.stopCalls != 1 || len(client.observed) != 1 {
+				t.Fatalf("receipt=%+v stops=%d observed=%v", receipt, fixture.client.stopCalls, client.observed)
+			}
+		})
 	}
 }
 

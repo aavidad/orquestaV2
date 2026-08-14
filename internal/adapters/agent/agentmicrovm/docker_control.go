@@ -18,6 +18,7 @@ import (
 const (
 	CodeDockerStopRequestInvalid       = "agentmicrovm.docker_stop_request_invalid"
 	CodeDockerStopCanceledBeforeSubmit = "agentmicrovm.docker_stop_canceled_before_submit"
+	CodeDockerStopNotRecorded          = "agentmicrovm.docker_stop_not_recorded"
 	CodeDockerStopUnavailable          = "agentmicrovm.docker_stop_unavailable"
 	CodeDockerStopRejected             = "agentmicrovm.docker_stop_rejected"
 	CodeDockerStopResponseInvalid      = "agentmicrovm.docker_stop_response_invalid"
@@ -71,6 +72,49 @@ func (adapter *DockerAdapter) Stop(ctx context.Context, request ports.AgentStopR
 		return ports.AgentStopReceipt{}, classifyMutationError(err, CodeDockerStopRejected, CodeDockerStopUnavailable)
 	}
 	return adapter.completeDockerStop(request, launch, stored, response)
+}
+
+// ReconcileStop is read-only: it resolves the exact durable launch and stop
+// request, then observes their physical target without repeating Stop.
+func (adapter *DockerAdapter) ReconcileStop(
+	ctx context.Context,
+	request ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	if adapter == nil || nilInterface(adapter.observer) || nilInterface(ctx) {
+		return ports.AgentStopReceipt{}, fail(CodeConfigurationInvalid, nil)
+	}
+	launch, err := adapter.resolveDockerStopLaunch(ctx, request)
+	if err != nil {
+		return ports.AgentStopReceipt{}, err
+	}
+	if request.Mode != ports.AgentStopForced {
+		return ports.AgentStopReceipt{}, fail(CodeDockerStopRequestInvalid, nil)
+	}
+	stored, found, err := adapter.resolveDockerStop(ctx, request, launch)
+	if err != nil {
+		return ports.AgentStopReceipt{}, err
+	}
+	if !found {
+		return ports.AgentStopReceipt{}, fail(CodeDockerStopNotRecorded, nil)
+	}
+	physical, err := adapter.observer.ObservarContenedor(ctx, stored.TargetRef)
+	if contextErr := preserveContextError(ctx, err); contextErr != nil {
+		return ports.AgentStopReceipt{}, contextErr
+	}
+	if err != nil {
+		return ports.AgentStopReceipt{}, classifyDockerObservationError(err, false)
+	}
+	if adapter.validDockerStoppedShape(request, launch, physical) && validDockerStopIdentity(request, physical) {
+		return adapter.completeDockerStop(request, launch, stored, physical)
+	}
+	if !adapter.validDockerRunningBeforeStop(request, launch, physical) {
+		return ports.AgentStopReceipt{}, fail(CodeDockerStopResponseInvalid, nil)
+	}
+	receipt := dockerStopReceipt(request, ports.AgentStopPending, "", time.Time{})
+	if err := ports.ValidateAgentStopReceipt(request, receipt); err != nil {
+		return ports.AgentStopReceipt{}, fail(CodeDockerStopResponseInvalid, err)
+	}
+	return receipt, nil
 }
 
 func (adapter *DockerAdapter) unsupportedDockerStop(request ports.AgentStopRequest) (ports.AgentStopReceipt, error) {
@@ -213,6 +257,20 @@ func (adapter *DockerAdapter) validDockerStoppedShape(
 		response.Cerca == request.StopActionFence && response.Estado == "detenido" && response.VCPU == adapter.vcpu &&
 		response.MemoriaMiB == adapter.memoryMiB && response.RecursoVivo != nil && !*response.RecursoVivo &&
 		response.EstadoMotor != nil && *response.EstadoMotor == "removed"
+}
+
+func (adapter *DockerAdapter) validDockerRunningBeforeStop(
+	request ports.AgentStopRequest,
+	launch ports.AgentProviderRequest,
+	response microvm.RespuestaContenedorV1,
+) bool {
+	identity := response.Identidad
+	return response.Referencia == launch.LaunchBindingRef && response.Revision == launch.LaunchBindingRevision &&
+		response.Cerca == request.LaunchActionFence && response.Estado == "activo" && response.VCPU == adapter.vcpu &&
+		response.MemoriaMiB == adapter.memoryMiB && response.RecursoVivo != nil && *response.RecursoVivo &&
+		response.EstadoMotor != nil && *response.EstadoMotor == "running" && identity != nil &&
+		identity.PIDObservado != 0 && identity.ExecutionLabel == response.Referencia &&
+		identity.RunLabel == request.ExecutionRef.String() && identity.Generation == request.LaunchActionFence
 }
 
 func validDockerStopIdentity(request ports.AgentStopRequest, response microvm.RespuestaContenedorV1) bool {

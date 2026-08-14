@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"reflect"
 	"time"
 
 	"orquesta/internal/goal"
@@ -52,6 +53,31 @@ type AgentObserver interface {
 type AgentController interface {
 	ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error)
 	Stop(context.Context, ports.AgentStopRequest) (ports.AgentStopReceipt, error)
+}
+
+var ErrAgentStopRecoveryUnsupported = errors.New("application.agent_stop_recovery_unsupported")
+
+// AgentStopReconciler is an optional read-only recovery capability. It may
+// inspect the exact durable stop but must never fall back to issuing Stop.
+type AgentStopReconciler interface {
+	ReconcileStop(context.Context, ports.AgentStopRequest) (ports.AgentStopReceipt, error)
+}
+
+// AgentStopReconcilerFrom keeps recovery structurally separate from ordinary
+// controllers, so unsupported providers cannot receive a recovery call.
+func AgentStopReconcilerFrom(controller AgentController) (AgentStopReconciler, error) {
+	reconciler, ok := controller.(AgentStopReconciler)
+	if controller == nil || !ok {
+		return nil, ErrAgentStopRecoveryUnsupported
+	}
+	value := reflect.ValueOf(reconciler)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if value.IsNil() {
+			return nil, ErrAgentStopRecoveryUnsupported
+		}
+	}
+	return reconciler, nil
 }
 
 // unsupportedAgentController is the null adapter used by compositions that

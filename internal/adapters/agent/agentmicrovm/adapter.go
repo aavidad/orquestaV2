@@ -781,7 +781,7 @@ func (err *Error) DefinitelyNotApplied() bool {
 		CodeCapabilityMismatch, CodeSigningFailed,
 		CodeLaunchAuthorityResolveFailed, CodeLaunchAuthorityBuildFailed,
 		CodeLaunchCanceledBeforeSubmit,
-		CodeDockerStopRequestInvalid, CodeDockerStopCanceledBeforeSubmit,
+		CodeDockerStopRequestInvalid, CodeDockerStopCanceledBeforeSubmit, CodeDockerStopNotRecorded,
 		CodeLaunchRequestInvalid, CodeSessionRequired, CodeAccessAuthorityRequired,
 		CodeEffectAuthorityInvalid, CodeFenceInvalid, CodeFenceMismatch,
 		CodeProfileBindingInvalid, CodeDescriptorInvalid, CodeControlBrokerRequired,
