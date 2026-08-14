@@ -91,6 +91,7 @@ type stopHashDocument struct {
 	PlanGeneration    uint64              `json:"plan_generation"`
 	AppSpecGeneration uint64              `json:"app_spec_generation"`
 	ExecutionAttempt  uint64              `json:"execution_attempt"`
+	LaunchActionFence uint64              `json:"launch_action_fence"`
 	SpecHash          string              `json:"spec_hash"`
 	ProviderRef       string              `json:"provider_ref"`
 	ModelRef          string              `json:"model_ref"`
@@ -105,7 +106,8 @@ func hashStopRequest(request ports.AgentStopRequest) (string, error) {
 		ExecutionRef: request.ExecutionRef.String(), GoalRef: request.GoalRef.String(),
 		WorkItemRef: request.WorkItemRef.String(), PlanGeneration: uint64(request.PlanGeneration),
 		AppSpecGeneration: uint64(request.AppSpecGeneration), ExecutionAttempt: request.ExecutionAttempt,
-		SpecHash: request.SpecHash, ProviderRef: request.ProviderRef, ModelRef: request.ModelRef,
+		LaunchActionFence: request.LaunchActionFence,
+		SpecHash:          request.SpecHash, ProviderRef: request.ProviderRef, ModelRef: request.ModelRef,
 		AgentRef: request.AgentRef, ExternalRef: request.ExternalRef, Mode: request.Mode,
 		IdempotencyKey: request.IdempotencyKey,
 	})

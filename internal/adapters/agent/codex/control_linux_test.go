@@ -313,7 +313,18 @@ func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
 	launch := launchReceiptForRequest(t, adapter, requests[1])
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	receipt, err := adapter.Stop(ctx, stopRequestForLaunch(launch, ports.AgentStopForced, "stop:control-b"))
+	stop := stopRequestForLaunch(launch, ports.AgentStopForced, "stop:control-b")
+	crossed := stop
+	crossed.LaunchActionFence++
+	stopHash, _ := hashStopRequest(stop)
+	crossedHash, _ := hashStopRequest(crossed)
+	if stopHash == crossedHash {
+		t.Fatal("stop hash omitted launch fence")
+	}
+	if _, err := adapter.Stop(ctx, crossed); ports.AgentContractErrorCode(err) != "agent.stop_launch_action_fence_mismatch" {
+		t.Fatalf("Stop(crossed fence) error = %v", err)
+	}
+	receipt, err := adapter.Stop(ctx, stop)
 	if err != nil || receipt.Status != ports.AgentStopped {
 		t.Fatalf("Stop(B) = %+v, %v", receipt, err)
 	}
@@ -322,6 +333,80 @@ func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
 		if err := syscall.Kill(grandchildren[index], 0); err != nil {
 			t.Fatalf("sibling %d was stopped: %v", index, err)
 		}
+	}
+}
+
+func TestControlLaunchReceiptRejectsMissingDurableFence(t *testing.T) {
+	adapter := &Adapter{}
+	if _, err := adapter.controlLaunchReceipt(launchRecord{SchemaVersion: stateSchemaVersion}, ports.AgentStopRequest{}); ErrorCode(err) != CodeLegacyControlMetadataUnknown {
+		t.Fatalf("missing launch fence error = %v", err)
+	}
+}
+
+func TestReopenedV7StopRejectsMissingDurableFenceBeforeJournalOrSignal(t *testing.T) {
+	for _, preloadObservation := range []bool{false, true} {
+		name := "cold"
+		if preloadObservation {
+			name = "observation-loaded"
+		}
+		t.Run(name, func(t *testing.T) {
+			config := durableControlProcessTreeTestConfig(t)
+			request := testRequest(t, "v7-missing-fence-"+name, "historical V7 without launch fence", 1024)
+			command, process, launch := seedUnownedLiveProcess(t, config, request)
+			cleanupSeededProcess(t, command, process)
+			grandchild := awaitGrandchildPID(t, config, request)
+			runPath := executionPath(request.ExecutionRef)
+			requestPath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), requestFileName)
+			payload, err := os.ReadFile(requestPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var historical launchRecord
+			if err := json.Unmarshal(payload, &historical); err != nil ||
+				historical.SchemaVersion != stateSchemaVersion || historical.LaunchActionFence == 0 {
+				t.Fatalf("current V7 record=%+v err=%v", historical, err)
+			}
+			historical.LaunchActionFence = 0
+			payload, err = json.Marshal(historical)
+			if err != nil || strings.Contains(string(payload), "launch_action_fence") {
+				t.Fatalf("historical V7 payload=%s err=%v", payload, err)
+			}
+			if err := os.WriteFile(requestPath, payload, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			adapter := openTestAdapter(t, config)
+			if preloadObservation {
+				observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
+				if err != nil || observation.Status != ports.AgentRunning {
+					t.Fatalf("Observe(V7 missing fence)=%+v err=%v", observation, err)
+				}
+				state := adapter.executions[request.ExecutionRef.String()]
+				if state == nil || state.receipt.LaunchActionFence != 0 {
+					t.Fatalf("recovered V7 state=%+v", state)
+				}
+			}
+			stop := stopRequestForLaunch(launch, ports.AgentStopForced, "stop:v7-missing-fence:"+name)
+			receipt, err := adapter.Stop(context.Background(), stop)
+			if ErrorCode(err) != CodeLegacyControlMetadataUnknown || receipt != (ports.AgentStopReceipt{}) {
+				t.Fatalf("Stop(V7 missing fence)=%+v err=%v code=%q", receipt, err, ErrorCode(err))
+			}
+			if identity, inspectErr := platformInspectProcess(process); inspectErr != nil || identity != processIdentityAlive {
+				t.Fatalf("Stop touched V7 process identity=%v err=%v", identity, inspectErr)
+			}
+			if err := syscall.Kill(grandchild, 0); err != nil {
+				t.Fatalf("Stop touched V7 descendant: %v", err)
+			}
+			requestName, receiptName := stopRecordNames(stop.IdempotencyKey)
+			for _, fileName := range []string{
+				requestName, receiptName, stopSignalIntentName(stop.IdempotencyKey),
+				stopSignalName(stop.IdempotencyKey), stopCompletionName, terminalFileName,
+			} {
+				if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), fileName)); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("Stop(V7 missing fence) created %s: %v", fileName, err)
+				}
+			}
+		})
 	}
 }
 
@@ -1376,7 +1461,7 @@ func stopRequestForLaunch(launch ports.AgentLaunchReceipt, mode ports.AgentStopM
 	return ports.AgentStopRequest{
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef, WorkItemRef: launch.WorkItemRef,
 		PlanGeneration: launch.PlanGeneration, AppSpecGeneration: launch.AppSpecGeneration,
-		ExecutionAttempt: launch.ExecutionAttempt, SpecHash: launch.SpecHash,
+		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: launch.LaunchActionFence, SpecHash: launch.SpecHash,
 		ProviderRef: launch.ProviderRef, ModelRef: launch.ModelRef, AgentRef: launch.AgentRef,
 		ExternalRef: launch.ExternalRef, Mode: mode, IdempotencyKey: idempotency,
 	}

@@ -192,7 +192,7 @@ func TestHistoricalPolicyRejectsPartialOrCorruptStateWithoutRuntimeFallback(t *t
 	}
 }
 
-func TestLegacyGovernanceParkingAndAuthorizedStopRemainSafe(t *testing.T) {
+func TestLegacyGovernanceParkingDoesNotInventStopAuthority(t *testing.T) {
 	system := newControlTestSystem(t, nil)
 	system.launch(t)
 	system.repository.mu.Lock()
@@ -214,8 +214,10 @@ func TestLegacyGovernanceParkingAndAuthorizedStopRemainSafe(t *testing.T) {
 	if _, err = system.orchestrator.Control(context.Background(), system.access, stop); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = system.orchestrator.ProcessNext(context.Background(), "worker:legacy-authorized-stop"); err != nil || system.stopCount() != 1 {
-		t.Fatalf("legacy stop: calls=%d err=%v", system.stopCount(), err)
+	result, err := system.orchestrator.ProcessNext(context.Background(), "worker:legacy-authorized-stop")
+	if err == nil || err.Error() != "application.agent_stop_authority_invalid" ||
+		!result.Processed || result.Action != ActionStopAgent || system.stopCount() != 0 {
+		t.Fatalf("legacy stop authority: result=%+v calls=%d err=%v", result, system.stopCount(), err)
 	}
 }
 

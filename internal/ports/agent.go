@@ -240,6 +240,7 @@ type AgentLaunchReceipt struct {
 	PlanGeneration              goal.PlanGeneration
 	AppSpecGeneration           goal.AppSpecGeneration
 	ExecutionAttempt            uint64
+	LaunchActionFence           uint64
 	SpecHash                    string
 	ProviderRef                 string
 	ModelRef                    string
@@ -643,6 +644,9 @@ func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchR
 	}
 	if receipt.ExecutionAttempt != request.ExecutionAttempt {
 		return &AgentContractError{Code: "agent.receipt_execution_attempt_mismatch"}
+	}
+	if receipt.LaunchActionFence != request.EffectAuthority.ActionFence {
+		return &AgentContractError{Code: "agent.receipt_launch_action_fence_mismatch"}
 	}
 	if receipt.RequierePreservacionEntorno != request.RequierePreservacionEntorno {
 		return &AgentContractError{Code: "agent.receipt_environment_preservation_mismatch"}

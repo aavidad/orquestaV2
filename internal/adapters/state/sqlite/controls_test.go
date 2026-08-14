@@ -415,7 +415,8 @@ func (agent *sqliteTerminalStopAgent) Launch(
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: "provider:sqlite-multi", ModelRef: "model:sqlite-multi", AgentRef: "agent:sqlite-multi",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		ReceiptRef: "receipt:sqlite-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),
@@ -482,7 +483,8 @@ func (agent *sqliteMultiControlAgent) Launch(
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: "provider:sqlite-multi", ModelRef: "model:sqlite-multi", AgentRef: "agent:sqlite-multi",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		ReceiptRef: "receipt:sqlite-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),

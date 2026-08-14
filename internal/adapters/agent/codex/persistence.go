@@ -46,6 +46,7 @@ type launchRecord struct {
 	PlanGeneration        goal.PlanGeneration        `json:"plan_generation"`
 	AppSpecGeneration     goal.AppSpecGeneration     `json:"app_spec_generation"`
 	ExecutionAttempt      uint64                     `json:"execution_attempt"`
+	LaunchActionFence     uint64                     `json:"launch_action_fence,omitempty"`
 	SpecHash              string                     `json:"spec_hash"`
 	ProviderRef           string                     `json:"provider_ref"`
 	ModelRef              string                     `json:"model_ref"`
@@ -281,6 +282,7 @@ func (adapter *Adapter) ensureLaunchRecord(request ports.AgentLaunchRequest, req
 		PlanGeneration:        request.PlanGeneration,
 		AppSpecGeneration:     request.AppSpecGeneration,
 		ExecutionAttempt:      request.ExecutionAttempt,
+		LaunchActionFence:     request.EffectAuthority.ActionFence,
 		SpecHash:              request.SpecHash,
 		ProviderRef:           ProviderRef,
 		ModelRef:              adapter.modelRef(),
@@ -644,6 +646,7 @@ func (record launchRecord) receipt(executionRef goal.ExecutionRef) (ports.AgentL
 		PlanGeneration:    record.PlanGeneration,
 		AppSpecGeneration: record.AppSpecGeneration,
 		ExecutionAttempt:  record.ExecutionAttempt,
+		LaunchActionFence: record.LaunchActionFence,
 		SpecHash:          record.SpecHash,
 		ProviderRef:       record.ProviderRef,
 		ModelRef:          record.ModelRef,
@@ -662,6 +665,7 @@ func (record launchRecord) receipt(executionRef goal.ExecutionRef) (ports.AgentL
 		ExecutionAttempt:  record.ExecutionAttempt,
 		SpecHash:          record.SpecHash,
 		IdempotencyKey:    record.IdempotencyKey,
+		EffectAuthority:   ports.AgentLaunchEffectAuthority{ActionFence: record.LaunchActionFence},
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid}

@@ -1442,6 +1442,7 @@ func supervisorTestRequest(suffix, objective string, maxOutput int64) ports.Agen
 		},
 		SecurityCriticality: governance.SecurityCriticalityNormal,
 		ReasoningEffort:     governance.ReasoningEffortMedium,
+		EffectAuthority:     ports.AgentLaunchEffectAuthority{ActionFence: 7},
 	}
 	if strings.Contains(suffix, "session-recovery") {
 		request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:" + suffix)

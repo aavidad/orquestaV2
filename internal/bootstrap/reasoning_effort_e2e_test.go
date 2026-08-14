@@ -180,16 +180,20 @@ func requireReasoningEffortCausality(t *testing.T, record application.GoalRecord
 	if record.Goal.State() != goal.GoalStateSucceeded ||
 		len(record.Goal.WorkItems()) != 1 ||
 		len(record.Executions) != 1 ||
-		len(record.EffectIntents) != 1 {
+		len(record.EffectIntents) != 1 || len(record.EffectApprovals) != 1 ||
+		len(record.EffectAttempts) != 1 || len(record.EffectReceipts) != 1 {
 		t.Fatalf("unexpected terminal causal record: %+v", record)
 	}
 	item := record.Goal.WorkItems()[0]
 	execution := record.Executions[0]
 	intent := record.EffectIntents[0]
+	approval, attempt, receipt := record.EffectApprovals[0], record.EffectAttempts[0], record.EffectReceipts[0]
 	if item.ReasoningEffort() != governance.ReasoningEffortXHigh ||
 		intent.Kind != application.EffectKindAgentLaunch ||
 		intent.Subject.ExecutionRef != execution.Ref ||
-		intent.ReasoningEffort != governance.ReasoningEffortXHigh {
+		intent.ReasoningEffort != governance.ReasoningEffortXHigh ||
+		attempt.IntentRef != intent.Ref || receipt.Ref != execution.LaunchReceiptRef ||
+		receipt.AttemptRef != attempt.Ref || approval.Ref != attempt.ApprovalRef {
 		t.Fatalf("WorkItem/EffectIntent lost xhigh: item=%q intent=%+v", item.ReasoningEffort(), intent)
 	}
 	phase, found := reasoningEffortPhase(record.Goal, item.Phase())
@@ -213,6 +217,11 @@ func requireReasoningEffortCausality(t *testing.T, record application.GoalRecord
 		IdempotencyKey: execution.IdempotencyKey, MaxOutputBytes: execution.MaxOutputBytes,
 		BudgetDemand: item.BudgetDemand(), SecurityCriticality: item.SecurityCriticality(),
 		ReasoningEffort: item.ReasoningEffort(),
+		EffectAuthority: ports.AgentLaunchEffectAuthority{
+			AuthorizationReceiptRef: intent.Authority.Ref(), EffectApprovalRef: approval.Ref,
+			EffectAttemptRef: attempt.Ref, ActionFence: attempt.ActionFence, StartedAt: attempt.StartedAt,
+			ClaimLeaseUntil: attempt.ClaimLeaseUntil, ApprovalExpiresAt: approval.ExpiresAt,
+		},
 	}
 	if err := ports.ValidateAgentLaunchRequest(request); err != nil {
 		t.Fatalf("reconstructed durable launch request: %v", err)

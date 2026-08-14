@@ -194,10 +194,11 @@ func TestAgentMicroVMConservaReconciliacionOptInSinRelanzar(t *testing.T) {
 		},
 	}
 	reciboEsperado := ports.AgentLaunchReceipt{
-		SpecHash:       solicitud.SpecHash,
-		ExternalRef:    "microvm:reconciliada",
-		IdempotencyKey: solicitud.IdempotencyKey,
-		ReceiptRef:     "receipt:reconcile-launch",
+		SpecHash:          solicitud.SpecHash,
+		LaunchActionFence: solicitud.EffectAuthority.ActionFence,
+		ExternalRef:       "microvm:reconciliada",
+		IdempotencyKey:    solicitud.IdempotencyKey,
+		ReceiptRef:        "receipt:reconcile-launch",
 	}
 	delegado := &agenteMicroVMDelegadoPrueba{reconcileReceipt: reciboEsperado}
 	agente := nuevoAgentMicroVMPrueba(t, delegado, func() error { return nil }, func() error { return nil })

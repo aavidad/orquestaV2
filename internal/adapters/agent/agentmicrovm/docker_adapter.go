@@ -230,7 +230,8 @@ func (adapter *DockerAdapter) launchDocker(
 	receipt := ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: adapter.capabilities.ProviderRef, ModelRef: adapter.capabilities.ModelRef,
 		AgentRef: adapter.capabilities.AgentRef, ExternalRef: bound.LaunchBindingRef,
 		IdempotencyKey: request.IdempotencyKey,

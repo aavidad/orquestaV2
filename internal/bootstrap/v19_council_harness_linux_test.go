@@ -147,7 +147,8 @@ func (a *v19CouncilAgent) Launch(ctx context.Context, request ports.AgentLaunchR
 	}
 	receipt := ports.AgentLaunchReceipt{ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration, ExecutionAttempt: request.ExecutionAttempt,
-		SpecHash: request.SpecHash, ProviderRef: "provider:v18-fake", ModelRef: "model:v18-fake", AgentRef: "agent:v18-fake",
+		LaunchActionFence: request.EffectAuthority.ActionFence, SpecHash: request.SpecHash,
+		ProviderRef: "provider:v18-fake", ModelRef: "model:v18-fake", AgentRef: "agent:v18-fake",
 		ExternalRef: "execution:v19-council:" + request.ExecutionRef.String(), ReceiptRef: "receipt:v19-council:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey, AcceptedAt: a.now().UTC()}
 	a.requests[request.ExecutionRef], a.receipts[request.ExecutionRef] = request, receipt
 	return receipt, nil

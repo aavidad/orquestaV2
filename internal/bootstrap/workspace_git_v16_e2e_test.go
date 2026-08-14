@@ -143,7 +143,8 @@ func (agent *v16WorkspaceAgent) launchReceipt(request ports.AgentLaunchRequest) 
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: "provider:v16-fake-agent", ModelRef: "model:v16-fake-agent",
 		AgentRef: "agent:v16-fake-agent", ExternalRef: "execution:v16-fake:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),

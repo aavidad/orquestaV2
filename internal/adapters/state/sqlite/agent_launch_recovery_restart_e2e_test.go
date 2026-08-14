@@ -170,7 +170,8 @@ func restartRecoveryReceipt(request ports.AgentLaunchRequest) ports.AgentLaunchR
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:                    request.SpecHash,
 		ProviderRef:                 sqliteTestCapabilities().ProviderRef,
 		ModelRef:                    sqliteTestCapabilities().ModelRef,
 		AgentRef:                    sqliteTestCapabilities().AgentRef,

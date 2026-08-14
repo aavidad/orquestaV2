@@ -142,7 +142,7 @@ func TestLiveV6RecoveryNeverInventsEffortAndRequiresV7Attempt(t *testing.T) {
 	}
 }
 
-func TestStopControlsOneLiveV6WithoutV7Binding(t *testing.T) {
+func TestStopRejectsLiveV6WithoutDurableLaunchFence(t *testing.T) {
 	config := testConfig(t)
 	first := testRequest(t, "stop-live-v6-first", "helper:block", 1024)
 	second := testRequest(t, "stop-live-v6-second", "helper:block", 1024)
@@ -169,12 +169,12 @@ func TestStopControlsOneLiveV6WithoutV7Binding(t *testing.T) {
 	stopContext, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
 	stopReceipt, err := adapter.Stop(stopContext, stop)
 	cancelStop()
-	if err != nil || stopReceipt.Status != ports.AgentStopped {
+	if ports.AgentContractErrorCode(err) != "agent.stop_launch_action_fence_required" ||
+		stopReceipt != (ports.AgentStopReceipt{}) {
 		t.Fatalf("Stop(V6) receipt=%+v error=%v", stopReceipt, err)
 	}
-	_ = firstCommand.Wait()
-	if identity, err := platformInspectProcess(firstProcess); err != nil || identity != processIdentityGone {
-		t.Fatalf("stopped V6 identity=%v error=%v", identity, err)
+	if identity, err := platformInspectProcess(firstProcess); err != nil || identity != processIdentityAlive {
+		t.Fatalf("unfenced V6 identity=%v error=%v", identity, err)
 	}
 	if identity, err := platformInspectProcess(secondProcess); err != nil || identity != processIdentityAlive {
 		t.Fatalf("unrelated V6 was touched identity=%v error=%v", identity, err)
@@ -187,6 +187,7 @@ func TestStopControlsOneLiveV6WithoutV7Binding(t *testing.T) {
 	if err := adapter.Shutdown(context.Background()); err != nil {
 		t.Fatalf("Shutdown: %v", err)
 	}
+	_ = firstCommand.Wait()
 	_ = secondCommand.Wait()
 }
 
@@ -211,7 +212,7 @@ func TestStopV3QuarantinesWithoutFabricatingCausalMetadata(t *testing.T) {
 	stop := ports.AgentStopRequest{
 		ExecutionRef: request.ExecutionRef, GoalRef: otherGoal, WorkItemRef: otherWorkItem,
 		PlanGeneration: request.PlanGeneration + 10, AppSpecGeneration: request.AppSpecGeneration + 10,
-		ExecutionAttempt: request.ExecutionAttempt + 10, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt + 10, LaunchActionFence: 1, SpecHash: request.SpecHash,
 		ProviderRef: ProviderRef, ModelRef: adapter.modelRef(), AgentRef: AgentRef,
 		ExternalRef: "codex:" + filepath.Base(runPath), Mode: ports.AgentStopForced,
 		IdempotencyKey: "stop:v3-unknown-causal-metadata",

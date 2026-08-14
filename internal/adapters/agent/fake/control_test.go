@@ -27,7 +27,7 @@ func stopForControl(launch ports.AgentLaunchReceipt, mode ports.AgentStopMode, k
 	return ports.AgentStopRequest{
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef, WorkItemRef: launch.WorkItemRef,
 		PlanGeneration: launch.PlanGeneration, AppSpecGeneration: launch.AppSpecGeneration,
-		ExecutionAttempt: launch.ExecutionAttempt, SpecHash: launch.SpecHash,
+		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: launch.LaunchActionFence, SpecHash: launch.SpecHash,
 		ProviderRef: launch.ProviderRef, ModelRef: launch.ModelRef, AgentRef: launch.AgentRef,
 		ExternalRef: launch.ExternalRef, Mode: mode, IdempotencyKey: key,
 	}
@@ -54,6 +54,11 @@ func TestFakeStopIsSelectiveAndIdempotent(t *testing.T) {
 	a := launchForControl(t, adapter, "a")
 	b := launchForControl(t, adapter, "b")
 	request := stopForControl(b, ports.AgentStopForced, "stop:b")
+	crossed := request
+	crossed.LaunchActionFence++
+	if _, err := adapter.Stop(context.Background(), crossed); ports.AgentContractErrorCode(err) != "agent.stop_launch_action_fence_mismatch" {
+		t.Fatalf("crossed launch fence error = %v", err)
+	}
 	first, err := adapter.Stop(context.Background(), request)
 	if err != nil {
 		t.Fatalf("Stop() error = %v", err)

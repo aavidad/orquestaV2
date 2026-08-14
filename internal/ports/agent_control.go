@@ -38,6 +38,7 @@ type AgentStopRequest struct {
 	PlanGeneration    goal.PlanGeneration
 	AppSpecGeneration goal.AppSpecGeneration
 	ExecutionAttempt  uint64
+	LaunchActionFence uint64
 	SpecHash          string
 	ProviderRef       string
 	ModelRef          string
@@ -91,6 +92,8 @@ func ValidateAgentStopRequest(request AgentStopRequest) error {
 		return stopContractError("app_spec_generation_required")
 	case request.ExecutionAttempt == 0:
 		return stopContractError("execution_attempt_required")
+	case request.LaunchActionFence == 0:
+		return stopContractError("launch_action_fence_required")
 	case request.SpecHash == "":
 		return stopContractError("spec_hash_required")
 	case !goal.IsCanonicalAppSpecHash(request.SpecHash):
@@ -128,6 +131,7 @@ func ValidateAgentStopTarget(launch AgentLaunchReceipt, stop AgentStopRequest) e
 		{stop.PlanGeneration == launch.PlanGeneration, "plan_generation"},
 		{stop.AppSpecGeneration == launch.AppSpecGeneration, "app_spec_generation"},
 		{stop.ExecutionAttempt == launch.ExecutionAttempt, "execution_attempt"},
+		{stop.LaunchActionFence == launch.LaunchActionFence, "launch_action_fence"},
 		{stop.SpecHash == launch.SpecHash, "spec_hash"},
 		{stop.ProviderRef == launch.ProviderRef, "provider_ref"},
 		{stop.ModelRef == launch.ModelRef, "model_ref"},

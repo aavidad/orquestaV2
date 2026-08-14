@@ -225,7 +225,8 @@ func (agent *countingAgent) Launch(ctx context.Context, request ports.AgentLaunc
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 		ExternalRef:    "test:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
@@ -399,7 +400,8 @@ func (agent *processAgent) receipt(request ports.AgentLaunchRequest) ports.Agent
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: "provider:process-test", ModelRef: "model:process-test", AgentRef: "agent:process-test",
 		ExternalRef: "pid-owned", IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
 		ReceiptRef: "process-launch:" + request.ExecutionRef.String(),

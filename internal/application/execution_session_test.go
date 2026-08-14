@@ -92,6 +92,10 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 	if wantErr != nil || wantObservation.LaunchActionFence != record.EffectReceipts[0].ActionFence {
 		t.Fatalf("agentObserveRequest()=%+v err=%v receipts=%+v", wantObservation, wantErr, record.EffectReceipts)
 	}
+	wantStop, wantStopErr := agentStopRequest(record, ControlRecord{Ref: "control:stop-authority", Mode: ports.AgentStopCooperative}, execution)
+	if wantStopErr != nil || wantStop.LaunchActionFence != wantObservation.LaunchActionFence {
+		t.Fatalf("agentStopRequest()=%+v err=%v", wantStop, wantStopErr)
+	}
 	if len(observed) != 1 || !reflect.DeepEqual(observed[0], wantObservation) {
 		t.Fatalf("observe requests=%+v want=%+v", observed, wantObservation)
 	}
@@ -130,6 +134,10 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 			if request, err := agentObserveRequest(candidate, execution); err == nil ||
 				!reflect.DeepEqual(request, ports.AgentObserveRequest{}) {
 				t.Fatalf("agentObserveRequest()=%+v err=%v", request, err)
+			}
+			if request, err := agentStopRequest(candidate, ControlRecord{Ref: "control:stop-authority", Mode: ports.AgentStopCooperative}, execution); err == nil ||
+				!reflect.DeepEqual(request, ports.AgentStopRequest{}) {
+				t.Fatalf("agentStopRequest()=%+v err=%v", request, err)
 			}
 		})
 	}

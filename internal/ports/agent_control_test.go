@@ -10,10 +10,11 @@ import (
 func validAgentStopRequest(t *testing.T) AgentStopRequest {
 	t.Helper()
 	launch := validAgentLaunchReceipt(validAgentLaunchRequest(t))
+	launch.LaunchActionFence = 11
 	return AgentStopRequest{
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef, WorkItemRef: launch.WorkItemRef,
 		PlanGeneration: launch.PlanGeneration, AppSpecGeneration: launch.AppSpecGeneration,
-		ExecutionAttempt: launch.ExecutionAttempt, SpecHash: launch.SpecHash,
+		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: 11, SpecHash: launch.SpecHash,
 		ProviderRef: launch.ProviderRef, ModelRef: launch.ModelRef, AgentRef: launch.AgentRef,
 		ExternalRef: launch.ExternalRef, Mode: AgentStopCooperative, IdempotencyKey: "stop:1",
 	}
@@ -53,6 +54,7 @@ func TestAgentStopRequestRejectsEveryInvalidIdentityMutation(t *testing.T) {
 		"plan":            func(value *AgentStopRequest) { value.PlanGeneration = 0 },
 		"app spec":        func(value *AgentStopRequest) { value.AppSpecGeneration = 0 },
 		"attempt":         func(value *AgentStopRequest) { value.ExecutionAttempt = 0 },
+		"launch fence":    func(value *AgentStopRequest) { value.LaunchActionFence = 0 },
 		"hash missing":    func(value *AgentStopRequest) { value.SpecHash = "" },
 		"hash invalid":    func(value *AgentStopRequest) { value.SpecHash = "ABC" },
 		"provider":        func(value *AgentStopRequest) { value.ProviderRef = " provider:fake" },
@@ -75,6 +77,7 @@ func TestAgentStopRequestRejectsEveryInvalidIdentityMutation(t *testing.T) {
 
 func TestAgentStopTargetRejectsEveryLaunchMismatch(t *testing.T) {
 	launch := validAgentLaunchReceipt(validAgentLaunchRequest(t))
+	launch.LaunchActionFence = 11
 	base := validAgentStopRequest(t)
 	otherExecution, _ := goal.NewExecutionRef("execution:other")
 	otherGoal, _ := goal.NewGoalRef("goal:other")
@@ -86,6 +89,9 @@ func TestAgentStopTargetRejectsEveryLaunchMismatch(t *testing.T) {
 		"plan":      func(value *AgentStopRequest) { value.PlanGeneration++ },
 		"app spec":  func(value *AgentStopRequest) { value.AppSpecGeneration++ },
 		"attempt":   func(value *AgentStopRequest) { value.ExecutionAttempt++ },
+		"launch fence": func(value *AgentStopRequest) {
+			value.LaunchActionFence++
+		},
 		"hash": func(value *AgentStopRequest) {
 			value.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		},

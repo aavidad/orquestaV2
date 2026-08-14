@@ -99,6 +99,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		PlanGeneration:    request.PlanGeneration,
 		AppSpecGeneration: request.AppSpecGeneration,
 		ExecutionAttempt:  request.ExecutionAttempt,
+		LaunchActionFence: request.EffectAuthority.ActionFence,
 		SpecHash:          request.SpecHash,
 		ProviderRef:       adapter.config.ProviderRef,
 		ModelRef:          ModelRef,

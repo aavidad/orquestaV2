@@ -23,7 +23,8 @@ func TestSequentialReviewerLaunchesCannotShareExternalProcess(t *testing.T) {
 		return ports.AgentLaunchReceipt{ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef,
 			WorkItemRef: request.WorkItemRef, PlanGeneration: request.PlanGeneration,
 			AppSpecGeneration: request.AppSpecGeneration, ExecutionAttempt: request.ExecutionAttempt,
-			SpecHash: request.SpecHash, ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
+			LaunchActionFence: request.EffectAuthority.ActionFence,
+			SpecHash:          request.SpecHash, ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 			ExternalRef: "external:shared-review-process", ReceiptRef: "receipt:" + request.ExecutionRef.String(),
 			IdempotencyKey: request.IdempotencyKey, AcceptedAt: system.orchestrator.clock.Now()}, nil
 	}
@@ -207,7 +208,8 @@ func TestDispatchingReviewCleanupDuplicateProcessResolvesWithoutStoppingForeignP
 		return ports.AgentLaunchReceipt{ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef,
 			WorkItemRef: request.WorkItemRef, PlanGeneration: request.PlanGeneration,
 			AppSpecGeneration: request.AppSpecGeneration, ExecutionAttempt: request.ExecutionAttempt,
-			SpecHash: request.SpecHash, ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
+			LaunchActionFence: request.EffectAuthority.ActionFence,
+			SpecHash:          request.SpecHash, ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 			ExternalRef: author.ExternalRef, ReceiptRef: "receipt:foreign-process",
 			IdempotencyKey: request.IdempotencyKey, AcceptedAt: system.orchestrator.clock.Now()}, nil
 	}

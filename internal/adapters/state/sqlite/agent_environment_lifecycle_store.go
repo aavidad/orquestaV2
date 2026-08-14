@@ -945,13 +945,14 @@ func validateAgentEnvironmentLifecycleSnapshotAgainstRecord(
 		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
 		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
 		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
+		EffectAuthority:             ports.AgentLaunchEffectAuthority{ActionFence: launchEffect.ActionFence},
 		IdempotencyKey:              execution.IdempotencyKey,
 		RequierePreservacionEntorno: execution.RequierePreservacionEntorno,
 	}
 	physical := ports.AgentLaunchReceipt{
 		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
 		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
-		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
+		ExecutionAttempt: execution.AttemptNo, LaunchActionFence: launchEffect.ActionFence, SpecHash: execution.SpecHash,
 		ProviderRef: execution.ProviderRef, ModelRef: execution.ModelRef, AgentRef: execution.AgentRef,
 		ExternalRef: execution.ExternalRef, IdempotencyKey: execution.IdempotencyKey,
 		ReceiptRef: launchEffect.ExternalRef, AcceptedAt: execution.ProviderAcceptedAt,

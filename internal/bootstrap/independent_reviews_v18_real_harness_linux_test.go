@@ -200,7 +200,8 @@ func v18LaunchReceipt(request ports.AgentLaunchRequest, acceptedAt time.Time) po
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: "provider:v18-fake", ModelRef: "model:v18-fake",
 		AgentRef:       "agent:v18-fake",
 		ExternalRef:    "execution:v18-fake:" + participant + ":" + request.ExecutionRef.String(),

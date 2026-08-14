@@ -91,6 +91,7 @@ type sqliteV15External struct {
 	launchStart          chan struct{}
 	launchGate           chan struct{}
 	launchCalls          int
+	observeCalls         int
 	stopCalls            int
 	stopStatus           ports.AgentStopStatus
 	observationStatus    ports.AgentStatus
@@ -147,7 +148,8 @@ func (external *sqliteV15External) Launch(
 	receipt := ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    request.SpecHash,
 		ProviderRef: capabilities.ProviderRef, ModelRef: capabilities.ModelRef, AgentRef: capabilities.AgentRef,
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		ReceiptRef: "provider-receipt:" + request.ExecutionRef.String(), AcceptedAt: external.clock.Now(),
@@ -163,6 +165,7 @@ func (external *sqliteV15External) Observe(
 ) (ports.AgentObservation, error) {
 	external.mu.Lock()
 	defer external.mu.Unlock()
+	external.observeCalls++
 	for _, receipt := range external.launches {
 		if receipt.ExecutionRef == executionRef {
 			request := external.launchRequests[executionRef]

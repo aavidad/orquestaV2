@@ -35,7 +35,10 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	if execution.State == ExecutionDispatching || execution.ExternalRef == "" {
 		return orchestrator.requeueStop(ctx, claim, execution, "application.stop_waiting_launch_receipt")
 	}
-	request := stopRequest(control, execution)
+	request, err := agentStopRequest(record, control, execution)
+	if err != nil {
+		return orchestrator.quarantine(ctx, claim, err.Error())
+	}
 	if stopTargetDigest(control, request) != claim.Action.EffectIntent.TargetDigest {
 		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
 	}
@@ -254,6 +257,16 @@ func stopRequest(control ControlRecord, execution ExecutionRecord) ports.AgentSt
 		ExternalRef: execution.ExternalRef, Mode: control.Mode,
 		IdempotencyKey: "stop:" + control.Ref + ":" + execution.Ref.String(),
 	}
+}
+
+func agentStopRequest(record GoalRecord, control ControlRecord, execution ExecutionRecord) (ports.AgentStopRequest, error) {
+	launchReceipt, found := acceptedLaunchReceiptForExecution(record, execution)
+	if !found {
+		return ports.AgentStopRequest{}, errors.New("application.agent_stop_authority_invalid")
+	}
+	request := stopRequest(control, execution)
+	request.LaunchActionFence = launchReceipt.ActionFence
+	return request, nil
 }
 
 func (orchestrator *Orchestrator) closeCanceledScope(

@@ -176,6 +176,9 @@ func (adapter *Adapter) controlTargetLocked(request ports.AgentStopRequest) (*ex
 	if !found {
 		return nil, runPath, &Error{Code: CodeExecutionNotFound}
 	}
+	if record.SchemaVersion == stateSchemaVersion && record.LaunchActionFence == 0 {
+		return nil, runPath, &Error{Code: CodeLegacyControlMetadataUnknown}
+	}
 	terminalRequestHash := record.RequestHash
 	stateRequestHash := record.RequestHash
 	if state, ok := adapter.executions[request.ExecutionRef.String()]; ok {
@@ -227,7 +230,7 @@ func (adapter *Adapter) controlLaunchReceipt(
 	record launchRecord,
 	request ports.AgentStopRequest,
 ) (ports.AgentLaunchReceipt, error) {
-	if record.SchemaVersion == legacyStateSchemaVersion {
+	if record.SchemaVersion == legacyStateSchemaVersion || record.LaunchActionFence == 0 {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeLegacyControlMetadataUnknown}
 	}
 	return record.receipt(request.ExecutionRef)

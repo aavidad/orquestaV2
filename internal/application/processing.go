@@ -791,7 +791,7 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 }
 
 func agentObserveRequest(record GoalRecord, execution ExecutionRecord) (ports.AgentObserveRequest, error) {
-	receipt, found := launchReceiptForObservation(record, execution)
+	receipt, found := acceptedLaunchReceiptForExecution(record, execution)
 	if !found {
 		return ports.AgentObserveRequest{}, errors.New("application.agent_observation_authority_invalid")
 	}
@@ -805,13 +805,13 @@ func agentObserveRequest(record GoalRecord, execution ExecutionRecord) (ports.Ag
 	}, nil
 }
 
-func launchReceiptForObservation(record GoalRecord, execution ExecutionRecord) (EffectReceipt, bool) {
+func acceptedLaunchReceiptForExecution(record GoalRecord, execution ExecutionRecord) (EffectReceipt, bool) {
 	intent, found := exactAgentEnvironmentIntentByRef(record.EffectIntents, execution.EffectIntentRef)
 	if !found || intent.Kind != EffectKindAgentLaunch || intent.ActionKind != ActionLaunchAgent ||
 		!agentEnvironmentLaunchIntentMatchesExecution(intent, execution, record) {
 		return EffectReceipt{}, false
 	}
-	receipt, found := exactObservationLaunchReceipt(record.EffectReceipts, execution.LaunchReceiptRef)
+	receipt, found := exactAcceptedLaunchReceipt(record.EffectReceipts, execution.LaunchReceiptRef)
 	if !found || receipt.Status != EffectStatusAccepted {
 		return EffectReceipt{}, false
 	}
@@ -820,13 +820,13 @@ func launchReceiptForObservation(record GoalRecord, execution ExecutionRecord) (
 	if !attemptFound || !approvalFound ||
 		validateAgentEnvironmentHistoricalAuthority(intent, approval, attempt) != nil ||
 		validateAgentEnvironmentHistoricalReceipt(intent, approval, attempt, receipt) != nil ||
-		!validObservationLaunchHistory(record, intent, attempt, receipt) {
+		!validAcceptedLaunchHistory(record, intent, attempt, receipt) {
 		return EffectReceipt{}, false
 	}
 	return receipt, true
 }
 
-func exactObservationLaunchReceipt(records []EffectReceipt, ref string) (EffectReceipt, bool) {
+func exactAcceptedLaunchReceipt(records []EffectReceipt, ref string) (EffectReceipt, bool) {
 	var selected EffectReceipt
 	matches := 0
 	for _, receipt := range records {
@@ -837,20 +837,20 @@ func exactObservationLaunchReceipt(records []EffectReceipt, ref string) (EffectR
 	return selected, matches == 1
 }
 
-func validObservationLaunchHistory(record GoalRecord, intent EffectIntent, selectedAttempt EffectAttempt, selectedReceipt EffectReceipt) bool {
+func validAcceptedLaunchHistory(record GoalRecord, intent EffectIntent, selectedAttempt EffectAttempt, selectedReceipt EffectReceipt) bool {
 	relatedAttempts := make(map[string]struct{})
 	for _, attempt := range record.EffectAttempts {
 		if attempt.ActionRef != intent.ActionRef && attempt.IntentRef != intent.Ref {
 			continue
 		}
-		if _, duplicate := relatedAttempts[attempt.Ref]; duplicate || !validPriorObservationLaunchAttempt(record, intent, selectedAttempt, attempt) {
+		if _, duplicate := relatedAttempts[attempt.Ref]; duplicate || !validPriorAcceptedLaunchAttempt(record, intent, selectedAttempt, attempt) {
 			return false
 		}
 		relatedAttempts[attempt.Ref] = struct{}{}
 	}
 	relatedReceipts := 0
 	for _, receipt := range record.EffectReceipts {
-		if !observationReceiptRelated(receipt, intent, relatedAttempts) {
+		if !acceptedLaunchReceiptRelated(receipt, intent, relatedAttempts) {
 			continue
 		}
 		relatedReceipts++
@@ -861,12 +861,12 @@ func validObservationLaunchHistory(record GoalRecord, intent EffectIntent, selec
 	return relatedReceipts == 1 && !effectAttemptDefinitelyUnapplied(record, selectedAttempt)
 }
 
-func validPriorObservationLaunchAttempt(record GoalRecord, intent EffectIntent, selected, candidate EffectAttempt) bool {
+func validPriorAcceptedLaunchAttempt(record GoalRecord, intent EffectIntent, selected, candidate EffectAttempt) bool {
 	return validateHistoricalLaunchAttemptIdentity(intent, candidate) == nil &&
 		(candidate.Ref == selected.Ref || candidate.ActionFence < selected.ActionFence && effectAttemptDefinitelyUnapplied(record, candidate))
 }
 
-func observationReceiptRelated(receipt EffectReceipt, intent EffectIntent, attempts map[string]struct{}) bool {
+func acceptedLaunchReceiptRelated(receipt EffectReceipt, intent EffectIntent, attempts map[string]struct{}) bool {
 	if receipt.ActionRef == intent.ActionRef || receipt.IntentRef == intent.Ref {
 		return true
 	}

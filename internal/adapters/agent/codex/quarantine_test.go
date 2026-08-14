@@ -13,7 +13,7 @@ import (
 	"orquesta/internal/ports"
 )
 
-func TestStopLegacyV4ThroughV6PreservesDurableTerminal(t *testing.T) {
+func TestStopLegacyV4ThroughV6RejectsMissingFenceAndPreservesDurableTerminal(t *testing.T) {
 	for _, schemaVersion := range []int{
 		intermediateStateSchemaVersion,
 		accountlessStateSchemaVersion,
@@ -53,7 +53,8 @@ func TestStopLegacyV4ThroughV6PreservesDurableTerminal(t *testing.T) {
 				launch, ports.AgentStopForced, "stop:terminal:"+schemaName(schemaVersion),
 			)
 			receipt, err := adapter.Stop(context.Background(), stop)
-			if err != nil || receipt.Status != ports.AgentStopAlreadyCompleted {
+			if ports.AgentContractErrorCode(err) != "agent.stop_launch_action_fence_required" ||
+				receipt != (ports.AgentStopReceipt{}) {
 				t.Fatalf("Stop(V%d) receipt=%+v error=%v", schemaVersion, receipt, err)
 			}
 			persisted := readPersistedTerminal(t, config, runPath)

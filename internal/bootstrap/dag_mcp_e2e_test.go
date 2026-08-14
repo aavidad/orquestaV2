@@ -861,7 +861,8 @@ func (agent *dagAgent) Launch(ctx context.Context, request ports.AgentLaunchRequ
 	receipt := ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:dag-test",
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash: request.SpecHash, ProviderRef: "provider:dag-test",
 		ModelRef: "model:dag-test", AgentRef: "agent:dag-test",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		ReceiptRef: "dag-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),

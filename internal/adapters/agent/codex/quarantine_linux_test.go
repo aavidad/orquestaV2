@@ -195,7 +195,7 @@ func TestLegacyCgroupQuarantineReleasesAdapterMutexWhileCleaning(t *testing.T) {
 	}
 }
 
-func TestForcedStopLegacyV4ThroughV6KeepsPublicProofAndStoppedTerminal(t *testing.T) {
+func TestForcedStopLegacyV4ThroughV6RejectsMissingFenceBeforePhysicalEffect(t *testing.T) {
 	for _, schemaVersion := range []int{
 		intermediateStateSchemaVersion,
 		accountlessStateSchemaVersion,
@@ -227,7 +227,8 @@ func TestForcedStopLegacyV4ThroughV6KeepsPublicProofAndStoppedTerminal(t *testin
 			stopContext, cancelStop := context.WithTimeout(context.Background(), 5*time.Second)
 			receipt, err := adapter.Stop(stopContext, stop)
 			cancelStop()
-			if err != nil || receipt.Status != ports.AgentStopped {
+			if ports.AgentContractErrorCode(err) != "agent.stop_launch_action_fence_required" ||
+				receipt != (ports.AgentStopReceipt{}) {
 				t.Fatalf("Stop(V%d) receipt=%+v error=%v", schemaVersion, receipt, err)
 			}
 			for name, candidate := range map[string]processRecord{
@@ -235,29 +236,15 @@ func TestForcedStopLegacyV4ThroughV6KeepsPublicProofAndStoppedTerminal(t *testin
 				"descendant": descendant,
 			} {
 				if identity, err := platformInspectProcess(candidate); err != nil ||
-					identity != processIdentityGone {
+					identity != processIdentityAlive {
 					t.Fatalf("V%d %s identity=%v error=%v", schemaVersion, name, identity, err)
 				}
 			}
-			if _, err := adapter.cgroups.leafForRecord(record); !errors.Is(err, os.ErrNotExist) {
-				t.Fatalf("Stop(V%d) left cgroup leaf: %v", schemaVersion, err)
-			}
-			terminal := readPersistedTerminal(t, config, runPath)
-			if terminal.RequestHash != record.RequestHash ||
-				terminal.ErrorCode != CodeExecutionStopped {
-				t.Fatalf("Stop(V%d) terminal=%+v", schemaVersion, terminal)
-			}
-			if _, found, err := adapter.loadWinningStopCompletion(runPath); err != nil || !found {
-				t.Fatalf("Stop(V%d) completion found=%v error=%v", schemaVersion, found, err)
-			}
-			requestHash, err := hashStopRequest(stop)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, found, err := adapter.loadStopReceiptRecord(
-				runPath, stop, requestHash,
-			); err != nil || !found {
-				t.Fatalf("Stop(V%d) receipt journal found=%v error=%v", schemaVersion, found, err)
+			requestName, receiptName := stopRecordNames(stop.IdempotencyKey)
+			for _, name := range []string{requestName, receiptName} {
+				if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), name)); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("Stop(V%d) created %s: %v", schemaVersion, name, err)
+				}
 			}
 			if _, err := os.Stat(filepath.Join(
 				config.WorkRoot, filepath.FromSlash(runPath), quarantineIntentFileName,
@@ -271,6 +258,11 @@ func TestForcedStopLegacyV4ThroughV6KeepsPublicProofAndStoppedTerminal(t *testin
 			}
 			if err := adapter.Close(); err != nil {
 				t.Fatal(err)
+			}
+			for name, candidate := range map[string]processRecord{"supervisor": record, "descendant": descendant} {
+				if identity, err := platformInspectProcess(candidate); err != nil || identity != processIdentityGone {
+					t.Fatalf("shutdown V%d %s identity=%v error=%v", schemaVersion, name, identity, err)
+				}
 			}
 		})
 	}

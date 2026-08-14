@@ -818,7 +818,7 @@ FROM outbox WHERE goal_ref = ?`, created.Goal.Ref().String()).Scan(
 	}
 }
 
-func TestV15MigratedV14ParentSuccessParksReadyChildWithoutRetroactiveAuthority(t *testing.T) {
+func TestV15MigratedV14RunningParentDoesNotInventObservationOrStopAuthority(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "legacy-v14-multi", "state.sqlite")
 	if err := preparePrivateDatabase(path); err != nil {
@@ -951,37 +951,45 @@ WHERE ref=?`, claim.Token, claim.WorkerRef, requiredTime(claim.LeaseUntil), clai
 	t.Cleanup(func() { _ = migrated.Close() })
 	migratedOrchestrator := newSQLiteV15Orchestrator(t, migrated, clock, external, policy, ids)
 	result, err := migratedOrchestrator.ProcessNext(ctx, "worker:v15-legacy-observe")
-	if err != nil || !result.Processed || result.Action != application.ActionObserveAgent {
-		t.Fatalf("migrated parent completion result=%+v err=%v", result, err)
+	if err == nil || err.Error() != "application.agent_observation_authority_invalid" ||
+		!result.Processed || result.Action != application.ActionObserveAgent || external.observeCalls != 0 {
+		t.Fatalf("migrated observation authority result=%+v observe_calls=%d err=%v", result, external.observeCalls, err)
 	}
 	after, err := migrated.GetGoal(ctx, legacyGoalRef)
 	sqliteTestNoError(t, err)
 	items := after.Goal.WorkItems()
 	if after.Goal.State() != goal.GoalStateRunning || len(items) != 2 ||
-		items[0].State() != goal.WorkItemStateSucceeded || items[1].State() != goal.WorkItemStatePending ||
+		items[0].State() != goal.WorkItemStateRunning || items[1].State() != goal.WorkItemStatePending ||
 		len(after.Executions) != 1 || len(after.WorkItemAuthorities) != 0 || len(after.EffectIntents) != 0 ||
 		len(after.EffectApprovals) != 0 || len(after.EffectAttempts) != 0 || len(after.EffectReceipts) != 0 ||
 		len(after.Controls) != 1 || after.Controls[0].Status != application.ControlRequested {
-		t.Fatalf("migrated successor was synthesized or parent rolled back: %+v", after)
+		t.Fatalf("migrated authority was synthesized or lifecycle changed: %+v", after)
 	}
 	result, err = migratedOrchestrator.ProcessNext(ctx, "worker:v15-legacy-local-stop")
-	if err != nil || !result.Processed || result.Action != application.ActionStopAgent {
-		t.Fatalf("consume terminal V14 stop result=%+v err=%v", result, err)
+	if err != nil || result.Processed || external.stopCalls != 0 {
+		t.Fatalf("parked migrated stop result=%+v calls=%d err=%v", result, external.stopCalls, err)
 	}
 	after, err = migrated.GetGoal(ctx, legacyGoalRef)
-	if err != nil || after.Controls[0].Status != application.ControlConfirmed ||
-		after.Controls[0].ReceiptRef != "receipt:local-terminal:"+execution.Ref.String() || external.stopCalls != 0 {
-		t.Fatalf("V14 terminal stop settlement record=%+v calls=%d err=%v", after, external.stopCalls, err)
+	if err != nil || after.Controls[0].Status != application.ControlRequested || after.Controls[0].ReceiptRef != "" {
+		t.Fatalf("V14 stop invented settlement record=%+v err=%v", after, err)
 	}
-	var active int
-	if err := migrated.db.QueryRow(`SELECT COUNT(*) FROM outbox WHERE completed_at IS NULL`).Scan(&active); err != nil {
+	var active, quarantined int
+	if err := migrated.db.QueryRow(`
+SELECT COUNT(*) FILTER (WHERE completed_at IS NULL),
+       COUNT(*) FILTER (WHERE quarantined_at IS NOT NULL)
+FROM outbox WHERE goal_ref=?`, legacyGoalRef.String()).Scan(&active, &quarantined); err != nil {
 		t.Fatal(err)
 	}
-	if active != 0 {
-		t.Fatalf("legacy child received synthetic action count=%d", active)
+	if active != 1 || quarantined != 1 {
+		t.Fatalf("legacy authority actions active=%d quarantined=%d", active, quarantined)
+	}
+	var stopCode string
+	if err := migrated.db.QueryRow(`SELECT last_error_code FROM outbox WHERE goal_ref=? AND kind='stop_agent'`,
+		legacyGoalRef.String()).Scan(&stopCode); err != nil || stopCode != "governance.legacy_reauthorization_required" {
+		t.Fatalf("legacy stop parking code=%q err=%v", stopCode, err)
 	}
 	if _, _, err := validateRecoveryDatabase(ctx, migrated.db); err != nil {
-		t.Fatalf("migrated parked child recovery: %v cause=%v", err, errors.Unwrap(err))
+		t.Fatalf("migrated quarantined authority recovery: %v cause=%v", err, errors.Unwrap(err))
 	}
 }
 

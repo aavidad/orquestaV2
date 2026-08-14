@@ -366,7 +366,8 @@ func (agent *restartAgent) Launch(ctx context.Context, request ports.AgentLaunch
 		agent.receipt = ports.AgentLaunchReceipt{
 			ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 			PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-			ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:restart",
+			ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+			SpecHash: request.SpecHash, ProviderRef: "provider:restart",
 			ModelRef: "model:restart", AgentRef: "agent:restart",
 			ExternalRef: "external:" + request.ExecutionRef.String(), ReceiptRef: "receipt:restart:" + request.ExecutionRef.String(),
 			IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),
@@ -429,7 +430,8 @@ func (agent *leaseCompletionAgent) Launch(_ context.Context, request ports.Agent
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:lease-test",
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash: request.SpecHash, ProviderRef: "provider:lease-test",
 		ModelRef: "model:lease-test", AgentRef: "agent:lease-test",
 		ExternalRef: "external:" + request.ExecutionRef.String(), ReceiptRef: "receipt:lease:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),

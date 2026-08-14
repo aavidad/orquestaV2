@@ -3565,7 +3565,8 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: receiptSpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    receiptSpecHash,
 		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 		ExternalRef:    "external:" + request.ExecutionRef.String(),
 		ReceiptRef:     "receipt:launch:" + request.ExecutionRef.String(),

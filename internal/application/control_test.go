@@ -412,6 +412,11 @@ func TestControlsStopCompletionCASAndUnsupportedMode(t *testing.T) {
 		if err != nil || !processed.Processed || processed.Action != ActionStopAgent {
 			t.Fatalf("process stop: result=%+v err=%v", processed, err)
 		}
+		effects := system.effects(t)
+		launchReceipt, found := acceptedLaunchReceiptForExecution(record, execution)
+		if !found || len(effects.stopRequests) != 1 || effects.stopRequests[0].LaunchActionFence != launchReceipt.ActionFence {
+			t.Fatalf("stop authority requests=%+v launch=%+v found=%v", effects.stopRequests, launchReceipt, found)
+		}
 		stopped := system.record(t)
 		item, _ = stopped.Goal.WorkItem(item.Ref())
 		execution, _ = executionByRef(stopped.Executions, execution.Ref)
