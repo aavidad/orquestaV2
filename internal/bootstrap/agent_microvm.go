@@ -27,9 +27,9 @@ var (
 	errAgentMicroVMCapacidadFisicaInvalida = errors.New("bootstrap.agent_microvm_physical_capacity_invalid")
 )
 
-// agenteMicroVMDelegado es la frontera cohesionada que permite probar la
-// composicion sin importar un cliente UDS fisico. El adaptador publico sigue
-// siendo la unica implementacion aceptada por la factoria productiva.
+// agenteMicroVMDelegado es la frontera cohesionada del adaptador físico. La
+// factoría elige explícitamente la implementación; el wrapper solo coordina
+// llamadas neutrales y recursos locales de composición.
 type agenteMicroVMDelegado interface {
 	application.AgentLauncher
 	application.AgentLaunchReconciler
@@ -49,20 +49,7 @@ type agenteMicroVM struct {
 	shutdownErr        error
 }
 
-// newAgentMicroVM mantiene concreta la frontera productiva. La construccion
-// con interfaz queda limitada a las pruebas de este wrapper.
 func newAgentMicroVM(
-	adaptador *agentmicrovm.Adapter,
-	cerrarConexiones func() error,
-	cerrarCredenciales func() error,
-) (*agenteMicroVM, error) {
-	if adaptador == nil {
-		return nil, errAgentMicroVMAdapterRequerido
-	}
-	return newAgentMicroVMConDelegado(adaptador, cerrarConexiones, cerrarCredenciales)
-}
-
-func newAgentMicroVMConDelegado(
 	adaptador agenteMicroVMDelegado,
 	cerrarConexiones func() error,
 	cerrarCredenciales func() error,
@@ -209,6 +196,7 @@ func interfazNulaAgentMicroVM(valor any) bool {
 }
 
 var _ agenteMicroVMDelegado = (*agentmicrovm.Adapter)(nil)
+var _ agenteMicroVMDelegado = (*agentmicrovm.DockerAdapter)(nil)
 var _ AgentAdapter = (*agenteMicroVM)(nil)
 var _ application.AgentLaunchReconciler = (*agenteMicroVM)(nil)
 var _ catalogoCapacidadColocacionAgente = (*agenteMicroVM)(nil)

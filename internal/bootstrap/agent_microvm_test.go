@@ -170,14 +170,14 @@ func TestAgentMicroVMRechazaDependenciasNulas(t *testing.T) {
 		t.Fatalf("adapter nil error=%v", err)
 	}
 	var delegado *agenteMicroVMDelegadoPrueba
-	if _, err := newAgentMicroVMConDelegado(delegado, cierre, cierre); !errors.Is(err, errAgentMicroVMAdapterRequerido) {
+	if _, err := newAgentMicroVM(delegado, cierre, cierre); !errors.Is(err, errAgentMicroVMAdapterRequerido) {
 		t.Fatalf("adapter tipado nil error=%v", err)
 	}
 	valido := &agenteMicroVMDelegadoPrueba{}
-	if _, err := newAgentMicroVMConDelegado(valido, nil, cierre); !errors.Is(err, errAgentMicroVMCierreConexiones) {
+	if _, err := newAgentMicroVM(valido, nil, cierre); !errors.Is(err, errAgentMicroVMCierreConexiones) {
 		t.Fatalf("cierre conexiones nil error=%v", err)
 	}
-	if _, err := newAgentMicroVMConDelegado(valido, cierre, nil); !errors.Is(err, errAgentMicroVMCierreCredenciales) {
+	if _, err := newAgentMicroVM(valido, cierre, nil); !errors.Is(err, errAgentMicroVMCierreCredenciales) {
 		t.Fatalf("cierre credenciales nil error=%v", err)
 	}
 }
@@ -320,7 +320,7 @@ func nuevoAgentMicroVMPrueba(
 	cerrarCredenciales func() error,
 ) *agenteMicroVM {
 	t.Helper()
-	agente, err := newAgentMicroVMConDelegado(adaptador, cerrarConexiones, cerrarCredenciales)
+	agente, err := newAgentMicroVM(adaptador, cerrarConexiones, cerrarCredenciales)
 	if err != nil {
 		t.Fatal(err)
 	}
