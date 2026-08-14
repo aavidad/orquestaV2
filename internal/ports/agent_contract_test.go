@@ -85,7 +85,7 @@ func validAgentObserveRequest(t *testing.T) AgentObserveRequest {
 	return AgentObserveRequest{
 		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
 		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
-		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ExecutionAttempt: receipt.ExecutionAttempt, LaunchActionFence: 7, SpecHash: receipt.SpecHash,
 		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
 		ExternalRef: receipt.ExternalRef, SessionRef: sessionRef,
 		ArtifactMediaType: launch.ArtifactMediaType, MaxOutputBytes: launch.MaxOutputBytes,
@@ -104,6 +104,7 @@ func TestAgentObserveRequestRequiresDurableExecutionIdentity(t *testing.T) {
 		"plan":       func(value *AgentObserveRequest) { value.PlanGeneration = 0 },
 		"app spec":   func(value *AgentObserveRequest) { value.AppSpecGeneration = 0 },
 		"attempt":    func(value *AgentObserveRequest) { value.ExecutionAttempt = 0 },
+		"fence":      func(value *AgentObserveRequest) { value.LaunchActionFence = 0 },
 		"spec":       func(value *AgentObserveRequest) { value.SpecHash = "invalid" },
 		"provider":   func(value *AgentObserveRequest) { value.ProviderRef = "" },
 		"model":      func(value *AgentObserveRequest) { value.ModelRef = " model:fake" },
@@ -136,11 +137,13 @@ func TestAgentObserveTargetRejectsLaunchBindingMismatches(t *testing.T) {
 	launch.SessionRef = sessionRef
 	receipt := validAgentLaunchReceipt(launch)
 	valid := validAgentObserveRequest(t)
+	launch.EffectAuthority.ActionFence = valid.LaunchActionFence
 	if err := ValidateAgentObserveTarget(launch, receipt, valid); err != nil {
 		t.Fatalf("valid observation target rejected: %v", err)
 	}
 	tests := map[string]func(*AgentObserveRequest){
 		"spec":     func(value *AgentObserveRequest) { value.SpecHash = strings.Repeat("a", 64) },
+		"fence":    func(value *AgentObserveRequest) { value.LaunchActionFence++ },
 		"external": func(value *AgentObserveRequest) { value.ExternalRef = "external:other" },
 		"session": func(value *AgentObserveRequest) {
 			value.SessionRef, _ = NewExecutionSessionRef("execution-session:sha256:" + strings.Repeat("c", 64))

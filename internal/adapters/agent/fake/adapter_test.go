@@ -104,7 +104,8 @@ func fakeObserveRequest(
 	return ports.AgentObserveRequest{
 		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
 		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
-		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ExecutionAttempt: receipt.ExecutionAttempt, LaunchActionFence: launch.EffectAuthority.ActionFence,
+		SpecHash:    receipt.SpecHash,
 		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
 		ExternalRef: receipt.ExternalRef, SessionRef: launch.SessionRef,
 		ArtifactMediaType: launch.ArtifactMediaType, MaxOutputBytes: launch.MaxOutputBytes,
@@ -149,5 +150,6 @@ func validRequest(t *testing.T) ports.AgentLaunchRequest {
 		},
 		SecurityCriticality: governance.SecurityCriticalityNormal,
 		ReasoningEffort:     governance.ReasoningEffortMedium,
+		EffectAuthority:     ports.AgentLaunchEffectAuthority{ActionFence: 7},
 	}
 }

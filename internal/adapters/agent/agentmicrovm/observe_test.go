@@ -379,7 +379,8 @@ func validObserveRequest(t *testing.T, launch ports.AgentLaunchRequest) ports.Ag
 	return ports.AgentObserveRequest{
 		ExecutionRef: launch.ExecutionRef, GoalRef: launch.GoalRef, WorkItemRef: launch.WorkItemRef,
 		PlanGeneration: launch.PlanGeneration, AppSpecGeneration: launch.AppSpecGeneration,
-		ExecutionAttempt: launch.ExecutionAttempt, SpecHash: launch.SpecHash,
+		ExecutionAttempt: launch.ExecutionAttempt, LaunchActionFence: launch.EffectAuthority.ActionFence,
+		SpecHash:    launch.SpecHash,
 		ProviderRef: "provider:codex", ModelRef: "model:codex-microvm", AgentRef: "agent:codex-microvm",
 		ExternalRef: "ejecucion:" + strings.Repeat("a", 64), SessionRef: launch.SessionRef,
 		ArtifactMediaType: launch.ArtifactMediaType, MaxOutputBytes: launch.MaxOutputBytes,

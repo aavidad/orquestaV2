@@ -237,7 +237,8 @@ func codexObserveRequest(
 	return ports.AgentObserveRequest{
 		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
 		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
-		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ExecutionAttempt: receipt.ExecutionAttempt, LaunchActionFence: launch.EffectAuthority.ActionFence,
+		SpecHash:    receipt.SpecHash,
 		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
 		ExternalRef: receipt.ExternalRef, SessionRef: launch.SessionRef,
 		ArtifactMediaType: launch.ArtifactMediaType, MaxOutputBytes: launch.MaxOutputBytes,
@@ -1035,6 +1036,7 @@ func testRequest(t *testing.T, suffix, objective string, maxOutput int64) ports.
 	actorRef, _ := goal.NewActorRef("actor:local-owner")
 	projectRef, _ := goal.NewProjectRef("project:default")
 	colocacion, _ := ports.NewAgentPlacementRef("placement:test")
+	authorityAt := time.Date(2026, 7, 14, 11, 0, 0, 0, time.UTC)
 	return ports.AgentLaunchRequest{
 		ExecutionRef:         executionRef,
 		ReferenciaColocacion: colocacion,
@@ -1069,6 +1071,15 @@ func testRequest(t *testing.T, suffix, objective string, maxOutput int64) ports.
 		},
 		SecurityCriticality: governance.SecurityCriticalityNormal,
 		ReasoningEffort:     governance.ReasoningEffortMedium,
+		EffectAuthority: ports.AgentLaunchEffectAuthority{
+			AuthorizationReceiptRef: "authorization:" + suffix,
+			EffectApprovalRef:       "effect-approval:" + suffix,
+			EffectAttemptRef:        "effect-attempt:" + suffix,
+			ActionFence:             7,
+			StartedAt:               authorityAt,
+			ClaimLeaseUntil:         authorityAt.Add(2 * time.Minute),
+			ApprovalExpiresAt:       authorityAt.Add(time.Minute),
+		},
 	}
 }
 

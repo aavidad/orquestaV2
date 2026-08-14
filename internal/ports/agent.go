@@ -260,6 +260,7 @@ type AgentObserveRequest struct {
 	PlanGeneration    goal.PlanGeneration
 	AppSpecGeneration goal.AppSpecGeneration
 	ExecutionAttempt  uint64
+	LaunchActionFence uint64
 	SpecHash          string
 	ProviderRef       string
 	ModelRef          string
@@ -301,6 +302,8 @@ func ValidateAgentObserveRequest(request AgentObserveRequest) error {
 		return &AgentContractError{Code: "agent.observation_request_app_spec_generation_required"}
 	case request.ExecutionAttempt == 0:
 		return &AgentContractError{Code: "agent.observation_request_execution_attempt_required"}
+	case request.LaunchActionFence == 0:
+		return &AgentContractError{Code: "agent.observation_request_launch_action_fence_required"}
 	case request.SpecHash == "":
 		return &AgentContractError{Code: "agent.observation_request_spec_hash_required"}
 	case !goal.IsCanonicalAppSpecHash(request.SpecHash):
@@ -342,6 +345,7 @@ func ValidateAgentObserveTarget(
 		{request.PlanGeneration == receipt.PlanGeneration, "plan_generation"},
 		{request.AppSpecGeneration == receipt.AppSpecGeneration, "app_spec_generation"},
 		{request.ExecutionAttempt == receipt.ExecutionAttempt, "execution_attempt"},
+		{request.LaunchActionFence == launch.EffectAuthority.ActionFence, "launch_action_fence"},
 		{request.SpecHash == receipt.SpecHash, "spec_hash"},
 		{request.ProviderRef == receipt.ProviderRef, "provider_ref"},
 		{request.ModelRef == receipt.ModelRef, "model_ref"},

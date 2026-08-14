@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -87,9 +88,117 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 	agent.mu.Lock()
 	observed := append([]ports.AgentObserveRequest(nil), agent.observeRequests...)
 	agent.mu.Unlock()
-	wantObservation := agentObserveRequest(execution)
+	wantObservation, wantErr := agentObserveRequest(record, execution)
+	if wantErr != nil || wantObservation.LaunchActionFence != record.EffectReceipts[0].ActionFence {
+		t.Fatalf("agentObserveRequest()=%+v err=%v receipts=%+v", wantObservation, wantErr, record.EffectReceipts)
+	}
 	if len(observed) != 1 || !reflect.DeepEqual(observed[0], wantObservation) {
 		t.Fatalf("observe requests=%+v want=%+v", observed, wantObservation)
+	}
+
+	for name, mutate := range map[string]func(*GoalRecord){
+		"missing": func(candidate *GoalRecord) { candidate.EffectReceipts = nil },
+		"duplicate": func(candidate *GoalRecord) {
+			candidate.EffectReceipts = append(candidate.EffectReceipts, candidate.EffectReceipts[0])
+		},
+		"zero fence":    func(candidate *GoalRecord) { candidate.EffectReceipts[0].ActionFence = 0 },
+		"crossed fence": func(candidate *GoalRecord) { candidate.EffectReceipts[0].ActionFence++ },
+		"crossed execution": func(candidate *GoalRecord) {
+			candidate.EffectReceipts[0].Subject.ExecutionRef, _ = goal.NewExecutionRef("execution:crossed")
+		},
+		"crossed generation": func(candidate *GoalRecord) {
+			candidate.EffectReceipts[0].Subject.PlanGeneration++
+		},
+		"crossed spec": func(candidate *GoalRecord) { candidate.EffectReceipts[0].Subject.SpecHash = testDigest("crossed") },
+		"crossed intent digest": func(candidate *GoalRecord) {
+			candidate.EffectReceipts[0].IntentDigest = testDigest("crossed-intent")
+		},
+		"crossed attempt": func(candidate *GoalRecord) { candidate.EffectReceipts[0].AttemptRef = "attempt:crossed" },
+		"crossed action":  func(candidate *GoalRecord) { candidate.EffectReceipts[0].ActionRef = "action:crossed" },
+		"crossed attempt fence": func(candidate *GoalRecord) {
+			candidate.EffectAttempts[len(candidate.EffectAttempts)-1].ActionFence++
+		},
+		"missing external receipt": func(candidate *GoalRecord) {
+			candidate.EffectReceipts[0].ExternalRef = ""
+		},
+	} {
+		t.Run("observation authority "+name, func(t *testing.T) {
+			candidate := record
+			candidate.EffectReceipts = append([]EffectReceipt(nil), record.EffectReceipts...)
+			candidate.EffectAttempts = append([]EffectAttempt(nil), record.EffectAttempts...)
+			mutate(&candidate)
+			if request, err := agentObserveRequest(candidate, execution); err == nil ||
+				!reflect.DeepEqual(request, ports.AgentObserveRequest{}) {
+				t.Fatalf("agentObserveRequest()=%+v err=%v", request, err)
+			}
+		})
+	}
+
+	cloneAuthorityRecord := func() GoalRecord {
+		candidate := record
+		candidate.EffectAttempts = append([]EffectAttempt(nil), record.EffectAttempts...)
+		candidate.EffectReceipts = append([]EffectReceipt(nil), record.EffectReceipts...)
+		candidate.BudgetSettlements = append([]governance.BudgetSettlement(nil), record.BudgetSettlements...)
+		return candidate
+	}
+	addPrior := func(candidate *GoalRecord, releases int) EffectAttempt {
+		selected := &candidate.EffectAttempts[len(candidate.EffectAttempts)-1]
+		selected.ActionFence++
+		candidate.EffectReceipts[0].ActionFence++
+		prior := *selected
+		prior.Ref, prior.WorkerRef, prior.ActionFence = prior.Ref+":prior", "worker:prior", prior.ActionFence-1
+		candidate.EffectAttempts = append([]EffectAttempt{prior}, candidate.EffectAttempts...)
+		for index := 0; index < releases; index++ {
+			candidate.BudgetSettlements = append(candidate.BudgetSettlements,
+				exactZeroReleaseForRecovery(candidate.BudgetReservations[0], prior))
+		}
+		return prior
+	}
+	t.Run("observation authority accepts exact prior release", func(t *testing.T) {
+		candidate := cloneAuthorityRecord()
+		addPrior(&candidate, 1)
+		request, err := agentObserveRequest(candidate, execution)
+		if err != nil || request.LaunchActionFence != candidate.EffectReceipts[0].ActionFence {
+			t.Fatalf("agentObserveRequest()=%+v err=%v", request, err)
+		}
+	})
+	for name, mutate := range map[string]func(*GoalRecord){
+		"prior missing release":   func(candidate *GoalRecord) { addPrior(candidate, 0) },
+		"prior duplicate release": func(candidate *GoalRecord) { addPrior(candidate, 2) },
+		"prior contradictory release": func(candidate *GoalRecord) {
+			addPrior(candidate, 1)
+			candidate.BudgetSettlements[len(candidate.BudgetSettlements)-1].Released.Tokens--
+		},
+		"posterior released attempt": func(candidate *GoalRecord) {
+			selected := candidate.EffectAttempts[len(candidate.EffectAttempts)-1]
+			posterior := selected
+			posterior.Ref, posterior.WorkerRef, posterior.ActionFence = selected.Ref+":posterior", "worker:posterior", selected.ActionFence+1
+			candidate.EffectAttempts = append(candidate.EffectAttempts, posterior)
+			candidate.BudgetSettlements = append(candidate.BudgetSettlements,
+				exactZeroReleaseForRecovery(candidate.BudgetReservations[0], posterior))
+		},
+		"duplicate attempt ref": func(candidate *GoalRecord) {
+			candidate.EffectAttempts = append(candidate.EffectAttempts, candidate.EffectAttempts[len(candidate.EffectAttempts)-1])
+		},
+		"selected zero release": func(candidate *GoalRecord) {
+			selected := candidate.EffectAttempts[len(candidate.EffectAttempts)-1]
+			candidate.BudgetSettlements = append(candidate.BudgetSettlements,
+				exactZeroReleaseForRecovery(candidate.BudgetReservations[0], selected))
+		},
+		"related receipt extra": func(candidate *GoalRecord) {
+			extra := candidate.EffectReceipts[0]
+			extra.Ref = "effect-receipt:extra"
+			candidate.EffectReceipts = append(candidate.EffectReceipts, extra)
+		},
+	} {
+		t.Run("observation authority rejects "+name, func(t *testing.T) {
+			candidate := cloneAuthorityRecord()
+			mutate(&candidate)
+			if request, err := agentObserveRequest(candidate, execution); err == nil ||
+				!reflect.DeepEqual(request, ports.AgentObserveRequest{}) {
+				t.Fatalf("agentObserveRequest()=%+v err=%v", request, err)
+			}
+		})
 	}
 }
 

@@ -385,7 +385,8 @@ func launchAndAwaitCredentialArtifact(t *testing.T, agent AgentAdapter, suffix, 
 	observeRequest := ports.AgentObserveRequest{
 		ExecutionRef: receipt.ExecutionRef, GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef,
 		PlanGeneration: receipt.PlanGeneration, AppSpecGeneration: receipt.AppSpecGeneration,
-		ExecutionAttempt: receipt.ExecutionAttempt, SpecHash: receipt.SpecHash,
+		ExecutionAttempt: receipt.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence,
+		SpecHash:    receipt.SpecHash,
 		ProviderRef: receipt.ProviderRef, ModelRef: receipt.ModelRef, AgentRef: receipt.AgentRef,
 		ExternalRef: receipt.ExternalRef, SessionRef: request.SessionRef,
 		ArtifactMediaType: request.ArtifactMediaType, MaxOutputBytes: request.MaxOutputBytes,
@@ -415,6 +416,7 @@ func bootstrapCredentialAgentRequest(t *testing.T, suffix, objective string) por
 	actorRef, _ := goal.NewActorRef("actor:local-owner")
 	projectRef, _ := goal.NewProjectRef("project:default")
 	placementRef, _ := ports.NewAgentPlacementRef("placement:test")
+	authorityAt := time.Date(2026, 7, 14, 11, 0, 0, 0, time.UTC)
 	return ports.AgentLaunchRequest{
 		ExecutionRef: executionRef, ReferenciaColocacion: placementRef, GoalRef: goalRef, WorkItemRef: workItemRef,
 		PlanGeneration: 1, AppSpecGeneration: 1, ExecutionAttempt: 1,
@@ -427,6 +429,12 @@ func bootstrapCredentialAgentRequest(t *testing.T, suffix, objective string) por
 		IdempotencyKey: "launch:" + suffix, MaxOutputBytes: 1024,
 		BudgetDemand: testBudgetDemand(suffix), SecurityCriticality: governance.SecurityCriticalityNormal,
 		ReasoningEffort: governance.ReasoningEffortMedium,
+		EffectAuthority: ports.AgentLaunchEffectAuthority{
+			AuthorizationReceiptRef: "authorization:" + suffix,
+			EffectApprovalRef:       "effect-approval:" + suffix, EffectAttemptRef: "effect-attempt:" + suffix,
+			ActionFence: 7, StartedAt: authorityAt, ClaimLeaseUntil: authorityAt.Add(2 * time.Minute),
+			ApprovalExpiresAt: authorityAt.Add(time.Minute),
+		},
 	}
 }
 

@@ -1262,12 +1262,35 @@ func newMailboxTestSystem(t *testing.T, childCount int) *mailboxTestSystem {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if launch.EffectApproval == nil {
+		t.Fatal("mailbox launch missing automatic approval")
+	}
+	launchAttempt := EffectAttempt{
+		Ref: "effect-attempt:mailbox-parent", IntentRef: launch.EffectIntent.Ref,
+		IntentDigest: launch.EffectIntent.Digest, ApprovalRef: launch.EffectApproval.Ref,
+		Subject: launch.EffectIntent.Subject, ActionRef: launch.Ref, ActionFence: 1,
+		WorkerRef: "worker:mailbox-parent", IdempotencyKey: launch.EffectIntent.IdempotencyKey,
+		StartedAt: base.Add(-25 * time.Minute), ClaimLeaseUntil: base.Add(-24 * time.Minute),
+	}
+	launchClaim := ActionClaim{
+		Action: launch, EffectApproval: *launch.EffectApproval, Fence: launchAttempt.ActionFence,
+		LeaseUntil: launchAttempt.ClaimLeaseUntil,
+	}
+	launchReceipt, err := effectReceipt(launchClaim, launchAttempt, "provider-receipt:mailbox-parent",
+		EffectStatusAccepted, unknownUsage(), launchAttempt.StartedAt.Add(time.Second))
+	if err != nil {
+		t.Fatalf("mailbox launch receipt: %v", err)
+	}
+	executions[0].EffectIntentRef = launch.EffectIntent.Ref
+	executions[0].LaunchReceiptRef = launchReceipt.Ref
 	repository.records[goalRef] = GoalRecord{
 		RequestRef: "request:mailbox-fixture", RequestFingerprint: "fixture",
 		RequestedBy: source.Ref, Goal: aggregate, Executions: executions,
 		BudgetEnvelopes:     policy.envelopes(project, goalRef, base.Add(-28*time.Minute)),
 		BudgetReservations:  []governance.BudgetReservation{reservation},
 		WorkItemAuthorities: authorities, EffectIntents: []EffectIntent{launch.EffectIntent},
+		EffectApprovals: []EffectApproval{*launch.EffectApproval}, EffectAttempts: []EffectAttempt{launchAttempt},
+		EffectReceipts: []EffectReceipt{launchReceipt},
 	}
 	sourceAccesses := make([]Access, len(childExecutions))
 	for index, executionRef := range childExecutions {

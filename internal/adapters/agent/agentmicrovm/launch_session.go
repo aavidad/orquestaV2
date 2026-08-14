@@ -182,7 +182,10 @@ func (adapter *Adapter) observeSessionBeforeInput(
 	if err := ctx.Err(); err != nil {
 		return sessionRevisions{}, false, err
 	}
-	observeRequest := ports.AgentObserveRequest{ExternalRef: physical.Referencia, SessionRef: request.SessionRef}
+	observeRequest := ports.AgentObserveRequest{
+		ExternalRef: physical.Referencia, SessionRef: request.SessionRef,
+		LaunchActionFence: request.EffectAuthority.ActionFence,
+	}
 	if !validObservationPage(page, observeRequest, physical.Cerca, 0) {
 		return sessionRevisions{}, false, fail(CodeSessionResponseInvalid, nil)
 	}

@@ -699,7 +699,11 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.processCouncilObservation(ctx, claim, record, item, execution)
 	}
 	reviewer := isReviewerExecution(execution)
-	observation, observeErr := orchestrator.observer.ObserveAgent(ctx, agentObserveRequest(execution))
+	observeRequest, err := agentObserveRequest(record, execution)
+	if err != nil {
+		return orchestrator.quarantine(ctx, claim, err.Error())
+	}
+	observation, observeErr := orchestrator.observer.ObserveAgent(ctx, observeRequest)
 	if observeErr != nil {
 		if orchestrator.executionExpired(execution, claim) {
 			if reviewer {
@@ -786,15 +790,88 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	}
 }
 
-func agentObserveRequest(execution ExecutionRecord) ports.AgentObserveRequest {
+func agentObserveRequest(record GoalRecord, execution ExecutionRecord) (ports.AgentObserveRequest, error) {
+	receipt, found := launchReceiptForObservation(record, execution)
+	if !found {
+		return ports.AgentObserveRequest{}, errors.New("application.agent_observation_authority_invalid")
+	}
 	return ports.AgentObserveRequest{
 		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
 		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
-		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
+		ExecutionAttempt: execution.AttemptNo, LaunchActionFence: receipt.ActionFence, SpecHash: execution.SpecHash,
 		ProviderRef: execution.ProviderRef, ModelRef: execution.ModelRef, AgentRef: execution.AgentRef,
 		ExternalRef: execution.ExternalRef, SessionRef: execution.ExecutionSessionRef,
 		ArtifactMediaType: execution.ArtifactMediaType, MaxOutputBytes: execution.MaxOutputBytes,
+	}, nil
+}
+
+func launchReceiptForObservation(record GoalRecord, execution ExecutionRecord) (EffectReceipt, bool) {
+	intent, found := exactAgentEnvironmentIntentByRef(record.EffectIntents, execution.EffectIntentRef)
+	if !found || intent.Kind != EffectKindAgentLaunch || intent.ActionKind != ActionLaunchAgent ||
+		!agentEnvironmentLaunchIntentMatchesExecution(intent, execution, record) {
+		return EffectReceipt{}, false
 	}
+	receipt, found := exactObservationLaunchReceipt(record.EffectReceipts, execution.LaunchReceiptRef)
+	if !found || receipt.Status != EffectStatusAccepted {
+		return EffectReceipt{}, false
+	}
+	attempt, attemptFound := exactAgentEnvironmentAttemptByRef(record.EffectAttempts, receipt.AttemptRef)
+	approval, approvalFound := exactHistoricalApproval(record.EffectApprovals, attempt.ApprovalRef)
+	if !attemptFound || !approvalFound ||
+		validateAgentEnvironmentHistoricalAuthority(intent, approval, attempt) != nil ||
+		validateAgentEnvironmentHistoricalReceipt(intent, approval, attempt, receipt) != nil ||
+		!validObservationLaunchHistory(record, intent, attempt, receipt) {
+		return EffectReceipt{}, false
+	}
+	return receipt, true
+}
+
+func exactObservationLaunchReceipt(records []EffectReceipt, ref string) (EffectReceipt, bool) {
+	var selected EffectReceipt
+	matches := 0
+	for _, receipt := range records {
+		if receipt.Ref == ref {
+			selected, matches = receipt, matches+1
+		}
+	}
+	return selected, matches == 1
+}
+
+func validObservationLaunchHistory(record GoalRecord, intent EffectIntent, selectedAttempt EffectAttempt, selectedReceipt EffectReceipt) bool {
+	relatedAttempts := make(map[string]struct{})
+	for _, attempt := range record.EffectAttempts {
+		if attempt.ActionRef != intent.ActionRef && attempt.IntentRef != intent.Ref {
+			continue
+		}
+		if _, duplicate := relatedAttempts[attempt.Ref]; duplicate || !validPriorObservationLaunchAttempt(record, intent, selectedAttempt, attempt) {
+			return false
+		}
+		relatedAttempts[attempt.Ref] = struct{}{}
+	}
+	relatedReceipts := 0
+	for _, receipt := range record.EffectReceipts {
+		if !observationReceiptRelated(receipt, intent, relatedAttempts) {
+			continue
+		}
+		relatedReceipts++
+		if receipt.Ref != selectedReceipt.Ref {
+			return false
+		}
+	}
+	return relatedReceipts == 1 && !effectAttemptDefinitelyUnapplied(record, selectedAttempt)
+}
+
+func validPriorObservationLaunchAttempt(record GoalRecord, intent EffectIntent, selected, candidate EffectAttempt) bool {
+	return validateHistoricalLaunchAttemptIdentity(intent, candidate) == nil &&
+		(candidate.Ref == selected.Ref || candidate.ActionFence < selected.ActionFence && effectAttemptDefinitelyUnapplied(record, candidate))
+}
+
+func observationReceiptRelated(receipt EffectReceipt, intent EffectIntent, attempts map[string]struct{}) bool {
+	if receipt.ActionRef == intent.ActionRef || receipt.IntentRef == intent.Ref {
+		return true
+	}
+	_, found := attempts[receipt.AttemptRef]
+	return found
 }
 
 func isSpecHashFenceCode(code string) bool {
