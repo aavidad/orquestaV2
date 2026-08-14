@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"reflect"
 	"strings"
@@ -727,25 +726,25 @@ func classifyCapabilitiesError(err error) error {
 }
 
 func classifyLaunchError(err error) error {
+	return classifyMutationError(err, CodeLaunchRejected, CodeLaunchUnavailable)
+}
+
+func classifyMutationError(err error, rejectedCode, unavailableCode string) error {
 	var responseError *microvm.ErrorRespuesta
 	if errors.As(err, &responseError) && responseError.Estado != http.StatusRequestTimeout &&
 		responseError.Estado != http.StatusTooManyRequests && responseError.Estado < http.StatusInternalServerError {
-		return fail(CodeLaunchRejected, err)
+		return fail(rejectedCode, err)
 	}
 	var protocolError *microvm.ErrorProtocolo
 	var configurationError *microvm.ErrorConfiguracion
 	var responseTooLarge *microvm.ErrorRespuestaGrande
 	if errors.As(err, &protocolError) || errors.As(err, &configurationError) ||
 		errors.As(err, &responseTooLarge) {
-		return fail(CodeLaunchRejected, err)
-	}
-	var networkError net.Error
-	if errors.As(err, &networkError) || responseError != nil {
-		return fail(CodeLaunchUnavailable, err)
+		return fail(rejectedCode, err)
 	}
 	// An arbitrary client error may hide a submitted request. It is retryable
 	// only through the same idempotency key and is never definitely unapplied.
-	return fail(CodeLaunchUnavailable, err)
+	return fail(unavailableCode, err)
 }
 
 // Temporary reports only conditions that may clear without changing the
@@ -757,7 +756,7 @@ func (err *Error) Temporary() bool {
 	switch err.Code {
 	case CodeCapabilitiesUnavailable, CodePhysicalUnavailable, CodeLaunchUnavailable,
 		CodeNegotiatedPhysicalCapacityUnavailable,
-		CodeDockerRecoveryPending,
+		CodeDockerRecoveryPending, CodeDockerStopUnavailable,
 		CodeObservationUnavailable, CodeWorkRevisionUnavailable,
 		CodeSessionStartUnavailable, CodeSessionPending,
 		CodeSessionInputUnavailable, CodeSessionInputPending,
@@ -769,9 +768,8 @@ func (err *Error) Temporary() bool {
 }
 
 // DefinitelyNotApplied is true only when the exact failure stage proves that
-// this call did not invoke client.Lanzar. The generic Prepare code also covers
-// invalid or conflicting durable replays and stays conservative; cancellation
-// observed after a successful Prepare has an explicit pre-submit code instead.
+// this call did not invoke the provider mutation. Durable replay conflicts stay
+// conservative; named pre-submit codes cover cancellation proven before mutation.
 func (err *Error) DefinitelyNotApplied() bool {
 	if err == nil {
 		return false
@@ -783,6 +781,7 @@ func (err *Error) DefinitelyNotApplied() bool {
 		CodeCapabilityMismatch, CodeSigningFailed,
 		CodeLaunchAuthorityResolveFailed, CodeLaunchAuthorityBuildFailed,
 		CodeLaunchCanceledBeforeSubmit,
+		CodeDockerStopRequestInvalid, CodeDockerStopCanceledBeforeSubmit,
 		CodeLaunchRequestInvalid, CodeSessionRequired, CodeAccessAuthorityRequired,
 		CodeEffectAuthorityInvalid, CodeFenceInvalid, CodeFenceMismatch,
 		CodeProfileBindingInvalid, CodeDescriptorInvalid, CodeControlBrokerRequired,

@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"reflect"
+	"time"
 
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
 
@@ -32,6 +33,7 @@ type DockerClient interface {
 	ConsultarOperacionContenedor(context.Context, string) (microvm.RespuestaOperacionContenedorV1, error)
 	IniciarSesionContenedorCodificada(context.Context, string, string, json.RawMessage) (microvm.RespuestaInicioSesionContenedorV1, error)
 	EnviarEntradaSesionContenedorCodificada(context.Context, string, string, string, json.RawMessage) (microvm.RespuestaEntradaSesionContenedorV1, error)
+	DetenerContenedorCodificada(context.Context, string, string, json.RawMessage) (microvm.RespuestaContenedorV1, error)
 }
 
 type DockerSigner interface {
@@ -51,6 +53,7 @@ type DockerConfig struct {
 	Client         DockerClient
 	Signer         DockerSigner
 	Journal        ports.AgentProviderRequestJournal
+	StopJournal    ports.AgentProviderStopRequestJournal
 	Capabilities   ports.AgentCapabilities
 	PlacementRef   ports.AgentPlacementRef
 	ProviderModel  string
@@ -60,6 +63,7 @@ type DockerConfig struct {
 	VCPU           uint8
 	MemoryMiB      uint32
 	MaxPIDs        uint32
+	Now            func() time.Time
 }
 
 // DockerAdapter is opt-in composition behind AgentLauncher. It only talks to
@@ -69,6 +73,7 @@ type DockerAdapter struct {
 	observer         dockerObservationClient
 	signer           DockerSigner
 	journal          ports.AgentProviderRequestJournal
+	stopJournal      ports.AgentProviderStopRequestJournal
 	capabilities     ports.AgentCapabilities
 	placement        ports.AgentPlacementRef
 	model            string
@@ -78,11 +83,13 @@ type DockerAdapter struct {
 	vcpu             uint8
 	memoryMiB        uint32
 	maxPIDs          uint32
+	now              func() time.Time
 	physicalCapacity physicalCapacityProjection
 }
 
 func NewDockerAdapter(config DockerConfig) (*DockerAdapter, error) {
 	if nilInterface(config.Client) || nilInterface(config.Signer) || nilInterface(config.Journal) ||
+		nilInterface(config.StopJournal) || nilInterface(config.Now) ||
 		nilInterface(config.PromptRenderer) || config.PlacementRef.String() == "" ||
 		!validWorkPacketToken(config.ProviderModel, 128) ||
 		ports.ValidateAgentCapabilities(config.Capabilities) != nil ||
@@ -96,10 +103,11 @@ func NewDockerAdapter(config DockerConfig) (*DockerAdapter, error) {
 	}
 	return &DockerAdapter{
 		client: config.Client, observer: observer, signer: config.Signer, journal: config.Journal,
+		stopJournal:  config.StopJournal,
 		capabilities: cloneCapabilities(config.Capabilities), placement: config.PlacementRef,
 		model: config.ProviderModel, renderer: config.PromptRenderer,
 		imageRef: config.ImageRef, executorRef: config.ExecutorRef,
-		vcpu: config.VCPU, memoryMiB: config.MemoryMiB, maxPIDs: config.MaxPIDs,
+		vcpu: config.VCPU, memoryMiB: config.MemoryMiB, maxPIDs: config.MaxPIDs, now: config.Now,
 		physicalCapacity: newPhysicalCapacityProjection(),
 	}, nil
 }

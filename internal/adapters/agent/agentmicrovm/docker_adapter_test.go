@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
 
@@ -373,15 +374,17 @@ func TestDockerAdapterRejectsCrossedResponses(t *testing.T) {
 }
 
 type dockerAdapterFixture struct {
-	t       *testing.T
-	request ports.AgentLaunchRequest
-	binding DockerPhysicalBinding
-	events  []string
-	journal *dockerJournalStub
-	client  *dockerClientStub
-	store   *credentialSignerStoreStub
-	signer  *CredentialSigner
-	adapter *DockerAdapter
+	t           *testing.T
+	request     ports.AgentLaunchRequest
+	binding     DockerPhysicalBinding
+	events      []string
+	journal     *dockerJournalStub
+	stopJournal *dockerStopJournalStub
+	client      *dockerClientStub
+	store       *credentialSignerStoreStub
+	signer      *CredentialSigner
+	adapter     *DockerAdapter
+	now         time.Time
 }
 
 func newDockerAdapterFixture(t *testing.T) *dockerAdapterFixture {
@@ -391,10 +394,12 @@ func newDockerAdapterFixture(t *testing.T) *dockerAdapterFixture {
 	request.EgressAuthority = ports.AgentLaunchEgressAuthority{}
 	request.ExecutionWorkspaceRef = ports.ExecutionWorkspaceRef{}
 	request.RequierePreservacionEntorno = false
-	fixture := &dockerAdapterFixture{t: t, request: request, binding: validDockerPhysicalBinding(request)}
+	fixture := &dockerAdapterFixture{t: t, request: request, binding: validDockerPhysicalBinding(request),
+		now: time.Date(2026, 8, 14, 9, 30, 0, 0, time.UTC)}
 	fixture.journal = newDockerJournalStub(&fixture.events)
+	fixture.stopJournal = newDockerStopJournalStub(&fixture.events)
 	fixture.client = &dockerClientStub{
-		t: t, request: request, journal: fixture.journal, events: &fixture.events,
+		t: t, request: request, journal: fixture.journal, stopJournal: fixture.stopJournal, events: &fixture.events,
 		capabilities: validDockerRemoteCapabilities(),
 	}
 	fixture.store = &credentialSignerStoreStub{
@@ -428,11 +433,12 @@ func (fixture *dockerAdapterFixture) mustAdapter(t *testing.T, journal ports.Age
 	capabilities.AgentRef = "agent:codex-docker"
 	capabilities.RequierePreservacionEntorno = false
 	adapter, err := NewDockerAdapter(DockerConfig{
-		Client: fixture.client, Signer: fixture.signer, Journal: journal,
+		Client: fixture.client, Signer: fixture.signer, Journal: journal, StopJournal: fixture.stopJournal,
 		Capabilities: capabilities, PlacementRef: fixture.binding.PlacementRef,
 		ProviderModel: "gpt-5.6", PromptRenderer: staticSessionPromptRenderer("execute exact work"),
 		ImageRef: fixture.binding.ImageRef, ExecutorRef: executorRef,
 		VCPU: fixture.binding.VCPU, MemoryMiB: fixture.binding.MemoryMiB, MaxPIDs: fixture.binding.MaxPIDs,
+		Now: func() time.Time { return fixture.now },
 	})
 	if err != nil {
 		t.Fatalf("NewDockerAdapter() = %v", err)
@@ -548,19 +554,21 @@ func (journal *dockerJournalStub) reopen() *dockerJournalStub {
 }
 
 type dockerClientStub struct {
-	t                                                             *testing.T
-	request                                                       ports.AgentLaunchRequest
-	journal                                                       *dockerJournalStub
-	events                                                        *[]string
-	capabilities                                                  microvm.RespuestaCapacidades
-	capabilityErr, launchErr, queryErr, startErr, inputErr        error
-	capabilityHook                                                func()
-	mutateLaunch                                                  func(*microvm.RespuestaContenedorV1)
-	mutateQuery                                                   func(*microvm.RespuestaOperacionContenedorV1)
-	mutateStart                                                   func(*microvm.RespuestaInicioSesionContenedorV1)
-	mutateInput                                                   func(*microvm.RespuestaEntradaSesionContenedorV1)
-	negotiations, launchCalls, queryCalls, startCalls, inputCalls int
-	launchBodies, startBodies, inputBodies                        [][]byte
+	t                                                                        *testing.T
+	request                                                                  ports.AgentLaunchRequest
+	journal                                                                  *dockerJournalStub
+	stopJournal                                                              *dockerStopJournalStub
+	events                                                                   *[]string
+	capabilities                                                             microvm.RespuestaCapacidades
+	capabilityErr, launchErr, queryErr, startErr, inputErr, stopErr          error
+	capabilityHook                                                           func()
+	mutateLaunch                                                             func(*microvm.RespuestaContenedorV1)
+	mutateQuery                                                              func(*microvm.RespuestaOperacionContenedorV1)
+	mutateStart                                                              func(*microvm.RespuestaInicioSesionContenedorV1)
+	mutateInput                                                              func(*microvm.RespuestaEntradaSesionContenedorV1)
+	mutateStop                                                               func(*microvm.RespuestaContenedorV1)
+	negotiations, launchCalls, queryCalls, startCalls, inputCalls, stopCalls int
+	launchBodies, startBodies, inputBodies, stopBodies                       [][]byte
 }
 
 func (client *dockerClientStub) NegociarDocker(context.Context) (microvm.RespuestaCapacidades, error) {
@@ -650,6 +658,32 @@ func (client *dockerClientStub) EnviarEntradaSesionContenedorCodificada(_ contex
 	}
 	if client.inputErr != nil {
 		return microvm.RespuestaEntradaSesionContenedorV1{}, client.inputErr
+	}
+	return response, nil
+}
+
+func (client *dockerClientStub) DetenerContenedorCodificada(
+	_ context.Context,
+	key, target string,
+	body json.RawMessage,
+) (microvm.RespuestaContenedorV1, error) {
+	stored, found := client.stopJournal.byPhysicalKey[key]
+	if !found || stored.TargetRef != target || !bytes.Equal(stored.Body, body) {
+		client.t.Fatalf("stop crossed journal: stored=%+v key=%q target=%q", stored, key, target)
+	}
+	*client.events = append(*client.events, "effect:stop")
+	client.stopCalls++
+	client.stopBodies = append(client.stopBodies, append([]byte(nil), body...))
+	var request microvm.SolicitudDetenerContenedorV1
+	if json.Unmarshal(body, &request) != nil {
+		client.t.Fatal("invalid stop body")
+	}
+	response := validDockerStoppedResponse(client.request, target, request)
+	if client.mutateStop != nil {
+		client.mutateStop(&response)
+	}
+	if client.stopErr != nil {
+		return microvm.RespuestaContenedorV1{}, client.stopErr
 	}
 	return response, nil
 }

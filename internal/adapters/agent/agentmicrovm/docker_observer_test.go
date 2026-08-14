@@ -432,11 +432,12 @@ type dockerLaunchOnlyClient struct{ DockerClient }
 
 func dockerObserverConfig(fixture *dockerAdapterFixture, client DockerClient) DockerConfig {
 	return DockerConfig{
-		Client: client, Signer: fixture.signer, Journal: fixture.journal,
+		Client: client, Signer: fixture.signer, Journal: fixture.journal, StopJournal: fixture.stopJournal,
 		Capabilities: cloneCapabilities(fixture.adapter.capabilities), PlacementRef: fixture.adapter.placement,
 		ProviderModel: fixture.adapter.model, PromptRenderer: fixture.adapter.renderer,
 		ImageRef: fixture.adapter.imageRef, ExecutorRef: fixture.adapter.executorRef,
 		VCPU: fixture.adapter.vcpu, MemoryMiB: fixture.adapter.memoryMiB, MaxPIDs: fixture.adapter.maxPIDs,
+		Now: fixture.adapter.now,
 	}
 }
 
