@@ -31,11 +31,20 @@ type roadmapImplementationDecision struct {
 	ID                    string   `json:"id"`
 	Status                string   `json:"status"`
 	CapabilityRefs        []string `json:"capability_refs"`
+	Provider              string   `json:"provider"`
 	Transport             string   `json:"transport"`
 	AllowedServices       []string `json:"allowed_services"`
 	ForbiddenConnectivity []string `json:"forbidden_connectivity"`
 	Authentication        string   `json:"authentication"`
 	TestAttestorScope     string   `json:"test_attestor_scope"`
+	AdapterBoundary       string   `json:"adapter_boundary"`
+	Selection             string   `json:"selection"`
+	ClientAdoption        string   `json:"client_adoption"`
+	EngineOwner           string   `json:"engine_owner"`
+	OrquestaDockerSocket  string   `json:"orquesta_docker_socket"`
+	ForbiddenSharing      []string `json:"forbidden_sharing"`
+	Fallback              string   `json:"fallback"`
+	V38Accreditation      string   `json:"v38_accreditation"`
 	TestRefs              []string `json:"test_refs"`
 }
 
@@ -1601,30 +1610,45 @@ func assertRoadmapOperatorDecisions(t *testing.T, decisions map[string]json.RawM
 
 func assertRoadmapImplementationDecisions(t *testing.T, decisions []roadmapImplementationDecision) {
 	t.Helper()
-	if len(decisions) != 1 {
-		t.Fatalf("implementation decision count = %d, want 1", len(decisions))
+	if len(decisions) != 2 {
+		t.Fatalf("implementation decision count = %d, want 2", len(decisions))
 	}
-	decision := decisions[0]
-	if decision.ID != "agent_microvm_network" || decision.Status != "planned_not_applied" ||
-		decision.Transport != "vsock_only" ||
-		decision.Authentication != "single_use_neutral_signed_grant_and_attestation_binding" ||
-		decision.TestAttestorScope != "unchanged_no_network_no_vsock" {
-		t.Fatalf("invalid agent microVM implementation decision: %#v", decision)
+	network, docker := decisions[0], decisions[1]
+	if network.ID != "agent_microvm_network" || network.Status != "planned_not_applied" ||
+		network.Transport != "vsock_only" ||
+		network.Authentication != "single_use_neutral_signed_grant_and_attestation_binding" ||
+		network.TestAttestorScope != "unchanged_no_network_no_vsock" {
+		t.Fatalf("invalid agent microVM implementation decision: %#v", network)
 	}
-	if !reflect.DeepEqual(decision.CapabilityRefs, []string{"AGT-01", "AGT-03", "EVD-13", "ORC-15"}) ||
-		!reflect.DeepEqual(decision.AllowedServices, []string{"orquesta_broker", "controlled_egress_proxy"}) ||
-		!reflect.DeepEqual(decision.ForbiddenConnectivity,
+	if !reflect.DeepEqual(network.CapabilityRefs, []string{"AGT-01", "AGT-03", "EVD-13", "ORC-15"}) ||
+		!reflect.DeepEqual(network.AllowedServices, []string{"orquesta_broker", "controlled_egress_proxy"}) ||
+		!reflect.DeepEqual(network.ForbiddenConnectivity,
 			[]string{"guest_ip_network", "tap", "bridge", "nat", "inbound", "east_west", "direct_internet"}) {
-		t.Fatalf("agent microVM implementation scope drifted: %#v", decision)
+		t.Fatalf("agent microVM implementation scope drifted: %#v", network)
 	}
-	wantTestRefs := []string{
-		"internal/ports/agent_microvm_network_test.go",
+	if docker.ID != "agent_runtime_docker_provider" || docker.Status != "planned_not_applied" ||
+		docker.Provider != "docker" || docker.Transport != "agentmicrovm.local.v1_http1_over_unix_socket" ||
+		docker.AdapterBoundary != "agent_launcher_and_existing_neutral_agent_ports_only" ||
+		docker.Selection != "opt_in_explicit_no_fallback" ||
+		docker.ClientAdoption != "published_versioned_agente_microvm_go_module_only_no_local_replace" ||
+		docker.EngineOwner != "agente_microvm_sibling_process_only" ||
+		docker.OrquestaDockerSocket != "forbidden" || docker.Fallback != "forbidden" ||
+		docker.V38Accreditation != "none_firecracker_a_b_c_remain_mandatory" ||
+		!reflect.DeepEqual(docker.CapabilityRefs, []string{"ORC-28"}) ||
+		!reflect.DeepEqual(docker.ForbiddenSharing, []string{"database", "filesystem", "secrets"}) {
+		t.Fatalf("invalid Docker provider implementation decision: %#v", docker)
 	}
-	if !reflect.DeepEqual(decision.TestRefs, wantTestRefs) {
-		t.Fatalf("agent microVM implementation tests = %v, want %v", decision.TestRefs, wantTestRefs)
+	wantTestRefs := [][]string{
+		{"internal/ports/agent_microvm_network_test.go"},
+		{"acceptance/v38_docker_provider_decision_test.go"},
 	}
-	for _, ref := range decision.TestRefs {
-		requireRepositoryFile(t, ".", ref)
+	for index, decision := range decisions {
+		if !reflect.DeepEqual(decision.TestRefs, wantTestRefs[index]) {
+			t.Fatalf("implementation decision %q tests = %v, want %v", decision.ID, decision.TestRefs, wantTestRefs[index])
+		}
+		for _, ref := range decision.TestRefs {
+			requireRepositoryFile(t, ".", ref)
+		}
 	}
 	for _, retired := range []string{
 		"internal/ports/agent_microvm_launch_auth.go",

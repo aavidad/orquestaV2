@@ -24,12 +24,13 @@ func TestAgentFirecrackerSingleVMFixtureRatchetsExistingNetworkDecision(t *testi
 
 	roadmap := agentFirecrackerReadObject(t, filepath.Join(root, "product/roadmap.json"))
 	decisions := agentFirecrackerObjectSlice(t, roadmap["implementation_decisions"])
-	if len(decisions) != 1 {
-		t.Fatalf("implementation decisions = %d, want one authority", len(decisions))
+	if len(decisions) != 2 {
+		t.Fatalf("implementation decisions = %d, want two bounded authorities", len(decisions))
 	}
 	authority := fixture["authority"].(map[string]any)
-	if !reflect.DeepEqual(decisions[0], authority["roadmap_decision"]) {
-		t.Fatalf("roadmap authority drifted:\n got: %#v\nwant: %#v", decisions[0], authority["roadmap_decision"])
+	networkDecision := agentFirecrackerObjectByID(t, roadmap["implementation_decisions"], "agent_microvm_network")
+	if !reflect.DeepEqual(networkDecision, authority["roadmap_decision"]) {
+		t.Fatalf("roadmap authority drifted:\n got: %#v\nwant: %#v", networkDecision, authority["roadmap_decision"])
 	}
 	if roadmap["catalog_size"] != float64(257) ||
 		!agentFirecrackerHasID(roadmap["verticals"], "agent_runtime_elastic") ||

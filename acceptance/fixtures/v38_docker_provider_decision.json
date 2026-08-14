@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "fixture_id": "v38_docker_provider_decision",
+  "decision": {
+    "id": "agent_runtime_docker_provider",
+    "status": "planned_not_applied",
+    "capability_refs": [
+      "ORC-28"
+    ],
+    "provider": "docker",
+    "transport": "agentmicrovm.local.v1_http1_over_unix_socket",
+    "adapter_boundary": "agent_launcher_and_existing_neutral_agent_ports_only",
+    "selection": "opt_in_explicit_no_fallback",
+    "client_adoption": "published_versioned_agente_microvm_go_module_only_no_local_replace",
+    "engine_owner": "agente_microvm_sibling_process_only",
+    "orquesta_docker_socket": "forbidden",
+    "forbidden_sharing": [
+      "database",
+      "filesystem",
+      "secrets"
+    ],
+    "fallback": "forbidden",
+    "v38_accreditation": "none_firecracker_a_b_c_remain_mandatory",
+    "test_refs": [
+      "acceptance/v38_docker_provider_decision_test.go"
+    ]
+  },
+  "v38_alignment": {
+    "canonical_vertical": "agent_runtime_elastic",
+    "capability_id": "ORC-28",
+    "capability_status": "declared",
+    "acceptance_contract": "AC-V38-AGENT-RUNTIME-ELASTIC",
+    "contract_status": "planned",
+    "firecracker_required_subgates": [
+      "A",
+      "B",
+      "C"
+    ],
+    "firecracker_global_accreditation": "only_after_a_b_c_pass_on_same_candidate",
+    "docker_accreditation": "none",
+    "new_capability": false,
+    "new_acceptance_contract": false,
+    "new_receipt": false,
+    "new_evidence": false
+  },
+  "implementation_state": {
+    "runtime_wiring": "absent",
+    "docker_client_usage": "absent_in_this_cut",
+    "docker_engine_smoke": "not_claimed",
+    "local_replace": "forbidden"
+  }
+}

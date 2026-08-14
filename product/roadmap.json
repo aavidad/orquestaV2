@@ -76,6 +76,30 @@
       "test_refs": [
         "internal/ports/agent_microvm_network_test.go"
       ]
+    },
+    {
+      "id": "agent_runtime_docker_provider",
+      "status": "planned_not_applied",
+      "capability_refs": [
+        "ORC-28"
+      ],
+      "provider": "docker",
+      "transport": "agentmicrovm.local.v1_http1_over_unix_socket",
+      "adapter_boundary": "agent_launcher_and_existing_neutral_agent_ports_only",
+      "selection": "opt_in_explicit_no_fallback",
+      "client_adoption": "published_versioned_agente_microvm_go_module_only_no_local_replace",
+      "engine_owner": "agente_microvm_sibling_process_only",
+      "orquesta_docker_socket": "forbidden",
+      "forbidden_sharing": [
+        "database",
+        "filesystem",
+        "secrets"
+      ],
+      "fallback": "forbidden",
+      "v38_accreditation": "none_firecracker_a_b_c_remain_mandatory",
+      "test_refs": [
+        "acceptance/v38_docker_provider_decision_test.go"
+      ]
     }
   ],
   "verticals": [
