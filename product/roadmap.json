@@ -79,7 +79,7 @@
     },
     {
       "id": "agent_runtime_docker_provider",
-      "status": "planned_not_applied",
+      "status": "implemented",
       "capability_refs": [
         "ORC-28"
       ],

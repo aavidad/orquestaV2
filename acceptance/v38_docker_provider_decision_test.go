@@ -2,6 +2,7 @@ package acceptance_test
 
 import (
 	"context"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,7 +22,10 @@ const v38DockerProviderFixturePath = "acceptance/fixtures/v38_docker_provider_de
 var (
 	_ func(*microvm.Cliente, context.Context) (microvm.RespuestaCapacidades, error)                                                                            = (*microvm.Cliente).NegociarDocker
 	_ func(*microvm.FirmanteConcesiones, microvm.PlanLanzamientoContenedorV1, time.Time, time.Duration) (microvm.SolicitudLanzarORecuperarContenedorV1, error) = (*microvm.FirmanteConcesiones).PrepararContenedor
-	_ func(*microvm.Cliente, context.Context, string, microvm.SolicitudLanzarORecuperarContenedorV1) (microvm.RespuestaContenedorV1, error)                    = (*microvm.Cliente).LanzarORecuperarContenedor
+	_ func(*microvm.Cliente, context.Context, string, json.RawMessage) (microvm.RespuestaContenedorV1, error)                                                  = (*microvm.Cliente).LanzarORecuperarContenedorCodificada
+	_ func(*microvm.Cliente, context.Context, string) (microvm.RespuestaOperacionContenedorV1, error)                                                          = (*microvm.Cliente).ConsultarOperacionContenedor
+	_ func(*microvm.Cliente, context.Context, string, string, json.RawMessage) (microvm.RespuestaInicioSesionContenedorV1, error)                              = (*microvm.Cliente).IniciarSesionContenedorCodificada
+	_ func(*microvm.Cliente, context.Context, string, string, string, json.RawMessage) (microvm.RespuestaEntradaSesionContenedorV1, error)                     = (*microvm.Cliente).EnviarEntradaSesionContenedorCodificada
 	_ ports.AgentProviderRequestJournal                                                                                                                        = (*sqlite.Repository)(nil)
 )
 
@@ -82,6 +86,8 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 		{"firecracker_incompleto", []string{"v38_alignment", "firecracker_required_subgates"}, []any{"A", "B"}},
 		{"evidencia_nueva", []string{"v38_alignment", "new_evidence"}, true},
 		{"wiring_anticipado", []string{"implementation_state", "runtime_wiring"}, "present"},
+		{"launcher_ausente", []string{"implementation_state", "neutral_agent_launcher"}, "absent"},
+		{"observador_anticipado", []string{"implementation_state", "neutral_agent_observer"}, "implemented"},
 		{"journal_ausente", []string{"implementation_state", "prepared_request_journal"}, "absent"},
 		{"cliente_bloqueado", []string{"client_adoption_gate", "status"}, "blocked"},
 	}
@@ -106,7 +112,7 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 
 func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 	if !agentFirecrackerHasExactKeys(fixture, "schema_version", "fixture_id", "decision", "v38_alignment", "implementation_state", "client_adoption_gate") ||
-		fixture["schema_version"] != float64(4) || fixture["fixture_id"] != "v38_docker_provider_decision" {
+		fixture["schema_version"] != float64(5) || fixture["fixture_id"] != "v38_docker_provider_decision" {
 		return false
 	}
 	decision, decisionOK := fixture["decision"].(map[string]any)
@@ -116,11 +122,11 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 	if !decisionOK || !alignmentOK || !stateOK || !gateOK ||
 		!agentFirecrackerHasExactKeys(decision, "id", "status", "capability_refs", "provider", "transport", "adapter_boundary", "selection", "client_adoption", "engine_owner", "orquesta_docker_socket", "forbidden_sharing", "fallback", "v38_accreditation", "test_refs") ||
 		!agentFirecrackerHasExactKeys(alignment, "canonical_vertical", "capability_id", "capability_status", "acceptance_contract", "contract_status", "firecracker_required_subgates", "firecracker_global_accreditation", "docker_accreditation", "new_capability", "new_acceptance_contract", "new_receipt", "new_evidence") ||
-		!agentFirecrackerHasExactKeys(state, "runtime_wiring", "docker_client_usage", "prepared_request_journal", "docker_engine_smoke", "local_replace") ||
+		!agentFirecrackerHasExactKeys(state, "runtime_wiring", "neutral_agent_launcher", "neutral_agent_observer", "docker_client_usage", "prepared_request_journal", "docker_engine_smoke", "local_replace") ||
 		!agentFirecrackerHasExactKeys(gate, "status", "pinned_module_version", "module_zip_sum", "module_source", "observed_external_candidate_commit", "required_symbols", "unblock", "forbidden_resolutions", "next_safe_dependency") {
 		return false
 	}
-	return decision["id"] == "agent_runtime_docker_provider" && decision["status"] == "planned_not_applied" &&
+	return decision["id"] == "agent_runtime_docker_provider" && decision["status"] == "implemented" &&
 		reflect.DeepEqual(decision["capability_refs"], []any{"ORC-28"}) && decision["provider"] == "docker" &&
 		decision["transport"] == "agentmicrovm.local.v1_http1_over_unix_socket" &&
 		decision["adapter_boundary"] == "agent_launcher_and_existing_neutral_agent_ports_only" &&
@@ -134,15 +140,19 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 		alignment["acceptance_contract"] == "AC-V38-AGENT-RUNTIME-ELASTIC" && alignment["contract_status"] == "planned" &&
 		reflect.DeepEqual(alignment["firecracker_required_subgates"], []any{"A", "B", "C"}) && alignment["firecracker_global_accreditation"] == "only_after_a_b_c_pass_on_same_candidate" &&
 		alignment["docker_accreditation"] == "none" && alignment["new_capability"] == false && alignment["new_acceptance_contract"] == false && alignment["new_receipt"] == false && alignment["new_evidence"] == false &&
-		state["runtime_wiring"] == "absent" && state["docker_client_usage"] == "published_module_adopted_not_wired" &&
-		state["prepared_request_journal"] == "same_state_repository_implemented_not_runtime_wired" &&
+		state["runtime_wiring"] == "absent" && state["neutral_agent_launcher"] == "implemented_reviewed_not_runtime_wired" &&
+		state["neutral_agent_observer"] == "absent" && state["docker_client_usage"] == "published_module_used_by_adapter_not_runtime_wired" &&
+		state["prepared_request_journal"] == "same_state_repository_used_by_adapter_not_runtime_wired" &&
 		state["docker_engine_smoke"] == "not_claimed" && state["local_replace"] == "forbidden" &&
 		gate["status"] == "satisfied_published_module_ready_for_neutral_adapter" && gate["pinned_module_version"] == "v0.0.0-20260814005716-2768389c82c0" &&
 		gate["module_zip_sum"] == "h1:YRl+uPkDB0Glq34Hqq/4D7ZLu+LQa5LgCHl1WwlJars=" &&
 		gate["module_source"] == "authorized_local_gomodcache_private_zip" &&
-		gate["observed_external_candidate_commit"] == "2768389c82c02e4eeb3599152037fe3a52e2dc76" && reflect.DeepEqual(gate["required_symbols"], []any{"NegociarDocker", "PrepararContenedor", "LanzarORecuperarContenedor"}) &&
+		gate["observed_external_candidate_commit"] == "2768389c82c02e4eeb3599152037fe3a52e2dc76" && reflect.DeepEqual(gate["required_symbols"], []any{
+		"NegociarDocker", "PrepararContenedor", "LanzarORecuperarContenedorCodificada", "ConsultarOperacionContenedor",
+		"IniciarSesionContenedorCodificada", "EnviarEntradaSesionContenedorCodificada",
+	}) &&
 		gate["unblock"] == "satisfied_published_versioned_module_available_in_authorized_local_supply_chain" && reflect.DeepEqual(gate["forbidden_resolutions"], []any{"copy_external_worktree", "local_replace", "go_work", "private_module_remote_download"}) &&
-		gate["next_safe_dependency"] == "v38_docker_neutral_agent_adapter"
+		gate["next_safe_dependency"] == "v38_docker_neutral_agent_observer"
 }
 
 func v38DockerAssertClientAdoptionReady(t *testing.T, root string, gate map[string]any) {

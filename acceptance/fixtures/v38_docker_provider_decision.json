@@ -1,9 +1,9 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
-    "status": "planned_not_applied",
+    "status": "implemented",
     "capability_refs": [
       "ORC-28"
     ],
@@ -45,8 +45,10 @@
   },
   "implementation_state": {
     "runtime_wiring": "absent",
-    "docker_client_usage": "published_module_adopted_not_wired",
-    "prepared_request_journal": "same_state_repository_implemented_not_runtime_wired",
+    "neutral_agent_launcher": "implemented_reviewed_not_runtime_wired",
+    "neutral_agent_observer": "absent",
+    "docker_client_usage": "published_module_used_by_adapter_not_runtime_wired",
+    "prepared_request_journal": "same_state_repository_used_by_adapter_not_runtime_wired",
     "docker_engine_smoke": "not_claimed",
     "local_replace": "forbidden"
   },
@@ -59,7 +61,10 @@
     "required_symbols": [
       "NegociarDocker",
       "PrepararContenedor",
-      "LanzarORecuperarContenedor"
+      "LanzarORecuperarContenedorCodificada",
+      "ConsultarOperacionContenedor",
+      "IniciarSesionContenedorCodificada",
+      "EnviarEntradaSesionContenedorCodificada"
     ],
     "unblock": "satisfied_published_versioned_module_available_in_authorized_local_supply_chain",
     "forbidden_resolutions": [
@@ -68,6 +73,6 @@
       "go_work",
       "private_module_remote_download"
     ],
-    "next_safe_dependency": "v38_docker_neutral_agent_adapter"
+    "next_safe_dependency": "v38_docker_neutral_agent_observer"
   }
 }
