@@ -65,25 +65,25 @@ func validateRecoveryV38AgentProviderStopRequestCausality(
 	tx *sql.Tx,
 	request ports.AgentProviderStopRequest,
 ) error {
-	var attemptExecution, attemptIdempotency, intentKind, intentExecution string
+	var attemptExecution, intentKind, intentExecution string
 	var executionProvider, executionExternal string
 	var attemptFence int64
 	var receiptStatus sql.NullString
 	if err := tx.QueryRowContext(ctx, `
-SELECT attempt.execution_ref,attempt.action_fence,attempt.idempotency_key,
- intent.kind,intent.execution_ref,execution.provider_ref,execution.external_ref,receipt.status
+SELECT attempt.execution_ref,attempt.action_fence,intent.kind,intent.execution_ref,
+ execution.provider_ref,execution.external_ref,receipt.status
 FROM effect_attempts attempt
 JOIN effect_intents intent ON intent.ref=attempt.intent_ref
 JOIN executions execution ON execution.ref=attempt.execution_ref
 LEFT JOIN effect_receipts receipt ON receipt.attempt_ref=attempt.ref
 WHERE attempt.ref=?`, request.StopEffectAttemptRef).Scan(
-		&attemptExecution, &attemptFence, &attemptIdempotency, &intentKind, &intentExecution,
+		&attemptExecution, &attemptFence, &intentKind, &intentExecution,
 		&executionProvider, &executionExternal, &receiptStatus,
 	); err != nil {
 		return invalidRecoveryV38AgentProviderStopRequest(err)
 	}
-	attemptIdentity := [6]string{attemptExecution, attemptIdempotency, intentKind, intentExecution, executionProvider, executionExternal}
-	wantIdentity := [6]string{request.Key.ExecutionRef.String(), request.IdempotencyKey, "agent_stop",
+	attemptIdentity := [5]string{attemptExecution, intentKind, intentExecution, executionProvider, executionExternal}
+	wantIdentity := [5]string{request.Key.ExecutionRef.String(), "agent_stop",
 		request.Key.ExecutionRef.String(), request.ProviderRef, request.TargetRef}
 	if attemptFence <= 0 || uint64(attemptFence) != request.Key.StopActionFence || attemptIdentity != wantIdentity {
 		return invalidRecoveryV38AgentProviderStopRequest(nil)

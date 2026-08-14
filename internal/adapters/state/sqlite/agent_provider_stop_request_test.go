@@ -61,6 +61,11 @@ func TestAgentProviderStopRequestRejectsReplayAndCausalDivergence(t *testing.T) 
 	if _, err := system.repository.RecordAgentProviderStopRequest(context.Background(), divergent); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("divergent replay error=%s", sqliteTestErrorChain(err))
 	}
+	divergent = request
+	divergent.IdempotencyKey += ":crossed"
+	if _, err := system.repository.RecordAgentProviderStopRequest(context.Background(), divergent); !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("divergent physical idempotency replay error=%s", sqliteTestErrorChain(err))
+	}
 
 	otherExecution, _ := goal.NewExecutionRef("execution:provider-stop-crossed")
 	mutations := map[string]func(*ports.AgentProviderStopRequest){
@@ -69,7 +74,6 @@ func TestAgentProviderStopRequestRejectsReplayAndCausalDivergence(t *testing.T) 
 		"stop fence":   func(v *ports.AgentProviderStopRequest) { v.Key.StopActionFence++ },
 		"attempt":      func(v *ports.AgentProviderStopRequest) { v.StopEffectAttemptRef += ":crossed" },
 		"provider":     func(v *ports.AgentProviderStopRequest) { v.ProviderRef = "provider:other" },
-		"idempotency":  func(v *ports.AgentProviderStopRequest) { v.IdempotencyKey += ":crossed" },
 		"target":       func(v *ports.AgentProviderStopRequest) { v.TargetRef = "runtime:other" },
 		"revision":     func(v *ports.AgentProviderStopRequest) { v.ExpectedRevision++ },
 	}
@@ -214,7 +218,7 @@ WHERE execution_ref=? AND launch_action_fence=? AND stop_action_fence=?`,
 	}
 }
 
-func TestV38AgentProviderStopRequestMigrationHasStrictCausalShape(t *testing.T) {
+func TestV39AgentProviderStopRequestMigrationHasStrictCausalShape(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "agent-provider-stop-v37.db")
 	database := agentCapacityDatabase(t, path, recoverySchemaV38AgentProviderRequest)
 	sqliteTestNoError(t, database.Close())
@@ -226,22 +230,72 @@ func TestV38AgentProviderStopRequestMigrationHasStrictCausalShape(t *testing.T) 
 	t.Cleanup(func() { _ = repository.Close() })
 
 	var version, strict int
-	var name, tableSQL, triggerSQL string
+	var stopName, keyName, tableSQL, triggerSQL string
 	sqliteTestNoError(t, repository.db.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, repository.db.QueryRow(`SELECT name FROM schema_migrations WHERE version=?`,
-		recoverySchemaV38AgentProviderStop).Scan(&name))
+		recoverySchemaV38AgentProviderStop).Scan(&stopName))
+	sqliteTestNoError(t, repository.db.QueryRow(`SELECT name FROM schema_migrations WHERE version=?`,
+		recoverySchemaV38AgentProviderStopKey).Scan(&keyName))
 	sqliteTestNoError(t, repository.db.QueryRow(`SELECT strict FROM pragma_table_list
 WHERE name='agent_provider_stop_requests'`).Scan(&strict))
 	sqliteTestNoError(t, repository.db.QueryRow(`SELECT sql FROM sqlite_schema
 WHERE type='table' AND name='agent_provider_stop_requests'`).Scan(&tableSQL))
 	sqliteTestNoError(t, repository.db.QueryRow(`SELECT sql FROM sqlite_schema
 WHERE type='trigger' AND name='agent_provider_stop_requests_causal_insert'`).Scan(&triggerSQL))
-	if version != recoverySchemaLatest || name != "038_agent_provider_stop_requests.sql" || strict != 1 ||
+	if version != recoverySchemaLatest || stopName != "038_agent_provider_stop_requests.sql" ||
+		keyName != "039_agent_provider_stop_physical_idempotency.sql" || strict != 1 ||
 		!strings.Contains(tableSQL, "PRIMARY KEY(execution_ref,launch_action_fence,stop_action_fence)") ||
 		!strings.Contains(tableSQL, "FOREIGN KEY(stop_effect_attempt_ref,execution_ref,stop_action_fence)") ||
+		strings.Contains(triggerSQL, "attempt.idempotency_key=NEW.idempotency_key") ||
 		!strings.Contains(triggerSQL, "intent.kind='agent_stop'") ||
 		!strings.Contains(triggerSQL, "launch.launch_binding_revision=NEW.expected_revision") {
-		t.Fatalf("version=%d name=%q strict=%d table=%s trigger=%s", version, name, strict, tableSQL, triggerSQL)
+		t.Fatalf("version=%d names=%q,%q strict=%d table=%s trigger=%s", version, stopName, keyName, strict, tableSQL, triggerSQL)
+	}
+}
+
+func TestV39UpgradePreservesExactV38StopJournalAndHistory(t *testing.T) {
+	system, _, attempt, request := seedSQLiteAgentProviderStopRequest(t, "provider-stop-v38-upgrade")
+	request.IdempotencyKey = attempt.IdempotencyKey
+	recordSQLiteAgentProviderStopRequest(t, system.repository, request)
+	var checksumV38 string
+	sqliteTestNoError(t, system.repository.db.QueryRow(`SELECT checksum FROM schema_migrations WHERE version=?`,
+		recoverySchemaV38AgentProviderStop).Scan(&checksumV38))
+
+	legacy := agentCapacityDatabase(t, filepath.Join(t.TempDir(), "canonical-v38.db"), recoverySchemaV38AgentProviderStop)
+	var legacyTrigger string
+	sqliteTestNoError(t, legacy.QueryRow(`SELECT sql FROM sqlite_schema
+WHERE type='trigger' AND name='agent_provider_stop_requests_causal_insert'`).Scan(&legacyTrigger))
+	sqliteTestNoError(t, legacy.Close())
+	_, err := system.repository.db.Exec(`DROP TRIGGER agent_provider_stop_requests_causal_insert`)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(legacyTrigger)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(`DELETE FROM schema_migrations WHERE version=?`, recoverySchemaV38AgentProviderStopKey)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(`PRAGMA user_version=38`)
+	sqliteTestNoError(t, err)
+	wantInventory, err := canonicalSchemaInventoryDigest(recoverySchemaV38AgentProviderStop)
+	sqliteTestNoError(t, err)
+	gotInventory, err := schemaInventoryDigest(context.Background(), system.repository.db)
+	if err != nil || gotInventory != wantInventory {
+		t.Fatalf("V38 inventory=%q want=%q err=%v", gotInventory, wantInventory, err)
+	}
+	sqliteTestNoError(t, system.repository.Close())
+
+	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
+	stored, found, err := reopened.ResolveAgentProviderStopRequest(context.Background(), request.Key)
+	if err != nil || !found || !reflect.DeepEqual(stored, request) {
+		t.Fatalf("upgraded request=%+v found=%t err=%v", stored, found, err)
+	}
+	var version, receiptV39 int
+	var upgradedChecksumV38 string
+	sqliteTestNoError(t, reopened.db.QueryRow(`SELECT user_version,
+ (SELECT COUNT(*) FROM schema_migrations WHERE version=?),
+ (SELECT checksum FROM schema_migrations WHERE version=?) FROM pragma_user_version`,
+		recoverySchemaV38AgentProviderStopKey, recoverySchemaV38AgentProviderStop,
+	).Scan(&version, &receiptV39, &upgradedChecksumV38))
+	if version != recoverySchemaLatest || receiptV39 != 1 || upgradedChecksumV38 != checksumV38 {
+		t.Fatalf("version=%d V39 receipts=%d V38 checksum=%q want=%q", version, receiptV39, upgradedChecksumV38, checksumV38)
 	}
 }
 
@@ -310,8 +364,11 @@ func seedSQLiteAgentProviderStopRequest(
 			StopActionFence: stopAttempt.ActionFence,
 		},
 		StopEffectAttemptRef: stopAttempt.Ref, ProviderRef: accepted.Execution.ProviderRef,
-		IdempotencyKey: stopAttempt.IdempotencyKey, TargetRef: targetRef, ExpectedRevision: 3,
+		IdempotencyKey: "provider-stop-operation:" + suffix, TargetRef: targetRef, ExpectedRevision: 3,
 		Body: body, BodySHA256: ports.AgentProviderRequestBodySHA256(body),
+	}
+	if request.IdempotencyKey == stopAttempt.IdempotencyKey {
+		t.Fatal("physical idempotency key reused application intent key")
 	}
 	return system, stopClaim, stopAttempt, request
 }
