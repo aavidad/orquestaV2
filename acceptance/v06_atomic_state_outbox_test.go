@@ -1075,7 +1075,7 @@ func (agent *v06Agent) Launch(_ context.Context, request ports.AgentLaunchReques
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ExecutionAttempt: request.ExecutionAttempt, LaunchActionFence: request.EffectAuthority.ActionFence, SpecHash: request.SpecHash,
 		ProviderRef: "provider:v06", ModelRef: "model:v06", AgentRef: "agent:v06",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		ReceiptRef: "receipt:" + request.ExecutionRef.String(),
