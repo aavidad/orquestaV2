@@ -46,7 +46,7 @@
   "implementation_state": {
     "runtime_wiring": "absent",
     "neutral_agent_launcher": "implemented_reviewed_not_runtime_wired",
-    "neutral_agent_observer": "absent",
+    "neutral_agent_observer": "implemented_reviewed_not_runtime_wired",
     "docker_client_usage": "published_module_used_by_adapter_not_runtime_wired",
     "prepared_request_journal": "same_state_repository_used_by_adapter_not_runtime_wired",
     "docker_engine_smoke": "not_claimed",
@@ -64,7 +64,9 @@
       "LanzarORecuperarContenedorCodificada",
       "ConsultarOperacionContenedor",
       "IniciarSesionContenedorCodificada",
-      "EnviarEntradaSesionContenedorCodificada"
+      "EnviarEntradaSesionContenedorCodificada",
+      "ObservarContenedor",
+      "LeerEventosSesionContenedor"
     ],
     "unblock": "satisfied_published_versioned_module_available_in_authorized_local_supply_chain",
     "forbidden_resolutions": [
@@ -73,6 +75,6 @@
       "go_work",
       "private_module_remote_download"
     ],
-    "next_safe_dependency": "v38_docker_neutral_agent_observer"
+    "next_safe_dependency": "v38_docker_opt_in_runtime_composition"
   }
 }

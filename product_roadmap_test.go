@@ -1626,7 +1626,7 @@ func assertRoadmapImplementationDecisions(t *testing.T, decisions []roadmapImple
 			[]string{"guest_ip_network", "tap", "bridge", "nat", "inbound", "east_west", "direct_internet"}) {
 		t.Fatalf("agent microVM implementation scope drifted: %#v", network)
 	}
-	if docker.ID != "agent_runtime_docker_provider" || docker.Status != "planned_not_applied" ||
+	if docker.ID != "agent_runtime_docker_provider" || docker.Status != "implemented" ||
 		docker.Provider != "docker" || docker.Transport != "agentmicrovm.local.v1_http1_over_unix_socket" ||
 		docker.AdapterBoundary != "agent_launcher_and_existing_neutral_agent_ports_only" ||
 		docker.Selection != "opt_in_explicit_no_fallback" ||
