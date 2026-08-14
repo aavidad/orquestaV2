@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
@@ -52,6 +52,29 @@
     "docker_engine_smoke": "not_claimed",
     "local_replace": "forbidden"
   },
+  "composition_gate": {
+    "status": "blocked_external_contract_required",
+    "required_application_authorities": [
+      "execution_workspace_ref",
+      "artifact_access_ref",
+      "mcp_access_ref",
+      "mailbox_endpoint_ref",
+      "egress_authority"
+    ],
+    "published_contract_gap": "no_complete_isolated_application_authority_delegation",
+    "forbidden_resolutions": [
+      "drop_runtime_authority",
+      "shared_database",
+      "shared_filesystem",
+      "shared_secrets",
+      "orquesta_docker_socket",
+      "silent_fallback"
+    ],
+    "test_refs": [
+      "internal/application/execution_session_test.go",
+      "internal/adapters/agent/agentmicrovm/docker_adapter_test.go"
+    ]
+  },
   "client_adoption_gate": {
     "status": "satisfied_published_module_ready_for_neutral_adapter",
     "pinned_module_version": "v0.0.0-20260814005716-2768389c82c0",
@@ -75,6 +98,6 @@
       "go_work",
       "private_module_remote_download"
     ],
-    "next_safe_dependency": "v38_docker_opt_in_runtime_composition"
+    "next_safe_dependency": "v38_docker_isolated_session_access_contract"
   }
 }
