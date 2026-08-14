@@ -65,19 +65,20 @@ type DockerConfig struct {
 // DockerAdapter is opt-in composition behind AgentLauncher. It only talks to
 // the published sibling client and never owns Docker transport or lifecycle.
 type DockerAdapter struct {
-	client       DockerClient
-	observer     dockerObservationClient
-	signer       DockerSigner
-	journal      ports.AgentProviderRequestJournal
-	capabilities ports.AgentCapabilities
-	placement    ports.AgentPlacementRef
-	model        string
-	renderer     PromptRenderer
-	imageRef     string
-	executorRef  string
-	vcpu         uint8
-	memoryMiB    uint32
-	maxPIDs      uint32
+	client           DockerClient
+	observer         dockerObservationClient
+	signer           DockerSigner
+	journal          ports.AgentProviderRequestJournal
+	capabilities     ports.AgentCapabilities
+	placement        ports.AgentPlacementRef
+	model            string
+	renderer         PromptRenderer
+	imageRef         string
+	executorRef      string
+	vcpu             uint8
+	memoryMiB        uint32
+	maxPIDs          uint32
+	physicalCapacity physicalCapacityProjection
 }
 
 func NewDockerAdapter(config DockerConfig) (*DockerAdapter, error) {
@@ -99,6 +100,7 @@ func NewDockerAdapter(config DockerConfig) (*DockerAdapter, error) {
 		model: config.ProviderModel, renderer: config.PromptRenderer,
 		imageRef: config.ImageRef, executorRef: config.ExecutorRef,
 		vcpu: config.VCPU, memoryMiB: config.MemoryMiB, maxPIDs: config.MaxPIDs,
+		physicalCapacity: newPhysicalCapacityProjection(),
 	}, nil
 }
 
@@ -110,6 +112,13 @@ func (adapter *DockerAdapter) Capabilities(ctx context.Context) (ports.AgentCapa
 		return ports.AgentCapabilities{}, err
 	}
 	return cloneCapabilities(adapter.capabilities), nil
+}
+
+func (adapter *DockerAdapter) NegotiatedPhysicalCapacity() (NegotiatedPhysicalCapacity, error) {
+	if adapter == nil {
+		return NegotiatedPhysicalCapacity{}, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	}
+	return adapter.physicalCapacity.read()
 }
 
 func (adapter *DockerAdapter) Launch(
@@ -264,6 +273,11 @@ func (adapter *DockerAdapter) validateDockerRequest(ctx context.Context, request
 }
 
 func (adapter *DockerAdapter) negotiateDocker(ctx context.Context) error {
+	generation, release, beginErr := adapter.physicalCapacity.begin(ctx)
+	if beginErr != nil {
+		return beginErr
+	}
+	defer release()
 	response, err := adapter.client.NegociarDocker(ctx)
 	if err != nil {
 		if contextErr := preserveContextError(ctx, err); contextErr != nil {
@@ -271,10 +285,17 @@ func (adapter *DockerAdapter) negotiateDocker(ctx context.Context) error {
 		}
 		return classifyCapabilitiesError(err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if response.Protocolo != microvm.ProtocoloLocal || response.BackendEjecuciones != microvm.BackendEjecucionesDocker ||
 		!response.DockerConfigurado || !response.DockerEngineDisponible || response.MaximoEjecuciones == 0 {
 		return fail(CodeCapabilitiesRejected, nil)
 	}
+	adapter.physicalCapacity.publish(generation, NegotiatedPhysicalCapacity{
+		PlacementRef: adapter.placement,
+		Slots:        response.MaximoEjecuciones,
+	})
 	return nil
 }
 

@@ -140,6 +140,70 @@ type NegotiatedPhysicalCapacity struct {
 	Slots        uint32
 }
 
+// physicalCapacityProjection keeps only the latest complete remote
+// negotiation. It is deliberately ephemeral: reservations and scheduling
+// remain application concerns backed by the canonical StateRepository.
+type physicalCapacityProjection struct {
+	gate       chan struct{}
+	mu         sync.RWMutex
+	generation uint64
+	exhausted  bool
+	capacity   NegotiatedPhysicalCapacity
+	available  bool
+}
+
+func newPhysicalCapacityProjection() physicalCapacityProjection {
+	return physicalCapacityProjection{gate: make(chan struct{}, 1)}
+}
+
+func (projection *physicalCapacityProjection) begin(ctx context.Context) (uint64, func(), error) {
+	if projection == nil || projection.gate == nil || nilInterface(ctx) {
+		return 0, nil, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	}
+	if err := ctx.Err(); err != nil {
+		return 0, nil, err
+	}
+	projection.mu.Lock()
+	projection.capacity, projection.available = NegotiatedPhysicalCapacity{}, false
+	if projection.generation == ^uint64(0) {
+		projection.exhausted = true
+		projection.mu.Unlock()
+		return 0, nil, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	}
+	projection.generation++
+	generation := projection.generation
+	projection.mu.Unlock()
+	select {
+	case projection.gate <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			<-projection.gate
+			return 0, nil, err
+		}
+		return generation, func() { <-projection.gate }, nil
+	case <-ctx.Done():
+		return 0, nil, ctx.Err()
+	}
+}
+
+func (projection *physicalCapacityProjection) publish(generation uint64, capacity NegotiatedPhysicalCapacity) bool {
+	projection.mu.Lock()
+	defer projection.mu.Unlock()
+	if projection.exhausted || projection.generation != generation {
+		return false
+	}
+	projection.capacity, projection.available = capacity, true
+	return true
+}
+
+func (projection *physicalCapacityProjection) read() (NegotiatedPhysicalCapacity, error) {
+	projection.mu.RLock()
+	defer projection.mu.RUnlock()
+	if !projection.available {
+		return NegotiatedPhysicalCapacity{}, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	}
+	return projection.capacity, nil
+}
+
 // Adapter translates launch authority without owning a lifecycle or retaining
 // replay state. Repetition always crosses the sibling idempotency boundary with
 // the same key and signed bytes.
@@ -154,12 +218,7 @@ type Adapter struct {
 	model                   string
 	renderer                PromptRenderer
 
-	negotiationGate                     chan struct{}
-	physicalCapacityMu                  sync.RWMutex
-	physicalCapacityGeneration          uint64
-	physicalCapacityGenerationExhausted bool
-	physicalCapacity                    NegotiatedPhysicalCapacity
-	physicalCapacityAvailable           bool
+	physicalCapacity physicalCapacityProjection
 }
 
 // New validates only local, immutable composition facts. Remote readiness is
@@ -196,7 +255,7 @@ func New(config Config) (*Adapter, error) {
 		capabilities:            cloneCapabilities(config.Capabilities),
 		model:                   config.ModelBinding.ProviderModel,
 		renderer:                config.PromptRenderer,
-		negotiationGate:         make(chan struct{}, 1),
+		physicalCapacity:        newPhysicalCapacityProjection(),
 	}, nil
 }
 
@@ -220,13 +279,7 @@ func (adapter *Adapter) NegotiatedPhysicalCapacity() (NegotiatedPhysicalCapacity
 	if adapter == nil {
 		return NegotiatedPhysicalCapacity{}, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
 	}
-	adapter.physicalCapacityMu.RLock()
-	capacity, available := adapter.physicalCapacity, adapter.physicalCapacityAvailable
-	adapter.physicalCapacityMu.RUnlock()
-	if !available {
-		return NegotiatedPhysicalCapacity{}, fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
-	}
-	return capacity, nil
+	return adapter.physicalCapacity.read()
 }
 
 // Launch signs and submits one exact physical launch. A physically available
@@ -489,16 +542,11 @@ func (adapter *Adapter) negotiate(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	generation, ok := adapter.beginPhysicalCapacityNegotiation()
-	if !ok || adapter.negotiationGate == nil {
-		return fail(CodeNegotiatedPhysicalCapacityUnavailable, nil)
+	generation, release, err := adapter.physicalCapacity.begin(ctx)
+	if err != nil {
+		return err
 	}
-	select {
-	case adapter.negotiationGate <- struct{}{}:
-		defer func() { <-adapter.negotiationGate }()
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	defer release()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -531,38 +579,11 @@ func (adapter *Adapter) negotiate(ctx context.Context) error {
 			return fail(CodeOperationUnsupported, nil)
 		}
 	}
-	adapter.publishNegotiatedPhysicalCapacity(generation, NegotiatedPhysicalCapacity{
+	adapter.physicalCapacity.publish(generation, NegotiatedPhysicalCapacity{
 		PlacementRef: adapter.profile.PlacementRef,
 		Slots:        response.MaximoEjecuciones,
 	})
 	return nil
-}
-
-func (adapter *Adapter) beginPhysicalCapacityNegotiation() (uint64, bool) {
-	adapter.physicalCapacityMu.Lock()
-	defer adapter.physicalCapacityMu.Unlock()
-	adapter.physicalCapacity = NegotiatedPhysicalCapacity{}
-	adapter.physicalCapacityAvailable = false
-	if adapter.physicalCapacityGeneration == ^uint64(0) {
-		adapter.physicalCapacityGenerationExhausted = true
-		return 0, false
-	}
-	adapter.physicalCapacityGeneration++
-	return adapter.physicalCapacityGeneration, true
-}
-
-func (adapter *Adapter) publishNegotiatedPhysicalCapacity(
-	generation uint64,
-	capacity NegotiatedPhysicalCapacity,
-) bool {
-	adapter.physicalCapacityMu.Lock()
-	defer adapter.physicalCapacityMu.Unlock()
-	if adapter.physicalCapacityGenerationExhausted || adapter.physicalCapacityGeneration != generation {
-		return false
-	}
-	adapter.physicalCapacity = capacity
-	adapter.physicalCapacityAvailable = true
-	return true
 }
 
 func validLaunchResponse(response microvm.RespuestaEjecucion, plan microvm.PlanLanzamiento) bool {

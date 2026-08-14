@@ -66,6 +66,63 @@ func TestDockerAdapterPersistsExactBytesBeforeEveryEffect(t *testing.T) {
 	}
 }
 
+func TestDockerAdapterPublishesOnlyCompleteNegotiatedCapacity(t *testing.T) {
+	fixture := newDockerAdapterFixture(t)
+	assertUnavailable := func(label string) {
+		t.Helper()
+		capacity, err := fixture.adapter.NegotiatedPhysicalCapacity()
+		if capacity != (NegotiatedPhysicalCapacity{}) || ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
+			t.Fatalf("%s capacity=%+v err=%v", label, capacity, err)
+		}
+	}
+	assertUnavailable("before negotiation")
+	if capabilities, err := fixture.adapter.Capabilities(context.Background()); err != nil ||
+		capabilities.ProviderRef != DockerProviderRef {
+		t.Fatalf("Capabilities()=%+v err=%v", capabilities, err)
+	}
+	capacity, err := fixture.adapter.NegotiatedPhysicalCapacity()
+	if err != nil || capacity.PlacementRef != fixture.binding.PlacementRef || capacity.Slots != 4 {
+		t.Fatalf("capacity=%+v err=%v", capacity, err)
+	}
+	preCanceled, cancelBefore := context.WithCancel(context.Background())
+	cancelBefore()
+	negotiations := fixture.client.negotiations
+	if _, err := fixture.adapter.Capabilities(preCanceled); !errors.Is(err, context.Canceled) ||
+		fixture.client.negotiations != negotiations {
+		t.Fatalf("pre-canceled Capabilities()=%v negotiations=%d", err, fixture.client.negotiations)
+	}
+	if capacity, err := fixture.adapter.NegotiatedPhysicalCapacity(); err != nil || capacity.Slots != 4 {
+		t.Fatalf("pre-canceled capacity=%+v err=%v", capacity, err)
+	}
+
+	fixture.client.capabilityErr = errors.New("transport unavailable")
+	if _, err := fixture.adapter.Capabilities(context.Background()); ErrorCode(err) != CodeCapabilitiesUnavailable {
+		t.Fatalf("transport Capabilities()=%v", err)
+	}
+	assertUnavailable("after transport failure")
+	fixture.client.capabilityErr = nil
+	fixture.client.capabilities.MaximoEjecuciones = 0
+	if _, err := fixture.adapter.Capabilities(context.Background()); ErrorCode(err) != CodeCapabilitiesRejected {
+		t.Fatalf("invalid Capabilities()=%v", err)
+	}
+	assertUnavailable("after invalid response")
+
+	fixture.client.capabilities = validDockerRemoteCapabilities()
+	ctx, cancel := context.WithCancel(context.Background())
+	fixture.client.capabilityHook = cancel
+	if _, err := fixture.adapter.Capabilities(ctx); !errors.Is(err, context.Canceled) || ErrorCode(err) != "" {
+		t.Fatalf("canceled Capabilities()=%v", err)
+	}
+	assertUnavailable("after cancellation")
+	fixture.client.capabilityHook = nil
+	if _, err := fixture.adapter.Capabilities(context.Background()); err != nil {
+		t.Fatalf("recovered Capabilities()=%v", err)
+	}
+	if capacity, err := fixture.adapter.NegotiatedPhysicalCapacity(); err != nil || capacity.Slots != 4 {
+		t.Fatalf("recovered capacity=%+v err=%v", capacity, err)
+	}
+}
+
 func TestDockerAdapterLaunchAndReconcileReplayKeepExactBytesAndReceipt(t *testing.T) {
 	fixture := newDockerAdapterFixture(t)
 	first, firstErr := fixture.adapter.Launch(context.Background(), fixture.request)
@@ -497,6 +554,7 @@ type dockerClientStub struct {
 	events                                                        *[]string
 	capabilities                                                  microvm.RespuestaCapacidades
 	capabilityErr, launchErr, queryErr, startErr, inputErr        error
+	capabilityHook                                                func()
 	mutateLaunch                                                  func(*microvm.RespuestaContenedorV1)
 	mutateQuery                                                   func(*microvm.RespuestaOperacionContenedorV1)
 	mutateStart                                                   func(*microvm.RespuestaInicioSesionContenedorV1)
@@ -506,6 +564,9 @@ type dockerClientStub struct {
 }
 
 func (client *dockerClientStub) NegociarDocker(context.Context) (microvm.RespuestaCapacidades, error) {
+	if client.capabilityHook != nil {
+		client.capabilityHook()
+	}
 	*client.events = append(*client.events, "negotiate")
 	client.negotiations++
 	return client.capabilities, client.capabilityErr

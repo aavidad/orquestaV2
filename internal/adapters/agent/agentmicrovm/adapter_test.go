@@ -601,22 +601,22 @@ func TestAdapterNegotiationGenerationExhaustionFailsClosedWithoutWrapping(t *tes
 	descriptor := validDescriptor(t, false)
 	client := &launchClientStub{capabilities: validRemoteCapabilities()}
 	adapter := mustNewAdapter(t, client, validSigner(), request, descriptor)
-	adapter.physicalCapacityGeneration = ^uint64(0)
-	adapter.physicalCapacity = NegotiatedPhysicalCapacity{
+	adapter.physicalCapacity.generation = ^uint64(0)
+	adapter.physicalCapacity.capacity = NegotiatedPhysicalCapacity{
 		PlacementRef: request.ReferenciaColocacion,
 		Slots:        999,
 	}
-	adapter.physicalCapacityAvailable = true
+	adapter.physicalCapacity.available = true
 
 	if _, err := adapter.Capabilities(context.Background()); ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable {
 		t.Fatalf("Capabilities() = %v code=%q", err, ErrorCode(err))
 	}
 	capacity, err := adapter.NegotiatedPhysicalCapacity()
-	if adapter.physicalCapacityGeneration != ^uint64(0) ||
+	if adapter.physicalCapacity.generation != ^uint64(0) ||
 		capacity != (NegotiatedPhysicalCapacity{}) ||
 		ErrorCode(err) != CodeNegotiatedPhysicalCapacityUnavailable || client.capabilitiesCall != 0 {
 		t.Fatalf("generation=%d capacity=%+v error=%v calls=%d",
-			adapter.physicalCapacityGeneration, capacity, err, client.capabilitiesCall)
+			adapter.physicalCapacity.generation, capacity, err, client.capabilitiesCall)
 	}
 }
 
