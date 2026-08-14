@@ -6,21 +6,25 @@ import (
 )
 
 func validateRecoveryV28EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryEffectRecoveryClaim(ctx, tx, false, false)
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, false, false, false)
 }
 
 func validateRecoveryV30EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, false)
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, false, false)
 }
 
 func validateRecoveryV40EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, true)
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, true, false)
+}
+
+func validateRecoveryV41EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, true, true)
 }
 
 func validateRecoveryEffectRecoveryClaim(
 	ctx context.Context,
 	tx *sql.Tx,
-	allowUnclaimedRetry, allowStopPending bool,
+	allowUnclaimedRetry, allowStopPending, allowStopTerminal bool,
 ) error {
 	pendingClaim := `(action.claim_token IS NOT NULL AND action.claimed_by IS NOT NULL
            AND action.claimed_until IS NOT NULL)`
@@ -32,6 +36,20 @@ func validateRecoveryEffectRecoveryClaim(
 	validKind := `(action.kind='launch_agent' AND intent.kind='agent_launch')`
 	if allowStopPending {
 		validKind = `(` + validKind + ` OR (action.kind='stop_agent' AND intent.kind='agent_stop'))`
+	}
+	stopTerminal := ""
+	if allowStopTerminal {
+		stopTerminal = ` OR
+	(action.kind='stop_agent' AND action.completed_at IS NOT NULL AND action.quarantined_at IS NULL
+     AND EXISTS (SELECT 1 FROM action_consumption_receipts consumed
+      JOIN effect_receipts receipt ON receipt.ref=consumed.effect_receipt_ref
+      WHERE consumed.action_ref=action.ref AND consumed.fence=action.fence
+       AND consumed.claim_token=action.claim_token AND consumed.worker_ref=action.claimed_by
+       AND consumed.delivery_attempt=action.delivery_attempt
+       AND consumed.consumed_at=action.completed_at AND consumed.outcome='completed'
+       AND consumed.error_code='' AND receipt.attempt_ref=action.recovery_effect_attempt_ref
+       AND receipt.action_fence=attempt.action_fence AND receipt.confirmed_at=consumed.consumed_at
+       AND receipt.status IN ('stopped','already_stopped','already_completed','already_failed')))`
 	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{
@@ -70,7 +88,7 @@ WHERE action.recovery_effect_attempt_ref IS NOT NULL AND
         AND consumed.consumed_at=action.completed_at
         AND (consumed.effect_receipt_ref IS NULL
              OR (receipt.attempt_ref=action.recovery_effect_attempt_ref
-                 AND receipt.action_fence=attempt.action_fence))))))`,
+		             AND receipt.action_fence=attempt.action_fence))))` + stopTerminal + `))`,
 		},
 		{
 			"sqlite.recovery_v28_effect_receipt_attempt_invalid",
@@ -82,7 +100,12 @@ WHERE attempt.ref IS NULL OR receipt.action_ref<>attempt.action_ref
  OR receipt.confirmed_at<attempt.started_at
 	 OR (attempt.claim_lease_until IS NOT NULL
 	     AND receipt.confirmed_at>=attempt.claim_lease_until
-	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close'))`,
+	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close')
+	     AND NOT (intent.kind='agent_stop' AND EXISTS (
+	      SELECT 1 FROM outbox recovered WHERE recovered.ref=receipt.action_ref
+	       AND recovered.recovery_effect_attempt_ref=attempt.ref
+	       AND recovered.completed_at=receipt.confirmed_at
+	       AND receipt.confirmed_at<recovered.claimed_until)))`,
 		},
 		{
 			"sqlite.recovery_v28_effect_consumption_claim_invalid",
@@ -123,6 +146,14 @@ WHERE NOT (
   AND receipt.action_fence<consumed.fence
   AND NOT EXISTS (SELECT 1 FROM effect_attempts current
                   WHERE current.action_ref=consumed.action_ref
+	                    AND current.action_fence=consumed.fence))
+ OR
+ (consumed.kind='stop_agent'
+  AND action.recovery_effect_attempt_ref=receipt.attempt_ref
+  AND receipt.action_fence<consumed.fence
+  AND receipt.confirmed_at=consumed.consumed_at
+  AND NOT EXISTS (SELECT 1 FROM effect_attempts current
+                  WHERE current.action_ref=consumed.action_ref
                     AND current.action_fence=consumed.fence)))`,
 		},
 	})
@@ -153,7 +184,9 @@ WHERE attempt.ref IS NULL OR intent.ref IS NULL OR action.ref IS NULL
  OR receipt.action_fence<>attempt.action_fence OR receipt.idempotency_key<>attempt.idempotency_key
 	 OR receipt.confirmed_at<attempt.started_at
 	 OR (attempt.claim_lease_until IS NOT NULL AND receipt.confirmed_at>=attempt.claim_lease_until
-	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close'))
+	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close')
+	     AND NOT (intent.kind='agent_stop' AND action.recovery_effect_attempt_ref=attempt.ref
+	      AND action.completed_at=receipt.confirmed_at AND receipt.confirmed_at<action.claimed_until))
  OR (intent.kind='agent_launch' AND receipt.status<>'accepted')
  OR (intent.kind='agent_quiesce' AND receipt.status<>'quiesced')
  OR (intent.kind='agent_environment_preserve' AND receipt.status<>'preserved')
@@ -186,7 +219,11 @@ SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents inten
       OR (consumed.kind='launch_agent' AND action.recovery_effect_attempt_ref=receipt.attempt_ref
        AND receipt.action_fence<consumed.fence
        AND NOT EXISTS(SELECT 1 FROM effect_attempts current
-          WHERE current.action_ref=consumed.action_ref AND current.action_fence=consumed.fence)))))
+	          WHERE current.action_ref=consumed.action_ref AND current.action_fence=consumed.fence))
+	  OR (consumed.kind='stop_agent' AND action.recovery_effect_attempt_ref=receipt.attempt_ref
+	   AND receipt.action_fence<consumed.fence AND receipt.confirmed_at=consumed.consumed_at
+	   AND NOT EXISTS(SELECT 1 FROM effect_attempts current
+	      WHERE current.action_ref=consumed.action_ref AND current.action_fence=consumed.fence)))))
  OR (consumed.governance_version=1 AND consumed.kind='launch_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL)
  OR (consumed.governance_version=1 AND consumed.kind IN (

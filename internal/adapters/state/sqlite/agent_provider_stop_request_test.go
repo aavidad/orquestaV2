@@ -262,11 +262,15 @@ func TestV39UpgradePreservesExactV38StopJournalAndHistory(t *testing.T) {
 		recoverySchemaV38AgentProviderStop).Scan(&checksumV38))
 
 	legacy := agentCapacityDatabase(t, filepath.Join(t.TempDir(), "canonical-v38.db"), recoverySchemaV38AgentProviderStop)
-	var legacyTrigger, legacyRecoveryTrigger string
+	var legacyTrigger, legacyRecoveryTrigger, legacyEffectReceiptTrigger, legacyConsumptionEffectTrigger string
 	sqliteTestNoError(t, legacy.QueryRow(`SELECT sql FROM sqlite_schema
 WHERE type='trigger' AND name='agent_provider_stop_requests_causal_insert'`).Scan(&legacyTrigger))
 	sqliteTestNoError(t, legacy.QueryRow(`SELECT sql FROM sqlite_schema
 WHERE type='trigger' AND name='outbox_recovery_effect_claim_guard'`).Scan(&legacyRecoveryTrigger))
+	sqliteTestNoError(t, legacy.QueryRow(`SELECT sql FROM sqlite_schema
+WHERE type='trigger' AND name='effect_receipts_causal_guard'`).Scan(&legacyEffectReceiptTrigger))
+	sqliteTestNoError(t, legacy.QueryRow(`SELECT sql FROM sqlite_schema
+WHERE type='trigger' AND name='action_consumption_effect_receipt_guard'`).Scan(&legacyConsumptionEffectTrigger))
 	sqliteTestNoError(t, legacy.Close())
 	_, err := system.repository.db.Exec(`DROP TRIGGER agent_provider_stop_requests_causal_insert`)
 	sqliteTestNoError(t, err)
@@ -276,8 +280,17 @@ WHERE type='trigger' AND name='outbox_recovery_effect_claim_guard'`).Scan(&legac
 	sqliteTestNoError(t, err)
 	_, err = system.repository.db.Exec(legacyRecoveryTrigger)
 	sqliteTestNoError(t, err)
-	_, err = system.repository.db.Exec(`DELETE FROM schema_migrations WHERE version IN (?,?)`,
-		recoverySchemaV38AgentProviderStopKey, recoverySchemaV38StopRecoveryClaim)
+	_, err = system.repository.db.Exec(`DROP TRIGGER effect_receipts_causal_guard`)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(legacyEffectReceiptTrigger)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(`DROP TRIGGER action_consumption_effect_receipt_guard`)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(legacyConsumptionEffectTrigger)
+	sqliteTestNoError(t, err)
+	_, err = system.repository.db.Exec(`DELETE FROM schema_migrations WHERE version IN (?,?,?)`,
+		recoverySchemaV38AgentProviderStopKey, recoverySchemaV38StopRecoveryClaim,
+		recoverySchemaV38StopRecoveryTerminal)
 	sqliteTestNoError(t, err)
 	_, err = system.repository.db.Exec(`PRAGMA user_version=38`)
 	sqliteTestNoError(t, err)

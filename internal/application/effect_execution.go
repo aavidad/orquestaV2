@@ -263,8 +263,11 @@ func effectReceipt(
 func validateEffectReceipt(claim ActionClaim, attempt EffectAttempt, receipt EffectReceipt) error {
 	intent := claim.Action.EffectIntent
 	confirmationClaimValid := claim.Fence == attempt.ActionFence
+	recoveredStop := false
 	if claim.Disposition == ActionClaimDispositionRecoverEffect {
-		confirmationClaimValid = claim.Action.Kind == ActionLaunchAgent &&
+		recoveredLaunch := claim.Action.Kind == ActionLaunchAgent && intent.Kind == EffectKindAgentLaunch
+		recoveredStop = claim.Action.Kind == ActionStopAgent && intent.Kind == EffectKindAgentStop
+		confirmationClaimValid = (recoveredLaunch || recoveredStop) &&
 			claim.Fence > attempt.ActionFence && claim.RecoveryEffectAttemptRef == attempt.Ref
 	}
 	if attempt.ActionFence == 0 || !validApplicationRef(receipt.Ref) || !validApplicationRef(receipt.ExternalRef) ||
@@ -274,7 +277,9 @@ func validateEffectReceipt(claim ActionClaim, attempt EffectAttempt, receipt Eff
 		receipt.ActionRef != claim.Action.Ref || receipt.ActionFence != attempt.ActionFence ||
 		!confirmationClaimValid ||
 		receipt.IdempotencyKey != intent.IdempotencyKey || receipt.ConfirmedAt.Before(attempt.StartedAt) ||
-		(effectReceiptRequiresLiveLease(intent.Kind) && !receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil)) ||
+		(effectReceiptRequiresLiveLease(intent.Kind) && !recoveredStop &&
+			!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil)) ||
+		(recoveredStop && !receipt.ConfirmedAt.Before(claim.LeaseUntil)) ||
 		governance.ValidateResourceUsage(receipt.Usage) != nil {
 		return errors.New("application.effect_receipt_invalid")
 	}

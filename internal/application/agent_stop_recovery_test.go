@@ -132,17 +132,58 @@ func TestProcessAgentStopRecoveryRequeuesOnlyReadOnlyPendingOutcomes(t *testing.
 	}
 }
 
-func TestProcessAgentStopRecoveryLeavesTerminalAndInvalidResultsUnconsumed(t *testing.T) {
+func TestProcessAgentStopRecoveryPersistsTerminalHistoryWithoutSecondStop(t *testing.T) {
+	for _, test := range []struct {
+		status       ports.AgentStopStatus
+		execution    ExecutionState
+		consumptions int
+	}{
+		{ports.AgentStopped, ExecutionStopped, 3},
+		{ports.AgentStopAlreadyStopped, ExecutionStopped, 3},
+		{ports.AgentStopAlreadyCompleted, ExecutionRunning, 2},
+		{ports.AgentStopAlreadyFailed, ExecutionRunning, 2},
+	} {
+		t.Run(string(test.status), func(t *testing.T) {
+			fixture := newAgentStopRecoveryFixture(t)
+			fixture.system.clock.Advance(
+				fixture.attempt.ClaimLeaseUntil.Sub(fixture.system.clock.Now()) + time.Nanosecond,
+			)
+			controller := &agentStopRecoveryProcessorController{
+				status: test.status, confirmedAt: fixture.system.clock.Now(),
+			}
+			fixture.system.orchestrator.controller = controller
+			result, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+			if err != nil || !result.Processed || len(controller.reconciles) != 1 ||
+				controller.stops != 0 || controller.capabilityCalls != 0 {
+				t.Fatalf("result=%+v err=%v reconciles=%d stops=%d capabilities=%d",
+					result, err, len(controller.reconciles), controller.stops, controller.capabilityCalls)
+			}
+			record := fixture.system.record(t)
+			execution, found := executionByRef(record.Executions, fixture.execution.Ref)
+			if !found || execution.State != test.execution || len(record.EffectReceipts) != 2 ||
+				len(record.ConsumptionReceipts) != test.consumptions {
+				t.Fatalf("execution=%+v found=%t effects=%+v consumptions=%+v",
+					execution, found, record.EffectReceipts, record.ConsumptionReceipts)
+			}
+			effect := record.EffectReceipts[1]
+			consumed := record.ConsumptionReceipts[1]
+			if effect.AttemptRef != fixture.attempt.Ref || effect.ActionFence != fixture.attempt.ActionFence ||
+				effect.Status != EffectStatus(test.status) || !effect.ConfirmedAt.Equal(controller.confirmedAt) ||
+				consumed.ActionRef != fixture.claim.Action.Ref || consumed.Fence != fixture.claim.Fence ||
+				consumed.EffectReceiptRef != effect.Ref {
+				t.Fatalf("effect=%+v consumed=%+v claim=%+v", effect, consumed, fixture.claim)
+			}
+		})
+	}
+}
+
+func TestProcessAgentStopRecoveryLeavesInvalidResultsUnconsumed(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		status ports.AgentStopStatus
 		err    error
 		mutate func(*ports.AgentStopReceipt)
 	}{
-		{"stopped", ports.AgentStopped, nil, nil},
-		{"already stopped", ports.AgentStopAlreadyStopped, nil, nil},
-		{"already completed", ports.AgentStopAlreadyCompleted, nil, nil},
-		{"already failed", ports.AgentStopAlreadyFailed, nil, nil},
 		{"permanent failure", "", errors.New("provider response invalid"), nil},
 		{"crossed receipt", ports.AgentStopPending, nil, func(receipt *ports.AgentStopReceipt) {
 			receipt.StopActionFence++
@@ -238,6 +279,38 @@ func TestProcessAgentStopRecoveryFencesClaimProviderAndCancellationBeforeMutatio
 		if action.token != "" || action.workerRef != "" || !action.lease.IsZero() {
 			t.Fatalf("revoked claim was not requeued: %+v", action)
 		}
+	})
+	t.Run("terminal confirmation at recovery lease boundary", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		controller := &agentStopRecoveryProcessorController{
+			status: ports.AgentStopped, confirmedAt: fixture.claim.LeaseUntil,
+		}
+		fixture.system.orchestrator.controller = controller
+		before := fixture.system.effects(t)
+		_, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+		if !IsStateError(err, StateConflict) || len(controller.reconciles) != 1 || controller.stops != 0 {
+			t.Fatalf("lease boundary err=%v reconciles=%d stops=%d",
+				err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.assertEffects(t, before)
+	})
+	t.Run("terminal success after recovery lease expires", func(t *testing.T) {
+		fixture := newAgentStopRecoveryFixture(t)
+		confirmedAt := fixture.system.clock.Now()
+		controller := &agentStopRecoveryProcessorController{
+			status: ports.AgentStopped, confirmedAt: confirmedAt,
+			hook: func() {
+				fixture.system.clock.Advance(fixture.claim.LeaseUntil.Sub(fixture.system.clock.Now()))
+			},
+		}
+		fixture.system.orchestrator.controller = controller
+		before := fixture.system.effects(t)
+		_, err := fixture.system.orchestrator.ProcessClaim(context.Background(), fixture.claim)
+		if !IsStateError(err, StateConflict) || len(controller.reconciles) != 1 || controller.stops != 0 {
+			t.Fatalf("expired result err=%v reconciles=%d stops=%d",
+				err, len(controller.reconciles), controller.stops)
+		}
+		fixture.system.assertEffects(t, before)
 	})
 	t.Run("cancel during reconcile", func(t *testing.T) {
 		fixture := newAgentStopRecoveryFixture(t)

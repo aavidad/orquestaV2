@@ -93,6 +93,9 @@ type sqliteV15External struct {
 	launchCalls          int
 	observeCalls         int
 	stopCalls            int
+	stopReconcileCalls   int
+	stopReconcileStart   chan struct{}
+	stopReconcileGate    chan struct{}
 	stopStatus           ports.AgentStopStatus
 	observationStatus    ports.AgentStatus
 	observationError     string
@@ -307,6 +310,34 @@ func (external *sqliteV15External) Stop(
 		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
 		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
 		Status: status, ReceiptRef: "provider-stop:" + request.ExecutionRef.String(),
+		ConfirmedAt: external.clock.Now(),
+	}, nil
+}
+
+func (external *sqliteV15External) ReconcileStop(
+	_ context.Context, request ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	external.mu.Lock()
+	external.stopReconcileCalls++
+	status, start, gate := external.stopStatus, external.stopReconcileStart, external.stopReconcileGate
+	external.mu.Unlock()
+	if start != nil {
+		start <- struct{}{}
+	}
+	if gate != nil {
+		<-gate
+	}
+	if status == "" {
+		status = ports.AgentStopped
+	}
+	return ports.AgentStopReceipt{
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, StopEffectAttemptRef: request.StopEffectAttemptRef,
+		StopActionFence: request.StopActionFence, SpecHash: request.SpecHash,
+		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
+		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
+		Status: status, ReceiptRef: "provider-stop-recovery:" + request.ExecutionRef.String(),
 		ConfirmedAt: external.clock.Now(),
 	}, nil
 }

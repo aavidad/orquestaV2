@@ -23,7 +23,7 @@ JOIN outbox action ON action.ref=attempt.action_ref
 WHERE attempt.claim_lease_until IS NOT NULL
  AND receipt.confirmed_at>=attempt.claim_lease_until
  AND NOT (
-  intent.kind IN ('agent_quiesce','agent_environment_preserve','agent_environment_close')
+  (intent.kind IN ('agent_quiesce','agent_environment_preserve','agent_environment_close')
   AND EXISTS (
    SELECT 1 FROM action_consumption_receipts consumed
    JOIN agent_environment_lifecycles lifecycle ON lifecycle.execution_ref=consumed.execution_ref
@@ -51,7 +51,19 @@ WHERE attempt.claim_lease_until IS NOT NULL
     AND action.work_item_ref=attempt.work_item_ref
     AND action.execution_ref=attempt.execution_ref
     AND lifecycle.goal_ref=attempt.goal_ref
-    AND lifecycle.work_item_ref=attempt.work_item_ref))`
+    AND lifecycle.work_item_ref=attempt.work_item_ref))
+  OR (intent.kind='agent_stop' AND action.kind='stop_agent'
+   AND action.recovery_effect_attempt_ref=attempt.ref
+   AND action.fence>attempt.action_fence AND action.completed_at=receipt.confirmed_at
+   AND receipt.confirmed_at<action.claimed_until
+   AND NOT EXISTS (SELECT 1 FROM effect_attempts current
+                   WHERE current.action_ref=action.ref AND current.action_fence=action.fence)
+   AND EXISTS (SELECT 1 FROM action_consumption_receipts consumed
+    WHERE consumed.action_ref=action.ref AND consumed.effect_receipt_ref=receipt.ref
+     AND consumed.fence=action.fence AND consumed.claim_token=action.claim_token
+     AND consumed.worker_ref=action.claimed_by AND consumed.delivery_attempt=action.delivery_attempt
+     AND consumed.consumed_at=action.completed_at AND consumed.outcome='completed'
+     AND consumed.error_code='')))`
 	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{

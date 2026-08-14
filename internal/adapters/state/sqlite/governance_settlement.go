@@ -33,10 +33,12 @@ func insertEffectReceipt(
 		claim.Action.Ref == receipt.ActionRef && claim.Action.EffectIntentRef == receipt.IntentRef &&
 		claim.Fence == receipt.ActionFence && receipt.ConfirmedAt.Equal(consumedAt)
 	if claim.Disposition == application.ActionClaimDispositionRecoverEffect {
-		confirmationClaimValid = claim.Action.Kind == application.ActionLaunchAgent &&
+		recoveredLaunch := claim.Action.Kind == application.ActionLaunchAgent && receipt.ConfirmedAt.Before(consumedAt)
+		recoveredStop := claim.Action.Kind == application.ActionStopAgent && receipt.ConfirmedAt.Equal(consumedAt)
+		confirmationClaimValid = (recoveredLaunch || recoveredStop) &&
 			claim.Action.Ref == receipt.ActionRef && claim.Action.EffectIntentRef == receipt.IntentRef &&
 			claim.RecoveryEffectAttemptRef == receipt.AttemptRef && receipt.ActionFence < claim.Fence &&
-			receipt.ConfirmedAt.Before(consumedAt)
+			receipt.ConfirmedAt.Before(claim.LeaseUntil)
 	}
 	if !confirmationClaimValid {
 		return conflict(errors.New("sqlite.effect_receipt_claim_conflict"))
@@ -51,7 +53,9 @@ func insertEffectReceipt(
 		attempt.IntentDigest != receipt.IntentDigest || attempt.ApprovalRef != receipt.ApprovalRef ||
 		attempt.Subject != receipt.Subject || attempt.IdempotencyKey != receipt.IdempotencyKey ||
 		receipt.ConfirmedAt.Before(attempt.StartedAt) ||
-		!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil) {
+		(!receipt.ConfirmedAt.Before(attempt.ClaimLeaseUntil) &&
+			!(claim.Disposition == application.ActionClaimDispositionRecoverEffect &&
+				claim.Action.Kind == application.ActionStopAgent)) {
 		return conflict(errors.New("sqlite.effect_receipt_attempt_conflict"))
 	}
 	var outboxFence, claimedUntil int64

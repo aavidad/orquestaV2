@@ -328,10 +328,11 @@ ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END,name`)
 		}
 	}
 	if _, err := transaction.Exec(
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?)`,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?)`,
 		recoverySchemaV38EnvironmentLifecycle, recoverySchemaV23WizardGapsSnapshot,
 		recoverySchemaV38AgentProviderRequest, recoverySchemaV38AgentProviderStop,
 		recoverySchemaV38AgentProviderStopKey, recoverySchemaV38StopRecoveryClaim,
+		recoverySchemaV38StopRecoveryTerminal,
 	); err != nil {
 		t.Fatal(err)
 	}

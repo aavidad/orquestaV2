@@ -33,7 +33,7 @@ func (orchestrator *Orchestrator) processAgentStopRecovery(
 	if err != nil {
 		return err
 	}
-	request, _, err := BuildAgentStopRecoveryRequest(record, claim)
+	request, attempt, err := BuildAgentStopRecoveryRequest(record, claim)
 	execution, found := executionForAction(record, claim.Action)
 	if err != nil || !found || !agentStopRecoveryProviderMatches(request, orchestrator.agentCapabilities) {
 		return &StateError{Code: StateConflict}
@@ -48,16 +48,21 @@ func (orchestrator *Orchestrator) processAgentStopRecovery(
 	if err := orchestrator.state.ValidateAgentStopRecoveryClaim(ctx, claim); err != nil {
 		return err
 	}
-	return orchestrator.reconcileAgentStopRecovery(ctx, claim, execution, reconciler, request)
+	return orchestrator.reconcileAgentStopRecovery(ctx, claim, record, attempt, reconciler, request)
 }
 
 func (orchestrator *Orchestrator) reconcileAgentStopRecovery(
 	ctx context.Context,
 	claim ActionClaim,
-	execution ExecutionRecord,
+	record GoalRecord,
+	attempt EffectAttempt,
 	reconciler AgentStopReconciler,
 	request ports.AgentStopRequest,
 ) error {
+	item, execution, control, err := validateStopClaim(claim, record)
+	if err != nil {
+		return &StateError{Code: StateConflict}
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -77,9 +82,24 @@ func (orchestrator *Orchestrator) reconcileAgentStopRecovery(
 	switch receipt.Status {
 	case ports.AgentStopPending, ports.AgentStopUnsupported:
 		return orchestrator.requeueStop(ctx, claim, execution, agentStopReconciliationPendingCode)
+	case ports.AgentStopped, ports.AgentStopAlreadyStopped,
+		ports.AgentStopAlreadyCompleted, ports.AgentStopAlreadyFailed:
+		if err := orchestrator.state.ValidateAgentStopRecoveryClaim(ctx, claim); err != nil {
+			return err
+		}
+		externalReceipt, receiptErr := effectReceipt(
+			claim, attempt, receipt.ReceiptRef, EffectStatus(receipt.Status), unknownUsage(), receipt.ConfirmedAt,
+		)
+		if receiptErr != nil {
+			return &StateError{Code: StateConflict}
+		}
+		if receipt.Status == ports.AgentStopAlreadyCompleted || receipt.Status == ports.AgentStopAlreadyFailed {
+			return orchestrator.settleStopObservedTerminal(
+				ctx, claim, record, item, execution, control, receipt, externalReceipt,
+			)
+		}
+		return orchestrator.settleStopped(ctx, claim, record, item, execution, control, receipt, externalReceipt)
 	default:
-		// A terminal observation remains leased and unconsumed until the next
-		// cut can persist its historical receipt and terminal snapshot atomically.
 		return &StateError{Code: StateConflict}
 	}
 }

@@ -377,7 +377,9 @@ WHERE type='trigger' AND name='outbox_recovery_effect_claim_guard'`).Scan(&trigg
 	repository, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: time.Now,
 	})
-	sqliteTestNoError(t, err)
+	if err != nil {
+		t.Fatalf("upgrade V39: %s", sqliteTestErrorChain(err))
+	}
 	t.Cleanup(func() { _ = repository.Close() })
 	var version, receipt int
 	var triggerV40 string

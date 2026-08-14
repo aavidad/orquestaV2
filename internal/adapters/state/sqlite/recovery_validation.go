@@ -142,6 +142,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 			if version >= recoverySchemaV38StopRecoveryClaim {
 				recoveryClaimValidator = validateRecoveryV40EffectRecoveryClaim
 			}
+			if version >= recoverySchemaV38StopRecoveryTerminal {
+				recoveryClaimValidator = validateRecoveryV41EffectRecoveryClaim
+			}
 			validators = append(validators, recoveryClaimValidator)
 		}
 		if version >= recoverySchemaV38MicroVMHostLaunch {

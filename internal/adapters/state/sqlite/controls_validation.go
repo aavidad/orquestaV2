@@ -53,7 +53,11 @@ func validateApplyControlState(state application.ApplyControlState) error {
 		return err
 	}
 	if state.Claim.Action.Ref != "" {
-		if err := validateClaim(state.Claim); err != nil || state.Claim.Action.GoalRef != state.GoalRef {
+		claimErr := validateClaim(state.Claim)
+		if stopRecoveryControlApplication(state) {
+			claimErr = validateEffectRecoveryClaim(state.Claim)
+		}
+		if claimErr != nil || state.Claim.Action.GoalRef != state.GoalRef {
 			return errors.New("sqlite.control_claim_invalid")
 		}
 	}
@@ -182,8 +186,13 @@ func validateControlStopReceipt(state application.ApplyControlState, current app
 	}
 	receipt := *state.EffectReceipt
 	execution, found := sqliteExecutionByRef(current.Executions, receipt.Subject.ExecutionRef)
+	validFence := receipt.ActionFence == state.Claim.Fence
+	if stopRecoveryControlApplication(state) {
+		validFence = receipt.AttemptRef == state.Claim.RecoveryEffectAttemptRef &&
+			receipt.ActionFence < state.Claim.Fence
+	}
 	if !found || state.Claim.Action.Kind != application.ActionStopAgent ||
-		receipt.ActionRef != state.Claim.Action.Ref || receipt.ActionFence != state.Claim.Fence ||
+		receipt.ActionRef != state.Claim.Action.Ref || !validFence ||
 		receipt.Subject.GoalRef != execution.GoalRef || receipt.Subject.WorkItemRef != execution.WorkItemRef ||
 		!receipt.ConfirmedAt.Equal(state.OperationAt) {
 		return errors.New("sqlite.control_stop_receipt_invalid")
@@ -198,4 +207,9 @@ func validateControlStopReceipt(state application.ApplyControlState, current app
 		return errors.New("sqlite.control_stop_receipt_nonterminal")
 	}
 	return nil
+}
+
+func stopRecoveryControlApplication(state application.ApplyControlState) bool {
+	return state.Claim.Disposition == application.ActionClaimDispositionRecoverEffect &&
+		state.Claim.Action.Kind == application.ActionStopAgent && state.EffectReceipt != nil
 }
