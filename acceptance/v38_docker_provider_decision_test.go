@@ -69,7 +69,8 @@ func TestV38DockerProviderDecisionMatchesCanonicalRoadmap(t *testing.T) {
 	v38AssertNoPrematureEvidence(t, filepath.Join(root, "product/evidence"))
 	v38DockerAssertPublishedModuleWithoutReplace(t, root)
 	v38DockerAssertClientAdoptionReady(t, root, fixture["client_adoption_gate"].(map[string]any))
-	v38DockerAssertCompositionBlockerReferences(t, root, fixture["composition_gate"].(map[string]any))
+	v38DockerAssertLocalTestReferences(t, root, fixture["composition_gate"].(map[string]any)["test_refs"].([]any))
+	v38DockerAssertLocalTestReferences(t, root, fixture["stop_recovery_gate"].(map[string]any)["test_refs"].([]any))
 	v38DockerAssertNoDirectRuntime(t, root)
 }
 
@@ -97,6 +98,11 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 		{"controller_ausente", []string{"implementation_state", "neutral_agent_controller"}, "absent"},
 		{"journal_ausente", []string{"implementation_state", "prepared_request_journal"}, "absent"},
 		{"journal_stop_ausente", []string{"implementation_state", "durable_stop_request_journal"}, "absent"},
+		{"recovery_stop_ausente", []string{"stop_recovery_gate", "status"}, "absent"},
+		{"recovery_stop_repite_efecto", []string{"stop_recovery_gate", "physical_reconciliation"}, "second_stop"},
+		{"recovery_stop_no_atomico", []string{"stop_recovery_gate", "durable_terminal_commit"}, "separate_writes"},
+		{"recovery_stop_wired", []string{"stop_recovery_gate", "runtime_wiring"}, "present"},
+		{"recovery_stop_acredita", []string{"stop_recovery_gate", "accreditation"}, "v38"},
 		{"cliente_bloqueado", []string{"client_adoption_gate", "status"}, "blocked"},
 		{"superficie_observer_ausente", []string{"client_adoption_gate", "required_symbols"}, []any{"NegociarDocker"}},
 		{"superficie_stop_ausente", []string{"client_adoption_gate", "required_symbols"}, []any{"NegociarDocker", "DetenerContenedorCodificada"}},
@@ -127,19 +133,21 @@ func TestV38DockerProviderDecisionRejectsSemanticDrift(t *testing.T) {
 }
 
 func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
-	if !agentFirecrackerHasExactKeys(fixture, "schema_version", "fixture_id", "decision", "v38_alignment", "implementation_state", "composition_gate", "client_adoption_gate") ||
-		fixture["schema_version"] != float64(8) || fixture["fixture_id"] != "v38_docker_provider_decision" {
+	if !agentFirecrackerHasExactKeys(fixture, "schema_version", "fixture_id", "decision", "v38_alignment", "implementation_state", "stop_recovery_gate", "composition_gate", "client_adoption_gate") ||
+		fixture["schema_version"] != float64(9) || fixture["fixture_id"] != "v38_docker_provider_decision" {
 		return false
 	}
 	decision, decisionOK := fixture["decision"].(map[string]any)
 	alignment, alignmentOK := fixture["v38_alignment"].(map[string]any)
 	state, stateOK := fixture["implementation_state"].(map[string]any)
+	stopRecovery, stopRecoveryOK := fixture["stop_recovery_gate"].(map[string]any)
 	composition, compositionOK := fixture["composition_gate"].(map[string]any)
 	gate, gateOK := fixture["client_adoption_gate"].(map[string]any)
-	if !decisionOK || !alignmentOK || !stateOK || !compositionOK || !gateOK ||
+	if !decisionOK || !alignmentOK || !stateOK || !stopRecoveryOK || !compositionOK || !gateOK ||
 		!agentFirecrackerHasExactKeys(decision, "id", "status", "capability_refs", "provider", "transport", "adapter_boundary", "selection", "client_adoption", "engine_owner", "orquesta_docker_socket", "forbidden_sharing", "fallback", "v38_accreditation", "test_refs") ||
 		!agentFirecrackerHasExactKeys(alignment, "canonical_vertical", "capability_id", "capability_status", "acceptance_contract", "contract_status", "firecracker_required_subgates", "firecracker_global_accreditation", "docker_accreditation", "new_capability", "new_acceptance_contract", "new_receipt", "new_evidence") ||
 		!agentFirecrackerHasExactKeys(state, "runtime_wiring", "neutral_agent_launcher", "neutral_agent_observer", "neutral_agent_controller", "docker_client_usage", "prepared_request_journal", "durable_stop_request_journal", "docker_engine_smoke", "local_replace") ||
+		!agentFirecrackerHasExactKeys(stopRecovery, "status", "physical_reconciliation", "durable_terminal_commit", "claim_fencing", "restart_and_cas", "runtime_wiring", "accreditation", "test_refs") ||
 		!agentFirecrackerHasExactKeys(composition, "status", "neutral_application_contract", "required_application_authorities", "published_contract_gap", "external_unblock_dependency", "forbidden_resolutions", "test_refs") ||
 		!agentFirecrackerHasExactKeys(gate, "status", "pinned_module_version", "module_zip_sum", "module_source", "observed_external_candidate_commit", "required_symbols", "unblock", "forbidden_resolutions", "next_safe_dependency") {
 		return false
@@ -164,6 +172,13 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 		state["prepared_request_journal"] == "same_state_repository_used_by_adapter_not_runtime_wired" &&
 		state["durable_stop_request_journal"] == "same_state_repository_used_by_adapter_not_runtime_wired" &&
 		state["docker_engine_smoke"] == "not_claimed" && state["local_replace"] == "forbidden" &&
+		stopRecovery["status"] == "implemented_reviewed_not_runtime_wired" &&
+		stopRecovery["physical_reconciliation"] == "read_only_reconcile_never_second_stop" &&
+		stopRecovery["durable_terminal_commit"] == "historical_effect_receipt_current_claim_consumption_terminal_snapshot_same_state_repository_atomic" &&
+		stopRecovery["claim_fencing"] == "validated_immediately_before_provider_and_terminal_commit" &&
+		stopRecovery["restart_and_cas"] == "exact_restart_single_atomic_winner" &&
+		stopRecovery["runtime_wiring"] == "absent" && stopRecovery["accreditation"] == "none" &&
+		reflect.DeepEqual(stopRecovery["test_refs"], []any{"internal/application/agent_stop_recovery_test.go", "internal/adapters/state/sqlite/v41_stop_recovery_terminal_test.go"}) &&
 		composition["status"] == "blocked_external_contract_required" && composition["neutral_application_contract"] == "implemented_port_contract_not_runtime_wired_v2" && reflect.DeepEqual(composition["required_application_authorities"], []any{
 		"execution_workspace_ref", "artifact_access_ref", "mcp_access_ref", "mailbox_endpoint_ref", "egress_authority",
 	}) && composition["published_contract_gap"] == "docker_client_missing_complete_isolated_application_authority_delegation" &&
@@ -182,9 +197,9 @@ func v38DockerProviderSemanticsValid(fixture map[string]any) bool {
 		gate["next_safe_dependency"] == "v38_docker_published_isolated_session_delegation"
 }
 
-func v38DockerAssertCompositionBlockerReferences(t *testing.T, root string, composition map[string]any) {
+func v38DockerAssertLocalTestReferences(t *testing.T, root string, refs []any) {
 	t.Helper()
-	for _, ref := range composition["test_refs"].([]any) {
+	for _, ref := range refs {
 		path, ok := ref.(string)
 		if !ok {
 			t.Fatalf("referencia de gate Docker inválida: %#v", ref)

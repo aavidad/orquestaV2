@@ -1,5 +1,5 @@
 {
-  "schema_version": 8,
+  "schema_version": 9,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
@@ -53,6 +53,19 @@
     "durable_stop_request_journal": "same_state_repository_used_by_adapter_not_runtime_wired",
     "docker_engine_smoke": "not_claimed",
     "local_replace": "forbidden"
+  },
+  "stop_recovery_gate": {
+    "status": "implemented_reviewed_not_runtime_wired",
+    "physical_reconciliation": "read_only_reconcile_never_second_stop",
+    "durable_terminal_commit": "historical_effect_receipt_current_claim_consumption_terminal_snapshot_same_state_repository_atomic",
+    "claim_fencing": "validated_immediately_before_provider_and_terminal_commit",
+    "restart_and_cas": "exact_restart_single_atomic_winner",
+    "runtime_wiring": "absent",
+    "accreditation": "none",
+    "test_refs": [
+      "internal/application/agent_stop_recovery_test.go",
+      "internal/adapters/state/sqlite/v41_stop_recovery_terminal_test.go"
+    ]
   },
   "composition_gate": {
     "status": "blocked_external_contract_required",
