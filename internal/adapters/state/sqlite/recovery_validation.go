@@ -147,6 +147,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		if version >= recoverySchemaV38EnvironmentLifecycle {
 			validators = append(validators, validarRecuperacionAgentEnvironmentLifecycles)
 		}
+		if version >= recoverySchemaV38AgentProviderRequest {
+			validators = append(validators, validateRecoveryV38AgentProviderRequests)
+		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {
 			if err := validate(ctx, tx); err != nil {

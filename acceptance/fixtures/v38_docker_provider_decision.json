@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "fixture_id": "v38_docker_provider_decision",
   "decision": {
     "id": "agent_runtime_docker_provider",
@@ -46,6 +46,7 @@
   "implementation_state": {
     "runtime_wiring": "absent",
     "docker_client_usage": "published_module_adopted_not_wired",
+    "prepared_request_journal": "same_state_repository_implemented_not_runtime_wired",
     "docker_engine_smoke": "not_claimed",
     "local_replace": "forbidden"
   },
