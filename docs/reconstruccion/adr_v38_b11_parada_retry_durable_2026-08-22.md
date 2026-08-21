@@ -24,9 +24,9 @@ preservación B12, optimizaciones SQLite y ToolExecutor V26:
 
 | Corte | Producto `P` | Verificación `V` | Retiradas `D` |
 |---|---:|---:|---:|
-| B11a — conector público Stop y composición | 203 | 273 | 76 |
-| B11b — evidencia neutral, schema 037, CAS/restart | 331 | 669 | 68 |
-| **B11 real** | **534** | **942** | **144** |
+| B11a — conector público Stop y composición | 203 | 273 | 20 |
+| B11b — evidencia neutral, schema 037, CAS/restart | 331 | 669 | 41 |
+| **B11 real** | **534** | **942** | **61** |
 
 La cifra incluye la carrera real de dos writers, duplicado, receipt y
 settlement terminales, rollback íntegro, corrupción de recovery, reinicio y el
@@ -44,7 +44,7 @@ neutral de inferencia.
    autoriza ya un nuevo intento de parada.
 3. También se retira el catálogo privado duplicado de operaciones remotas del
    adaptador: la negociación usa una única lista requerida y el contrato
-   público versionado. Las 144 líneas retiradas se registran, pero no se
+   público versionado. Las 61 líneas no documentales retiradas se registran, pero no se
    convierten en crédito ni se restan de `P/V`.
 4. La única autoridad nueva de no aplicación es
    `EffectAttemptOutcome(definitely_not_applied)`, ligada a intento, intent,
