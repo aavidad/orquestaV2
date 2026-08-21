@@ -88,6 +88,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		if version >= recoverySchemaV38RecoveryClaim {
 			governanceValidator = validateRecoveryV28Governance
 		}
+		if version >= recoverySchemaV38StopNonApplication {
+			governanceValidator = validateRecoveryV37Governance
+		}
 		validators := []recoveryValidator{
 			validateRecoveryV10Identity,
 			validateRecoveryV12Director,
@@ -146,6 +149,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		}
 		if version >= recoverySchemaV38EnvironmentLifecycle {
 			validators = append(validators, validarRecuperacionAgentEnvironmentLifecycles)
+		}
+		if version >= recoverySchemaV38StopNonApplication {
+			validators = append(validators, validateRecoveryV37EffectNonApplication)
 		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {

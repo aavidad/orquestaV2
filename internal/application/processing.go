@@ -1255,6 +1255,38 @@ func (orchestrator *Orchestrator) requeueStop(
 	return orchestrator.requeueAfter(ctx, claim, execution, code, delay)
 }
 
+func (orchestrator *Orchestrator) requeueDefinitelyUnappliedStop(
+	ctx context.Context,
+	claim ActionClaim,
+	execution ExecutionRecord,
+	attempt EffectAttempt,
+	code string,
+) error {
+	if claim.Action.Kind != ActionStopAgent || validateEffectAttempt(claim, attempt) != nil {
+		return errors.New("application.stop_unapplied_outcome_invalid")
+	}
+	now := orchestrator.clock.Now().UTC()
+	outcome := EffectAttemptOutcome{
+		Ref:        "effect-attempt-outcome:" + attempt.Ref + ":definitely-not-applied",
+		AttemptRef: attempt.Ref, IntentRef: attempt.IntentRef, IntentDigest: attempt.IntentDigest,
+		ApprovalRef: attempt.ApprovalRef, Subject: attempt.Subject, ActionRef: attempt.ActionRef,
+		ActionFence: attempt.ActionFence, IdempotencyKey: attempt.IdempotencyKey,
+		Outcome: EffectAttemptDefinitelyNotApplied, ObservedAt: now,
+	}
+	if ValidateEffectAttemptOutcome(attempt, outcome) != nil {
+		return errors.New("application.stop_unapplied_outcome_invalid")
+	}
+	base := claim.Action.EffectIntent.QuotaRetryDelay
+	if base <= 0 {
+		return errors.New("application.stop_retry_policy_invalid")
+	}
+	delay := executionRetryBackoff(base, claim.DeliveryAttempt, orchestrator.executionTimeout)
+	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
+		Claim: claim, Execution: execution, AvailableAt: now.Add(delay),
+		ErrorCode: stableFailureCode(code), OperationAt: now, EffectAttemptOutcome: &outcome,
+	})
+}
+
 func (orchestrator *Orchestrator) requeueAfter(
 	ctx context.Context,
 	claim ActionClaim,

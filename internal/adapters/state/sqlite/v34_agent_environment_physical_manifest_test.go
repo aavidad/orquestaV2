@@ -281,6 +281,9 @@ ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END,name`)
 		t.Fatal(err)
 	}
 	defer transaction.Rollback()
+	if _, err := transaction.Exec(`DROP TABLE effect_non_application_evidence`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := transaction.Exec(`DROP TABLE wizard_gaps_result_snapshots`); err != nil {
 		t.Fatal(err)
 	}
@@ -322,8 +325,9 @@ ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END,name`)
 		}
 	}
 	if _, err := transaction.Exec(
-		`DELETE FROM schema_migrations WHERE version IN (?,?)`,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?)`,
 		recoverySchemaV38EnvironmentLifecycle, recoverySchemaV23WizardGapsSnapshot,
+		recoverySchemaV38StopNonApplication,
 	); err != nil {
 		t.Fatal(err)
 	}

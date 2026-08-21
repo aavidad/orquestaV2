@@ -80,7 +80,22 @@ func effectAttemptHasReceipt(receipts []EffectReceipt, attempt EffectAttempt) bo
 }
 
 func effectAttemptDefinitelyUnapplied(record GoalRecord, attempt EffectAttempt) bool {
+	if effectAttemptHasReceipt(record.EffectReceipts, attempt) {
+		return false
+	}
 	matches := 0
+	for _, outcome := range record.EffectAttemptOutcomes {
+		if outcome.AttemptRef != attempt.Ref {
+			continue
+		}
+		intent, found := effectIntentByRef(record.EffectIntents, attempt.IntentRef)
+		if !found || intent.ActionKind != ActionStopAgent || intent.ActionRef != attempt.ActionRef ||
+			intent.Digest != attempt.IntentDigest || intent.Subject != attempt.Subject ||
+			ValidateEffectAttemptOutcome(attempt, outcome) != nil {
+			return false
+		}
+		matches++
+	}
 	for _, settlement := range record.BudgetSettlements {
 		if settlement.CausalAttemptRef != attempt.Ref {
 			continue
@@ -94,6 +109,23 @@ func effectAttemptDefinitelyUnapplied(record GoalRecord, attempt EffectAttempt) 
 		matches++
 	}
 	return matches == 1
+}
+
+// ValidateEffectAttemptOutcome binds neutral non-application evidence to the
+// complete immutable authority of one attempt. Any crossed or duplicate fact
+// remains blocking at the caller.
+func ValidateEffectAttemptOutcome(attempt EffectAttempt, outcome EffectAttemptOutcome) error {
+	wantRef := "effect-attempt-outcome:" + attempt.Ref + ":definitely-not-applied"
+	if outcome.Ref != wantRef || outcome.AttemptRef != attempt.Ref ||
+		outcome.IntentRef != attempt.IntentRef || outcome.IntentDigest != attempt.IntentDigest ||
+		outcome.ApprovalRef != attempt.ApprovalRef || outcome.Subject != attempt.Subject ||
+		outcome.ActionRef != attempt.ActionRef || outcome.ActionFence != attempt.ActionFence ||
+		outcome.IdempotencyKey != attempt.IdempotencyKey ||
+		outcome.Outcome != EffectAttemptDefinitelyNotApplied || outcome.ObservedAt.IsZero() ||
+		outcome.ObservedAt.Before(attempt.StartedAt) || outcome.ObservedAt.After(attempt.ClaimLeaseUntil) {
+		return errors.New("application.effect_attempt_outcome_invalid")
+	}
+	return nil
 }
 
 func validateClaimedEffect(claim ActionClaim, at time.Time) error {

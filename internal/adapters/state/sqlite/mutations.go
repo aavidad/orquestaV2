@@ -105,6 +105,9 @@ func (repository *Repository) RequeueAction(ctx context.Context, state applicati
 				return err
 			}
 		}
+		if err := insertEffectAttemptOutcome(ctx, transaction, state); err != nil {
+			return err
+		}
 		return releaseClaimForRetry(ctx, transaction, state)
 	})
 }

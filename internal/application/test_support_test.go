@@ -1788,6 +1788,23 @@ func (repository *memoryRepository) RequeueAction(_ context.Context, state Actio
 	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
 		return err
 	}
+	if state.EffectAttemptOutcome != nil {
+		if state.Claim.Action.Kind != ActionStopAgent || state.BudgetSettlement != nil || state.ClearEffectBinding {
+			return &StateError{Code: StateInvalid}
+		}
+		attempt, found := effectAttemptByRef(record.EffectAttempts, state.EffectAttemptOutcome.AttemptRef)
+		if !found || validateEffectAttempt(state.Claim, attempt) != nil ||
+			ValidateEffectAttemptOutcome(attempt, *state.EffectAttemptOutcome) != nil ||
+			effectAttemptHasReceipt(record.EffectReceipts, attempt) {
+			return &StateError{Code: StateInvalid}
+		}
+		for _, outcome := range record.EffectAttemptOutcomes {
+			if outcome.AttemptRef == attempt.Ref {
+				return &StateError{Code: StateConflict}
+			}
+		}
+		record.EffectAttemptOutcomes = append(record.EffectAttemptOutcomes, *state.EffectAttemptOutcome)
+	}
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	if state.BudgetSettlement != nil {
 		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)

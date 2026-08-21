@@ -375,33 +375,34 @@ type WorkItemAuthority struct {
 }
 
 type GoalRecord struct {
-	RequestRef          string
-	RequestFingerprint  string
-	RequestedBy         identity.PrincipalRef
-	Goal                goal.Goal
-	Executions          []ExecutionRecord
-	Artifacts           []ArtifactRecord
-	Attestations        []AttestationRecord
-	Controls            []ControlRecord
-	BudgetEnvelopes     []governance.BudgetEnvelope
-	BudgetReservations  []governance.BudgetReservation
-	BudgetSettlements   []governance.BudgetSettlement
-	WorkItemAuthorities []WorkItemAuthority
-	EffectIntents       []EffectIntent
-	EffectApprovals     []EffectApproval
-	EffectAttempts      []EffectAttempt
-	EffectReceipts      []EffectReceipt
-	WorkspaceBindings   []WorkspaceBinding
-	ChangeSets          []ChangeSet
-	MergeObservations   []MergeObservation
-	IntegrationReceipts []IntegrationReceipt
-	Reviews             []ReviewRecord
-	Mailboxes           []MailboxRecord
-	CouncilRounds       []CouncilRoundRecord
-	CouncilFacts        []council.ContributionFact
-	CouncilDecisions    []CouncilDecisionRecord
-	CouncilSkips        []CouncilSkipRecord
-	ConsumptionReceipts []ActionConsumptionReceipt
+	RequestRef            string
+	RequestFingerprint    string
+	RequestedBy           identity.PrincipalRef
+	Goal                  goal.Goal
+	Executions            []ExecutionRecord
+	Artifacts             []ArtifactRecord
+	Attestations          []AttestationRecord
+	Controls              []ControlRecord
+	BudgetEnvelopes       []governance.BudgetEnvelope
+	BudgetReservations    []governance.BudgetReservation
+	BudgetSettlements     []governance.BudgetSettlement
+	WorkItemAuthorities   []WorkItemAuthority
+	EffectIntents         []EffectIntent
+	EffectApprovals       []EffectApproval
+	EffectAttempts        []EffectAttempt
+	EffectAttemptOutcomes []EffectAttemptOutcome
+	EffectReceipts        []EffectReceipt
+	WorkspaceBindings     []WorkspaceBinding
+	ChangeSets            []ChangeSet
+	MergeObservations     []MergeObservation
+	IntegrationReceipts   []IntegrationReceipt
+	Reviews               []ReviewRecord
+	Mailboxes             []MailboxRecord
+	CouncilRounds         []CouncilRoundRecord
+	CouncilFacts          []council.ContributionFact
+	CouncilDecisions      []CouncilDecisionRecord
+	CouncilSkips          []CouncilSkipRecord
+	ConsumptionReceipts   []ActionConsumptionReceipt
 }
 
 type GoalSummary struct {
@@ -541,13 +542,14 @@ type LaunchAcceptedState struct {
 }
 
 type ActionRequeuedState struct {
-	Claim              ActionClaim
-	Execution          ExecutionRecord
-	AvailableAt        time.Time
-	ErrorCode          string
-	OperationAt        time.Time
-	BudgetSettlement   *governance.BudgetSettlement
-	ClearEffectBinding bool
+	Claim                ActionClaim
+	Execution            ExecutionRecord
+	AvailableAt          time.Time
+	ErrorCode            string
+	OperationAt          time.Time
+	BudgetSettlement     *governance.BudgetSettlement
+	EffectAttemptOutcome *EffectAttemptOutcome
+	ClearEffectBinding   bool
 }
 
 type ActionQuarantinedState struct {

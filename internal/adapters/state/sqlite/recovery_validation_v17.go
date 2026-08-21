@@ -54,6 +54,12 @@ func validateRecoveryV17Governance(ctx context.Context, tx *sql.Tx) error {
 }
 
 func validateRecoveryV17GovernanceWithChecks(ctx context.Context, tx *sql.Tx, checks []recoveryV15Check) error {
+	return validateRecoveryV17GovernanceWithOutcome(ctx, tx, checks, false)
+}
+
+func validateRecoveryV17GovernanceWithOutcome(
+	ctx context.Context, tx *sql.Tx, checks []recoveryV15Check, allowNonApplication bool,
+) error {
 	for _, check := range checks {
 		if check.code == "sqlite.recovery_v15_unknown_applied_repeated" {
 			continue
@@ -70,8 +76,12 @@ func validateRecoveryV17GovernanceWithChecks(ctx context.Context, tx *sql.Tx, ch
 			return err
 		}
 	}
+	unknownAppliedQuery := `SELECT COUNT(*) FROM effect_attempts later JOIN effect_attempts prior ON prior.action_ref=later.action_ref AND prior.intent_ref=later.intent_ref AND prior.action_fence<later.action_fence LEFT JOIN effect_receipts receipt ON receipt.attempt_ref=prior.ref WHERE receipt.ref IS NULL AND NOT EXISTS (SELECT 1 FROM budget_settlements settlement WHERE settlement.causal_attempt_ref=prior.ref)`
+	if allowNonApplication {
+		unknownAppliedQuery = `SELECT COUNT(*) FROM effect_attempts later JOIN effect_attempts prior ON prior.action_ref=later.action_ref AND prior.intent_ref=later.intent_ref AND prior.action_fence<later.action_fence LEFT JOIN effect_receipts receipt ON receipt.attempt_ref=prior.ref WHERE receipt.ref IS NULL AND NOT EXISTS (SELECT 1 FROM budget_settlements settlement WHERE settlement.causal_attempt_ref=prior.ref) AND NOT EXISTS (SELECT 1 FROM effect_non_application_evidence evidence WHERE evidence.attempt_ref=prior.ref AND evidence.outcome='definitely_not_applied')`
+	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{"sqlite.recovery_v17_causal_settlement_invalid", `SELECT COUNT(*) FROM budget_settlements settlement JOIN budget_reservations reservation ON reservation.ref=settlement.reservation_ref LEFT JOIN effect_attempts attempt ON attempt.ref=settlement.causal_attempt_ref WHERE settlement.causal_attempt_ref IS NOT NULL AND (attempt.ref IS NULL OR attempt.action_ref<>reservation.action_ref OR attempt.intent_ref<>reservation.effect_intent_ref OR reservation.fence>attempt.action_fence OR settlement.observed_known<>31 OR settlement.observed_quality<>'exact' OR settlement.observed_tokens<>0 OR settlement.observed_money_micros<>0 OR settlement.observed_currency<>reservation.currency OR settlement.observed_active_time_ns<>0 OR settlement.observed_process_slots<>0 OR settlement.observed_disk_bytes<>0 OR settlement.charged_tokens<>0 OR settlement.charged_money_micros<>0 OR settlement.charged_currency<>reservation.currency OR settlement.charged_active_time_ns<>0 OR settlement.charged_process_slots<>0 OR settlement.charged_disk_bytes<>0 OR settlement.released_tokens<>reservation.tokens OR settlement.released_money_micros<>reservation.money_micros OR settlement.released_currency<>reservation.currency OR settlement.released_active_time_ns<>reservation.active_time_ns OR settlement.released_process_slots<>reservation.process_slots OR settlement.released_disk_bytes<>reservation.disk_bytes OR settlement.overrun_tokens<>0 OR settlement.overrun_money_micros<>0 OR settlement.overrun_currency<>reservation.currency OR settlement.overrun_active_time_ns<>0 OR settlement.overrun_process_slots<>0 OR settlement.overrun_disk_bytes<>0)`},
-		{"sqlite.recovery_v17_unknown_applied_repeated", `SELECT COUNT(*) FROM effect_attempts later JOIN effect_attempts prior ON prior.action_ref=later.action_ref AND prior.intent_ref=later.intent_ref AND prior.action_fence<later.action_fence LEFT JOIN effect_receipts receipt ON receipt.attempt_ref=prior.ref WHERE receipt.ref IS NULL AND NOT EXISTS (SELECT 1 FROM budget_settlements settlement WHERE settlement.causal_attempt_ref=prior.ref)`},
+		{"sqlite.recovery_v17_unknown_applied_repeated", unknownAppliedQuery},
 	})
 }

@@ -57,6 +57,11 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	receipt, stopErr := orchestrator.controller.Stop(effectCtx, request)
 	cancel()
 	if stopErr != nil {
+		if isDefinitelyNotAppliedAgentError(stopErr) {
+			return orchestrator.requeueDefinitelyUnappliedStop(
+				ctx, claim, execution, attempt, "agent.stop_definitely_not_applied",
+			)
+		}
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	if err := ports.ValidateAgentStopReceipt(request, receipt); err != nil {

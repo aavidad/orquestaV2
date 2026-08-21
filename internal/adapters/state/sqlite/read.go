@@ -218,7 +218,8 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 		BudgetEnvelopes: governanceData.envelopes, BudgetReservations: governanceData.reservations,
 		BudgetSettlements: governanceData.settlements, WorkItemAuthorities: governanceData.authorities,
 		EffectIntents: governanceData.intents, EffectApprovals: governanceData.approvals,
-		EffectAttempts: governanceData.attempts, EffectReceipts: governanceData.receipts,
+		EffectAttempts: governanceData.attempts, EffectAttemptOutcomes: governanceData.outcomes,
+		EffectReceipts:      governanceData.receipts,
 		ConsumptionReceipts: data.consumptionReceipts,
 		WorkspaceBindings:   workspaceFacts.bindings, ChangeSets: workspaceFacts.changes,
 		MergeObservations: workspaceFacts.observations, IntegrationReceipts: workspaceFacts.receipts,
@@ -413,6 +414,7 @@ type goalGovernance struct {
 	intents      []application.EffectIntent
 	approvals    []application.EffectApproval
 	attempts     []application.EffectAttempt
+	outcomes     []application.EffectAttemptOutcome
 	receipts     []application.EffectReceipt
 }
 
@@ -443,6 +445,9 @@ func readGoalGovernance(ctx context.Context, source queryer, projectRef, goalVal
 	}
 	if err == nil {
 		data.attempts, err = readEffectAttemptsForGoal(ctx, source, goalValue)
+	}
+	if err == nil {
+		data.outcomes, err = readEffectAttemptOutcomesForGoal(ctx, source, goalValue)
 	}
 	if err == nil {
 		data.receipts, err = readEffectReceiptsForGoal(ctx, source, goalValue)

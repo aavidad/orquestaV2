@@ -92,7 +92,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets",
 		"command_invocations", "command_outcomes", "controls",
 		"council_decisions", "council_facts", "council_rounds", "council_skips",
-		"director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
+		"director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_non_application_evidence", "effect_receipts", "events", "executions", "fairness_cursors",
 		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups",
 		"intake_dossier_confirmations", "intake_dossier_generation_receipts", "intake_dossiers", "intake_receipts", "intake_states", "integration_receipts", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",

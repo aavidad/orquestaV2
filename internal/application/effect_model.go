@@ -142,6 +142,27 @@ type EffectAttempt struct {
 	ClaimLeaseUntil time.Time
 }
 
+// EffectAttemptOutcome is immutable neutral evidence about whether one exact
+// attempt crossed its external effect boundary. It is neither an external
+// effect receipt nor budget accounting.
+type EffectAttemptOutcome struct {
+	Ref            string
+	AttemptRef     string
+	IntentRef      string
+	IntentDigest   string
+	ApprovalRef    string
+	Subject        EffectSubject
+	ActionRef      string
+	ActionFence    uint64
+	IdempotencyKey string
+	Outcome        EffectAttemptOutcomeKind
+	ObservedAt     time.Time
+}
+
+type EffectAttemptOutcomeKind string
+
+const EffectAttemptDefinitelyNotApplied EffectAttemptOutcomeKind = "definitely_not_applied"
+
 type EffectReceipt struct {
 	Ref            string
 	IntentRef      string

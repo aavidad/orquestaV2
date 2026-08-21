@@ -115,6 +115,14 @@ WHERE NOT (
 }
 
 func validateRecoveryV28Governance(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryV28GovernanceWithOutcome(ctx, tx, false)
+}
+
+func validateRecoveryV37Governance(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryV28GovernanceWithOutcome(ctx, tx, true)
+}
+
+func validateRecoveryV28GovernanceWithOutcome(ctx context.Context, tx *sql.Tx, allowNonApplication bool) error {
 	checks := make([]recoveryV15Check, 0, len(recoveryV15Checks))
 	for _, check := range recoveryV15Checks {
 		switch check.code {
@@ -186,5 +194,5 @@ SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents inten
  ON consumed.effect_receipt_ref=receipt.ref AND consumed.action_ref=receipt.action_ref
  WHERE consumed.action_ref IS NULL)`},
 	)
-	return validateRecoveryV17GovernanceWithChecks(ctx, tx, checks)
+	return validateRecoveryV17GovernanceWithOutcome(ctx, tx, checks, allowNonApplication)
 }
