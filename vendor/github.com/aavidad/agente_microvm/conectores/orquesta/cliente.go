@@ -3,7 +3,9 @@ package microvm
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,8 +20,90 @@ import (
 )
 
 const (
-	maximoRespuestaBytes  int64  = 12*1024*1024 + 1
-	maximoEnteroDurableV1 uint64 = 1<<63 - 1
+	maximoRespuestaBytes                       int64  = 12*1024*1024 + 1
+	maximoEnteroDurableV1                      uint64 = 1<<63 - 1
+	MaximoManifiestoPreservacionBytesV1               = 1_048_576
+	maximoManifiestoPreservacionBase64                = (MaximoManifiestoPreservacionBytesV1 + 2) / 3 * 4
+	maximoRespuestaManifiestoPreservacionBytes        = int64(maximoManifiestoPreservacionBase64 + 4*1024 + 1)
+	protocoloManifiestoPreservacionV1                 = "agentmicrovm.preservacion.v1"
+)
+
+var esquemaRespuestaManifiestoPreservacionV1 = esquemaObjetoJSONEstricto{
+	"referencia":        esquemaEscalarJSONEstricto,
+	"cerca":             esquemaEscalarJSONEstricto,
+	"revision_trabajo":  esquemaEscalarJSONEstricto,
+	"manifiesto_ref":    esquemaEscalarJSONEstricto,
+	"manifiesto_sha256": esquemaEscalarJSONEstricto,
+	"manifiesto_bytes":  esquemaEscalarJSONEstricto,
+	"sellada_unix_ms":   esquemaEscalarJSONEstricto,
+	"contenido_base64":  esquemaEscalarJSONEstricto,
+}
+
+var esquemaIdentidadProcesoDetencionV1 = esquemaObjetoJSONEstricto{
+	"pid":          esquemaEscalarJSONEstricto,
+	"inicio_ticks": esquemaEscalarJSONEstricto,
+}
+
+var esquemaRespuestaEjecucionDetencionV1 = esquemaObjetoJSONEstricto{
+	"referencia":   esquemaEscalarJSONEstricto,
+	"estado":       esquemaEscalarJSONEstricto,
+	"revision":     esquemaEscalarJSONEstricto,
+	"cerca":        esquemaEscalarJSONEstricto,
+	"vcpu":         esquemaEscalarJSONEstricto,
+	"memoria_mib":  esquemaEscalarJSONEstricto,
+	"identidad":    esquemaObjetoEstrictoOpcional(esquemaIdentidadProcesoDetencionV1),
+	"proceso_vivo": esquemaEscalarJSONEstrictoOpcional,
+	"estado_motor": esquemaEscalarJSONEstrictoOpcional,
+}
+
+var esquemaRespuestaEjecucionDetencionConTrabajoV1 = esquemaObjetoJSONEstricto{
+	"referencia":       esquemaEscalarJSONEstricto,
+	"estado":           esquemaEscalarJSONEstricto,
+	"revision":         esquemaEscalarJSONEstricto,
+	"cerca":            esquemaEscalarJSONEstricto,
+	"revision_trabajo": esquemaEscalarJSONEstricto,
+	"vcpu":             esquemaEscalarJSONEstricto,
+	"memoria_mib":      esquemaEscalarJSONEstricto,
+	"identidad":        esquemaObjetoEstrictoOpcional(esquemaIdentidadProcesoDetencionV1),
+	"proceso_vivo":     esquemaEscalarJSONEstrictoOpcional,
+	"estado_motor":     esquemaEscalarJSONEstrictoOpcional,
+}
+
+func esquemaRespuestaDetencionPendienteV1(ejecucion esquemaObjetoJSONEstricto) esquemaObjetoJSONEstricto {
+	return esquemaObjetoJSONEstricto{
+		"ejecucion":          esquemaObjetoEstricto(ejecucion),
+		"clave_idempotencia": esquemaEscalarJSONEstricto,
+		"estado":             esquemaEscalarJSONEstricto,
+		"modo_solicitado":    esquemaEscalarJSONEstricto,
+	}
+}
+
+func esquemaRespuestaDetencionConfirmadaV1(ejecucion esquemaObjetoJSONEstricto) esquemaObjetoJSONEstricto {
+	return esquemaObjetoJSONEstricto{
+		"ejecucion":          esquemaObjetoEstricto(ejecucion),
+		"clave_idempotencia": esquemaEscalarJSONEstricto,
+		"estado":             esquemaEscalarJSONEstricto,
+		"modo_solicitado":    esquemaEscalarJSONEstricto,
+		"modo_efectivo":      esquemaEscalarJSONEstricto,
+		"receipt_ref":        esquemaEscalarJSONEstricto,
+		"confirmada_unix_ms": esquemaEscalarJSONEstricto,
+	}
+}
+
+var esquemaRespuestaDetencionPendienteSinTrabajoV1 = esquemaRespuestaDetencionPendienteV1(
+	esquemaRespuestaEjecucionDetencionV1,
+)
+
+var esquemaRespuestaDetencionPendienteConTrabajoV1 = esquemaRespuestaDetencionPendienteV1(
+	esquemaRespuestaEjecucionDetencionConTrabajoV1,
+)
+
+var esquemaRespuestaDetencionConfirmadaSinTrabajoV1 = esquemaRespuestaDetencionConfirmadaV1(
+	esquemaRespuestaEjecucionDetencionV1,
+)
+
+var esquemaRespuestaDetencionConfirmadaConTrabajoV1 = esquemaRespuestaDetencionConfirmadaV1(
+	esquemaRespuestaEjecucionDetencionConTrabajoV1,
 )
 
 // Cliente consume la API local sin conocer tipos internos de Agente MicroVM.
@@ -310,14 +394,24 @@ func (c *Cliente) Detener(
 	clave string,
 	referencia string,
 	solicitud SolicitudDetencion,
-) (RespuestaEjecucion, error) {
-	return mutar[RespuestaEjecucion](
+) (RespuestaDetencion, error) {
+	if err := validarSolicitudDetencion(clave, referencia, solicitud); err != nil {
+		return RespuestaDetencion{}, err
+	}
+	respuesta, err := mutarEstricto[RespuestaDetencion](
 		ctx,
 		c,
 		rutaEjecucion(referencia, "/detencion"),
 		clave,
 		solicitud,
 	)
+	if err != nil {
+		return RespuestaDetencion{}, err
+	}
+	if err := validarRespuestaDetencion(clave, referencia, solicitud, respuesta); err != nil {
+		return RespuestaDetencion{}, err
+	}
+	return respuesta, nil
 }
 
 func (c *Cliente) Preservar(
@@ -333,6 +427,39 @@ func (c *Cliente) Preservar(
 		clave,
 		solicitud,
 	)
+}
+
+// RecuperarManifiestoPreservacion lee el sello exacto sin mutar lifecycle ni CAS.
+func (c *Cliente) RecuperarManifiestoPreservacion(
+	ctx context.Context,
+	referencia string,
+	solicitud SolicitudRecuperacionManifiestoPreservacion,
+) (RespuestaManifiestoPreservacion, error) {
+	if err := validarSolicitudRecuperacionManifiesto(referencia, solicitud); err != nil {
+		return RespuestaManifiestoPreservacion{}, err
+	}
+	parametros := url.Values{}
+	parametros.Set("cerca", strconv.FormatUint(solicitud.Cerca, 10))
+	parametros.Set("revision_trabajo", strconv.FormatUint(solicitud.RevisionTrabajo, 10))
+	parametros.Set("manifiesto_ref", solicitud.ManifiestoRef)
+	parametros.Set("manifiesto_sha256", solicitud.ManifiestoSHA256)
+	parametros.Set("manifiesto_bytes", strconv.FormatUint(solicitud.ManifiestoBytes, 10))
+	respuesta, err := solicitarEstrictoAcotado[RespuestaManifiestoPreservacion](
+		ctx,
+		c,
+		http.MethodGet,
+		rutaEjecucion(referencia, "/preservacion/manifiesto")+"?"+parametros.Encode(),
+		"",
+		nil,
+		maximoRespuestaManifiestoPreservacionBytes,
+	)
+	if err != nil {
+		return RespuestaManifiestoPreservacion{}, err
+	}
+	if err := validarRespuestaManifiesto(referencia, solicitud, respuesta); err != nil {
+		return RespuestaManifiestoPreservacion{}, err
+	}
+	return respuesta, nil
 }
 
 func (c *Cliente) Cerrar(
@@ -425,6 +552,27 @@ func solicitarEstricto[T any](
 	return solicitarDecodificando[T](ctx, cliente, metodo, ruta, clave, cuerpo, true)
 }
 
+func solicitarEstrictoAcotado[T any](
+	ctx context.Context,
+	cliente *Cliente,
+	metodo string,
+	ruta string,
+	clave string,
+	cuerpo []byte,
+	maximoRespuesta int64,
+) (T, error) {
+	return solicitarDecodificandoAcotado[T](
+		ctx,
+		cliente,
+		metodo,
+		ruta,
+		clave,
+		cuerpo,
+		true,
+		maximoRespuesta,
+	)
+}
+
 func solicitarDecodificando[T any](
 	ctx context.Context,
 	cliente *Cliente,
@@ -433,6 +581,28 @@ func solicitarDecodificando[T any](
 	clave string,
 	cuerpo []byte,
 	estricto bool,
+) (T, error) {
+	return solicitarDecodificandoAcotado[T](
+		ctx,
+		cliente,
+		metodo,
+		ruta,
+		clave,
+		cuerpo,
+		estricto,
+		maximoRespuestaBytes,
+	)
+}
+
+func solicitarDecodificandoAcotado[T any](
+	ctx context.Context,
+	cliente *Cliente,
+	metodo string,
+	ruta string,
+	clave string,
+	cuerpo []byte,
+	estricto bool,
+	maximoRespuesta int64,
 ) (T, error) {
 	var cero T
 	if cliente == nil || cliente.http == nil {
@@ -461,11 +631,11 @@ func solicitarDecodificando[T any](
 	if respuesta.Header.Get(CabeceraProtocolo) != ProtocoloLocal {
 		return cero, &ErrorProtocolo{Recibido: respuesta.Header.Get(CabeceraProtocolo)}
 	}
-	bytesRespuesta, err := io.ReadAll(io.LimitReader(respuesta.Body, maximoRespuestaBytes))
+	bytesRespuesta, err := io.ReadAll(io.LimitReader(respuesta.Body, maximoRespuesta))
 	if err != nil {
 		return cero, fmt.Errorf("leer respuesta: %w", err)
 	}
-	if int64(len(bytesRespuesta)) >= maximoRespuestaBytes {
+	if int64(len(bytesRespuesta)) >= maximoRespuesta {
 		return cero, &ErrorRespuestaGrande{}
 	}
 	if respuesta.StatusCode < 200 || respuesta.StatusCode >= 300 {
@@ -688,6 +858,103 @@ func validarResultadoSesion(estado EstadoSesionTrabajoV1, resultado *ResultadoTe
 	return nil
 }
 
+func validarSolicitudDetencion(
+	clave string,
+	referencia string,
+	solicitud SolicitudDetencion,
+) error {
+	if !claveDetencionValida(clave) {
+		return &ErrorConfiguracion{Causa: "clave_idempotencia_invalida"}
+	}
+	if !referenciaValida(referencia, "ejecucion:", 96) {
+		return errorDetencion("detencion.referencia_ejecucion_invalida")
+	}
+	if !revisionSesionValida(solicitud.RevisionEsperada) {
+		return errorDetencion("detencion.revision_invalida")
+	}
+	if !cercaSesionValida(solicitud.Cerca) {
+		return errorDetencion("detencion.cerca_invalida")
+	}
+	if solicitud.Modo != ModoDetencionCooperativa && solicitud.Modo != ModoDetencionForzada {
+		return errorDetencion("detencion.modo_incoherente")
+	}
+	return nil
+}
+
+func validarRespuestaDetencion(
+	clave string,
+	referencia string,
+	solicitud SolicitudDetencion,
+	respuesta RespuestaDetencion,
+) error {
+	if respuesta.Ejecucion.Referencia != referencia {
+		return errorDetencion("detencion.referencia_ejecucion_invalida")
+	}
+	if !revisionSesionValida(respuesta.Ejecucion.Revision) ||
+		respuesta.Ejecucion.Revision < solicitud.RevisionEsperada {
+		return errorDetencion("detencion.revision_invalida")
+	}
+	if respuesta.Ejecucion.Cerca != solicitud.Cerca {
+		return errorDetencion("detencion.cerca_invalida")
+	}
+	if respuesta.ClaveIdempotencia != clave || !claveDetencionValida(respuesta.ClaveIdempotencia) {
+		return errorDetencion("detencion.clave_idempotencia_invalida")
+	}
+	if respuesta.ModoSolicitado != solicitud.Modo {
+		return errorDetencion("detencion.modo_incoherente")
+	}
+	switch respuesta.Estado {
+	case EstadoDetencionPendiente:
+		if respuesta.Ejecucion.Estado != "deteniendo" || respuesta.ModoEfectivo != nil ||
+			respuesta.ReceiptRef != nil || respuesta.ConfirmadaUnixMS != nil {
+			return errorDetencion("detencion.confirmacion_incoherente")
+		}
+	case EstadoDetencionConfirmada:
+		if respuesta.Ejecucion.Estado != "detenida" || respuesta.ModoEfectivo == nil ||
+			respuesta.ReceiptRef == nil || respuesta.ConfirmadaUnixMS == nil ||
+			*respuesta.ConfirmadaUnixMS > maximoEnteroDurableV1 {
+			return errorDetencion("detencion.confirmacion_incoherente")
+		}
+		if *respuesta.ConfirmadaUnixMS == 0 || !receiptDetencionValido(*respuesta.ReceiptRef) ||
+			!modosDetencionCoherentes(respuesta.ModoSolicitado, *respuesta.ModoEfectivo) {
+			return errorDetencion("detencion.confirmacion_incoherente")
+		}
+	default:
+		return errorDetencion("detencion.estado_ejecucion_incoherente")
+	}
+	return nil
+}
+
+func claveDetencionValida(clave string) bool {
+	if clave == "" || len(clave) > 128 {
+		return false
+	}
+	for _, caracter := range []byte(clave) {
+		if !((caracter >= 'a' && caracter <= 'z') || (caracter >= 'A' && caracter <= 'Z') ||
+			(caracter >= '0' && caracter <= '9') || strings.ContainsRune("-_.:/", rune(caracter))) {
+			return false
+		}
+	}
+	return true
+}
+
+func receiptDetencionValido(referencia string) bool {
+	digest := strings.TrimPrefix(referencia, "detencion:")
+	return digest != referencia && sha256Valido(digest)
+}
+
+func modosDetencionCoherentes(
+	solicitado ModoDetencionSolicitadoV1,
+	efectivo ModoDetencionEfectivoV1,
+) bool {
+	return solicitado == ModoDetencionCooperativa &&
+		(efectivo == ModoDetencionEfectivoCooperativa || efectivo == ModoDetencionEfectivoYaAusente) ||
+		solicitado == ModoDetencionForzada &&
+			(efectivo == ModoDetencionEfectivoForzada || efectivo == ModoDetencionEfectivoYaAusente)
+}
+
+func errorDetencion(codigo string) error { return &ErrorDetencionV1{Codigo: codigo} }
+
 func referenciaSesionValida(referencia string) bool {
 	if referencia == "" || len(referencia) > 128 || !utf8.ValidString(referencia) {
 		return false
@@ -752,6 +1019,68 @@ func codigoErrorSesionValido(codigo string) bool {
 
 func errorSesion(codigo string) error { return &ErrorSesionTrabajoV1{Codigo: codigo} }
 
+func validarSolicitudRecuperacionManifiesto(
+	referencia string,
+	solicitud SolicitudRecuperacionManifiestoPreservacion,
+) error {
+	if !referenciaValida(referencia, "ejecucion:", 96) ||
+		solicitud.Cerca == 0 || solicitud.Cerca > maximoEnteroDurableV1 ||
+		solicitud.RevisionTrabajo == 0 || solicitud.RevisionTrabajo > maximoEnteroDurableV1 ||
+		solicitud.ManifiestoRef != solicitud.ManifiestoSHA256 ||
+		!digestValido(solicitud.ManifiestoSHA256) ||
+		solicitud.ManifiestoBytes == 0 ||
+		solicitud.ManifiestoBytes > MaximoManifiestoPreservacionBytesV1 {
+		return &ErrorContenido{Causa: "solicitud_manifiesto_invalida"}
+	}
+	return nil
+}
+
+func validarRespuestaManifiesto(
+	referencia string,
+	solicitud SolicitudRecuperacionManifiestoPreservacion,
+	respuesta RespuestaManifiestoPreservacion,
+) error {
+	if respuesta.Referencia != referencia || respuesta.Cerca != solicitud.Cerca ||
+		respuesta.RevisionTrabajo != solicitud.RevisionTrabajo ||
+		respuesta.ManifiestoRef != solicitud.ManifiestoRef ||
+		respuesta.ManifiestoSHA256 != solicitud.ManifiestoSHA256 ||
+		respuesta.ManifiestoRef != respuesta.ManifiestoSHA256 ||
+		respuesta.ManifiestoBytes != solicitud.ManifiestoBytes ||
+		respuesta.SelladaUnixMS == 0 || respuesta.SelladaUnixMS > maximoEnteroDurableV1 {
+		return &ErrorContenido{Causa: "respuesta_manifiesto_invalida"}
+	}
+	if len(respuesta.ContenidoBase64) > maximoManifiestoPreservacionBase64 ||
+		strings.ContainsAny(respuesta.ContenidoBase64, "\r\n") {
+		return &ErrorContenido{Causa: "base64_invalido"}
+	}
+	contenido, err := base64.StdEncoding.Strict().DecodeString(respuesta.ContenidoBase64)
+	if err != nil || base64.StdEncoding.EncodeToString(contenido) != respuesta.ContenidoBase64 {
+		return &ErrorContenido{Causa: "base64_invalido"}
+	}
+	if uint64(len(contenido)) != respuesta.ManifiestoBytes {
+		return &ErrorContenido{Causa: "tamano_manifiesto_invalido"}
+	}
+	digest := sha256.Sum256(contenido)
+	if hex.EncodeToString(digest[:]) != respuesta.ManifiestoSHA256 {
+		return &ErrorContenido{Causa: "digest_manifiesto_invalido"}
+	}
+	var sujeto struct {
+		Protocolo string `json:"protocolo"`
+		Contexto  struct {
+			Referencia      string `json:"referencia"`
+			Cerca           uint64 `json:"cerca"`
+			RevisionTrabajo uint64 `json:"revision_trabajo"`
+		} `json:"contexto"`
+	}
+	if !jsonSinClavesDuplicadas(contenido) || json.Unmarshal(contenido, &sujeto) != nil ||
+		sujeto.Protocolo != protocoloManifiestoPreservacionV1 ||
+		sujeto.Contexto.Referencia != referencia || sujeto.Contexto.Cerca != solicitud.Cerca ||
+		sujeto.Contexto.RevisionTrabajo != solicitud.RevisionTrabajo {
+		return &ErrorContenido{Causa: "sujeto_manifiesto_invalido"}
+	}
+	return nil
+}
+
 func validarEstructuraJSONSesion[T any](datos []byte) error {
 	var cero T
 	switch any(cero).(type) {
@@ -799,8 +1128,79 @@ func validarEstructuraJSONSesion[T any](datos []byte) error {
 				return err
 			}
 		}
+	case RespuestaManifiestoPreservacion:
+		var respuesta RespuestaManifiestoPreservacion
+		if !decodificarObjetoJSONEstricto(
+			datos,
+			esquemaRespuestaManifiestoPreservacionV1,
+			&respuesta,
+		) {
+			return errors.New("respuesta JSON de manifiesto invalida")
+		}
+	case RespuestaDetencion:
+		var respuesta RespuestaDetencion
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaDetencionPendienteSinTrabajoV1, &respuesta) &&
+			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaDetencionPendienteConTrabajoV1, &respuesta) &&
+			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaDetencionConfirmadaSinTrabajoV1, &respuesta) &&
+			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaDetencionConfirmadaConTrabajoV1, &respuesta) {
+			return errors.New("respuesta JSON de detencion invalida")
+		}
 	}
 	return nil
+}
+
+func jsonSinClavesDuplicadas(datos []byte) bool {
+	if len(datos) == 0 || !utf8.Valid(datos) || !escapesUnicodeJSONValidos(datos) {
+		return false
+	}
+	decodificador := json.NewDecoder(bytes.NewReader(datos))
+	decodificador.UseNumber()
+	if !valorJSONSinClavesDuplicadas(decodificador) {
+		return false
+	}
+	_, err := decodificador.Token()
+	return errors.Is(err, io.EOF)
+}
+
+func valorJSONSinClavesDuplicadas(decodificador *json.Decoder) bool {
+	token, err := decodificador.Token()
+	if err != nil {
+		return false
+	}
+	delimitador, compuesto := token.(json.Delim)
+	if !compuesto {
+		return true
+	}
+	switch delimitador {
+	case '{':
+		vistos := map[string]struct{}{}
+		for decodificador.More() {
+			clave, err := decodificador.Token()
+			nombre, esCadena := clave.(string)
+			if err != nil || !esCadena {
+				return false
+			}
+			if _, duplicada := vistos[nombre]; duplicada {
+				return false
+			}
+			vistos[nombre] = struct{}{}
+			if !valorJSONSinClavesDuplicadas(decodificador) {
+				return false
+			}
+		}
+		cierre, err := decodificador.Token()
+		return err == nil && cierre == json.Delim('}')
+	case '[':
+		for decodificador.More() {
+			if !valorJSONSinClavesDuplicadas(decodificador) {
+				return false
+			}
+		}
+		cierre, err := decodificador.Token()
+		return err == nil && cierre == json.Delim(']')
+	default:
+		return false
+	}
 }
 
 func objetoJSONConCampos(datos []byte, esperados []string) (map[string]json.RawMessage, error) {

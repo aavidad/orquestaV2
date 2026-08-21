@@ -39,14 +39,46 @@ type SolicitudLanzamiento struct {
 	Concesion json.RawMessage `json:"concesion"`
 }
 
+type ModoDetencionSolicitadoV1 string
+
+const (
+	ModoDetencionCooperativa ModoDetencionSolicitadoV1 = "cooperativa"
+	ModoDetencionForzada     ModoDetencionSolicitadoV1 = "forzada"
+)
+
+type ModoDetencionEfectivoV1 string
+
+const (
+	ModoDetencionEfectivoCooperativa ModoDetencionEfectivoV1 = "cooperativa"
+	ModoDetencionEfectivoForzada     ModoDetencionEfectivoV1 = "forzada"
+	ModoDetencionEfectivoYaAusente   ModoDetencionEfectivoV1 = "ya_ausente"
+)
+
+type EstadoDetencionV1 string
+
+const (
+	EstadoDetencionPendiente  EstadoDetencionV1 = "pendiente"
+	EstadoDetencionConfirmada EstadoDetencionV1 = "confirmada"
+)
+
 type SolicitudDetencion struct {
-	RevisionEsperada uint64 `json:"revision_esperada"`
-	Cerca            uint64 `json:"cerca"`
+	RevisionEsperada uint64                    `json:"revision_esperada"`
+	Cerca            uint64                    `json:"cerca"`
+	Modo             ModoDetencionSolicitadoV1 `json:"modo"`
 }
 
 type SolicitudPreservacion struct {
 	RevisionEsperada uint64 `json:"revision_esperada"`
 	Cerca            uint64 `json:"cerca"`
+}
+
+// SolicitudRecuperacionManifiestoPreservacion identifica un único sello durable.
+type SolicitudRecuperacionManifiestoPreservacion struct {
+	Cerca            uint64 `json:"cerca"`
+	RevisionTrabajo  uint64 `json:"revision_trabajo"`
+	ManifiestoRef    string `json:"manifiesto_ref"`
+	ManifiestoSHA256 string `json:"manifiesto_sha256"`
+	ManifiestoBytes  uint64 `json:"manifiesto_bytes"`
 }
 
 type SolicitudCierre struct {
@@ -113,6 +145,18 @@ type RespuestaEjecucion struct {
 	Identidad       *IdentidadProceso `json:"identidad"`
 	ProcesoVivo     *bool             `json:"proceso_vivo"`
 	EstadoMotor     *string           `json:"estado_motor"`
+}
+
+// RespuestaDetencion conserva por separado la intención solicitada y el modo
+// físico observado. Una respuesta pendiente no acredita todavía una parada.
+type RespuestaDetencion struct {
+	Ejecucion         RespuestaEjecucion        `json:"ejecucion"`
+	ClaveIdempotencia string                    `json:"clave_idempotencia"`
+	Estado            EstadoDetencionV1         `json:"estado"`
+	ModoSolicitado    ModoDetencionSolicitadoV1 `json:"modo_solicitado"`
+	ModoEfectivo      *ModoDetencionEfectivoV1  `json:"modo_efectivo,omitempty"`
+	ReceiptRef        *string                   `json:"receipt_ref,omitempty"`
+	ConfirmadaUnixMS  *uint64                   `json:"confirmada_unix_ms,omitempty"`
 }
 
 type RespuestaOrden struct {
@@ -269,6 +313,17 @@ func (e *ErrorSesionTrabajoV1) Error() string {
 	return e.Codigo
 }
 
+// ErrorDetencionV1 identifica un contrato de parada inválido antes o después
+// del socket. Codigo es una lista cerrada y no contiene texto remoto.
+type ErrorDetencionV1 struct{ Codigo string }
+
+func (e *ErrorDetencionV1) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Codigo
+}
+
 type ArtefactoPreservado struct {
 	Origen          string  `json:"origen"`
 	Clase           string  `json:"clase"`
@@ -286,6 +341,18 @@ type RespuestaPreservacion struct {
 	Artefactos       []ArtefactoPreservado `json:"artefactos"`
 	BytesUtiles      uint64                `json:"bytes_utiles"`
 	RevisionTrabajo  uint64                `json:"revision_trabajo"`
+}
+
+// RespuestaManifiestoPreservacion transporta un manifiesto exacto sin exponer rutas.
+type RespuestaManifiestoPreservacion struct {
+	Referencia       string `json:"referencia"`
+	Cerca            uint64 `json:"cerca"`
+	RevisionTrabajo  uint64 `json:"revision_trabajo"`
+	ManifiestoRef    string `json:"manifiesto_ref"`
+	ManifiestoSHA256 string `json:"manifiesto_sha256"`
+	ManifiestoBytes  uint64 `json:"manifiesto_bytes"`
+	SelladaUnixMS    uint64 `json:"sellada_unix_ms"`
+	ContenidoBase64  string `json:"contenido_base64"`
 }
 
 type Problema struct {

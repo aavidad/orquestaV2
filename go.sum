@@ -1,5 +1,5 @@
-github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260805221511-928ef309a173 h1:vqAvfww6ZIpxu3Yk2uQsL6dhd9WFHdSBkUZMaKjKqmw=
-github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260805221511-928ef309a173/go.mod h1:Q/wNodoAhLQTJweffqspI2QT4XZ/4OJiGnyqhNwbT+s=
+github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260816192103-3d9c68f20721 h1:ijYWT4pPHQmVL6UVx5rNXHRbDzveIn1ykXp16LwWhcs=
+github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260816192103-3d9c68f20721/go.mod h1:Q/wNodoAhLQTJweffqspI2QT4XZ/4OJiGnyqhNwbT+s=
 github.com/coreos/go-oidc/v3 v3.20.0 h1:EtE0WIBHk03N+DqGkY4+UONzzZHk7amKt6IyNd7OsZE=
 github.com/coreos/go-oidc/v3 v3.20.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=

@@ -39,6 +39,10 @@ func esquemaObjetoEstricto(campos esquemaObjetoJSONEstricto) esquemaValorJSONEst
 	return esquemaValorJSONEstricto{clase: valorJSONObject, objeto: campos}
 }
 
+func esquemaObjetoEstrictoOpcional(campos esquemaObjetoJSONEstricto) esquemaValorJSONEstricto {
+	return esquemaValorJSONEstricto{clase: valorJSONObject, objeto: campos, admiteNulo: true}
+}
+
 func esquemaArrayEstricto(elemento esquemaValorJSONEstricto) esquemaValorJSONEstricto {
 	return esquemaValorJSONEstricto{clase: valorJSONArray, elemento: &elemento}
 }
@@ -112,7 +116,7 @@ func validarValorJSONEstricto(decoder *json.Decoder, esquema esquemaValorJSONEst
 		return false
 	}
 	if token == nil {
-		return esquema.clase == valorJSONEscalar && esquema.admiteNulo
+		return esquema.admiteNulo
 	}
 	switch esquema.clase {
 	case valorJSONEscalar:
