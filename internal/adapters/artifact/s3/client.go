@@ -21,8 +21,9 @@ type ObjectLocator struct {
 }
 
 // ObjectMetadata binds an immutable blob to its content and project namespace.
-// ProjectDigest is deliberately irreversible: project references never become
-// backend paths or externally visible object metadata.
+// ProjectDigest is a deterministic pseudonym: the raw project reference never
+// becomes a backend path or object metadata, but the digest is not a
+// confidentiality or authorization boundary.
 type ObjectMetadata struct {
 	Schema            string
 	ProjectDigest     string
@@ -48,7 +49,8 @@ type ObjectInfo struct {
 
 // Client is the narrow, SDK-neutral object client required by this adapter.
 // Credentials, endpoints, retries and provider-specific errors remain owned by
-// the concrete client injected by composition.
+// the concrete client injected by composition. Implementations must honor the
+// supplied context while opening and reading object streams.
 type Client interface {
 	PutIfAbsent(context.Context, PutObjectRequest) error
 	Head(context.Context, ObjectLocator) (ObjectInfo, error)

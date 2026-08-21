@@ -15,10 +15,10 @@ import (
 	"orquesta/internal/ports"
 )
 
-func TestStorePutGetCASIsIdempotentAcrossRestart(t *testing.T) {
+func TestStorePutGetCASIsIdempotentAcrossStoreReinstantiation(t *testing.T) {
 	client := newMemoryClient()
 	store := newTestStore(t, client, "project:alpha")
-	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("durable S3 artifact")}
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("S3 artifact over shared in-memory backend")}
 
 	first, err := store.Put(context.Background(), request)
 	testNoError(t, err)
@@ -28,11 +28,11 @@ func TestStorePutGetCASIsIdempotentAcrossRestart(t *testing.T) {
 		t.Fatalf("idempotent Put: first=%+v second=%+v objects=%d", first, second, client.objectCount())
 	}
 
-	restarted := newTestStore(t, client, "project:alpha")
-	got, err := restarted.Get(context.Background(), first.Ref, first.Size)
+	reinstantiated := newTestStore(t, client, "project:alpha")
+	got, err := reinstantiated.Get(context.Background(), first.Ref, first.Size)
 	testNoError(t, err)
 	if string(got.Content) != string(request.Content) || got.Digest != first.Digest || got.Size != first.Size {
-		t.Fatalf("Get(restarted) = %+v", got)
+		t.Fatalf("Get(reinstantiated store) = %+v", got)
 	}
 }
 
@@ -87,12 +87,13 @@ func TestStoreIsolatesProjectNamespaceWithoutLeakingRef(t *testing.T) {
 func TestStoreReconcilesUnknownPutAndRejectsTampering(t *testing.T) {
 	client := newMemoryClient()
 	client.ambiguousAfterWrite = 1
+	client.headErrors = []error{ErrObjectNotFound, errors.New("transient head failure")}
 	store := newTestStore(t, client, "project:reconcile")
 	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("write then timeout")}
 	stored, err := store.Put(context.Background(), request)
 	testNoError(t, err)
-	if client.objectCount() != 1 {
-		t.Fatalf("ambiguous Put created %d objects", client.objectCount())
+	if client.objectCount() != 1 || client.headCount() < 3 {
+		t.Fatalf("ambiguous Put objects=%d head attempts=%d", client.objectCount(), client.headCount())
 	}
 
 	client.tamperContent(store.locator(stored.Digest), []byte("tampered content!!"))
@@ -104,6 +105,75 @@ func TestStoreReconcilesUnknownPutAndRejectsTampering(t *testing.T) {
 	missing.client.(*memoryClient).failBeforeWrite = errors.New("backend unavailable")
 	if _, err := missing.Put(context.Background(), request); artifactCode(err) != ports.ArtifactErrorIO {
 		t.Fatalf("failed Put error=%v", err)
+	}
+	if missing.client.(*memoryClient).headCount() < 2 {
+		t.Fatalf("failed Put reconciliation attempts=%d", missing.client.(*memoryClient).headCount())
+	}
+}
+
+func TestStoreReconciliationDetachesCallerCancellationWithinBound(t *testing.T) {
+	client := newMemoryClient()
+	client.ambiguousAfterWrite = 1
+	client.headErrors = []error{ErrObjectNotFound}
+	ctx, cancel := context.WithCancel(context.Background())
+	client.afterWrite = cancel
+	store := newTestStore(t, client, "project:detached-reconciliation")
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("detached bounded reconciliation")}
+
+	stored, err := store.Put(ctx, request)
+	testNoError(t, err)
+	if err := ports.ValidateStoredArtifact(request, stored); err != nil || client.headCount() < 2 {
+		t.Fatalf("detached reconciliation stored=%+v validation=%v head attempts=%d", stored, err, client.headCount())
+	}
+}
+
+func TestStoreClosesStreamReturnedWithErrorAndRejectsHeadOpenDivergence(t *testing.T) {
+	client := newMemoryClient()
+	store := newTestStore(t, client, "project:stream-error")
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("stream lifecycle")}
+	stored, err := store.Put(context.Background(), request)
+	testNoError(t, err)
+
+	closesBeforeFailure := client.closeCount()
+	client.setOpenFailure(errors.New("transport failed after stream allocation"), true)
+	if _, err := store.Get(context.Background(), stored.Ref, stored.Size); artifactCode(err) != ports.ArtifactErrorIO {
+		t.Fatalf("stream allocation error=%v", err)
+	}
+	if client.closeCount() != closesBeforeFailure+1 {
+		t.Fatalf("stream closes=%d want=%d", client.closeCount(), closesBeforeFailure+1)
+	}
+
+	client.setOpenFailure(ErrObjectNotFound, false)
+	if _, err := store.Get(context.Background(), stored.Ref, stored.Size); artifactCode(err) != ports.ArtifactErrorIO {
+		t.Fatalf("Head/Open divergence error=%v", err)
+	}
+}
+
+func TestStoreRejectsIndividuallyCorruptVerifiableMetadata(t *testing.T) {
+	for name, mutate := range map[string]func(*ObjectMetadata){
+		"schema":          func(metadata *ObjectMetadata) { metadata.Schema = "other.schema" },
+		"project digest":  func(metadata *ObjectMetadata) { metadata.ProjectDigest = strings.Repeat("0", 64) },
+		"artifact digest": func(metadata *ObjectMetadata) { metadata.ArtifactDigest = strings.Repeat("f", 64) },
+		"metadata size":   func(metadata *ObjectMetadata) { metadata.Size++ },
+		"invalid media":   func(metadata *ObjectMetadata) { metadata.OriginalMediaType = "not-a-media-type" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			client := newMemoryClient()
+			store := newTestStore(t, client, "project:metadata-"+strings.ReplaceAll(name, " ", "-"))
+			stored, err := store.Put(context.Background(), ports.PutArtifactRequest{
+				MediaType: "text/plain", Content: []byte("individually verified metadata"),
+			})
+			testNoError(t, err)
+			client.mutateMetadata(store.locator(stored.Digest), mutate)
+			_, err = store.Get(context.Background(), stored.Ref, stored.Size)
+			want := ports.ArtifactErrorDigestMismatch
+			if name == "metadata size" {
+				want = ports.ArtifactErrorSizeMismatch
+			}
+			if artifactCode(err) != want {
+				t.Fatalf("metadata error=%v want code=%s", err, want)
+			}
+		})
 	}
 }
 
@@ -192,7 +262,7 @@ func newTestStore(t *testing.T, client Client, projectValue string) *Store {
 	project, err := goal.NewProjectRef(projectValue)
 	testNoError(t, err)
 	store, err := New(client, Options{
-		Bucket: "artifacts", ProjectRef: project, MaxObjectBytes: 64, ReconcileTimeout: time.Second,
+		Bucket: "artifacts", ProjectRef: project, MaxObjectBytes: 64, ReconcileTimeout: 50 * time.Millisecond,
 	})
 	testNoError(t, err)
 	return store
@@ -209,7 +279,13 @@ type memoryClient struct {
 	creations           int
 	ambiguousAfterWrite int
 	failBeforeWrite     error
+	afterWrite          func()
 	returnNilOpen       bool
+	headErrors          []error
+	headCalls           int
+	openError           error
+	openStreamWithError bool
+	streamCloses        int
 	headSizeOverride    *int64
 	headSizeByKey       map[string]int64
 	lastRead            int64
@@ -241,6 +317,9 @@ func (client *memoryClient) PutIfAbsent(ctx context.Context, request PutObjectRe
 	}
 	client.objects[key] = memoryObject{content: append([]byte(nil), content...), metadata: request.Metadata}
 	client.creations++
+	if client.afterWrite != nil {
+		client.afterWrite()
+	}
 	if client.ambiguousAfterWrite > 0 {
 		client.ambiguousAfterWrite--
 		return errors.New("ambiguous timeout after write")
@@ -254,6 +333,12 @@ func (client *memoryClient) Head(ctx context.Context, locator ObjectLocator) (Ob
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	client.headCalls++
+	if len(client.headErrors) > 0 {
+		err := client.headErrors[0]
+		client.headErrors = client.headErrors[1:]
+		return ObjectInfo{}, err
+	}
 	object, found := client.objects[memoryKey(locator)]
 	if !found {
 		return ObjectInfo{}, ErrObjectNotFound
@@ -274,6 +359,8 @@ func (client *memoryClient) Open(ctx context.Context, locator ObjectLocator) (io
 	client.mu.Lock()
 	object, found := client.objects[memoryKey(locator)]
 	client.lastRead = 0
+	openErr := client.openError
+	openStreamWithError := client.openStreamWithError
 	client.mu.Unlock()
 	if !found {
 		return nil, ErrObjectNotFound
@@ -281,14 +368,26 @@ func (client *memoryClient) Open(ctx context.Context, locator ObjectLocator) (io
 	if client.returnNilOpen {
 		return nil, nil
 	}
-	return &countingReadCloser{
+	stream := &countingReadCloser{
 		reader: bytes.NewReader(append([]byte(nil), object.content...)),
 		onRead: func(count int) {
 			client.mu.Lock()
 			client.lastRead += int64(count)
 			client.mu.Unlock()
 		},
-	}, nil
+		onClose: func() {
+			client.mu.Lock()
+			client.streamCloses++
+			client.mu.Unlock()
+		},
+	}
+	if openErr != nil {
+		if openStreamWithError {
+			return stream, openErr
+		}
+		return nil, openErr
+	}
+	return stream, nil
 }
 
 func (client *memoryClient) tamperContent(locator ObjectLocator, content []byte) {
@@ -297,6 +396,21 @@ func (client *memoryClient) tamperContent(locator ObjectLocator, content []byte)
 	object := client.objects[memoryKey(locator)]
 	object.content = append([]byte(nil), content...)
 	client.objects[memoryKey(locator)] = object
+}
+
+func (client *memoryClient) mutateMetadata(locator ObjectLocator, mutate func(*ObjectMetadata)) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	object := client.objects[memoryKey(locator)]
+	mutate(&object.metadata)
+	client.objects[memoryKey(locator)] = object
+}
+
+func (client *memoryClient) setOpenFailure(err error, withStream bool) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.openError = err
+	client.openStreamWithError = withStream
 }
 
 func (client *memoryClient) overrideHeadSize(size int64) {
@@ -317,6 +431,18 @@ func (client *memoryClient) createdCount() int {
 	return client.creations
 }
 
+func (client *memoryClient) headCount() int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.headCalls
+}
+
+func (client *memoryClient) closeCount() int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.streamCloses
+}
+
 func (client *memoryClient) keys() []string {
 	client.mu.Lock()
 	defer client.mu.Unlock()
@@ -334,8 +460,9 @@ func (client *memoryClient) lastOpenReadCount() int64 {
 }
 
 type countingReadCloser struct {
-	reader *bytes.Reader
-	onRead func(int)
+	reader  *bytes.Reader
+	onRead  func(int)
+	onClose func()
 }
 
 func (reader *countingReadCloser) Read(buffer []byte) (int, error) {
@@ -344,7 +471,12 @@ func (reader *countingReadCloser) Read(buffer []byte) (int, error) {
 	return count, err
 }
 
-func (*countingReadCloser) Close() error { return nil }
+func (reader *countingReadCloser) Close() error {
+	if reader.onClose != nil {
+		reader.onClose()
+	}
+	return nil
+}
 
 func memoryKey(locator ObjectLocator) string { return locator.Bucket + "\x00" + locator.Key }
 

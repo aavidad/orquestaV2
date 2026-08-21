@@ -12,16 +12,14 @@
     "s3_fake_injected"
   ],
   "shared_invariants": [
-    "content_addressed_put",
-    "exact_replay_and_media_type_conflict",
-    "content_and_causal_metadata_tamper_rejection",
-    "bounded_read_and_expected_size_validation",
+    "content_addressed_put_exact_replay_and_media_type_conflict",
     "opaque_project_isolation",
-    "restart_recovery",
+    "store_reinstantiation_over_same_backend",
     "concurrent_idempotency_and_single_conflict_winner"
   ],
   "deferred_gates": [
     "real_s3_compatible_backend",
+    "real_process_client_backend_restart_recovery",
     "real_s3_compatible_backend_receipt",
     "postgres_s3_multihost_e2e",
     "sealed_candidate_receipt"

@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	artifactRefPrefix = "artifact:sha256:"
-	metadataSchema    = "orquesta.artifact.s3.v1"
+	artifactRefPrefix     = "artifact:sha256:"
+	metadataSchema        = "orquesta.artifact.s3.v1"
+	reconcileInitialDelay = time.Millisecond
+	reconcileMaximumDelay = 25 * time.Millisecond
 )
 
 // Options binds one Store instance to one project namespace. Limits are typed
@@ -32,7 +34,8 @@ type Options struct {
 }
 
 // Store adapts an injected S3-compatible object client to ArtifactStore.
-// Store is stateless: restart creates another Store over the same client.
+// Store is stateless: another Store may reuse the same client/backend. That
+// reinstantiation does not prove persistence or process/backend restart.
 type Store struct {
 	client           Client
 	bucket           string
@@ -83,24 +86,65 @@ func (store *Store) Put(ctx context.Context, request ports.PutArtifactRequest) (
 	putErr := store.client.PutIfAbsent(ctx, PutObjectRequest{
 		ObjectLocator: locator, Body: bytes.NewReader(request.Content), Size: stored.Size, Metadata: metadata,
 	})
-	if putErr == nil || errors.Is(putErr, ErrObjectAlreadyExists) {
-		if _, err := store.readVerified(ctx, locator, ref, digestText, request.MediaType, stored.Size); err != nil {
-			return ports.StoredArtifact{}, err
-		}
-		return stored, nil
-	}
-
-	// A timeout after an object write is an unknown outcome. Reconcile the same
-	// immutable key under a short detached context; never invent another key.
-	reconcileCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), store.reconcileTimeout)
-	defer cancel()
-	if _, err := store.readVerified(reconcileCtx, locator, ref, digestText, request.MediaType, stored.Size); err == nil {
+	if err := store.verifyPutOutcome(ctx, locator, ref, digestText, request.MediaType, stored.Size); err == nil {
 		return stored, nil
 	} else if code := ports.ArtifactContractErrorCode(err); code != ports.ArtifactErrorNotFound &&
 		code != ports.ArtifactErrorIO {
 		return ports.StoredArtifact{}, err
+	} else if putErr == nil || errors.Is(putErr, ErrObjectAlreadyExists) {
+		return ports.StoredArtifact{}, err
 	}
 	return ports.StoredArtifact{}, artifactError(ports.ArtifactErrorIO, putErr)
+}
+
+// verifyPutOutcome treats ReconcileTimeout as a bounded reconciliation window,
+// rather than as a timeout around one observation. A client may return success,
+// an already-exists result, or an ambiguous transport error before the object is
+// observable through Head/Open. Only absence and transport failures are retried;
+// an integrity or metadata conflict is terminal.
+func (store *Store) verifyPutOutcome(
+	ctx context.Context,
+	locator ObjectLocator,
+	ref goal.ArtifactRef,
+	digest string,
+	expectedMediaType string,
+	expectedSize int64,
+) error {
+	reconcileCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), store.reconcileTimeout)
+	defer cancel()
+	delay := reconcileInitialDelay
+	for {
+		if _, err := store.readVerified(
+			reconcileCtx, locator, ref, digest, expectedMediaType, expectedSize,
+		); err == nil {
+			return nil
+		} else if !retryablePutVerification(err) {
+			return err
+		}
+
+		timer := time.NewTimer(delay)
+		select {
+		case <-reconcileCtx.Done():
+			timer.Stop()
+			return artifactError(ports.ArtifactErrorIO, reconcileCtx.Err())
+		case <-timer.C:
+		}
+		if delay < reconcileMaximumDelay {
+			delay *= 2
+			if delay > reconcileMaximumDelay {
+				delay = reconcileMaximumDelay
+			}
+		}
+	}
+}
+
+func retryablePutVerification(err error) bool {
+	switch ports.ArtifactContractErrorCode(err) {
+	case ports.ArtifactErrorNotFound, ports.ArtifactErrorIO:
+		return true
+	default:
+		return false
+	}
 }
 
 func (store *Store) Get(
@@ -155,6 +199,15 @@ func (store *Store) readVerified(
 
 	stream, err := store.client.Open(ctx, locator)
 	if err != nil {
+		if stream != nil {
+			_ = stream.Close()
+		}
+		if errors.Is(err, ErrObjectNotFound) {
+			// Head observed the immutable key. Disappearance or a divergent
+			// Open observation is transient during Put reconciliation and is
+			// never reported as authoritative absence to a regular Get.
+			return ports.ArtifactContent{}, artifactError(ports.ArtifactErrorIO, err)
+		}
 		return ports.ArtifactContent{}, mapClientError(err)
 	}
 	if stream == nil {

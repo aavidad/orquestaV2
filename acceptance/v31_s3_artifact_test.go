@@ -36,60 +36,186 @@ type v31S3ArtifactFixture struct {
 func TestAcceptanceV31S3ArtifactFoundation(t *testing.T) {
 	fixture := readV31S3ArtifactFixture(t)
 	assertV31S3ArtifactFixture(t, fixture)
+	behaviorTests := map[string]func(*testing.T){
+		"content_addressed_put_over_create_only_client_contract":               runV31S3ContentAddressedPut,
+		"schema_project_digest_artifact_digest_size_and_media_syntax_verified": runV31S3MetadataValidation,
+		"media_type_conflict_rejected_on_put_replay":                           runV31S3MediaTypeConflict,
+		"raw_project_ref_not_embedded_in_object_key":                           runV31S3OpaqueProjectIsolation,
+		"bounded_in_memory_stream_read":                                        runV31S3BoundedStreamRead,
+		"bounded_retry_reconciliation_on_same_key":                             runV31S3BoundedRetryReconciliation,
+		"concurrent_idempotent_put_via_injected_fake":                          runV31S3ConcurrentPut,
+		"stateless_store_reinstantiation_over_same_in_memory_backend":          runV31S3StoreReinstantiation,
+	}
+	if len(behaviorTests) != len(fixture.ImplementedBehaviors) {
+		t.Fatalf("V31 S3 executable behavior count=%d fixture count=%d", len(behaviorTests), len(fixture.ImplementedBehaviors))
+	}
+	for _, behavior := range fixture.ImplementedBehaviors {
+		behaviorTest, found := behaviorTests[behavior]
+		if !found {
+			t.Fatalf("V31 S3 behavior %q has no executable acceptance", behavior)
+		}
+		t.Run(behavior, behaviorTest)
+	}
+}
 
+func runV31S3ContentAddressedPut(t *testing.T) {
 	client := newV31S3Client()
-	alpha := newV31S3Store(t, client, "project:v31-alpha")
-	beta := newV31S3Store(t, client, "project:v31-beta")
+	store := newV31S3Store(t, client, "project:v31-content-addressed")
 	request := ports.PutArtifactRequest{MediaType: "application/json", Content: []byte(`{"gate":"v31"}`)}
-	first, err := alpha.Put(context.Background(), request)
+	first, err := store.Put(context.Background(), request)
 	v31NoError(t, err)
-	second, err := alpha.Put(context.Background(), request)
+	if err := ports.ValidateStoredArtifact(request, first); err != nil {
+		t.Fatalf("stored artifact violates content address: %v", err)
+	}
+	second, err := store.Put(context.Background(), request)
 	v31NoError(t, err)
 	if first != second || client.count() != 1 {
 		t.Fatalf("conditional CAS not idempotent: first=%+v second=%+v objects=%d", first, second, client.count())
 	}
-
-	restarted := newV31S3Store(t, client, "project:v31-alpha")
-	content, err := restarted.Get(context.Background(), first.Ref, first.Size)
+	content, err := store.Get(context.Background(), first.Ref, first.Size)
 	v31NoError(t, err)
-	if string(content.Content) != string(request.Content) || content.Digest != first.Digest {
-		t.Fatalf("restart read=%+v", content)
+	if err := ports.ValidateArtifactContent(content); err != nil || !bytes.Equal(content.Content, request.Content) ||
+		content.MediaType != request.MediaType {
+		t.Fatalf("content=%+v validation=%v", content, err)
 	}
-	if _, err := beta.Get(context.Background(), first.Ref, first.Size); ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorNotFound {
+}
+
+func runV31S3MetadataValidation(t *testing.T) {
+	type metadataCase struct {
+		name   string
+		mutate func(*artifactS3.ObjectMetadata)
+		want   string
+	}
+	cases := []metadataCase{
+		{name: "schema", mutate: func(metadata *artifactS3.ObjectMetadata) { metadata.Schema = "other.schema" }, want: ports.ArtifactErrorDigestMismatch},
+		{name: "project_digest", mutate: func(metadata *artifactS3.ObjectMetadata) { metadata.ProjectDigest = strings.Repeat("0", 64) }, want: ports.ArtifactErrorDigestMismatch},
+		{name: "artifact_digest", mutate: func(metadata *artifactS3.ObjectMetadata) { metadata.ArtifactDigest = strings.Repeat("f", 64) }, want: ports.ArtifactErrorDigestMismatch},
+		{name: "metadata_size", mutate: func(metadata *artifactS3.ObjectMetadata) { metadata.Size++ }, want: ports.ArtifactErrorSizeMismatch},
+		{name: "media_syntax", mutate: func(metadata *artifactS3.ObjectMetadata) { metadata.OriginalMediaType = "not-a-media-type" }, want: ports.ArtifactErrorDigestMismatch},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			client := newV31S3Client()
+			store := newV31S3Store(t, client, "project:v31-metadata-"+testCase.name)
+			request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("causal metadata " + testCase.name)}
+			stored, err := store.Put(context.Background(), request)
+			v31NoError(t, err)
+			if !client.tamperMetadata(stored.Digest, testCase.mutate) {
+				t.Fatal("artifact metadata not found for tamper")
+			}
+			if _, err := store.Get(context.Background(), stored.Ref, stored.Size); ports.ArtifactContractErrorCode(err) != testCase.want {
+				t.Fatalf("metadata %s error=%v want code=%s", testCase.name, err, testCase.want)
+			}
+		})
+	}
+	t.Run("request_media_syntax", func(t *testing.T) {
+		client := newV31S3Client()
+		store := newV31S3Store(t, client, "project:v31-request-media")
+		stored, err := store.Put(context.Background(), ports.PutArtifactRequest{
+			MediaType: "not-a-media-type", Content: []byte("invalid media request"),
+		})
+		if ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorMediaTypeInvalid || stored.Ref.String() != "" || client.count() != 0 {
+			t.Fatalf("invalid media request stored=%+v error=%v objects=%d", stored, err, client.count())
+		}
+	})
+}
+
+func runV31S3MediaTypeConflict(t *testing.T) {
+	client := newV31S3Client()
+	store := newV31S3Store(t, client, "project:v31-media-conflict")
+	content := []byte("same bytes with conflicting media")
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: content}
+	stored, err := store.Put(context.Background(), request)
+	v31NoError(t, err)
+	before := client.count()
+	conflict, err := store.Put(context.Background(), ports.PutArtifactRequest{
+		MediaType: "application/octet-stream", Content: content,
+	})
+	if ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorFileChanged || conflict.Ref.String() != "" || client.count() != before {
+		t.Fatalf("media conflict stored=%+v error=%v objects=%d want=%d", conflict, err, client.count(), before)
+	}
+	got, err := store.Get(context.Background(), stored.Ref, stored.Size)
+	v31NoError(t, err)
+	if got.MediaType != request.MediaType || !bytes.Equal(got.Content, request.Content) {
+		t.Fatalf("media conflict changed original content: %+v", got)
+	}
+}
+
+func runV31S3OpaqueProjectIsolation(t *testing.T) {
+	client := newV31S3Client()
+	alphaValue, betaValue := "project:v31-alpha/private", "project:v31-beta/private"
+	alpha := newV31S3Store(t, client, alphaValue)
+	beta := newV31S3Store(t, client, betaValue)
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("same isolated bytes")}
+	alphaStored, err := alpha.Put(context.Background(), request)
+	v31NoError(t, err)
+	if _, err := beta.Get(context.Background(), alphaStored.Ref, alphaStored.Size); ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorNotFound {
 		t.Fatalf("cross-project read error=%v", err)
 	}
+	betaStored, err := beta.Put(context.Background(), request)
+	v31NoError(t, err)
+	if betaStored.Ref != alphaStored.Ref || client.count() != 2 {
+		t.Fatalf("project isolation alpha=%+v beta=%+v objects=%d", alphaStored, betaStored, client.count())
+	}
 	for _, locator := range client.locators() {
-		if strings.Contains(locator.Key, "project:v31-alpha") || strings.Contains(locator.Key, "project:v31-beta") {
+		if strings.Contains(locator.Key, alphaValue) || strings.Contains(locator.Key, betaValue) {
 			t.Fatalf("project ref leaked in object key %q", locator.Key)
 		}
 	}
+}
 
-	metadataRequest := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("causal metadata")}
-	metadataStored, err := alpha.Put(context.Background(), metadataRequest)
+func runV31S3BoundedStreamRead(t *testing.T) {
+	client := newV31S3Client()
+	store := newV31S3Store(t, client, "project:v31-bounded-stream")
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("bounded")}
+	stored, err := store.Put(context.Background(), request)
 	v31NoError(t, err)
-	client.tamperProjectMetadata(metadataStored.Digest)
-	if _, err := alpha.Get(context.Background(), metadataStored.Ref, metadataStored.Size); ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorDigestMismatch {
-		t.Fatalf("causal metadata substitution error=%v", err)
+	client.tamperContent(stored.Digest, bytes.Repeat([]byte("x"), 4096), stored.Size)
+	if _, err := store.Get(context.Background(), stored.Ref, stored.Size); ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorSizeMismatch {
+		t.Fatalf("oversized object stream error=%v", err)
 	}
+	if got := client.lastOpenReadCount(); got != stored.Size+1 {
+		t.Fatalf("bounded stream read=%d want=%d", got, stored.Size+1)
+	}
+}
 
-	boundedRequest := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("bounded")}
-	boundedStored, err := alpha.Put(context.Background(), boundedRequest)
+func runV31S3BoundedRetryReconciliation(t *testing.T) {
+	client := newV31S3Client()
+	client.injectAmbiguousWrite(2)
+	store := newV31S3Store(t, client, "project:v31-reconciliation")
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("effect before timeout")}
+	stored, err := store.Put(context.Background(), request)
 	v31NoError(t, err)
-	client.tamperContent(boundedStored.Digest, bytes.Repeat([]byte("x"), 4096), boundedStored.Size)
-	if _, err := alpha.Get(context.Background(), boundedStored.Ref, boundedStored.Size); ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorSizeMismatch {
-		t.Fatalf("unbounded object stream error=%v", err)
+	if err := ports.ValidateStoredArtifact(request, stored); err != nil {
+		t.Fatalf("reconciled artifact validation=%v", err)
 	}
-	if got := client.lastOpenReadCount(); got != boundedStored.Size+1 {
-		t.Fatalf("bounded stream read=%d want=%d", got, boundedStored.Size+1)
-	}
+	assertV31SameHeadLocator(t, client.headObservations(), 3)
 
-	concurrent := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("concurrent conditional object")}
+	boundedClient := newV31S3Client()
+	boundedClient.injectAmbiguousWrite(1_000_000)
+	boundedStore := newV31S3StoreWithTimeout(t, boundedClient, "project:v31-reconciliation-bound", 10*time.Millisecond)
+	started := time.Now()
+	failed, err := boundedStore.Put(context.Background(), ports.PutArtifactRequest{
+		MediaType: "text/plain", Content: []byte("never observable within bound"),
+	})
+	if ports.ArtifactContractErrorCode(err) != ports.ArtifactErrorIO || failed.Ref.String() != "" {
+		t.Fatalf("bounded reconciliation stored=%+v error=%v", failed, err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("bounded reconciliation elapsed=%s", elapsed)
+	}
+	assertV31SameHeadLocator(t, boundedClient.headObservations(), 2)
+}
+
+func runV31S3ConcurrentPut(t *testing.T) {
+	client := newV31S3Client()
+	store := newV31S3Store(t, client, "project:v31-concurrent")
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("concurrent conditional object")}
 	const workers = 24
 	results := make([]ports.StoredArtifact, workers)
 	errorsFound := make([]error, workers)
 	start := make(chan struct{})
-	var ready sync.WaitGroup
-	var done sync.WaitGroup
+	var ready, done sync.WaitGroup
 	for index := range workers {
 		ready.Add(1)
 		done.Add(1)
@@ -97,11 +223,11 @@ func TestAcceptanceV31S3ArtifactFoundation(t *testing.T) {
 			defer done.Done()
 			ready.Done()
 			<-start
-			results[index], errorsFound[index] = alpha.Put(context.Background(), concurrent)
+			results[index], errorsFound[index] = store.Put(context.Background(), request)
 		}()
 	}
 	ready.Wait()
-	beforeConcurrent := client.count()
+	before := client.count()
 	close(start)
 	done.Wait()
 	for index := range workers {
@@ -109,14 +235,34 @@ func TestAcceptanceV31S3ArtifactFoundation(t *testing.T) {
 			t.Fatalf("concurrent Put[%d] result=%+v error=%v", index, results[index], errorsFound[index])
 		}
 	}
-	if got := client.count(); got != beforeConcurrent+1 {
-		t.Fatalf("concurrent CAS object count=%d want=%d", got, beforeConcurrent+1)
+	if got := client.count(); got != before+1 {
+		t.Fatalf("concurrent CAS object count=%d want=%d", got, before+1)
 	}
+}
 
-	client.failAfterNextWrite = true
-	ambiguous := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("effect before timeout")}
-	if _, err := alpha.Put(context.Background(), ambiguous); err != nil {
-		t.Fatalf("unknown outcome was not reconciled on immutable key: %v", err)
+func runV31S3StoreReinstantiation(t *testing.T) {
+	client := newV31S3Client()
+	store := newV31S3Store(t, client, "project:v31-reinstantiation")
+	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("same in-memory backend")}
+	stored, err := store.Put(context.Background(), request)
+	v31NoError(t, err)
+	reinstantiated := newV31S3Store(t, client, "project:v31-reinstantiation")
+	content, err := reinstantiated.Get(context.Background(), stored.Ref, stored.Size)
+	v31NoError(t, err)
+	if !bytes.Equal(content.Content, request.Content) || content.Digest != stored.Digest {
+		t.Fatalf("store reinstantiation read=%+v", content)
+	}
+}
+
+func assertV31SameHeadLocator(t *testing.T, observations []artifactS3.ObjectLocator, minimum int) {
+	t.Helper()
+	if len(observations) < minimum {
+		t.Fatalf("Head observations=%d want at least %d", len(observations), minimum)
+	}
+	for _, observation := range observations[1:] {
+		if observation != observations[0] {
+			t.Fatalf("reconciliation changed object key: first=%+v observed=%+v", observations[0], observation)
+		}
 	}
 }
 
@@ -125,7 +271,9 @@ func TestV31S3ArtifactFoundationDoesNotClaimOPS13Accreditation(t *testing.T) {
 	if fixture.Status != "implemented_foundation_not_accredited" ||
 		!reflect.DeepEqual(fixture.DeferredGates, []string{
 			"real_s3_compatible_backend",
-			"filesystem_and_s3_shared_contract_suite",
+			"real_process_client_backend_restart_recovery",
+			"real_s3_compatible_backend_receipt",
+			"production_wiring_and_credentials",
 			"postgres_s3_multihost_e2e",
 			"sealed_candidate_receipt",
 		}) {
@@ -163,13 +311,14 @@ func assertV31S3ArtifactFixture(t *testing.T, fixture v31S3ArtifactFixture) {
 		t.Fatalf("invalid V31 S3 fixture identity: %+v", fixture)
 	}
 	wantBehaviors := []string{
-		"content_addressed_immutable_conditional_put",
-		"digest_size_and_causal_metadata_verified_after_write",
-		"opaque_project_isolation_without_project_ref_leak",
-		"bounded_stream_read",
-		"unknown_put_outcome_reconciled_on_same_key",
-		"concurrent_idempotent_put",
-		"stateless_restart",
+		"content_addressed_put_over_create_only_client_contract",
+		"schema_project_digest_artifact_digest_size_and_media_syntax_verified",
+		"media_type_conflict_rejected_on_put_replay",
+		"raw_project_ref_not_embedded_in_object_key",
+		"bounded_in_memory_stream_read",
+		"bounded_retry_reconciliation_on_same_key",
+		"concurrent_idempotent_put_via_injected_fake",
+		"stateless_store_reinstantiation_over_same_in_memory_backend",
 	}
 	if !reflect.DeepEqual(fixture.ImplementedBehaviors, wantBehaviors) {
 		t.Fatalf("V31 S3 behavior contract drift: %v", fixture.ImplementedBehaviors)
@@ -177,12 +326,21 @@ func assertV31S3ArtifactFixture(t *testing.T, fixture v31S3ArtifactFixture) {
 }
 
 func newV31S3Store(t *testing.T, client artifactS3.Client, projectValue string) *artifactS3.Store {
+	return newV31S3StoreWithTimeout(t, client, projectValue, time.Second)
+}
+
+func newV31S3StoreWithTimeout(
+	t *testing.T,
+	client artifactS3.Client,
+	projectValue string,
+	reconcileTimeout time.Duration,
+) *artifactS3.Store {
 	t.Helper()
 	project, err := goal.NewProjectRef(projectValue)
 	v31NoError(t, err)
 	store, err := artifactS3.New(client, artifactS3.Options{
 		Bucket: "v31-artifacts", ProjectRef: project, MaxObjectBytes: 1024,
-		ReconcileTimeout: time.Second,
+		ReconcileTimeout: reconcileTimeout,
 	})
 	v31NoError(t, err)
 	return store
@@ -194,11 +352,13 @@ type v31S3Object struct {
 }
 
 type v31S3Client struct {
-	mu                 sync.Mutex
-	objects            map[artifactS3.ObjectLocator]v31S3Object
-	headSizeOverride   map[artifactS3.ObjectLocator]int64
-	failAfterNextWrite bool
-	lastRead           int64
+	mu                    sync.Mutex
+	objects               map[artifactS3.ObjectLocator]v31S3Object
+	headSizeOverride      map[artifactS3.ObjectLocator]int64
+	failAfterNextWrite    bool
+	headNotFoundRemaining int
+	headLocators          []artifactS3.ObjectLocator
+	lastRead              int64
 }
 
 func newV31S3Client() *v31S3Client {
@@ -240,6 +400,11 @@ func (client *v31S3Client) Head(
 	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	client.headLocators = append(client.headLocators, locator)
+	if client.headNotFoundRemaining > 0 {
+		client.headNotFoundRemaining--
+		return artifactS3.ObjectInfo{}, artifactS3.ErrObjectNotFound
+	}
 	object, found := client.objects[locator]
 	if !found {
 		return artifactS3.ObjectInfo{}, artifactS3.ErrObjectNotFound
@@ -288,16 +453,20 @@ func (client *v31S3Client) locators() []artifactS3.ObjectLocator {
 	return locators
 }
 
-func (client *v31S3Client) tamperProjectMetadata(digest string) {
+func (client *v31S3Client) tamperMetadata(
+	digest string,
+	mutate func(*artifactS3.ObjectMetadata),
+) bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	for locator, object := range client.objects {
 		if object.metadata.ArtifactDigest == digest {
-			object.metadata.ProjectDigest = "substituted-project-digest"
+			mutate(&object.metadata)
 			client.objects[locator] = object
-			return
+			return true
 		}
 	}
+	return false
 }
 
 func (client *v31S3Client) tamperContent(digest string, content []byte, reportedSize int64) {
@@ -317,6 +486,19 @@ func (client *v31S3Client) lastOpenReadCount() int64 {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	return client.lastRead
+}
+
+func (client *v31S3Client) injectAmbiguousWrite(delayedHeads int) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.failAfterNextWrite = true
+	client.headNotFoundRemaining = delayedHeads
+}
+
+func (client *v31S3Client) headObservations() []artifactS3.ObjectLocator {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return append([]artifactS3.ObjectLocator(nil), client.headLocators...)
 }
 
 type v31CountingReadCloser struct {

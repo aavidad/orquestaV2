@@ -9,17 +9,20 @@
   "adapter_path": "internal/adapters/artifact/s3",
   "client_contract": "sdk_neutral_injected_client",
   "implemented_behaviors": [
-    "content_addressed_immutable_conditional_put",
-    "digest_size_and_causal_metadata_verified_after_write",
-    "opaque_project_isolation_without_project_ref_leak",
-    "bounded_stream_read",
-    "unknown_put_outcome_reconciled_on_same_key",
-    "concurrent_idempotent_put",
-    "stateless_restart"
+    "content_addressed_put_over_create_only_client_contract",
+    "schema_project_digest_artifact_digest_size_and_media_syntax_verified",
+    "media_type_conflict_rejected_on_put_replay",
+    "raw_project_ref_not_embedded_in_object_key",
+    "bounded_in_memory_stream_read",
+    "bounded_retry_reconciliation_on_same_key",
+    "concurrent_idempotent_put_via_injected_fake",
+    "stateless_store_reinstantiation_over_same_in_memory_backend"
   ],
   "deferred_gates": [
     "real_s3_compatible_backend",
-    "filesystem_and_s3_shared_contract_suite",
+    "real_process_client_backend_restart_recovery",
+    "real_s3_compatible_backend_receipt",
+    "production_wiring_and_credentials",
     "postgres_s3_multihost_e2e",
     "sealed_candidate_receipt"
   ]

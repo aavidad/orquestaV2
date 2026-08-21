@@ -30,16 +30,40 @@ type Backend struct {
 	AssertProjectRefOpaque func(testing.TB, goal.ProjectRef)
 }
 
+// ParityBackend contains only the observations needed to execute the common
+// adapter behaviors without backend-specific fault injection.
+type ParityBackend struct {
+	Open                   func(testing.TB, goal.ProjectRef) Handle
+	LogicalObjectCount     func(testing.TB) int
+	AssertProjectRefOpaque func(testing.TB, goal.ProjectRef)
+}
+
 func Run(t *testing.T, backend Backend) {
 	t.Helper()
 	validateBackend(t, backend)
-	t.Run("content_addressed_put_and_exact_replay", func(t *testing.T) { runPutAndReplay(t, backend) })
+	parity := parityBackend(backend)
+	t.Run("content_addressed_put_and_exact_replay", func(t *testing.T) { runPutAndReplay(t, parity) })
 	t.Run("tamper_rejection_and_bounded_reads", func(t *testing.T) { runTamperAndBounds(t, backend) })
-	t.Run("project_isolation_and_restart", func(t *testing.T) { runProjectIsolationAndRestart(t, backend) })
+	t.Run("project_isolation_and_store_reinstantiation", func(t *testing.T) {
+		runProjectIsolationAndStoreReinstantiation(t, parity)
+	})
+	t.Run("concurrent_replay_and_conflict", func(t *testing.T) { runConcurrentReplayAndConflict(t, parity) })
+}
+
+// RunParity executes the common observable behaviors directly against an
+// adapter. It deliberately makes no durability or process-restart claim: Open
+// may return another handle over the same backend instance.
+func RunParity(t *testing.T, backend ParityBackend) {
+	t.Helper()
+	validateParityBackend(t, backend)
+	t.Run("content_addressed_put_and_exact_replay", func(t *testing.T) { runPutAndReplay(t, backend) })
+	t.Run("project_isolation_and_store_reinstantiation", func(t *testing.T) {
+		runProjectIsolationAndStoreReinstantiation(t, backend)
+	})
 	t.Run("concurrent_replay_and_conflict", func(t *testing.T) { runConcurrentReplayAndConflict(t, backend) })
 }
 
-func runPutAndReplay(t *testing.T, backend Backend) {
+func runPutAndReplay(t *testing.T, backend ParityBackend) {
 	handle := backend.Open(t, projectRef(t, "put-replay"))
 	defer closeHandle(t, handle)
 	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("shared contract artifact")}
@@ -106,7 +130,7 @@ func assertContentTamper(t *testing.T, backend Backend, handle Handle) {
 	}
 }
 
-func runProjectIsolationAndRestart(t *testing.T, backend Backend) {
+func runProjectIsolationAndStoreReinstantiation(t *testing.T, backend ParityBackend) {
 	alphaRef, betaRef := projectRef(t, "alpha/private"), projectRef(t, "beta/private")
 	alpha, beta := backend.Open(t, alphaRef), backend.Open(t, betaRef)
 	defer closeHandle(t, beta)
@@ -123,12 +147,12 @@ func runProjectIsolationAndRestart(t *testing.T, backend Backend) {
 	backend.AssertProjectRefOpaque(t, alphaRef)
 	backend.AssertProjectRefOpaque(t, betaRef)
 	closeHandle(t, alpha)
-	restarted := backend.Open(t, alphaRef)
-	defer closeHandle(t, restarted)
-	assertContent(t, restarted.Store, request, alphaStored)
+	reinstantiated := backend.Open(t, alphaRef)
+	defer closeHandle(t, reinstantiated)
+	assertContent(t, reinstantiated.Store, request, alphaStored)
 }
 
-func runConcurrentReplayAndConflict(t *testing.T, backend Backend) {
+func runConcurrentReplayAndConflict(t *testing.T, backend ParityBackend) {
 	const workers = 24
 	handles := openHandles(t, backend, projectRef(t, "concurrent"), workers)
 	request := ports.PutArtifactRequest{MediaType: "text/plain", Content: []byte("one concurrent artifact")}
@@ -145,7 +169,7 @@ func runConcurrentReplayAndConflict(t *testing.T, backend Backend) {
 	runConcurrentConflict(t, backend, handles)
 }
 
-func runConcurrentConflict(t *testing.T, backend Backend, handles []Handle) {
+func runConcurrentConflict(t *testing.T, backend ParityBackend, handles []Handle) {
 	before := backend.LogicalObjectCount(t)
 	results, errs := concurrentPut(handles, func(index int) ports.PutArtifactRequest {
 		mediaType := "text/plain"
@@ -175,7 +199,7 @@ func runConcurrentConflict(t *testing.T, backend Backend, handles []Handle) {
 	}
 }
 
-func openHandles(t *testing.T, backend Backend, project goal.ProjectRef, count int) []Handle {
+func openHandles(t *testing.T, backend ParityBackend, project goal.ProjectRef, count int) []Handle {
 	handles := make([]Handle, count)
 	for index := range handles {
 		handles[index] = backend.Open(t, project)
@@ -187,10 +211,24 @@ func openHandles(t *testing.T, backend Backend, project goal.ProjectRef, count i
 
 func validateBackend(t *testing.T, backend Backend) {
 	t.Helper()
-	if backend.Open == nil || backend.LogicalObjectCount == nil || backend.TamperContent == nil ||
-		backend.TamperMetadata == nil || backend.TamperOversizedContent == nil || backend.ResetReadCount == nil ||
-		backend.ReadCount == nil || backend.AssertProjectRefOpaque == nil {
+	validateParityBackend(t, parityBackend(backend))
+	if backend.TamperContent == nil || backend.TamperMetadata == nil || backend.TamperOversizedContent == nil ||
+		backend.ResetReadCount == nil || backend.ReadCount == nil {
 		t.Fatal("artifact contract backend is incomplete")
+	}
+}
+
+func validateParityBackend(t *testing.T, backend ParityBackend) {
+	t.Helper()
+	if backend.Open == nil || backend.LogicalObjectCount == nil || backend.AssertProjectRefOpaque == nil {
+		t.Fatal("artifact parity backend is incomplete")
+	}
+}
+
+func parityBackend(backend Backend) ParityBackend {
+	return ParityBackend{
+		Open: backend.Open, LogicalObjectCount: backend.LogicalObjectCount,
+		AssertProjectRefOpaque: backend.AssertProjectRefOpaque,
 	}
 }
 
