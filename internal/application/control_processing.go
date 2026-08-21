@@ -62,7 +62,18 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 				ctx, claim, execution, attempt, "agent.stop_definitely_not_applied",
 			)
 		}
-		return orchestrator.quarantineUnknownApplied(ctx, claim)
+		recovered, recoveredReceipt, recoveryErr := orchestrator.reconcileAmbiguousAgentStop(
+			ctx, claim, attempt, request,
+		)
+		if recoveryErr != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		record = recovered
+		item, execution, control, err = validateStopClaim(claim, record)
+		if err != nil || stopRequest(control, execution) != request {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		receipt = recoveredReceipt
 	}
 	if err := ports.ValidateAgentStopReceipt(request, receipt); err != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)

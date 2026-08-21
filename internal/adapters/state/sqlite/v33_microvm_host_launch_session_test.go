@@ -90,7 +90,10 @@ func TestV33MigrationPreservesValidV32Authority(t *testing.T) {
 	requireRecoveryV32MicroVMHostLaunchAuthorityValid(t, system.repository.db)
 	sqliteTestNoError(t, system.repository.Close())
 
-	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
+	reopened := openFullTestRepository(t, Options{
+		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+		Now: system.clock.Now,
+	})
 	requireRecoveryV32MicroVMHostLaunchAuthorityValid(t, reopened.db)
 	key := ports.MicroVMHostLaunchAuthorityKey{
 		RunRef: attempt.Subject.ExecutionRef, ActionFence: attempt.ActionFence,

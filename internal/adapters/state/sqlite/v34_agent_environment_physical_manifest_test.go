@@ -56,7 +56,10 @@ func TestV34MigrationUpgradesCanonicalV33Atomically(t *testing.T) {
 	downgradeV34PhysicalManifestToCanonicalV33(t, system.repository.db)
 	sqliteTestNoError(t, system.repository.Close())
 
-	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
+	reopened := openFullTestRepository(t, Options{
+		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+		Now: system.clock.Now,
+	})
 	var version, receipt, columns, foreignKeyViolations int
 	var name string
 	sqliteTestNoError(t, reopened.db.QueryRow(`PRAGMA user_version`).Scan(&version))
@@ -122,7 +125,10 @@ func TestV35MigrationUpgradesPopulatedV34EnvironmentReceipt(t *testing.T) {
 	if err := system.repository.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
+	reopened := openFullTestRepository(t, Options{
+		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+		Now: system.clock.Now,
+	})
 	recovered, written, err := reopened.RegistrarPreservacionEntornoAgente(ctx, receipt)
 	if err != nil || written || !reflect.DeepEqual(recovered, receipt) {
 		t.Fatalf("upgraded populated V34 receipt written=%v got=%+v err=%v", written, recovered, err)
@@ -325,9 +331,9 @@ ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END,name`)
 		}
 	}
 	if _, err := transaction.Exec(
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?)`,
+		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?)`,
 		recoverySchemaV38EnvironmentLifecycle, recoverySchemaV23WizardGapsSnapshot,
-		recoverySchemaV38StopNonApplication,
+		recoverySchemaV38StopNonApplication, recoverySchemaV38StopRecoveryClaim,
 	); err != nil {
 		t.Fatal(err)
 	}

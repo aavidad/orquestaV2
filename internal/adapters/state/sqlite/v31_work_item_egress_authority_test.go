@@ -167,7 +167,10 @@ DELETE FROM schema_migrations WHERE version IN (31,32,33,34);
 PRAGMA user_version=30`)
 	sqliteTestNoError(t, database.Close())
 
-	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
+	reopened := openFullTestRepository(t, Options{
+		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+		Now: system.clock.Now,
+	})
 	record, err := reopened.GetGoal(context.Background(), created.Record.Goal.Ref())
 	sqliteTestNoError(t, err)
 	if len(record.WorkItemAuthorities) != 1 ||

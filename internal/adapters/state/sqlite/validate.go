@@ -1003,7 +1003,8 @@ func validateClaimBase(claim application.ActionClaim) error {
 			return errors.New("sqlite.claim_disposition_invalid")
 		}
 	case application.ActionClaimDispositionRecoverEffect:
-		if claim.Action.Kind != application.ActionLaunchAgent || claim.Action.EffectIntentRef == "" ||
+		if (claim.Action.Kind != application.ActionLaunchAgent && claim.Action.Kind != application.ActionStopAgent) ||
+			claim.Action.EffectIntentRef == "" ||
 			!validText(claim.RecoveryEffectAttemptRef) ||
 			claim.RetryBudgetExhaustion != (application.RetryBudgetExhaustion{}) {
 			return errors.New("sqlite.claim_disposition_invalid")

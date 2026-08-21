@@ -1446,14 +1446,41 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		action.fence++
 		action.lease = now.Add(request.LeaseDuration)
 		repository.actions[ref] = action
-		return ActionClaim{
+		claim := ActionClaim{
 			Action: action.record, Token: action.token, WorkerRef: action.workerRef,
 			DeliveryAttempt: action.deliveryAttempt, Fence: action.fence, LeaseUntil: action.lease,
 			BudgetReservationRef: reservation.Ref, BudgetReservation: reservation, CapacityReservation: reservaCapacidad,
 			ReferenciaColocacion: colocacion, EffectApproval: approval,
-		}, true, nil
+		}
+		if action.record.Kind == ActionStopAgent {
+			if attempt, recoveryErr := PreflightAgentStopRecoveryAttempt(record, action.record); recoveryErr == nil {
+				claim.Disposition = ActionClaimDispositionRecoverEffect
+				claim.RecoveryEffectAttemptRef = attempt.Ref
+			}
+		}
+		return claim, true, nil
 	}
 	return ActionClaim{}, false, nil
+}
+
+func (repository *memoryRepository) ValidateAgentStopRecoveryClaim(ctx context.Context, claim ActionClaim) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	action, found := repository.actions[claim.Action.Ref]
+	if !found || !memoryClaimMatches(action, claim, repository.now().UTC()) || !reflect.DeepEqual(action.record, claim.Action) {
+		return &StateError{Code: StateConflict}
+	}
+	record, found := repository.records[claim.Action.GoalRef]
+	if !found {
+		return &StateError{Code: StateConflict}
+	}
+	if _, err := SelectAgentStopRecoveryAttempt(record, claim); err != nil {
+		return &StateError{Code: StateConflict}
+	}
+	return nil
 }
 
 func (repository *memoryRepository) ValidateAgentLaunchRecoveryClaim(

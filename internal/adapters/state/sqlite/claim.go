@@ -213,7 +213,13 @@ func selectClaimCandidate(
 ) (claimSelection, bool, error) {
 	for index := range candidates {
 		candidate := &candidates[index]
-		recovery, recoveryState, err := prepareLaunchRecoveryClaim(ctx, tx, candidate, now)
+		recovery, recoveryState, err := prepareStopRecoveryClaim(ctx, tx, candidate)
+		if err != nil {
+			return claimSelection{}, false, err
+		}
+		if recoveryState == claimRecoveryAbsent {
+			recovery, recoveryState, err = prepareLaunchRecoveryClaim(ctx, tx, candidate, now)
+		}
 		if err != nil {
 			return claimSelection{}, false, err
 		}
@@ -538,9 +544,11 @@ ON CONFLICT(goal_ref,work_item_ref) DO UPDATE SET fence=work_item_fences.fence+1
 		return application.ActionClaim{}, invalid(errors.New("sqlite.claim_fence_invalid"))
 	}
 	if selected.recovery != nil {
-		selected, err = finalizeLaunchRecoveryClaim(
-			selected, request, leaseUntil, uint64(deliveryAttempt), uint64(fence),
-		)
+		if candidate.action.Kind == application.ActionStopAgent {
+			selected, err = finalizeStopRecoveryClaim(selected, request, leaseUntil, uint64(deliveryAttempt), uint64(fence))
+		} else {
+			selected, err = finalizeLaunchRecoveryClaim(selected, request, leaseUntil, uint64(deliveryAttempt), uint64(fence))
+		}
 		if err != nil {
 			return application.ActionClaim{}, err
 		}
@@ -598,6 +606,115 @@ AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, arguments...
 		}
 	}
 	return claim, nil
+}
+
+func prepareStopRecoveryClaim(
+	ctx context.Context,
+	tx *sql.Tx,
+	candidate *claimCandidate,
+) (claimSelection, claimRecoveryState, error) {
+	if candidate.governanceVersion != 1 || candidate.action.Kind != application.ActionStopAgent ||
+		candidate.action.EffectIntentRef == "" {
+		return claimSelection{}, claimRecoveryAbsent, nil
+	}
+	var footprints int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM effect_attempts
+WHERE action_ref=? AND intent_ref=?`, candidate.action.Ref, candidate.action.EffectIntentRef).Scan(&footprints); err != nil {
+		return claimSelection{}, claimRecoveryAbsent, mapDatabaseError(err)
+	}
+	if footprints == 0 {
+		return claimSelection{}, claimRecoveryAbsent, nil
+	}
+	intent, found, err := requireCandidateEffectIntent(ctx, tx, *candidate)
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	if !found {
+		return claimSelection{}, claimRecoveryBlocking, conflict(errors.New("sqlite.claim_stop_recovery_effect_intent_missing"))
+	}
+	candidate.action.EffectIntent = intent
+	record, err := readGoalRecord(ctx, tx, candidate.action.GoalRef.String())
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	attempt, err := application.PreflightAgentStopRecoveryAttempt(record, candidate.action)
+	if err != nil {
+		blocking := false
+		for _, previous := range record.EffectAttempts {
+			actionRelated := previous.ActionRef == candidate.action.Ref
+			intentRelated := previous.IntentRef == candidate.action.EffectIntentRef
+			if !actionRelated && !intentRelated {
+				continue
+			}
+			if actionRelated != intentRelated {
+				blocking = true
+				continue
+			}
+			resolved := false
+			for _, outcome := range record.EffectAttemptOutcomes {
+				if outcome.AttemptRef == previous.Ref &&
+					application.ValidateEffectAttemptOutcome(previous, outcome) == nil &&
+					outcome.Outcome == application.EffectAttemptDefinitelyNotApplied {
+					resolved = true
+				}
+			}
+			blocking = blocking || !resolved
+		}
+		if !blocking {
+			return claimSelection{}, claimRecoveryResolved, nil
+		}
+		return claimSelection{}, claimRecoveryBlocking, conflict(errors.New("sqlite.claim_stop_recovery_effect_selection_conflict"))
+	}
+	approval, unique := exactRecoveryApproval(record.EffectApprovals, attempt.ApprovalRef)
+	if !unique {
+		return claimSelection{}, claimRecoveryBlocking, conflict(errors.New("sqlite.claim_stop_recovery_effect_approval_conflict"))
+	}
+	current, err := authorizationMembershipCurrent(ctx, tx, intent.Authority)
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	if current {
+		current, err = authorizationMembershipCurrent(ctx, tx, approval.AuthorizationReceipt)
+	}
+	if err != nil {
+		return claimSelection{}, claimRecoveryBlocking, err
+	}
+	if !current {
+		return claimSelection{}, claimRecoveryBlocking, conflict(errors.New("sqlite.claim_stop_recovery_authority_stale"))
+	}
+	return claimSelection{
+		candidate: *candidate,
+		recovery: &claimRecoverySeed{record: record, candidates: []claimRecoveryCandidate{{
+			attemptRef: attempt.Ref, approval: approval,
+		}}},
+	}, claimRecoveryBlocking, nil
+}
+
+func finalizeStopRecoveryClaim(
+	selected claimSelection,
+	request application.ClaimRequest,
+	leaseUntil time.Time,
+	deliveryAttempt, fence uint64,
+) (claimSelection, error) {
+	winners := make([]claimRecoveryCandidate, 0, 1)
+	for _, candidate := range selected.recovery.candidates {
+		claim := application.ActionClaim{
+			Action: selected.candidate.action, Token: request.Token, WorkerRef: request.WorkerRef,
+			DeliveryAttempt: deliveryAttempt, Fence: fence, LeaseUntil: leaseUntil,
+			Disposition:              application.ActionClaimDispositionRecoverEffect,
+			RecoveryEffectAttemptRef: candidate.attemptRef, EffectApproval: candidate.approval,
+		}
+		if _, err := application.SelectAgentStopRecoveryAttempt(selected.recovery.record, claim); err == nil {
+			winners = append(winners, candidate)
+		}
+	}
+	if len(winners) != 1 {
+		return claimSelection{}, conflict(errors.New("sqlite.claim_stop_recovery_effect_selection_conflict"))
+	}
+	selected.disposition = application.ActionClaimDispositionRecoverEffect
+	selected.recoveryEffectAttemptRef = winners[0].attemptRef
+	selected.approval = winners[0].approval
+	return selected, nil
 }
 
 func finalizeLaunchRecoveryClaim(
@@ -1068,7 +1185,15 @@ WHERE o.ref = ?`, changeProjection, recoveryProjection), claim.Action.Ref).Scan(
 		if err != nil {
 			return err
 		}
-		attempt, err := application.SelectAgentLaunchRecoveryAttempt(record, claim)
+		var attempt application.EffectAttempt
+		switch claim.Action.Kind {
+		case application.ActionLaunchAgent:
+			attempt, err = application.SelectAgentLaunchRecoveryAttempt(record, claim)
+		case application.ActionStopAgent:
+			attempt, err = application.SelectAgentStopRecoveryAttempt(record, claim)
+		default:
+			err = errors.New("sqlite.claim_recovery_effect_kind_invalid")
+		}
 		if err != nil || attempt.Ref != recoveryEffectAttemptRef.String {
 			return conflict(errors.New("sqlite.claim_recovery_effect_conflict"))
 		}
