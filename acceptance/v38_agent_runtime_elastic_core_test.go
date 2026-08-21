@@ -26,6 +26,7 @@ func TestV38CompuertaANeutralConservaCohortesYCapacidadParcial(t *testing.T) {
 		{cohorte: 1, plazas: 1},
 		{cohorte: 16, plazas: 5},
 		{cohorte: 70, plazas: 10},
+		{cohorte: 500, plazas: 16},
 		{cohorte: 500, plazas: 20},
 	}
 	for _, caso := range casos {
