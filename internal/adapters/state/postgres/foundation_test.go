@@ -28,7 +28,7 @@ func TestFoundationCommitsAtomicMutationOnceUsingServerTime(t *testing.T) {
 		!receipt.TransactionAt.Equal(serverTime) || receipt.TransactionAt.Location() != time.UTC {
 		t.Fatalf("receipt=%+v", receipt)
 	}
-	if got := state.orderSnapshot(); !reflect.DeepEqual(got, []string{"begin", "clock", "cas", "event", "outbox", "commit"}) {
+	if got := state.orderSnapshot(); !reflect.DeepEqual(got, []string{"begin", "clock", "cas", "event", "outbox", "precommit_fence", "commit"}) {
 		t.Fatalf("transaction order=%v", got)
 	}
 	if state.beginCount != 1 || state.commitCount != 1 || state.rollbackCount != 0 {
@@ -47,6 +47,15 @@ func TestFoundationFencedCASGuardsEveryCausalDimension(t *testing.T) {
 			t.Fatalf("fenced CAS lacks %q", marker)
 		}
 	}
+	for _, marker := range []string{
+		"project_ref = $1", "goal_ref = $2", "work_item_ref = $3", "revision = $4",
+		"plan_generation = $5", "lease_token = $6", "lease_fence = $7", "last_mutation_ref = $8",
+		"lease_expires_at > clock_timestamp()", "FOR UPDATE",
+	} {
+		if !strings.Contains(revalidateFencedMutationSQL, marker) {
+			t.Fatalf("precommit fence revalidation lacks %q", marker)
+		}
+	}
 	state := newFakeState(time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC), 8)
 	request := validAtomicMutation(t)
 	foundation := newTestFoundation(t, openFakeDatabase(t, state))
@@ -54,16 +63,18 @@ func TestFoundationFencedCASGuardsEveryCausalDimension(t *testing.T) {
 	postgresNoError(t, err)
 
 	state.mu.Lock()
-	defer state.mu.Unlock()
+	calls := append([]fakeCall(nil), state.calls...)
+	serverTime := state.serverTime.UTC()
+	state.mu.Unlock()
 	var arguments []driver.NamedValue
-	for _, call := range state.calls {
+	for _, call := range calls {
 		if call.stage == "cas" {
 			arguments = call.arguments
 			break
 		}
 	}
 	want := []any{
-		request.Snapshot, state.serverTime.UTC(), request.MutationRef,
+		request.Snapshot, serverTime, request.MutationRef,
 		request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
 		int64(request.ExpectedRevision), int64(request.PlanGeneration), request.LeaseToken, int64(request.LeaseFence),
 	}
@@ -75,10 +86,29 @@ func TestFoundationFencedCASGuardsEveryCausalDimension(t *testing.T) {
 			t.Fatalf("CAS argument %d=%#v want=%#v", index+1, arguments[index].Value, want[index])
 		}
 	}
+	arguments = nil
+	for _, call := range calls {
+		if call.stage == "precommit_fence" {
+			arguments = call.arguments
+			break
+		}
+	}
+	want = []any{
+		request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(), int64(8),
+		int64(request.PlanGeneration), request.LeaseToken, int64(request.LeaseFence), request.MutationRef,
+	}
+	if len(arguments) != len(want) {
+		t.Fatalf("precommit fence arguments=%d want=%d", len(arguments), len(want))
+	}
+	for index := range want {
+		if !reflect.DeepEqual(arguments[index].Value, want[index]) {
+			t.Fatalf("precommit fence argument %d=%#v want=%#v", index+1, arguments[index].Value, want[index])
+		}
+	}
 }
 
 func TestFoundationRollsBackEveryPreCommitFailure(t *testing.T) {
-	for _, stage := range []string{"clock", "cas", "event", "outbox"} {
+	for _, stage := range []string{"clock", "cas", "event", "outbox", "precommit_fence"} {
 		t.Run(stage, func(t *testing.T) {
 			state := newFakeState(time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC), 8)
 			state.failStage = stage
@@ -92,6 +122,19 @@ func TestFoundationRollsBackEveryPreCommitFailure(t *testing.T) {
 					stage, state.beginCount, state.commitCount, state.rollbackCount, state.orderSnapshot())
 			}
 		})
+	}
+}
+
+func TestFoundationRejectsAuthorityExpiredBeforeCommit(t *testing.T) {
+	state := newFakeState(time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC), 8)
+	state.precommitStale = true
+	foundation := newTestFoundation(t, openFakeDatabase(t, state))
+
+	if receipt, err := foundation.ApplyAtomicMutation(context.Background(), validAtomicMutation(t)); receipt.MutationRef != "" || ErrorCode(err) != ErrorStaleFence {
+		t.Fatalf("receipt=%+v error=%v", receipt, err)
+	}
+	if got := state.orderSnapshot(); !reflect.DeepEqual(got, []string{"begin", "clock", "cas", "event", "outbox", "precommit_fence", "rollback"}) {
+		t.Fatalf("expired precommit fence order=%v", got)
 	}
 }
 
@@ -120,17 +163,28 @@ func TestFoundationRejectsInvalidReturnedRevisionAndCommitError(t *testing.T) {
 			t.Fatalf("commit=%d rollback=%d", state.commitCount, state.rollbackCount)
 		}
 	})
-	t.Run("commit error is not followed by second transaction decision", func(t *testing.T) {
-		state := newFakeState(time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC), 8)
-		state.failStage = "commit"
-		foundation := newTestFoundation(t, openFakeDatabase(t, state))
-		if _, err := foundation.ApplyAtomicMutation(context.Background(), validAtomicMutation(t)); ErrorCode(err) != ErrorUnavailable {
-			t.Fatalf("error=%v", err)
-		}
-		if state.commitCount != 1 || state.rollbackCount != 0 {
-			t.Fatalf("commit=%d rollback=%d order=%v", state.commitCount, state.rollbackCount, state.orderSnapshot())
-		}
-	})
+	for _, test := range []struct {
+		name  string
+		cause error
+	}{
+		{name: "driver error", cause: errors.New("injected commit error")},
+		{name: "context deadline", cause: context.DeadlineExceeded},
+	} {
+		t.Run("commit outcome unknown after "+test.name, func(t *testing.T) {
+			state := newFakeState(time.Date(2026, 8, 11, 8, 0, 0, 0, time.UTC), 8)
+			state.commitError = test.cause
+			foundation := newTestFoundation(t, openFakeDatabase(t, state))
+			receipt, err := foundation.ApplyAtomicMutation(context.Background(), validAtomicMutation(t))
+			if receipt.MutationRef != "" || ErrorCode(err) != ErrorCommitUnknown ||
+				ErrorCode(err) == ErrorUnavailable || !errors.Is(err, test.cause) {
+				t.Fatalf("receipt=%+v error=%v", receipt, err)
+			}
+			if state.commitCount != 1 || state.rollbackCount != 0 ||
+				!reflect.DeepEqual(state.orderSnapshot(), []string{"begin", "clock", "cas", "event", "outbox", "precommit_fence", "commit"}) {
+				t.Fatalf("commit=%d rollback=%d order=%v", state.commitCount, state.rollbackCount, state.orderSnapshot())
+			}
+		})
+	}
 }
 
 func TestFoundationPreservesContextFailureAndNeverStartsCanceledWork(t *testing.T) {
@@ -227,17 +281,19 @@ type fakeCall struct {
 }
 
 type fakeSQLState struct {
-	mu            sync.Mutex
-	serverTime    time.Time
-	nextRevision  int64
-	failStage     string
-	staleFence    bool
-	active        bool
-	beginCount    int
-	commitCount   int
-	rollbackCount int
-	order         []string
-	calls         []fakeCall
+	mu             sync.Mutex
+	serverTime     time.Time
+	nextRevision   int64
+	failStage      string
+	staleFence     bool
+	precommitStale bool
+	commitError    error
+	active         bool
+	beginCount     int
+	commitCount    int
+	rollbackCount  int
+	order          []string
+	calls          []fakeCall
 }
 
 func newFakeState(serverTime time.Time, nextRevision int64) *fakeSQLState {
@@ -315,6 +371,8 @@ func (connection *fakeConnection) QueryContext(
 		stage = "clock"
 	case fencedCASSQL:
 		stage = "cas"
+	case revalidateFencedMutationSQL:
+		stage = "precommit_fence"
 	default:
 		return nil, errors.New("unexpected query")
 	}
@@ -335,6 +393,12 @@ func (connection *fakeConnection) QueryContext(
 	}
 	if connection.state.staleFence {
 		return &fakeRows{columns: []string{"revision"}}, nil
+	}
+	if stage == "precommit_fence" {
+		if connection.state.precommitStale {
+			return &fakeRows{columns: []string{"authority_live"}}, nil
+		}
+		return &fakeRows{columns: []string{"authority_live"}, values: [][]driver.Value{{true}}}, nil
 	}
 	return &fakeRows{columns: []string{"revision"}, values: [][]driver.Value{{connection.state.nextRevision}}}, nil
 }
@@ -379,8 +443,8 @@ func (transaction *fakeTransaction) Commit() error {
 	transaction.state.active = false
 	transaction.state.commitCount++
 	transaction.state.order = append(transaction.state.order, "commit")
-	if transaction.state.failStage == "commit" {
-		return errors.New("injected commit error")
+	if transaction.state.commitError != nil {
+		return transaction.state.commitError
 	}
 	return nil
 }

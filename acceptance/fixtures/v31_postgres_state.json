@@ -8,15 +8,19 @@
   "status": "implemented_foundation_not_accredited",
   "adapter_path": "internal/adapters/state/postgres",
   "implemented_behaviors": [
-    "serializable_atomic_snapshot_event_outbox_transaction",
-    "postgresql_transaction_time_is_authoritative",
+    "serializable_transaction_requested_for_snapshot_event_outbox",
+    "postgresql_time_functions_requested_without_local_clock",
     "expected_revision_generation_token_fence_and_lease_cas",
-    "stale_fence_rolls_back_before_event_and_outbox",
-    "database_and_context_failures_never_commit"
+    "stale_fence_requests_rollback_before_event_and_outbox",
+    "server_clock_fence_query_requested_after_writes_before_commit",
+    "precommit_database_failures_surface_unavailable_and_request_rollback",
+    "commit_errors_surface_distinct_unknown_outcome_code_without_final_state_attribution"
   ],
   "deferred_gates": [
     "concrete_postgresql_driver_and_complete_schema",
     "shared_sqlite_postgresql_state_repository_suite",
+    "durable_idempotent_replay_and_unknown_commit_reconciliation",
+    "real_postgresql_clock_and_lock_wait_validation",
     "real_postgresql_cluster_concurrency_and_multihost",
     "migration_and_cutover_without_dual_write",
     "sealed_candidate_receipt"

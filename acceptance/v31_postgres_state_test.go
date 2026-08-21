@@ -44,7 +44,7 @@ func TestAcceptanceV31PostgresStateFoundation(t *testing.T) {
 	receipt, err := foundation.ApplyAtomicMutation(context.Background(), request)
 	v31PostgresNoError(t, err)
 	if receipt.Revision != 5 || !receipt.TransactionAt.Equal(serverTime) || receipt.TransactionAt.Location() != time.UTC ||
-		!reflect.DeepEqual(state.orderSnapshot(), []string{"begin", "clock", "cas", "event", "outbox", "commit"}) {
+		!reflect.DeepEqual(state.orderSnapshot(), []string{"begin", "clock", "cas", "event", "outbox", "precommit_fence", "commit"}) {
 		t.Fatalf("atomic PostgreSQL foundation receipt=%+v order=%v", receipt, state.orderSnapshot())
 	}
 
@@ -62,6 +62,30 @@ func TestAcceptanceV31PostgresStateFoundation(t *testing.T) {
 	if _, err := canceledFoundation.ApplyAtomicMutation(ctx, request); statePostgres.ErrorCode(err) != statePostgres.ErrorContext || len(canceledState.orderSnapshot()) != 0 {
 		t.Fatalf("canceled transaction error=%v order=%v", err, canceledState.orderSnapshot())
 	}
+
+	expiredState := &v31PostgresState{serverTime: serverTime, revision: 5, precommitStale: true}
+	expiredFoundation := newV31PostgresFoundation(t, expiredState)
+	if _, err := expiredFoundation.ApplyAtomicMutation(context.Background(), request); statePostgres.ErrorCode(err) != statePostgres.ErrorStaleFence ||
+		!reflect.DeepEqual(expiredState.orderSnapshot(), []string{"begin", "clock", "cas", "event", "outbox", "precommit_fence", "rollback"}) {
+		t.Fatalf("expired precommit fence error=%v order=%v", err, expiredState.orderSnapshot())
+	}
+
+	precommitCause := errors.New("injected outbox error")
+	precommitState := &v31PostgresState{serverTime: serverTime, revision: 5, outboxError: precommitCause}
+	precommitFoundation := newV31PostgresFoundation(t, precommitState)
+	if _, err := precommitFoundation.ApplyAtomicMutation(context.Background(), request); statePostgres.ErrorCode(err) != statePostgres.ErrorUnavailable ||
+		statePostgres.ErrorCode(err) == statePostgres.ErrorCommitUnknown || !errors.Is(err, precommitCause) ||
+		!reflect.DeepEqual(precommitState.orderSnapshot(), []string{"begin", "clock", "cas", "event", "outbox", "rollback"}) {
+		t.Fatalf("known precommit failure error=%v order=%v", err, precommitState.orderSnapshot())
+	}
+
+	commitState := &v31PostgresState{serverTime: serverTime, revision: 5, commitError: context.DeadlineExceeded}
+	commitFoundation := newV31PostgresFoundation(t, commitState)
+	if _, err := commitFoundation.ApplyAtomicMutation(context.Background(), request); statePostgres.ErrorCode(err) != statePostgres.ErrorCommitUnknown ||
+		statePostgres.ErrorCode(err) == statePostgres.ErrorUnavailable || !errors.Is(err, context.DeadlineExceeded) ||
+		!reflect.DeepEqual(commitState.orderSnapshot(), []string{"begin", "clock", "cas", "event", "outbox", "precommit_fence", "commit"}) {
+		t.Fatalf("unknown commit outcome error=%v order=%v", err, commitState.orderSnapshot())
+	}
 }
 
 func TestV31PostgresStateFoundationDoesNotClaimOPS11Accreditation(t *testing.T) {
@@ -70,6 +94,8 @@ func TestV31PostgresStateFoundationDoesNotClaimOPS11Accreditation(t *testing.T) 
 		!reflect.DeepEqual(fixture.DeferredGates, []string{
 			"concrete_postgresql_driver_and_complete_schema",
 			"shared_sqlite_postgresql_state_repository_suite",
+			"durable_idempotent_replay_and_unknown_commit_reconciliation",
+			"real_postgresql_clock_and_lock_wait_validation",
 			"real_postgresql_cluster_concurrency_and_multihost",
 			"migration_and_cutover_without_dual_write",
 			"sealed_candidate_receipt",
@@ -105,11 +131,13 @@ func assertV31PostgresStateFixture(t *testing.T, fixture v31PostgresStateFixture
 		fixture.Status != "implemented_foundation_not_accredited" ||
 		fixture.AdapterPath != "internal/adapters/state/postgres" ||
 		!reflect.DeepEqual(fixture.ImplementedBehaviors, []string{
-			"serializable_atomic_snapshot_event_outbox_transaction",
-			"postgresql_transaction_time_is_authoritative",
+			"serializable_transaction_requested_for_snapshot_event_outbox",
+			"postgresql_time_functions_requested_without_local_clock",
 			"expected_revision_generation_token_fence_and_lease_cas",
-			"stale_fence_rolls_back_before_event_and_outbox",
-			"database_and_context_failures_never_commit",
+			"stale_fence_requests_rollback_before_event_and_outbox",
+			"server_clock_fence_query_requested_after_writes_before_commit",
+			"precommit_database_failures_surface_unavailable_and_request_rollback",
+			"commit_errors_surface_distinct_unknown_outcome_code_without_final_state_attribution",
 		}) {
 		t.Fatalf("invalid V31 PostgreSQL fixture: %+v", fixture)
 	}
@@ -143,12 +171,15 @@ func v31PostgresRequest(t *testing.T) statePostgres.AtomicMutationRequest {
 }
 
 type v31PostgresState struct {
-	mu         sync.Mutex
-	serverTime time.Time
-	revision   int64
-	stale      bool
-	active     bool
-	order      []string
+	mu             sync.Mutex
+	serverTime     time.Time
+	revision       int64
+	stale          bool
+	precommitStale bool
+	outboxError    error
+	commitError    error
+	active         bool
+	order          []string
 }
 
 func (state *v31PostgresState) record(value string) {
@@ -226,6 +257,13 @@ func (connection *v31PostgresConnection) QueryContext(
 		}
 		return &v31PostgresRows{columns: []string{"revision"}, values: [][]driver.Value{{connection.state.revision}}}, nil
 	}
+	if strings.HasPrefix(query, "SELECT TRUE\nFROM work_items") {
+		connection.state.record("precommit_fence")
+		if connection.state.precommitStale {
+			return &v31PostgresRows{columns: []string{"authority_live"}}, nil
+		}
+		return &v31PostgresRows{columns: []string{"authority_live"}, values: [][]driver.Value{{true}}}, nil
+	}
 	return nil, errors.New("unexpected query")
 }
 
@@ -242,6 +280,9 @@ func (connection *v31PostgresConnection) ExecContext(
 		connection.state.record("event")
 	case strings.HasPrefix(query, "INSERT INTO outbox"):
 		connection.state.record("outbox")
+		if connection.state.outboxError != nil {
+			return nil, connection.state.outboxError
+		}
 	default:
 		return nil, errors.New("unexpected exec")
 	}
@@ -255,7 +296,7 @@ func (transaction *v31PostgresTransaction) Commit() error {
 	defer transaction.state.mu.Unlock()
 	transaction.state.active = false
 	transaction.state.order = append(transaction.state.order, "commit")
-	return nil
+	return transaction.state.commitError
 }
 func (transaction *v31PostgresTransaction) Rollback() error {
 	transaction.state.mu.Lock()

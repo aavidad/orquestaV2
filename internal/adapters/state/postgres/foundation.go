@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	ErrorInvalid     = "postgres.foundation_invalid"
-	ErrorContext     = "postgres.foundation_context"
-	ErrorUnavailable = "postgres.foundation_unavailable"
-	ErrorStaleFence  = "postgres.foundation_stale_fence"
-	ErrorInvariant   = "postgres.foundation_invariant"
+	ErrorInvalid       = "postgres.foundation_invalid"
+	ErrorContext       = "postgres.foundation_context"
+	ErrorUnavailable   = "postgres.foundation_unavailable"
+	ErrorCommitUnknown = "postgres.foundation_commit_unknown"
+	ErrorStaleFence    = "postgres.foundation_stale_fence"
+	ErrorInvariant     = "postgres.foundation_invariant"
 )
 
 const transactionTimeSQL = `SELECT transaction_timestamp()`
@@ -43,6 +44,19 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 const insertOutboxSQL = `INSERT INTO outbox
   (ref, mutation_ref, project_ref, goal_ref, work_item_ref, revision, available_at, payload)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+
+const revalidateFencedMutationSQL = `SELECT TRUE
+FROM work_items
+WHERE project_ref = $1
+  AND goal_ref = $2
+  AND work_item_ref = $3
+  AND revision = $4
+  AND plan_generation = $5
+  AND lease_token = $6
+  AND lease_fence = $7
+  AND last_mutation_ref = $8
+  AND lease_expires_at > clock_timestamp()
+FOR UPDATE`
 
 // ContractError exposes stable machine codes without leaking SQL, DSNs or
 // backend details.
@@ -178,9 +192,23 @@ func (foundation *Foundation) ApplyAtomicMutation(
 	); err != nil {
 		return AtomicMutationReceipt{}, databaseError(err)
 	}
+	var authorityLive bool
+	err = transaction.QueryRowContext(ctx, revalidateFencedMutationSQL,
+		request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(), revision,
+		int64(request.PlanGeneration), request.LeaseToken, int64(request.LeaseFence), request.MutationRef,
+	).Scan(&authorityLive)
+	if errors.Is(err, sql.ErrNoRows) {
+		return AtomicMutationReceipt{}, contractError(ErrorStaleFence, nil)
+	}
+	if err != nil {
+		return AtomicMutationReceipt{}, databaseError(err)
+	}
+	if !authorityLive {
+		return AtomicMutationReceipt{}, contractError(ErrorInvariant, nil)
+	}
 	if err := transaction.Commit(); err != nil {
 		open = false
-		return AtomicMutationReceipt{}, databaseError(err)
+		return AtomicMutationReceipt{}, contractError(ErrorCommitUnknown, err)
 	}
 	open = false
 	return AtomicMutationReceipt{
