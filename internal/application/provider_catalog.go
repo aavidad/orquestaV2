@@ -36,6 +36,7 @@ type ProviderCatalogFailure struct {
 // ProviderCatalog is an in-memory decision input, not durable provider state.
 // Maps are private so callers cannot mutate observations across Goals.
 type ProviderCatalog struct {
+	// observedAt is the cutoff obtained after the latest completed probe.
 	observedAt time.Time
 	providers  map[string]ports.ProviderCatalogObservation
 	failures   map[string]ProviderCatalogFailure
@@ -43,17 +44,17 @@ type ProviderCatalog struct {
 
 func ObserveProviderCatalog(
 	ctx context.Context,
-	now time.Time,
+	cutoff time.Time,
 	sources []ProviderCatalogSource,
 ) (ProviderCatalog, error) {
-	if ctx == nil || now.IsZero() {
+	if ctx == nil || cutoff.IsZero() {
 		return ProviderCatalog{}, ErrProviderCatalogInvalid
 	}
 	normalized, err := normalizeProviderCatalogSources(sources)
 	if err != nil {
 		return ProviderCatalog{}, err
 	}
-	return observeNormalizedProviderCatalog(ctx, now, normalized)
+	return observeNormalizedProviderCatalog(ctx, cutoff, func() time.Time { return cutoff }, normalized)
 }
 
 // ObserveProviderCatalog reads the sources bound at composition time using the
@@ -63,9 +64,11 @@ func (orchestrator *Orchestrator) ObserveProviderCatalog(ctx context.Context) (P
 	if orchestrator == nil || orchestrator.clock == nil {
 		return ProviderCatalog{}, ErrProviderCatalogInvalid
 	}
+	startedAt := orchestrator.clock.Now().Round(0).UTC()
 	return observeNormalizedProviderCatalog(
 		ctx,
-		orchestrator.clock.Now().Round(0).UTC(),
+		startedAt,
+		func() time.Time { return orchestrator.clock.Now().Round(0).UTC() },
 		orchestrator.providerCatalogSources,
 	)
 }
@@ -85,14 +88,15 @@ func (orchestrator *Orchestrator) RouteProviderModel(
 
 func observeNormalizedProviderCatalog(
 	ctx context.Context,
-	now time.Time,
+	startedAt time.Time,
+	cutoff func() time.Time,
 	normalized []normalizedProviderCatalogSource,
 ) (ProviderCatalog, error) {
-	if ctx == nil || now.IsZero() {
+	if ctx == nil || startedAt.IsZero() || cutoff == nil {
 		return ProviderCatalog{}, ErrProviderCatalogInvalid
 	}
 	catalog := ProviderCatalog{
-		observedAt: now,
+		observedAt: startedAt,
 		providers:  make(map[string]ports.ProviderCatalogObservation, len(normalized)),
 		failures:   make(map[string]ProviderCatalogFailure),
 	}
@@ -105,6 +109,11 @@ func observeNormalizedProviderCatalog(
 		if err := ctx.Err(); err != nil {
 			return catalog, err
 		}
+		probeCutoff := cutoff().Round(0).UTC()
+		if probeCutoff.IsZero() || probeCutoff.Before(catalog.observedAt) {
+			return catalog, ErrProviderCatalogInvalid
+		}
+		catalog.observedAt = probeCutoff
 		if observeErr != nil {
 			catalog.failures[providerRef] = ProviderCatalogFailure{
 				ProviderRef: providerRef,
@@ -112,7 +121,7 @@ func observeNormalizedProviderCatalog(
 			}
 			continue
 		}
-		if observation.ProviderRef != providerRef || observation.ObservedAt.After(now) ||
+		if observation.ProviderRef != providerRef || observation.ObservedAt.After(probeCutoff) ||
 			ports.ValidateProviderCatalogObservation(observation) != nil {
 			catalog.failures[providerRef] = ProviderCatalogFailure{
 				ProviderRef: providerRef,

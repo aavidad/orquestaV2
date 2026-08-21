@@ -23,6 +23,7 @@ const (
 	rebuildArchitectureRawDriveProtocol            = "orquesta/internal/testattestorprotocol/rawdrive"
 	rebuildArchitectureCodexWorkProtocol           = "orquesta/internal/agentprotocol/codexwork"
 	rebuildArchitectureArtifactContractTestSupport = "orquesta/internal/testsupport/artifactcontract"
+	rebuildArchitectureLocalHTTPContract           = "orquesta/internal/adapters/agent/localhttp"
 )
 
 type rebuildArchitectureImport struct {
@@ -277,6 +278,12 @@ func TestRebuildArchitecture(t *testing.T) {
 			"orquesta/internal/adapters/agent/claude",
 		); reason == "" {
 			t.Error("adapter accepted a sibling adapter")
+		}
+		if reason := rebuildArchitectureAdapterImportReason("internal/adapters/agent/codex/x.go", rebuildArchitectureLocalHTTPContract); reason == "" {
+			t.Error("unrelated adapter accepted the local HTTP contract")
+		}
+		if reason := rebuildArchitectureAdapterImportReason("internal/adapters/agent/ollama/x.go", rebuildArchitectureLocalHTTPContract+"/mutant"); reason == "" {
+			t.Error("adapter accepted a local HTTP subpackage mutant")
 		}
 		if reason := rebuildArchitectureAdapterImportReason(
 			"internal/adapters/artifact/filesystem/contract_test.go",
@@ -917,6 +924,9 @@ func rebuildArchitectureCredentialsImportReason(importPath string) string {
 
 func rebuildArchitectureAdapterImportReason(filePath, importPath string) string {
 	if rebuildArchitectureIsSharedAdapterProtocol(importPath) {
+		return ""
+	}
+	if importPath == rebuildArchitectureLocalHTTPContract && (rebuildArchitecturePathUnder(filePath, "internal/adapters/agent/ollama") || rebuildArchitecturePathUnder(filePath, "internal/adapters/agent/openaicompat")) {
 		return ""
 	}
 	if strings.HasSuffix(filePath, "_test.go") && importPath == rebuildArchitectureArtifactContractTestSupport {
