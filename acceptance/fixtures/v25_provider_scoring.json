@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "contract_id": "ORC-26-PROVIDER-MODEL-SCORING",
+  "status": "implemented_query_not_wired_not_accredited",
+  "capability": {
+    "id": "ORC-26",
+    "status": "declared",
+    "evidence_refs": []
+  },
+  "acceptance_contract": {
+    "id": "AC-V25-PROVIDER-ADAPTERS",
+    "status": "planned"
+  },
+  "authority_rules": [
+    "application_ranks",
+    "reader_owns_complete_canonical_bounded_corpus",
+    "caller_cannot_select_receipts_or_submit_metrics",
+    "explicit_profile_capabilities_and_effort_are_exact",
+    "content_addressed_receipts_bind_observation",
+    "policy_then_corpus_then_clock_controls_freshness",
+    "fallback_is_explicit",
+    "scoring_is_query_only"
+  ],
+  "negative_cases": [
+    "missing_or_incomplete_corpus",
+    "divergent_policy_or_receipt",
+    "valid_cross_policy_or_profile_receipt",
+    "stale_or_future_observation",
+    "confidence_or_samples_outside_policy",
+    "duplicate_or_noncanonical_observation",
+    "capability_or_observation_overcount",
+    "oversized_ref",
+    "self_observed_score",
+    "provider_quota_unknown"
+  ],
+  "subject_files": [
+    "internal/application/provider_scoring.go",
+    "internal/application/provider_scoring_test.go",
+    "acceptance/v25_provider_scoring_test.go",
+    "acceptance/fixtures/v25_provider_scoring.json",
+    "docs/reconstruccion/corte_v25_orc26_scoring_2026-08-21.md"
+  ],
+  "deferred": [
+    "durable authenticated policy and evidence reader adapter",
+    "score persistence and recalculation after accepted delivery receipts",
+    "public command bindings",
+    "concrete non-Codex provider adapters",
+    "real provider end-to-end evidence",
+    "V25 acceptance accreditation"
+  ]
+}
