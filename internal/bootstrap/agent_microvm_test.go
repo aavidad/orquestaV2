@@ -28,6 +28,7 @@ type agenteMicroVMDelegadoPrueba struct {
 	capabilitiesEntered chan struct{}
 	capabilitiesRelease chan struct{}
 	stopCalls           int
+	stopRequest         ports.AgentStopRequest
 	reconcileRequest    ports.AgentLaunchRequest
 	reconcileReceipt    ports.AgentLaunchReceipt
 }
@@ -93,9 +94,17 @@ func (adaptador *agenteMicroVMDelegadoPrueba) NegotiatedPhysicalCapacity() (agen
 	return adaptador.capacidad, adaptador.capacidadErr
 }
 
-// Stop existe para demostrar que Shutdown no descubre ni invoca control
-// fisico por aproximacion estructural.
-func (adaptador *agenteMicroVMDelegadoPrueba) Stop() { adaptador.stopCalls++ }
+func (adaptador *agenteMicroVMDelegadoPrueba) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
+	return ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}, nil
+}
+
+func (adaptador *agenteMicroVMDelegadoPrueba) Stop(_ context.Context, solicitud ports.AgentStopRequest) (ports.AgentStopReceipt, error) {
+	adaptador.mu.Lock()
+	defer adaptador.mu.Unlock()
+	adaptador.stopCalls++
+	adaptador.stopRequest = solicitud
+	return ports.AgentStopReceipt{ExternalRef: solicitud.ExternalRef, Mode: solicitud.Mode, IdempotencyKey: solicitud.IdempotencyKey, Status: ports.AgentStopPending}, nil
+}
 
 func TestAgentMicroVMCapacidadSoloTrasNegociacionYConservaMaximoExacto(t *testing.T) {
 	colocacion, err := ports.NewAgentPlacementRef("placement:/home/cuenta-codex/perfil")
@@ -236,6 +245,10 @@ func TestAgentMicroVMShutdownCanceladoUneErroresUnaVezYNoDetieneVM(t *testing.T)
 		cierresCredenciales.Add(1)
 		return falloCredenciales
 	})
+	solicitud := ports.AgentStopRequest{ExternalRef: "ejecucion:microvm-exacta", Mode: ports.AgentStopCooperative, IdempotencyKey: "stop:microvm-exacta"}
+	if _, err := agente.Stop(context.Background(), solicitud); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -256,8 +269,8 @@ func TestAgentMicroVMShutdownCanceladoUneErroresUnaVezYNoDetieneVM(t *testing.T)
 			t.Fatalf("Shutdown() error=%v", err)
 		}
 	}
-	if cierresConexiones.Load() != 1 || cierresCredenciales.Load() != 1 || delegado.stopCalls != 0 {
-		t.Fatalf("cierres conexiones=%d credenciales=%d stop=%d", cierresConexiones.Load(), cierresCredenciales.Load(), delegado.stopCalls)
+	if cierresConexiones.Load() != 1 || cierresCredenciales.Load() != 1 || delegado.stopCalls != 1 || delegado.stopRequest != solicitud {
+		t.Fatalf("cierres conexiones=%d credenciales=%d stop=%d request=%+v", cierresConexiones.Load(), cierresCredenciales.Load(), delegado.stopCalls, delegado.stopRequest)
 	}
 }
 

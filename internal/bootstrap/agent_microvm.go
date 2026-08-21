@@ -34,11 +34,13 @@ type agenteMicroVMDelegado interface {
 	application.AgentLauncher
 	application.AgentLaunchReconciler
 	application.AgentObserver
+	application.AgentController
 	NegotiatedPhysicalCapacity() (agentmicrovm.NegotiatedPhysicalCapacity, error)
 }
 
-// agenteMicroVM solo posee conexiones de composicion y credenciales. Nunca
-// ordena detener ni cerrar una microVM; esos efectos pertenecen a B11/B12.
+// agenteMicroVM solo posee conexiones de composicion y credenciales. La parada
+// individual se delega al contrato B11; Shutdown sigue limitado a recursos
+// locales de composicion y nunca sustituye ese control exacto.
 type agenteMicroVM struct {
 	adaptador          agenteMicroVMDelegado
 	cerrarConexiones   func() error
@@ -140,6 +142,35 @@ func (agente *agenteMicroVM) ObserveAgent(
 	return agente.adaptador.ObserveAgent(ctx, solicitud)
 }
 
+func (agente *agenteMicroVM) ControlCapabilities(
+	ctx context.Context,
+) (ports.AgentControlCapabilities, error) {
+	if agente == nil {
+		return ports.AgentControlCapabilities{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentControlCapabilities{}, errAgentMicroVMCerrado
+	}
+	return agente.adaptador.ControlCapabilities(ctx)
+}
+
+func (agente *agenteMicroVM) Stop(
+	ctx context.Context,
+	solicitud ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	if agente == nil {
+		return ports.AgentStopReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentStopReceipt{}, errAgentMicroVMCerrado
+	}
+	return agente.adaptador.Stop(ctx, solicitud)
+}
+
 func (agente *agenteMicroVM) DescribirCapacidadColocaciones() ([]application.DescriptorCapacidadColocacionAgente, error) {
 	if agente == nil {
 		return nil, errAgentMicroVMAdapterRequerido
@@ -211,4 +242,5 @@ func interfazNulaAgentMicroVM(valor any) bool {
 var _ agenteMicroVMDelegado = (*agentmicrovm.Adapter)(nil)
 var _ AgentAdapter = (*agenteMicroVM)(nil)
 var _ application.AgentLaunchReconciler = (*agenteMicroVM)(nil)
+var _ application.AgentController = (*agenteMicroVM)(nil)
 var _ catalogoCapacidadColocacionAgente = (*agenteMicroVM)(nil)

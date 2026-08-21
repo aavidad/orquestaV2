@@ -22,7 +22,14 @@ type agentLaunchReconcilerContract interface {
 
 var _ agentLaunchReconcilerContract = (*Adapter)(nil)
 
+type stopUnsupportedClient struct{}
+
+func (stopUnsupportedClient) Detener(context.Context, string, string, microvm.SolicitudDetencion) (microvm.RespuestaDetencion, error) {
+	return microvm.RespuestaDetencion{}, errors.New("control not configured")
+}
+
 type launchClientStub struct {
+	stopUnsupportedClient
 	capabilities     microvm.RespuestaCapacidades
 	capabilitiesErr  error
 	response         microvm.RespuestaEjecucion
@@ -103,7 +110,7 @@ func (client *launchClientStub) LeerEventosSesion(
 	return microvm.PaginaEventosSesionTrabajoV1{}, errors.New("observation not configured")
 }
 
-type launchOnlyClientStub struct{}
+type launchOnlyClientStub struct{ stopUnsupportedClient }
 
 func (*launchOnlyClientStub) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
 	return microvm.RespuestaCapacidades{}, nil
@@ -739,6 +746,7 @@ func TestAdapterRejectsIncompleteRemoteCapabilitiesBeforeLaunch(t *testing.T) {
 		{"input", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationSendSessionInput) }, CodeOperationUnsupported, false},
 		{"events", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReadSessionEvents) }, CodeOperationUnsupported, false},
 		{"reconcile", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReconcileSessionInput) }, CodeOperationUnsupported, false},
+		{"stop", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationStopExecution) }, CodeOperationUnsupported, false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -1001,6 +1009,7 @@ func validRemoteCapabilities() microvm.RespuestaCapacidades {
 			"salud", "capacidades", operationCreateExecution, operationObserveExecution,
 			operationReadWorkRevision, operationStartSession,
 			operationSendSessionInput, operationReadSessionEvents, operationReconcileSessionInput,
+			operationStopExecution,
 		},
 		KVMDisponible: true, FirecrackerConfigurado: true, FirecrackerEjecutable: true,
 		MaximoEjecuciones: 16,

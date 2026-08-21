@@ -93,6 +93,7 @@ type reconcileReply struct {
 }
 
 type sessionLaunchClientStub struct {
+	stopUnsupportedClient
 	mu sync.Mutex
 
 	capabilities microvm.RespuestaCapacidades
@@ -753,6 +754,7 @@ func (signer concurrentSessionSigner) Preparar(
 }
 
 type concurrentResolvedSessionClient struct {
+	stopUnsupportedClient
 	physical         microvm.RespuestaEjecucion
 	request          ports.AgentLaunchRequest
 	launches         atomic.Int64

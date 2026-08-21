@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ const (
 	operationSendSessionInput      = "enviar_entrada_sesion"
 	operationReadSessionEvents     = "leer_eventos_sesion"
 	operationReconcileSessionInput = "reconciliar_entrada_sesion"
+	operationStopExecution         = "detener_ejecucion"
 	launchReceiptDomain            = "orquesta.agentmicrovm.launch-receipt.v1\x00"
 	physicalExecutionPrefix        = "ejecucion:"
 	maxPhysicalExecutionRefBytes   = 96
@@ -66,6 +68,7 @@ var requiredRemoteOperations = [...]string{
 	operationSendSessionInput,
 	operationReadSessionEvents,
 	operationReconcileSessionInput,
+	operationStopExecution,
 }
 
 // Client is the public sibling boundary needed to admit physical capacity and
@@ -95,6 +98,7 @@ type Client interface {
 		string,
 		uint64,
 	) (microvm.RespuestaReconciliacionEntradaSesionTrabajoV1, error)
+	Detener(context.Context, string, string, microvm.SolicitudDetencion) (microvm.RespuestaDetencion, error)
 }
 
 // Signer receives the exact durable compilation. Key material remains owned by
@@ -522,20 +526,23 @@ func (adapter *Adapter) negotiate(ctx context.Context) error {
 		!response.FirecrackerEjecutable || response.MaximoEjecuciones == 0 {
 		return fail(CodePhysicalUnavailable, nil)
 	}
-	operations := make(map[string]struct{}, len(response.Operaciones))
-	for _, operation := range response.Operaciones {
-		operations[operation] = struct{}{}
-	}
-	for _, required := range requiredRemoteOperations {
-		if _, available := operations[required]; !available {
-			return fail(CodeOperationUnsupported, nil)
-		}
+	if !supportsRemoteOperations(response.Operaciones, requiredRemoteOperations[:]...) {
+		return fail(CodeOperationUnsupported, nil)
 	}
 	adapter.publishNegotiatedPhysicalCapacity(generation, NegotiatedPhysicalCapacity{
 		PlacementRef: adapter.profile.PlacementRef,
 		Slots:        response.MaximoEjecuciones,
 	})
 	return nil
+}
+
+func supportsRemoteOperations(available []string, required ...string) bool {
+	for _, operation := range required {
+		if !slices.Contains(available, operation) {
+			return false
+		}
+	}
+	return true
 }
 
 func (adapter *Adapter) beginPhysicalCapacityNegotiation() (uint64, bool) {
@@ -736,6 +743,7 @@ func (err *Error) Temporary() bool {
 	case CodeCapabilitiesUnavailable, CodePhysicalUnavailable, CodeLaunchUnavailable,
 		CodeNegotiatedPhysicalCapacityUnavailable,
 		CodeObservationUnavailable, CodeWorkRevisionUnavailable,
+		CodeControlObservationFailed, CodeControlUnavailable,
 		CodeSessionStartUnavailable, CodeSessionPending,
 		CodeSessionInputUnavailable, CodeSessionInputPending,
 		CodeSessionObserveUnavailable:
@@ -757,6 +765,8 @@ func (err *Error) DefinitelyNotApplied() bool {
 	case CodeConfigurationInvalid, CodeCapabilitiesUnavailable, CodeCapabilitiesRejected,
 		CodeNegotiatedPhysicalCapacityUnavailable,
 		CodeProtocolIncompatible, CodePhysicalUnavailable, CodeOperationUnsupported,
+		CodeControlRequestInvalid, CodeControlObservationInvalid, CodeControlObservationFailed,
+		CodeControlCanceledBeforeCall,
 		CodeCapabilityMismatch, CodeSigningFailed,
 		CodeLaunchAuthorityResolveFailed, CodeLaunchAuthorityBuildFailed,
 		CodeLaunchCanceledBeforeSubmit,

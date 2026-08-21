@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -18,6 +19,8 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/config"
 	"orquesta/internal/credentials"
+	"orquesta/internal/goal"
+	"orquesta/internal/ports"
 )
 
 type clienteRuntimeIsolationMicroVM struct {
@@ -25,6 +28,10 @@ type clienteRuntimeIsolationMicroVM struct {
 	antesCapacidades func()
 	falloCapacidades error
 	consultas        atomic.Int64
+	observada        string
+	claveDetencion   string
+	referencia       string
+	detencion        microvm.SolicitudDetencion
 }
 
 type agenteRuntimeIsolationCatalogoTrasBind struct {
@@ -67,6 +74,22 @@ func (cliente *clienteRuntimeIsolationMicroVM) Capacidades(ctx context.Context) 
 		return microvm.RespuestaCapacidades{}, cliente.falloCapacidades
 	}
 	return cliente.clienteFactoriaAgentMicroVM.Capacidades(ctx)
+}
+
+func (cliente *clienteRuntimeIsolationMicroVM) Observar(_ context.Context, referencia string) (microvm.RespuestaEjecucion, error) {
+	cliente.observada = referencia
+	return microvm.RespuestaEjecucion{Referencia: referencia, Estado: "disponible", Revision: 17, Cerca: 23}, nil
+}
+
+func (cliente *clienteRuntimeIsolationMicroVM) Detener(_ context.Context, clave, referencia string, solicitud microvm.SolicitudDetencion) (microvm.RespuestaDetencion, error) {
+	cliente.claveDetencion, cliente.referencia, cliente.detencion = clave, referencia, solicitud
+	modo := microvm.ModoDetencionEfectivoForzada
+	receipt, confirmada := "detencion:"+strings.Repeat("e", 64), uint64(1_786_905_600_000)
+	return microvm.RespuestaDetencion{
+		Ejecucion:         microvm.RespuestaEjecucion{Referencia: referencia, Estado: "detenida", Revision: 18, Cerca: solicitud.Cerca},
+		ClaveIdempotencia: clave, Estado: microvm.EstadoDetencionConfirmada,
+		ModoSolicitado: solicitud.Modo, ModoEfectivo: &modo, ReceiptRef: &receipt, ConfirmadaUnixMS: &confirmada,
+	}, nil
 }
 
 func TestBuildRejectsPartialMicroVMConfigBeforeCompositionState(t *testing.T) {
@@ -121,8 +144,32 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 	if _, ok := runtime.agent.(*agenteMicroVM); !ok {
 		t.Fatalf("production agent type=%T want=*bootstrap.agenteMicroVM", runtime.agent)
 	}
-	if _, ok := runtime.agent.(application.AgentController); ok {
-		t.Fatalf("microvm agent invented AgentController: %T", runtime.agent)
+	controller, ok := runtime.agent.(application.AgentController)
+	if !ok {
+		t.Fatalf("microvm agent omitted AgentController: %T", runtime.agent)
+	}
+	controlCapabilities, err := controller.ControlCapabilities(context.Background())
+	if err != nil || !controlCapabilities.CooperativeStop || !controlCapabilities.ForcedStop {
+		t.Fatalf("microvm control capabilities=%+v err=%v", controlCapabilities, err)
+	}
+	executionRef, _ := goal.NewExecutionRef("execution:runtime-stop")
+	goalRef, _ := goal.NewGoalRef("goal:runtime-stop")
+	workItemRef, _ := goal.NewWorkItemRef("work-item:runtime-stop")
+	stop := ports.AgentStopRequest{
+		ExecutionRef: executionRef, GoalRef: goalRef, WorkItemRef: workItemRef,
+		PlanGeneration: 2, AppSpecGeneration: 3, ExecutionAttempt: 1, SpecHash: strings.Repeat("d", 64),
+		ProviderRef: codex.ProviderRef, ModelRef: codex.DefaultModelRef, AgentRef: codex.AgentRef,
+		ExternalRef: "ejecucion:" + strings.Repeat("a", 64), Mode: ports.AgentStopForced,
+		IdempotencyKey: "stop:runtime-isolation",
+	}
+	stopReceipt, err := controller.Stop(context.Background(), stop)
+	wantPhysicalStop := microvm.SolicitudDetencion{RevisionEsperada: 17, Cerca: 23, Modo: microvm.ModoDetencionForzada}
+	if err != nil || client.observada != stop.ExternalRef || client.claveDetencion != stop.IdempotencyKey ||
+		client.referencia != stop.ExternalRef || client.detencion != wantPhysicalStop ||
+		stopReceipt.Status != ports.AgentStopped || stopReceipt.ReceiptRef != "detencion:"+strings.Repeat("e", 64) ||
+		ports.ValidateAgentStopReceipt(stop, stopReceipt) != nil {
+		t.Fatalf("physical stop observation=%q key=%q ref=%q request=%+v receipt=%+v err=%v",
+			client.observada, client.claveDetencion, client.referencia, client.detencion, stopReceipt, err)
 	}
 	if runtime.workspace == nil {
 		t.Fatal("configured repository did not compose workspace")
@@ -136,7 +183,7 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 		descriptors[0].PlacementRef.String() != "placement:codex:microvm-runtime" {
 		t.Fatalf("physical microvm capacity=%+v err=%v", descriptors, err)
 	}
-	if constructorCalls.Load() != 1 || client.consultas.Load() != 1 || connectionCloses.Load() != 0 {
+	if constructorCalls.Load() != 1 || client.consultas.Load() != 3 || connectionCloses.Load() != 0 {
 		t.Fatalf("constructor=%d capabilities=%d cleanup=%d before shutdown",
 			constructorCalls.Load(), client.consultas.Load(), connectionCloses.Load())
 	}

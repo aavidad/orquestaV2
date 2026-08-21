@@ -177,7 +177,7 @@ func (*clienteFactoriaAgentMicroVM) Capacidades(context.Context) (microvm.Respue
 		Operaciones: []string{
 			"salud", "capacidades", "crear_ejecucion", "consultar_ejecucion",
 			"consultar_revision_trabajo", "iniciar_sesion", "enviar_entrada_sesion",
-			"leer_eventos_sesion", "reconciliar_entrada_sesion",
+			"leer_eventos_sesion", "reconciliar_entrada_sesion", "detener_ejecucion",
 		},
 		KVMDisponible: true, FirecrackerConfigurado: true, FirecrackerEjecutable: true,
 		MaximoEjecuciones: 16,
@@ -200,6 +200,9 @@ func (*clienteFactoriaAgentMicroVM) ReconciliarEntradaSesion(context.Context, st
 }
 func (*clienteFactoriaAgentMicroVM) Observar(context.Context, string) (microvm.RespuestaEjecucion, error) {
 	return microvm.RespuestaEjecucion{}, nil
+}
+func (*clienteFactoriaAgentMicroVM) Detener(context.Context, string, string, microvm.SolicitudDetencion) (microvm.RespuestaDetencion, error) {
+	return microvm.RespuestaDetencion{}, nil
 }
 func (*clienteFactoriaAgentMicroVM) LeerEventosSesion(context.Context, string, string, microvm.ConsultaEventosSesionTrabajoV1) (microvm.PaginaEventosSesionTrabajoV1, error) {
 	return microvm.PaginaEventosSesionTrabajoV1{}, nil
@@ -283,6 +286,9 @@ func (cliente *clienteLanzamientoFactoriaAgentMicroVM) Observar(
 	string,
 ) (microvm.RespuestaEjecucion, error) {
 	return microvm.RespuestaEjecucion{}, nil
+}
+func (*clienteLanzamientoFactoriaAgentMicroVM) Detener(context.Context, string, string, microvm.SolicitudDetencion) (microvm.RespuestaDetencion, error) {
+	return microvm.RespuestaDetencion{}, nil
 }
 func (*clienteLanzamientoFactoriaAgentMicroVM) LeerEventosSesion(
 	context.Context,
