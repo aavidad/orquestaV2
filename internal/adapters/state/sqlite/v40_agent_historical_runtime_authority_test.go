@@ -89,6 +89,19 @@ func TestV40HistoricalRuntimeAuthorityExactProjectionRestartAndConcurrentCAS(t *
 	}
 }
 
+func TestV40HistoricalRuntimeAuthorityUsesPhysicalExecutionRefNotReceiptIdentity(t *testing.T) {
+	system, claim, attempt, authority, runtime := seedV40PreparedLaunch(t, "distinct-external-identities")
+	receipt := receiptV40Launch(t, system, claim, attempt)
+	want := v40ExpectedHistoricalAuthority(attempt, receipt, authority, runtime)
+	mustV10Exec(t, system.repository.db, `DROP TRIGGER effect_receipts_immutable_update`)
+	_, err := system.repository.db.Exec(
+		`UPDATE effect_receipts SET external_ref=? WHERE attempt_ref=?`,
+		"agentmicrovm-launch:sha256:"+strings.Repeat("a", 64), attempt.Ref,
+	)
+	sqliteTestNoError(t, err)
+	assertV40HistoricalAuthority(t, system.repository, want)
+}
+
 func TestV40HistoricalRuntimeAuthorityFailsClosedOnCrossedRows(t *testing.T) {
 	mutations := map[string]string{
 		"receipt not accepted":   `UPDATE effect_receipts SET status='already_failed' WHERE attempt_ref=?`,

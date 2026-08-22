@@ -41,7 +41,7 @@ func (repository *Repository) ResolveAgentHistoricalRuntimeAuthority(
 SELECT execution.ref,attempt.action_fence,
        attempt.goal_ref,attempt.work_item_ref,attempt.plan_generation,
        attempt.app_spec_generation,execution.attempt_no,attempt.spec_hash,
-       execution.provider_ref,execution.model_ref,execution.agent_ref,receipt.external_ref,
+       execution.provider_ref,execution.model_ref,execution.agent_ref,execution.external_ref,
        runtime.plan_sha256,runtime.concession_sha256,
        runtime.kernel_sha256,runtime.initramfs_sha256,runtime.profile_sha256
 FROM microvm_host_launch_authorities authority
@@ -81,7 +81,6 @@ JOIN executions execution
  AND execution.plan_generation=attempt.plan_generation
  AND execution.app_spec_generation=attempt.app_spec_generation
  AND execution.spec_hash=attempt.spec_hash
- AND execution.external_ref=receipt.external_ref
 WHERE authority.execution_ref=? AND authority.action_fence=?`,
 		key.ExecutionRef.String(), key.ActionFence,
 	).Scan(
