@@ -1,0 +1,51 @@
+{
+  "schema": "orquesta.v38.nonphysical_status_documentation.v1",
+  "schema_version": 1,
+  "kind": "documentation_mirror_of_derived_read_model",
+  "authority": "advisory_not_capability_state",
+  "subject_revision": "b2eabc98ef347e5dd422a4f62caef7ba6ec55132",
+  "canonical_read_model_ref": "product/read_models/v38_nonphysical_status.json",
+  "guard_ref": "scripts/check_v38_nonphysical_status.py",
+  "capability": "ORC-28",
+  "acceptance_contract": "AC-V38-AGENT-RUNTIME-ELASTIC",
+  "canonical_snapshot": {
+    "roadmap_status": "declared",
+    "capabilities_entry": "absent",
+    "accreditation_evidence": "absent"
+  },
+  "work_items": [
+    {"id": "039_launch_digest_supplement", "state": "implemented_unaccredited", "exercise_refs": []},
+    {"id": "040_historical_authority", "state": "implemented_unaccredited", "exercise_refs": []},
+    {"id": "b12_preserve_recover", "state": "implemented_unaccredited", "exercise_refs": []},
+    {"id": "b12_stop_seal_persist_close", "state": "implemented_unaccredited", "exercise_refs": []},
+    {
+      "id": "a08_neutral_core",
+      "state": "exercised_not_accredited",
+      "exercise_refs": ["acceptance/v38_agent_runtime_elastic_core_test.go"],
+      "not_equivalent_to": "gate_a_nonphysical_candidate"
+    },
+    {"id": "gate_a_nonphysical_candidate", "state": "implemented_unaccredited", "exercise_refs": []},
+    {"id": "gate_b_nonphysical_binding", "state": "implemented_no_go", "exercise_refs": []},
+    {"id": "b12_nonphysical_acceptance_task08", "state": "incomplete", "exercise_refs": []}
+  ],
+  "physical_gate_c": {"state": "parked", "execution_claimed": false},
+  "claims": {
+    "canonical_state_change": false,
+    "roadmap_promotion": false,
+    "capabilities_promotion": false,
+    "evidence_promotion": false,
+    "accreditation": false,
+    "gate_a_accredits_v38": false,
+    "gate_b_accredits_v38": false,
+    "physical_execution": false,
+    "application_ready": false
+  },
+  "promotion_requires_all": [
+    "same_candidate_source_binary_effective_config_digests",
+    "gate_a_receipt",
+    "gate_b_receipt",
+    "gate_c_receipt",
+    "canonical_c05_atomic_promotion"
+  ],
+  "evidence_refs": []
+}

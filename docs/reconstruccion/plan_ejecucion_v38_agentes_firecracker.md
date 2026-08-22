@@ -662,6 +662,43 @@ ni sesión Codex real.
 | B12.3 | Orden parada→sello→inventario→persistencia Orquesta→confirmación de desmontaje/liberación y recuperación a ambos lados. | Tras B12.2/B11; serial sobre cierre. | `P=100, V=130` |
 | B12.4 | `acceptance/v38_agent_firecracker_single_vm_test.go`: Codex real, orden posterior, parada, preservación y negativos. | Último; emite solo compuerta B. | `P=80, V=140` |
 
+## Read-model no físico de cierre rápido
+
+La fotografía derivada y validable de la revisión publicada
+`b2eabc98ef347e5dd422a4f62caef7ba6ec55132` vive en
+[`product/read_models/v38_nonphysical_status.json`](../../product/read_models/v38_nonphysical_status.json).
+Su espejo documental legible por máquina vive en
+[`v38_estado_no_fisico_2026-08-22.json`](v38_estado_no_fisico_2026-08-22.json)
+y conserva el mismo sujeto y la misma dirección de estado.
+No es autoridad de capability, evidencia ni candidato y no modifica
+`product/roadmap.json`, `product/capabilities.json` o `product/evidence/**`.
+
+En esa revisión están publicados el suplemento 039, la autoridad histórica
+040, el código B12 no físico y el sello A con su binding B. El read-model los
+clasifica `implemented_unaccredited`: los focales de integración no son un
+receipt de acreditación. Gate B queda explícitamente `implemented_no_go` porque
+no existe receipt físico independiente. La aceptación no física task08 sigue
+`incomplete` y la compuerta C continúa `parked`, sin ejecución atribuida.
+
+El read-model falla cerrado por construcción: enumera estados admisibles,
+afirma `accreditation_claimed=false`, mantiene `promotion_allowed=false` y
+lista como prohibidas las sobreafirmaciones `accredited`, `gate_b_go`,
+`gate_c_exercised`, `v38_complete` y `application_ready`. Una integración
+posterior debe regenerar esta fotografía desde su propia revisión y no editar
+los bloqueos para anticipar código, receipts o digests todavía ausentes.
+
+La guarda ejecutable focal es:
+
+```bash
+python3 scripts/check_v38_nonphysical_status.py \
+  --status product/read_models/v38_nonphysical_status.json \
+  --roadmap product/roadmap.json \
+  --capabilities product/capabilities.json
+```
+
+Solo `V38_NONPHYSICAL_STATUS_OK` con código cero valida este wiring; no acredita
+la capability ni sustituye los receipts de A, B o C.
+
 ## Frontera pública reutilizable
 
 Agente MicroVM ya existe como proyecto hermano independiente en
