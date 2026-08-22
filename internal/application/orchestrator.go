@@ -50,10 +50,12 @@ type Dependencies struct {
 }
 
 type AgentEnvironmentLifecycleComposition struct {
-	Store             AgentEnvironmentLifecycleStore
-	Physical          ports.AgentEnvironmentLifecycle
-	Reconciler        ports.AgentEnvironmentLifecycleReconciler
-	BuildPreservation AgentEnvironmentPreservationBuilder
+	Store               AgentEnvironmentLifecycleStore
+	Physical            ports.AgentEnvironmentLifecycle
+	Reconciler          ports.AgentEnvironmentLifecycleReconciler
+	BuildPreservation   AgentEnvironmentPreservationBuilder
+	HistoricalResolver  AgentHistoricalRuntimeAuthorityResolver
+	HistoricalPreserver AgentHistoricalRuntimePreserver
 }
 
 type Orchestrator struct {
@@ -225,12 +227,14 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 	}
 	if dependencies.AgentLifecycle != nil {
 		service, err := NewAgentEnvironmentLifecycleService(AgentEnvironmentLifecycleServiceDependencies{
-			Store:             dependencies.AgentLifecycle.Store,
-			Physical:          dependencies.AgentLifecycle.Physical,
-			Reconciler:        dependencies.AgentLifecycle.Reconciler,
-			Clock:             dependencies.Clock,
-			BuildNextAction:   orchestrator.BuildAgentEnvironmentLifecycleAction,
-			BuildPreservation: dependencies.AgentLifecycle.BuildPreservation,
+			Store:               dependencies.AgentLifecycle.Store,
+			Physical:            dependencies.AgentLifecycle.Physical,
+			Reconciler:          dependencies.AgentLifecycle.Reconciler,
+			Clock:               dependencies.Clock,
+			BuildNextAction:     orchestrator.BuildAgentEnvironmentLifecycleAction,
+			BuildPreservation:   dependencies.AgentLifecycle.BuildPreservation,
+			HistoricalResolver:  dependencies.AgentLifecycle.HistoricalResolver,
+			HistoricalPreserver: dependencies.AgentLifecycle.HistoricalPreserver,
 		})
 		if err != nil {
 			return nil, errors.New("application.agent_environment_lifecycle_composition_invalid")
@@ -255,7 +259,9 @@ func agentEnvironmentLifecycleDependenciesPartial(dependencies Dependencies) boo
 			present++
 		}
 	}
-	return present != 4
+	historicalPartial := (dependencies.AgentLifecycle.HistoricalResolver == nil) !=
+		(dependencies.AgentLifecycle.HistoricalPreserver == nil)
+	return present != 4 || historicalPartial
 }
 
 func cloneAgentCapabilities(source ports.AgentCapabilities) ports.AgentCapabilities {

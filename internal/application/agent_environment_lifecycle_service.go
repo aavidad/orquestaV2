@@ -32,21 +32,25 @@ type AgentEnvironmentPreservationBuilder func(
 ) (ComprobantePreservacionEntornoAgente, error)
 
 type AgentEnvironmentLifecycleServiceDependencies struct {
-	Store             AgentEnvironmentLifecycleStore
-	Physical          ports.AgentEnvironmentLifecycle
-	Reconciler        ports.AgentEnvironmentLifecycleReconciler
-	Clock             Clock
-	BuildNextAction   AgentEnvironmentLifecycleActionBuilder
-	BuildPreservation AgentEnvironmentPreservationBuilder
+	Store               AgentEnvironmentLifecycleStore
+	Physical            ports.AgentEnvironmentLifecycle
+	Reconciler          ports.AgentEnvironmentLifecycleReconciler
+	Clock               Clock
+	BuildNextAction     AgentEnvironmentLifecycleActionBuilder
+	BuildPreservation   AgentEnvironmentPreservationBuilder
+	HistoricalResolver  AgentHistoricalRuntimeAuthorityResolver
+	HistoricalPreserver AgentHistoricalRuntimePreserver
 }
 
 type AgentEnvironmentLifecycleService struct {
-	store             AgentEnvironmentLifecycleStore
-	physical          ports.AgentEnvironmentLifecycle
-	reconciler        ports.AgentEnvironmentLifecycleReconciler
-	clock             Clock
-	buildNextAction   AgentEnvironmentLifecycleActionBuilder
-	buildPreservation AgentEnvironmentPreservationBuilder
+	store               AgentEnvironmentLifecycleStore
+	physical            ports.AgentEnvironmentLifecycle
+	reconciler          ports.AgentEnvironmentLifecycleReconciler
+	clock               Clock
+	buildNextAction     AgentEnvironmentLifecycleActionBuilder
+	buildPreservation   AgentEnvironmentPreservationBuilder
+	historicalResolver  AgentHistoricalRuntimeAuthorityResolver
+	historicalPreserver AgentHistoricalRuntimePreserver
 }
 
 type InitializeAgentEnvironmentLifecycleRequest struct {
@@ -95,13 +99,15 @@ func NewAgentEnvironmentLifecycleService(
 	dependencies AgentEnvironmentLifecycleServiceDependencies,
 ) (*AgentEnvironmentLifecycleService, error) {
 	if dependencies.Store == nil || dependencies.Physical == nil || dependencies.Reconciler == nil ||
-		dependencies.Clock == nil || dependencies.BuildNextAction == nil || dependencies.BuildPreservation == nil {
+		dependencies.Clock == nil || dependencies.BuildNextAction == nil || dependencies.BuildPreservation == nil ||
+		(dependencies.HistoricalResolver == nil) != (dependencies.HistoricalPreserver == nil) {
 		return nil, errAgentEnvironmentLifecycleServiceInvalid
 	}
 	return &AgentEnvironmentLifecycleService{
 		store: dependencies.Store, physical: dependencies.Physical, reconciler: dependencies.Reconciler,
 		clock: dependencies.Clock, buildNextAction: dependencies.BuildNextAction,
-		buildPreservation: dependencies.BuildPreservation,
+		buildPreservation:  dependencies.BuildPreservation,
+		historicalResolver: dependencies.HistoricalResolver, historicalPreserver: dependencies.HistoricalPreserver,
 	}, nil
 }
 
@@ -259,9 +265,40 @@ func (service *AgentEnvironmentLifecycleService) executePhysicalOnce(
 		}
 	case ActionPreserveAgentEnvironment:
 		var receipt ports.AgentPreserveReceipt
-		receipt, err = service.physical.Preserve(ctx, ports.AgentPreserveRequest{
+		preserveRequest := ports.AgentPreserveRequest{
 			Subject: subject, ExpectedToken: expected, IdempotencyKey: key,
-		})
+		}
+		if service.historicalResolver == nil {
+			receipt, err = service.physical.Preserve(ctx, preserveRequest)
+			if err == nil {
+				at := service.clock.Now().UTC()
+				var preservation *ComprobantePreservacionEntornoAgente
+				if receipt.NextToken.State == ports.AgentEnvironmentPreserved {
+					fact, buildErr := service.buildPreservation(ctx, receipt, request.Record, at)
+					if buildErr != nil {
+						return agentEnvironmentLifecycleResult(prepared.Snapshot, nil, true, false), buildErr
+					}
+					preservation = &fact
+				}
+				outcome, err = RecordAgentEnvironmentPreserveOutcome(prepared, receipt, preservation, request.Record, at)
+			}
+			break
+		}
+		execution, historyErr := exactAgentEnvironmentExecution(request.Record, prepared.Snapshot)
+		if historyErr != nil {
+			return agentEnvironmentLifecycleResult(prepared.Snapshot, nil, true, false), historyErr
+		}
+		launch, historyErr := exactAgentEnvironmentLaunchHistory(
+			request.Record, execution, prepared.Snapshot, request.LaunchReceipt,
+		)
+		if historyErr != nil {
+			return agentEnvironmentLifecycleResult(prepared.Snapshot, nil, true, false), historyErr
+		}
+		receipt, err = PreserveAgentEnvironmentWithHistoricalAuthority(ctx,
+			service.historicalResolver,
+			ports.AgentHistoricalRuntimeAuthorityKey{
+				ExecutionRef: subject.ExecutionRef, ActionFence: launch.attempt.ActionFence,
+			}, preserveRequest, service.historicalPreserver)
 		if err == nil {
 			at := service.clock.Now().UTC()
 			var preservation *ComprobantePreservacionEntornoAgente

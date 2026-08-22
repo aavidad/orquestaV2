@@ -836,12 +836,17 @@ func buildOrchestratorDependencies(
 	// B12.2 builder would permit an unauthorised partial Quiesce/Close path.
 	physical, hasPhysical := agent.(ports.AgentEnvironmentLifecycle)
 	reconciler, hasReconciler := agent.(ports.AgentEnvironmentLifecycleReconciler)
+	historicalPreserver, hasHistoricalPreserver := agent.(application.AgentHistoricalRuntimePreserver)
 	if hasPhysical && hasReconciler && composition.environmentPreservationBuilder != nil {
 		dependencies.AgentLifecycle = &application.AgentEnvironmentLifecycleComposition{
 			Store:             repository,
 			Physical:          physical,
 			Reconciler:        reconciler,
 			BuildPreservation: composition.environmentPreservationBuilder,
+		}
+		if hasHistoricalPreserver {
+			dependencies.AgentLifecycle.HistoricalResolver = repository
+			dependencies.AgentLifecycle.HistoricalPreserver = historicalPreserver
 		}
 	}
 	return dependencies
