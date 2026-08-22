@@ -3,7 +3,7 @@
   "schema_version": 1,
   "kind": "documentation_mirror_of_derived_read_model",
   "authority": "advisory_not_capability_state",
-  "subject_revision": "b2eabc98ef347e5dd422a4f62caef7ba6ec55132",
+  "subject_revision": "0538ce8b923d6de5d4119eed319c1ae7368414a5",
   "canonical_read_model_ref": "product/read_models/v38_nonphysical_status.json",
   "guard_ref": "scripts/check_v38_nonphysical_status.py",
   "capability": "ORC-28",
@@ -26,7 +26,7 @@
     },
     {"id": "gate_a_nonphysical_candidate", "state": "implemented_unaccredited", "exercise_refs": []},
     {"id": "gate_b_nonphysical_binding", "state": "implemented_no_go", "exercise_refs": []},
-    {"id": "b12_nonphysical_acceptance_task08", "state": "incomplete", "exercise_refs": []}
+    {"id": "b12_nonphysical_acceptance_task08", "state": "implemented_unaccredited", "exercise_refs": []}
   ],
   "physical_gate_c": {"state": "parked", "execution_claimed": false},
   "claims": {

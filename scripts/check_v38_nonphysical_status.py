@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 EXPECTED_SCHEMA = "orquesta.v38.nonphysical_status.v1"
-EXPECTED_BASE = "b2eabc98ef347e5dd422a4f62caef7ba6ec55132"
+EXPECTED_BASE = "0538ce8b923d6de5d4119eed319c1ae7368414a5"
 EXPECTED_ITEMS = {
     "039_launch_digest_supplement",
     "040_historical_authority",
@@ -25,16 +25,16 @@ EXPECTED_ITEM_STATES = {
     "b12_stop_seal_persist_close": "implemented_unaccredited",
     "gate_a_nonphysical_candidate": "implemented_unaccredited",
     "gate_b_nonphysical_binding": "implemented_no_go",
-    "b12_nonphysical_acceptance_task08": "incomplete",
+    "b12_nonphysical_acceptance_task08": "implemented_unaccredited",
 }
 EXPECTED_ITEM_BLOCKERS = {
     "039_launch_digest_supplement": ["accreditation_receipt"],
     "040_historical_authority": ["accreditation_receipt"],
-    "b12_preserve_recover": ["task08_nonphysical_acceptance", "accreditation_receipt"],
-    "b12_stop_seal_persist_close": ["task08_nonphysical_acceptance", "accreditation_receipt"],
+    "b12_preserve_recover": ["accreditation_receipt"],
+    "b12_stop_seal_persist_close": ["accreditation_receipt"],
     "gate_a_nonphysical_candidate": ["accreditation_receipt"],
     "gate_b_nonphysical_binding": ["physical_gate_b_receipt"],
-    "b12_nonphysical_acceptance_task08": ["implementation_and_exercise"],
+    "b12_nonphysical_acceptance_task08": ["accreditation_receipt"],
 }
 
 

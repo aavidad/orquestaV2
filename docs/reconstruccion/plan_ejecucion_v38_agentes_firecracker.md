@@ -677,8 +677,9 @@ En esa revisión están publicados el suplemento 039, la autoridad histórica
 040, el código B12 no físico y el sello A con su binding B. El read-model los
 clasifica `implemented_unaccredited`: los focales de integración no son un
 receipt de acreditación. Gate B queda explícitamente `implemented_no_go` porque
-no existe receipt físico independiente. La aceptación no física task08 sigue
-`incomplete` y la compuerta C continúa `parked`, sin ejecución atribuida.
+no existe receipt físico independiente. La aceptación no física task08 está
+`implemented_unaccredited`: su focal no sustituye un receipt de acreditación.
+La compuerta C continúa `parked`, sin ejecución atribuida.
 
 El read-model falla cerrado por construcción: enumera estados admisibles,
 afirma `accreditation_claimed=false`, mantiene `promotion_allowed=false` y
