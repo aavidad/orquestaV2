@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/bootstrap"
 	"orquesta/internal/i18n"
 )
 
@@ -67,6 +69,28 @@ func TestVersionAndInvalidCommandDoNotStartRuntime(t *testing.T) {
 	}
 	if code, key := serveErrorPresentation(errors.New("bootstrap.runtime_isolation_not_composed")); code != "bootstrap.runtime_isolation_not_composed" || key != "error.bootstrap.runtime_isolation_not_composed" {
 		t.Fatalf("microvm presentation: code=%q key=%q", code, key)
+	}
+}
+
+func TestServePropagatesRejectedMicroVMCompositionWithoutFallback(t *testing.T) {
+	original := runRuntime
+	t.Cleanup(func() { runRuntime = original })
+
+	const configPath = "/tmp/orquesta-microvm-complete.toml"
+	calls := 0
+	runRuntime = func(_ context.Context, options bootstrap.Options) error {
+		calls++
+		if options.ConfigPath != configPath {
+			t.Fatalf("config path=%q want=%q", options.ConfigPath, configPath)
+		}
+		return errors.New("bootstrap.runtime_isolation_not_composed")
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"serve", "--config", configPath}, &stdout, &stderr)
+	if code != 1 || calls != 1 || stdout.Len() != 0 ||
+		!strings.Contains(stderr.String(), "code=bootstrap.runtime_isolation_not_composed") {
+		t.Fatalf("code=%d calls=%d stdout=%q stderr=%q", code, calls, stdout.String(), stderr.String())
 	}
 }
 

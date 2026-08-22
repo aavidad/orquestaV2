@@ -18,6 +18,12 @@ import (
 
 var version = "dev"
 
+// runRuntime is the single production composition boundary. Keeping the
+// bootstrap call explicit also lets the command contract prove that a rejected
+// microVM configuration is returned to the operator without a second runtime
+// attempt or an isolation fallback.
+var runRuntime = bootstrap.Run
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -72,7 +78,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	err = bootstrap.Run(ctx, bootstrap.Options{
+	err = runRuntime(ctx, bootstrap.Options{
 		ConfigPath:  *configPath,
 		Version:     version,
 		ReportError: reportWorkerError,

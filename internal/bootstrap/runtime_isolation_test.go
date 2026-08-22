@@ -27,6 +27,7 @@ type clienteRuntimeIsolationMicroVM struct {
 	clienteFactoriaAgentMicroVM
 	antesCapacidades func()
 	falloCapacidades error
+	mutarCapacidades func(*microvm.RespuestaCapacidades)
 	consultas        atomic.Int64
 	observada        string
 	claveDetencion   string
@@ -73,7 +74,11 @@ func (cliente *clienteRuntimeIsolationMicroVM) Capacidades(ctx context.Context) 
 	if cliente.falloCapacidades != nil {
 		return microvm.RespuestaCapacidades{}, cliente.falloCapacidades
 	}
-	return cliente.clienteFactoriaAgentMicroVM.Capacidades(ctx)
+	respuesta, err := cliente.clienteFactoriaAgentMicroVM.Capacidades(ctx)
+	if err == nil && cliente.mutarCapacidades != nil {
+		cliente.mutarCapacidades(&respuesta)
+	}
+	return respuesta, err
 }
 
 func (cliente *clienteRuntimeIsolationMicroVM) Observar(_ context.Context, referencia string) (microvm.RespuestaEjecucion, error) {
@@ -183,7 +188,7 @@ func TestBuildComposesProductionMicroVMAfterCapabilitiesWithoutHostBinders(t *te
 		descriptors[0].PlacementRef.String() != "placement:codex:microvm-runtime" {
 		t.Fatalf("physical microvm capacity=%+v err=%v", descriptors, err)
 	}
-	if constructorCalls.Load() != 1 || client.consultas.Load() != 3 || connectionCloses.Load() != 0 {
+	if constructorCalls.Load() != 1 || client.consultas.Load() != 4 || connectionCloses.Load() != 0 {
 		t.Fatalf("constructor=%d capabilities=%d cleanup=%d before shutdown",
 			constructorCalls.Load(), client.consultas.Load(), connectionCloses.Load())
 	}
@@ -251,6 +256,58 @@ func TestBuildMicroVMCapabilitiesFailureCleansClientAfterOpeningDurableState(t *
 		if _, statErr := os.Lstat(path); !errors.Is(statErr, os.ErrNotExist) {
 			t.Fatalf("failed Capabilities created %s: %v", path, statErr)
 		}
+	}
+}
+
+func TestBuildMicroVMRejectsDifferentProtocolOrVersionWithoutFallback(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*microvm.RespuestaCapacidades)
+	}{
+		{name: "protocol", mutate: func(response *microvm.RespuestaCapacidades) {
+			response.Protocolo = "agentmicrovm.local.v0"
+		}},
+		{name: "version", mutate: func(response *microvm.RespuestaCapacidades) {
+			response.Version = "0.0.0-incompatible"
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			configPath, socketPath, brokerPath := writeRuntimeIsolationMicroVMConfig(t, root, false)
+			provisionRuntimeIsolationMicroVMCredential(t, root)
+			client := &clienteRuntimeIsolationMicroVM{mutarCapacidades: test.mutate}
+			var constructorCalls, connectionCloses atomic.Int64
+
+			runtime, err := Build(context.Background(), Options{
+				ConfigPath: configPath,
+				constructorClienteAgentMicroVM: func(gotSocket string) (recursoClienteAgentMicroVM, error) {
+					constructorCalls.Add(1)
+					if gotSocket != socketPath {
+						t.Fatalf("microvm socket=%q want=%q", gotSocket, socketPath)
+					}
+					return recursoClienteAgentMicroVM{
+						cliente:           client,
+						liberarConexiones: func() error { connectionCloses.Add(1); return nil },
+					}, nil
+				},
+			})
+			if runtime != nil || err == nil {
+				t.Fatalf("incompatible %s admitted: runtime=%v err=%v", test.name, runtime, err)
+			}
+			if constructorCalls.Load() != 1 || client.consultas.Load() > 1 || connectionCloses.Load() != 1 {
+				t.Fatalf("incompatible %s fallback/cleanup: constructor=%d capabilities=%d closes=%d",
+					test.name, constructorCalls.Load(), client.consultas.Load(), connectionCloses.Load())
+			}
+			if _, statErr := os.Lstat(brokerPath); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("incompatible %s retained broker socket: %v", test.name, statErr)
+			}
+			for _, path := range []string{filepath.Join(root, "artifacts"), filepath.Join(root, "effective_config.json")} {
+				if _, statErr := os.Lstat(path); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("incompatible %s fell back and created %s: %v", test.name, path, statErr)
+				}
+			}
+		})
 	}
 }
 

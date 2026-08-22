@@ -27,12 +27,26 @@ import (
 // poder aplicar el decodificador estricto del protocolo.
 const maximoDescriptorPerfilMicroVMBytes int64 = 1 << 20
 
+// protocoloAgentMicroVMFijado documenta y ratifica el unico contrato que la
+// composicion productiva puede consumir. No es una opcion de configuracion:
+// admitir otra version aqui crearia un fallback de transporte fuera del
+// conector publico estable.
+const protocoloAgentMicroVMFijado = "agentmicrovm.local.v1"
+
+const versionAgentMicroVMFijada = "0.1.0"
+
 var (
 	errFactoriaAgentMicroVMSeleccionInvalida  = errors.New("bootstrap.agent_microvm_selection_invalid")
 	errFactoriaAgentMicroVMDescriptorInvalido = errors.New("bootstrap.agent_microvm_profile_descriptor_invalid")
 	errFactoriaAgentMicroVMClienteInvalido    = errors.New("bootstrap.agent_microvm_client_invalid")
 	errFactoriaAgentMicroVMAutoridadInvalida  = errors.New("bootstrap.agent_microvm_authority_invalid")
+	errFactoriaAgentMicroVMProtocoloInvalido  = errors.New("bootstrap.agent_microvm_protocol_invalid")
 )
+
+type configuracionClienteAgentMicroVM struct {
+	rutaSocket string
+	protocolo  string
+}
 
 type dependenciasAutoridadFisicaAgentMicroVM struct {
 	lectorCredencial     credentials.UseAuthorityReader
@@ -74,6 +88,10 @@ func productionAgentMicroVMConConstructor(
 ) (*agenteMicroVM, error) {
 	if snapshot.RuntimeProvider() != "codex" || snapshot.RuntimeIsolation() != "microvm" {
 		return nil, errFactoriaAgentMicroVMSeleccionInvalida
+	}
+	clienteConfig, err := configuracionClienteMicroVM(snapshot)
+	if err != nil {
+		return nil, err
 	}
 	if interfazNulaAgentMicroVM(promptRenderer) || interfazNulaAgentMicroVM(credentialStore) ||
 		interfazNulaAgentMicroVM(autoridad.lectorCredencial) ||
@@ -142,7 +160,7 @@ func productionAgentMicroVMConConstructor(
 	if err != nil {
 		return nil, errors.Join(errFactoriaAgentMicroVMAutoridadInvalida, err)
 	}
-	recurso, err := construirCliente(snapshot.RuntimeMicroVMSocketPath())
+	recurso, err := construirCliente(clienteConfig.rutaSocket)
 	if err != nil {
 		return nil, errors.Join(errFactoriaAgentMicroVMClienteInvalido, err)
 	}
@@ -154,6 +172,14 @@ func productionAgentMicroVMConConstructor(
 	}
 	fallarCliente := func(causa error) (*agenteMicroVM, error) {
 		return nil, errors.Join(causa, recurso.liberarConexiones())
+	}
+	capacidadesRemotas, err := recurso.cliente.Capacidades(context.Background())
+	if err != nil {
+		return fallarCliente(err)
+	}
+	if capacidadesRemotas.Protocolo != protocoloAgentMicroVMFijado ||
+		capacidadesRemotas.Version != versionAgentMicroVMFijada {
+		return fallarCliente(errFactoriaAgentMicroVMProtocoloInvalido)
 	}
 
 	capacidades := ports.AgentCapabilities{
@@ -212,7 +238,27 @@ func productionAgentMicroVMConConstructor(
 	return agente, nil
 }
 
+func configuracionClienteMicroVM(snapshot config.Snapshot) (configuracionClienteAgentMicroVM, error) {
+	configuracion := configuracionClienteAgentMicroVM{
+		rutaSocket: snapshot.RuntimeMicroVMSocketPath(),
+		protocolo:  microvm.ProtocoloLocal,
+	}
+	if configuracion.protocolo != protocoloAgentMicroVMFijado {
+		return configuracionClienteAgentMicroVM{}, errFactoriaAgentMicroVMProtocoloInvalido
+	}
+	if strings.TrimSpace(configuracion.rutaSocket) != configuracion.rutaSocket ||
+		strings.ContainsRune(configuracion.rutaSocket, '\x00') ||
+		!filepath.IsAbs(configuracion.rutaSocket) || filepath.Clean(configuracion.rutaSocket) != configuracion.rutaSocket {
+		return configuracionClienteAgentMicroVM{}, errFactoriaAgentMicroVMClienteInvalido
+	}
+	return configuracion, nil
+}
+
 func nuevoRecursoClienteAgentMicroVM(rutaSocket string) (recursoClienteAgentMicroVM, error) {
+	info, err := os.Lstat(rutaSocket)
+	if err != nil || info == nil || info.Mode()&os.ModeSocket == 0 {
+		return recursoClienteAgentMicroVM{}, errFactoriaAgentMicroVMClienteInvalido
+	}
 	cliente, err := microvm.Nuevo(rutaSocket)
 	if err != nil {
 		return recursoClienteAgentMicroVM{}, err

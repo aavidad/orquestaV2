@@ -491,28 +491,32 @@ func TestProductionAgentMicroVMLaunchFirmaYEntregaBindingExactoOffline(t *testin
 	}
 }
 
-func TestProductionAgentMicroVMConstruyeClientePublicoSinMarcarSocketNiKVM(t *testing.T) {
+func TestProductionAgentMicroVMRechazaSocketAusenteONoUDSAntesDeComponer(t *testing.T) {
 	snapshot, _, rutaSocket := fixtureFactoriaAgentMicroVM(t)
 	store := &storeFactoriaAgentMicroVM{}
 	registro := &registroLanzamientosFactoriaAgentMicroVM{}
-	agente, err := productionAgentMicroVM(
-		snapshot,
-		rendererFactoriaAgentMicroVM{},
-		store,
-		autoridadFisicaFactoriaAgentMicroVM(store, registro),
-	)
-	if err != nil || agente == nil {
-		t.Fatalf("productionAgentMicroVM() agente=%v error=%v", agente, err)
+
+	assertRejected := func(name string) {
+		t.Helper()
+		agente, err := productionAgentMicroVM(
+			snapshot,
+			rendererFactoriaAgentMicroVM{},
+			store,
+			autoridadFisicaFactoriaAgentMicroVM(store, registro),
+		)
+		if agente != nil || !errors.Is(err, errFactoriaAgentMicroVMClienteInvalido) {
+			t.Fatalf("%s: agente=%v error=%v", name, agente, err)
+		}
+		if store.cierres.Load() != 0 {
+			t.Fatalf("%s: store compartido cerrado %d veces", name, store.cierres.Load())
+		}
 	}
-	if _, err := os.Lstat(rutaSocket); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("la composición creó o tocó el socket: %v", err)
+
+	assertRejected("socket ausente")
+	if err := os.WriteFile(rutaSocket, []byte("no-es-un-socket"), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	if err := agente.Shutdown(context.Background()); err != nil {
-		t.Fatalf("Shutdown() error=%v", err)
-	}
-	if store.cierres.Load() != 0 {
-		t.Fatalf("store compartido cerrado %d veces", store.cierres.Load())
-	}
+	assertRejected("fichero regular")
 }
 
 func TestCargarDescriptorPerfilAgentMicroVMRechazaFilesystemDigestYJSONInseguros(t *testing.T) {
