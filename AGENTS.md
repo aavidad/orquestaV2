@@ -16,6 +16,106 @@ Si el write-set afecta a la aplicación hermana Agente MicroVM, lee además
 El segundo documento fija el candidato B09 guardado, sus gates lógicos y lo
 que aún no puede atribuirse a Orquesta ni a un smoke Firecracker.
 
+## Relevo operativo vigente — 2026-08-22
+
+Este bloque manda sobre handoffs históricos para reanudar la sesión detenida
+por cuota. No reinicies el trabajo ni abras tareas equivalentes hasta recuperar
+y clasificar todos los incrementos existentes.
+
+### Estado canónico y límite de lo terminado
+
+- `product/roadmap.json` contiene 257 capacidades: 81 `accredited` y 176
+  `declared`. Ese contador no cambió durante el corte del 21–22 de agosto.
+- El último `origin/main` observado al redactar este relevo es `779280e7`
+  (`fix(runtime): cablea preserve con autoridad historica`). Verifica de nuevo
+  el remoto: el director podía terminar otro push después de este snapshot.
+- Durante la sesión se avanzaron y publicaron incrementos de nueve capacidades,
+  pero todas siguen `declared`: `AGT-07`, `AGT-08`, `AGT-10`, `AGT-11`,
+  `AGT-12`, `ORC-26`, `OPS-11`, `OPS-13` y `ORC-28`.
+- No describas esos nueve incrementos como nueve capacidades terminadas. Un
+  corte offline, unitario o no cableado no cambia el roadmap ni acredita su
+  contrato de aceptación.
+- V38 corresponde a `ORC-28`. Sus gates no físicos, parada, replay,
+  preservación, autoridad histórica, digests y composición UDS han avanzado;
+  V38 completa sigue bloqueada por la prueba física con `agente-microvm` real.
+  Nunca fabriques el receipt, marques C como superada ni promociones ORC-28 sin
+  Orquesta -> microVM real -> Codex real -> resultado -> preservación.
+
+### Dirección y procesos que deben respetarse
+
+- El director recuperado quedó en tmux `orquestav2-director-cuota`; su sesión
+  Codex sucesora es `01a026da-0448-72f0-93a1-f7c6454c7c2c`. Antes de crear un
+  director nuevo, inspecciona si esta sesión sigue viva y recupera su último
+  cierre, commits y mensajes.
+- El encargo y modo de drenaje viven en
+  `/home/alberto/Trabajo/recovery-orquestav2-20260821T2225-director-01a023ad/ORDEN_UN_PADRE_POR_READY_TASK_20260821.md`.
+- Los padres de tareas 01–09 y 11 se drenaron y cerraron. La última orden del
+  operador fue no abrir tareas nuevas por falta de cuota: terminar solo WIP,
+  probarlo, integrar lo verde y parar. Una nueva sesión debe confirmar que hay
+  cuota o una orden nueva antes de volver a desplegar padres/subagentes.
+- No tocar, cerrar, reconfigurar ni reutilizar sesiones, `CODEX_HOME`, procesos
+  o worktrees de `/home/alberto/Trabajo/agente_microvm`. En particular, no
+  tocar tmux `amv-firecracker-root-run25-20260820`. Tampoco tocar VEC.
+
+### Trabajo local que no se puede perder
+
+El worktree raíz está intencionadamente muy sucio y atrasado respecto a
+`origin/main`; contiene trabajo compartido. Prohibido `reset`, `clean`,
+`checkout`, stash global, `git add -A` o borrado de `/tmp/orquesta-*`. Inspecciona
+por ruta y porta mediante allowlists a un worktree limpio basado en el último
+`origin/main`.
+
+- `/tmp/orquesta-tls01-output-maxbytes-9e8ef358`: `TLS-01`, registro de tools y
+  límite de salida; pruebas verdes.
+- `/tmp/orquesta-task04-v26-plugins`: `TLS-10..14`, plugins, catálogo, rulepacks
+  y doctor; candidato local.
+- `/tmp/orquesta-v26-skills-7Nhwqk`: `TLS-06..09`, skills; pruebas normales y
+  `-race` verdes, desacoplado mediante `SkillToolCatalog`.
+- `/tmp/orquesta-v26-tool-execution-kROvJy`: ejecución de tools y `sdk/tools`;
+  verde contra el WIP integrado, dependiente de tooling/composición.
+- El raíz compartido contiene los incrementos `TLS-02..05` de resources,
+  namespaces, separación de superficies y SDK, además de sus pruebas y docs
+  `docs/reconstruccion/corte_v26_*`. No los confundas con archivos desechables.
+- `/tmp/orquesta-codexwork-XllJQC`: protocolo/runner Codex con cwd y entorno
+  sellados, rate limits y reintentos; pruebas verdes.
+- `/tmp/orquesta-b12-public-connector-task02`: conector público B12 y
+  preservación fail-closed; pruebas verdes.
+- `/tmp/orquesta-task08-b12-e2e`, `/tmp/orquesta-task08-real-e2e-d989bc02` y
+  `/tmp/orquesta-task08-real-e2e-779280e7`: candidatos E2E B12 no físicos.
+  Reconcílialos; no publiques un test que evite la superficie pública de
+  `application.Orchestrator` o fabrique evidencia física.
+- `/tmp/orquesta-task08-gatea-b`: pruebas adicionales de gates A/B no físicos;
+  parte del núcleo ya fue publicado en `b2eabc98`, por lo que hay que comparar
+  antes de portar.
+- `/tmp/orquesta-ops02-sqlite-ep32xf/source`: endurecimiento y aceleración de
+  fixtures SQLite V23; pruebas normales y `-race` estaban verdes. `OPS-02` ya
+  estaba acreditada por V07: este corte no acredita V23 por sí solo.
+- `/tmp/orquestav2-v25-orc29-KBubSi`: ORC-29 preventivo incompleto. Falta hecho
+  durable, CAS, outbox y recuperación; no integrar el borrador como cierre ni
+  ampliar writers sin plan causal.
+
+También existen worktrees intermedios B12/039/040 y de release. Primero usa
+`git status`, `git diff`, `git log` y compara con `origin/main`; no presupongas
+que el nombre de un worktree implica que su contenido sigue pendiente.
+
+### Orden de reanudación
+
+1. Inspeccionar director/tmux, `origin/main`, estado del raíz y worktrees; no
+   mutar nada durante el inventario.
+2. Recuperar cualquier commit verde del director que aún no esté en remoto.
+3. Cerrar el E2E B12 no físico restante sin sobreacreditar V38.
+4. Integrar antes de rehacer: V26 `TLS-01..14`, worker Codex y SQLite, cada
+   conjunto en worktree limpio, con allowlist, pruebas focales, `-race` cuando
+   aplique, `git diff --check` y gates de arquitectura.
+5. Rebasar siempre sobre el `origin/main` vigente y empujar commits pequeños
+   solo si están verdes. Si el remoto avanzó, volver a integrar; nunca forzar.
+6. Dejar ORC-29 aparcado hasta diseñar su durabilidad. Dejar la compuerta física
+   V38 aparcada hasta que el repositorio hermano esté realmente preparado.
+7. Solo después de preservar e integrar todo WIP, seleccionar capacidades
+   `declared` cuyas dependencias estén satisfechas. Priorizar programación y
+   pruebas; reservar auditorías amplias u “olas” preventivas para fallos reales
+   o gates de release, conforme a la orden del operador.
+
 ## Misión y estado honesto
 
 Orquesta es un núcleo reutilizable que recibe una intención, mantiene un Goal
