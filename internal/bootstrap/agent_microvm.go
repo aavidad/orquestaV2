@@ -238,6 +238,82 @@ func (agente *agenteMicroVM) PreserveWithAuthority(
 	return preservador.PreserveWithAuthority(ctx, autoridad, solicitud)
 }
 
+func (agente *agenteMicroVM) Inspect(ctx context.Context, request ports.AgentEnvironmentInspectRequest) (ports.AgentEnvironmentInspectReceipt, error) {
+	if agente == nil {
+		return ports.AgentEnvironmentInspectReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentEnvironmentInspectReceipt{}, errAgentMicroVMCerrado
+	}
+	adapter, ok := agente.adaptador.(ports.AgentEnvironmentLifecycle)
+	if !ok {
+		return ports.AgentEnvironmentInspectReceipt{}, errAgentMicroVMPreservacionRequerida
+	}
+	return adapter.Inspect(ctx, request)
+}
+func (agente *agenteMicroVM) Quiesce(ctx context.Context, request ports.AgentQuiesceRequest) (ports.AgentQuiesceReceipt, error) {
+	if agente == nil {
+		return ports.AgentQuiesceReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentQuiesceReceipt{}, errAgentMicroVMCerrado
+	}
+	adapter, ok := agente.adaptador.(ports.AgentEnvironmentLifecycle)
+	if !ok {
+		return ports.AgentQuiesceReceipt{}, errAgentMicroVMPreservacionRequerida
+	}
+	return adapter.Quiesce(ctx, request)
+}
+func (agente *agenteMicroVM) Close(ctx context.Context, request ports.AgentCloseRequest) (ports.AgentCloseReceipt, error) {
+	if agente == nil {
+		return ports.AgentCloseReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentCloseReceipt{}, errAgentMicroVMCerrado
+	}
+	adapter, ok := agente.adaptador.(ports.AgentEnvironmentLifecycle)
+	if !ok {
+		return ports.AgentCloseReceipt{}, errAgentMicroVMPreservacionRequerida
+	}
+	return adapter.Close(ctx, request)
+}
+func (agente *agenteMicroVM) ReconcileQuiesce(ctx context.Context, request ports.AgentQuiesceRequest) (ports.AgentQuiesceReceipt, error) {
+	if agente == nil {
+		return ports.AgentQuiesceReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentQuiesceReceipt{}, errAgentMicroVMCerrado
+	}
+	adapter, ok := agente.adaptador.(ports.AgentEnvironmentLifecycleReconciler)
+	if !ok {
+		return ports.AgentQuiesceReceipt{}, errAgentMicroVMRecuperacionRequerida
+	}
+	return adapter.ReconcileQuiesce(ctx, request)
+}
+func (agente *agenteMicroVM) ReconcileClose(ctx context.Context, request ports.AgentCloseRequest) (ports.AgentCloseReceipt, error) {
+	if agente == nil {
+		return ports.AgentCloseReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentCloseReceipt{}, errAgentMicroVMCerrado
+	}
+	adapter, ok := agente.adaptador.(ports.AgentEnvironmentLifecycleReconciler)
+	if !ok {
+		return ports.AgentCloseReceipt{}, errAgentMicroVMRecuperacionRequerida
+	}
+	return adapter.ReconcileClose(ctx, request)
+}
+
 func (agente *agenteMicroVM) ReconcilePreserve(
 	ctx context.Context,
 	solicitud ports.AgentPreserveRequest,
