@@ -325,7 +325,23 @@ func newV32MicroVMHostLaunchAuthority(t *testing.T, attempt application.EffectAt
 }
 
 func insertV32MicroVMHostLaunchAuthority(database *sql.DB, authority v32MicroVMHostLaunchAuthority) error {
-	_, err := database.Exec(`
+	transaction, err := database.Begin()
+	if err != nil {
+		return err
+	}
+	defer transaction.Rollback()
+	var hasRuntimeDigests int
+	if err := transaction.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='microvm_host_launch_runtime_digests'`).Scan(&hasRuntimeDigests); err != nil {
+		return err
+	}
+	if hasRuntimeDigests == 1 {
+		if _, err := transaction.Exec(`INSERT INTO microvm_host_launch_runtime_digests(
+execution_ref,action_fence,kernel_sha256,initramfs_sha256,profile_sha256) VALUES(?,?,?,?,?)`,
+			authority.executionRef, authority.actionFence, strings.Repeat("1", 64), strings.Repeat("2", 64), strings.Repeat("3", 64)); err != nil {
+			return err
+		}
+	}
+	_, err = transaction.Exec(`
 INSERT INTO microvm_host_launch_authorities(
  execution_ref,action_fence,effect_attempt_ref,session_ref,plan_sha256,concession_sha256,
  control_service_ref,control_port,control_identity_ref,control_identity_sha256,
@@ -339,7 +355,10 @@ INSERT INTO microvm_host_launch_authorities(
 		authority.credentialRef, authority.ownerRef, authority.scopeRef, authority.purposeRef, authority.credentialVersion,
 		authority.actorRef, authority.requestRef,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return transaction.Commit()
 }
 
 func assertV32MicroVMHostLaunchAuthorityRoundTrip(

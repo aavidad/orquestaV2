@@ -81,7 +81,7 @@ func TestRecoveryV32MicroVMHostLaunchAuthorityRejectsCrossedAttemptAndIntent(t *
 		_, first := seedV32EffectAttempt(t, system, "recovery-attempt-first")
 		_, second := seedV32EffectAttempt(t, system, "recovery-attempt-second")
 		authority := sqliteMicroVMHostLaunchAuthority(t, first, false)
-		if _, err := system.repository.Prepare(context.Background(), authority); err != nil {
+		if _, err := prepareSQLiteMicroVMHostLaunch(system.repository, context.Background(), authority); err != nil {
 			t.Fatal(err)
 		}
 		requestRef, err := ports.BuildMicroVMHostLaunchOneShotRequestRefV1(
@@ -118,7 +118,7 @@ WHERE execution_ref=? AND action_fence=?`, second.Ref, requestRef,
 		_, first := seedV32EffectAttempt(t, system, "recovery-intent-first")
 		_, second := seedV32EffectAttempt(t, system, "recovery-intent-second")
 		authority := sqliteMicroVMHostLaunchAuthority(t, first, true)
-		if _, err := system.repository.Prepare(context.Background(), authority); err != nil {
+		if _, err := prepareSQLiteMicroVMHostLaunch(system.repository, context.Background(), authority); err != nil {
 			t.Fatal(err)
 		}
 		rewriteRecoveryTrigger(t, system.repository.db, "effect_attempts_immutable_update", func() {
@@ -218,7 +218,7 @@ func seedRecoveryV32MicroVMHostLaunchAuthority(
 	mustV10Exec(t, system.repository.db, `
 UPDATE executions SET execution_session_ref=? WHERE ref=?`,
 		authority.SessionRef.String(), authority.Key.RunRef.String())
-	if _, err := system.repository.Prepare(context.Background(), authority); err != nil {
+	if _, err := prepareSQLiteMicroVMHostLaunch(system.repository, context.Background(), authority); err != nil {
 		t.Fatal(err)
 	}
 	return system, claim, attempt, authority

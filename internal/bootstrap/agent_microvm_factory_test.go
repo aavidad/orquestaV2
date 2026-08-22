@@ -122,8 +122,29 @@ func (store *storeFactoriaAgentMicroVM) Close() error {
 
 type registroLanzamientosFactoriaAgentMicroVM struct {
 	autoridad ports.MicroVMHostLaunchAuthorityV1
+	runtime   ports.MicroVMHostLaunchRuntimeDigestsV1
 	prepares  atomic.Int64
 	bindings  atomic.Int64
+}
+
+func (registro *registroLanzamientosFactoriaAgentMicroVM) PrepareWithRuntime(
+	ctx context.Context, authority ports.MicroVMHostLaunchAuthorityV1,
+	runtime ports.MicroVMHostLaunchRuntimeDigestsV1,
+) (ports.MicroVMHostLaunchAuthorityV1, error) {
+	prepared, err := registro.Prepare(ctx, authority)
+	if err == nil {
+		registro.runtime = runtime
+	}
+	return prepared, err
+}
+
+func (registro *registroLanzamientosFactoriaAgentMicroVM) ResolveRuntime(
+	_ context.Context, key ports.MicroVMHostLaunchAuthorityKey,
+) (ports.MicroVMHostLaunchRuntimeDigestsV1, error) {
+	if registro.runtime.Key != key {
+		return ports.MicroVMHostLaunchRuntimeDigestsV1{}, errors.New("registro factoria: runtime ausente")
+	}
+	return registro.runtime, nil
 }
 
 func (registro *registroLanzamientosFactoriaAgentMicroVM) Prepare(
@@ -160,7 +181,7 @@ func (registro *registroLanzamientosFactoriaAgentMicroVM) Resolve(
 
 func autoridadFisicaFactoriaAgentMicroVM(
 	lector credentials.UseAuthorityReader,
-	registro ports.MicroVMHostLaunchAuthorityRegistry,
+	registro ports.MicroVMHostLaunchPreparationRegistry,
 ) dependenciasAutoridadFisicaAgentMicroVM {
 	almacenOneShot, _ := lector.(credentials.OneShotStore)
 	return dependenciasAutoridadFisicaAgentMicroVM{

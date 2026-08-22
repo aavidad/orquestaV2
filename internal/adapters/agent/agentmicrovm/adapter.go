@@ -130,7 +130,7 @@ type Config struct {
 	Client                  Client
 	Signer                  Signer
 	ClaimResolver           *CredentialClaimResolver
-	LaunchAuthorityRegistry ports.MicroVMHostLaunchAuthorityRegistry
+	LaunchAuthorityRegistry ports.MicroVMHostLaunchPreparationRegistry
 	Capabilities            ports.AgentCapabilities
 	ModelBinding            ProviderModelBinding
 	PromptRenderer          PromptRenderer
@@ -152,7 +152,7 @@ type Adapter struct {
 	observer                observationClient
 	signer                  Signer
 	claimResolver           *CredentialClaimResolver
-	launchAuthorityRegistry ports.MicroVMHostLaunchAuthorityRegistry
+	launchAuthorityRegistry ports.MicroVMHostLaunchPreparationRegistry
 	profile                 ProfileBinding
 	capabilities            ports.AgentCapabilities
 	model                   string
@@ -331,10 +331,20 @@ func (adapter *Adapter) launch(
 		}
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityBuildFailed, err)
 	}
+	runtimeDigests, err := BuildMicroVMHostLaunchRuntimeDigestsV1(request, compiled, signed)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	if reconcile {
+		historicalDigests, resolveErr := adapter.launchAuthorityRegistry.ResolveRuntime(ctx, authority.Key)
+		if resolveErr != nil || historicalDigests != runtimeDigests {
+			return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, resolveErr)
+		}
+	}
 	if reconcile && !validPreparedLaunchAuthorityReplay(authority, historical) {
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, nil)
 	}
-	prepared, err := adapter.launchAuthorityRegistry.Prepare(ctx, authority)
+	prepared, err := adapter.launchAuthorityRegistry.PrepareWithRuntime(ctx, authority, runtimeDigests)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityPrepareFailed, err)
 	}

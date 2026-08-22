@@ -82,6 +82,32 @@ func BuildHostLaunchAuthorityV1(
 	return ports.CloneMicroVMHostLaunchAuthorityV1(authority), nil
 }
 
+// BuildMicroVMHostLaunchRuntimeDigestsV1 derives the five immutable launch
+// digests from the canonical signed plan already bound to request.
+func BuildMicroVMHostLaunchRuntimeDigestsV1(
+	request ports.AgentLaunchRequest,
+	compiled Compilation,
+	signed microvm.SolicitudLanzamiento,
+) (ports.MicroVMHostLaunchRuntimeDigestsV1, error) {
+	if !validHostLaunchCompilation(request, compiled) || compiled.Plan.PerfilSHA256 == nil || !validSignedPlan(compiled, signed.Plan) {
+		return ports.MicroVMHostLaunchRuntimeDigestsV1{}, fail(CodeLaunchAuthorityInvalid, nil)
+	}
+	extracted, err := microvm.ExtraerAutoridadServiciosHostLanzamientoV1(signed)
+	if err != nil || extracted.RunRef != request.ExecutionRef.String() || extracted.Cerca != request.EffectAuthority.ActionFence {
+		return ports.MicroVMHostLaunchRuntimeDigestsV1{}, fail(CodeLaunchAuthorityInvalid, err)
+	}
+	value := ports.MicroVMHostLaunchRuntimeDigestsV1{
+		Key:        ports.MicroVMHostLaunchAuthorityKey{RunRef: request.ExecutionRef, ActionFence: request.EffectAuthority.ActionFence},
+		PlanSHA256: extracted.PlanSHA256, ConcessionSHA256: extracted.ConcesionSHA256,
+		KernelSHA256: compiled.Plan.KernelSHA256, InitramfsSHA256: compiled.Plan.InitramfsSHA256,
+		ProfileSHA256: *compiled.Plan.PerfilSHA256,
+	}
+	if ports.ValidateMicroVMHostLaunchRuntimeDigestsV1(value) != nil {
+		return ports.MicroVMHostLaunchRuntimeDigestsV1{}, fail(CodeLaunchAuthorityInvalid, nil)
+	}
+	return value, nil
+}
+
 func validHostLaunchCompilation(request ports.AgentLaunchRequest, compiled Compilation) bool {
 	context := compiled.Context
 	issuedAt, validity, validWindow := grantWindow(request.EffectAuthority)

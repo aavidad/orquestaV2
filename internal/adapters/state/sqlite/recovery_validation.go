@@ -147,6 +147,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		if version >= recoverySchemaV38MicroVMHostLaunch {
 			validators = append(validators, validateRecoveryV38MicroVMHostLaunchAuthority)
 		}
+		if version >= recoverySchemaV38LaunchRuntimeDigests {
+			validators = append(validators, validateRecoveryV39MicroVMHostLaunchRuntimeDigests)
+		}
 		if version >= recoverySchemaV38EnvironmentLifecycle {
 			validators = append(validators, validarRecuperacionAgentEnvironmentLifecycles)
 		}

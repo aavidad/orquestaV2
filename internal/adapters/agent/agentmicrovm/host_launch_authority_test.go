@@ -49,6 +49,58 @@ func TestBuildHostLaunchAuthorityV1MapsExactSignedControlAndProxy(t *testing.T) 
 	}
 }
 
+func TestBuildMicroVMHostLaunchRuntimeDigestsV1MapsExactCompilation(t *testing.T) {
+	request := validLaunchRequest(t)
+	compiled, signed := compiledSignedHostLaunchRequest(t, request, false)
+	got, err := BuildMicroVMHostLaunchRuntimeDigestsV1(request, compiled, signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	extracted, err := microvm.ExtraerAutoridadServiciosHostLanzamientoV1(signed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ports.MicroVMHostLaunchRuntimeDigestsV1{
+		Key:        ports.MicroVMHostLaunchAuthorityKey{RunRef: request.ExecutionRef, ActionFence: request.EffectAuthority.ActionFence},
+		PlanSHA256: extracted.PlanSHA256, ConcessionSHA256: extracted.ConcesionSHA256,
+		KernelSHA256: compiled.Plan.KernelSHA256, InitramfsSHA256: compiled.Plan.InitramfsSHA256,
+		ProfileSHA256: *compiled.Plan.PerfilSHA256,
+	}
+	if got != want {
+		t.Fatalf("digests=%+v want=%+v", got, want)
+	}
+}
+
+func TestBuildMicroVMHostLaunchRuntimeDigestsV1RejectsNilProfile(t *testing.T) {
+	request := validLaunchRequest(t)
+	compiled, signed := compiledSignedHostLaunchRequest(t, request, false)
+	compiled.Plan.PerfilSHA256 = nil
+	if got, err := BuildMicroVMHostLaunchRuntimeDigestsV1(request, compiled, signed); got != (ports.MicroVMHostLaunchRuntimeDigestsV1{}) || ErrorCode(err) != CodeLaunchAuthorityInvalid {
+		t.Fatalf("digests=%+v err=%v", got, err)
+	}
+}
+
+func TestBuildMicroVMHostLaunchRuntimeDigestsV1RejectsCompiledDigestMutation(t *testing.T) {
+	for _, field := range []string{"kernel", "initramfs", "profile"} {
+		t.Run(field, func(t *testing.T) {
+			request := validLaunchRequest(t)
+			compiled, signed := compiledSignedHostLaunchRequest(t, request, false)
+			mutated := strings.Repeat("f", 64)
+			switch field {
+			case "kernel":
+				compiled.Plan.KernelSHA256 = mutated
+			case "initramfs":
+				compiled.Plan.InitramfsSHA256 = mutated
+			case "profile":
+				compiled.Plan.PerfilSHA256 = &mutated
+			}
+			if got, err := BuildMicroVMHostLaunchRuntimeDigestsV1(request, compiled, signed); got != (ports.MicroVMHostLaunchRuntimeDigestsV1{}) || ErrorCode(err) != CodeLaunchAuthorityInvalid {
+				t.Fatalf("digests=%+v err=%v", got, err)
+			}
+		})
+	}
+}
+
 func TestBuildHostLaunchAuthorityV1RejectsSignedRunOrFenceCrossedWithRequest(t *testing.T) {
 	base := validLaunchRequest(t)
 	compiled, signed := compiledSignedHostLaunchRequest(t, base, false)

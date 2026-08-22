@@ -19,12 +19,13 @@ import (
 type pipelineAuthorityRegistryStub struct {
 	mu sync.Mutex
 
-	authorities  map[ports.MicroVMHostLaunchAuthorityKey]ports.MicroVMHostLaunchAuthorityV1
-	prepareErr   error
-	bindErr      error
-	mutateBind   func(*ports.MicroVMHostLaunchAuthorityV1)
-	record       func(string)
-	afterPrepare func()
+	authorities    map[ports.MicroVMHostLaunchAuthorityKey]ports.MicroVMHostLaunchAuthorityV1
+	runtimeDigests map[ports.MicroVMHostLaunchAuthorityKey]ports.MicroVMHostLaunchRuntimeDigestsV1
+	prepareErr     error
+	bindErr        error
+	mutateBind     func(*ports.MicroVMHostLaunchAuthorityV1)
+	record         func(string)
+	afterPrepare   func()
 
 	prepareCalls        int
 	bindCalls           int
@@ -35,8 +36,68 @@ type pipelineAuthorityRegistryStub struct {
 
 func newPipelineAuthorityRegistryStub() *pipelineAuthorityRegistryStub {
 	return &pipelineAuthorityRegistryStub{
-		authorities: make(map[ports.MicroVMHostLaunchAuthorityKey]ports.MicroVMHostLaunchAuthorityV1),
+		authorities:    make(map[ports.MicroVMHostLaunchAuthorityKey]ports.MicroVMHostLaunchAuthorityV1),
+		runtimeDigests: make(map[ports.MicroVMHostLaunchAuthorityKey]ports.MicroVMHostLaunchRuntimeDigestsV1),
 	}
+}
+
+func (registry *pipelineAuthorityRegistryStub) PrepareWithRuntime(
+	ctx context.Context,
+	authority ports.MicroVMHostLaunchAuthorityV1,
+	runtime ports.MicroVMHostLaunchRuntimeDigestsV1,
+) (ports.MicroVMHostLaunchAuthorityV1, error) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	registry.prepareCalls++
+	if registry.record != nil {
+		registry.record("prepare")
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.MicroVMHostLaunchAuthorityV1{}, err
+	}
+	if registry.prepareErr != nil {
+		return ports.MicroVMHostLaunchAuthorityV1{}, registry.prepareErr
+	}
+	if existing, found := registry.runtimeDigests[runtime.Key]; found && existing != runtime {
+		return ports.MicroVMHostLaunchAuthorityV1{}, errors.New("pipeline-registry: runtime conflict")
+	}
+	if persisted, found := registry.authorities[authority.Key]; found {
+		prepared := ports.CloneMicroVMHostLaunchAuthorityV1(persisted)
+		prepared.ExternalRef = ""
+		if !reflect.DeepEqual(prepared, authority) {
+			return ports.MicroVMHostLaunchAuthorityV1{}, errors.New("pipeline-registry: prepare conflict")
+		}
+		if persisted.ExternalRef != "" {
+			registry.boundPrepareReplays++
+		}
+		registry.runtimeDigests[runtime.Key] = runtime
+		if registry.afterPrepare != nil {
+			registry.afterPrepare()
+		}
+		return ports.CloneMicroVMHostLaunchAuthorityV1(persisted), nil
+	}
+	registry.authorities[authority.Key] = ports.CloneMicroVMHostLaunchAuthorityV1(authority)
+	registry.runtimeDigests[runtime.Key] = runtime
+	if registry.afterPrepare != nil {
+		registry.afterPrepare()
+	}
+	return ports.CloneMicroVMHostLaunchAuthorityV1(authority), nil
+}
+
+func (registry *pipelineAuthorityRegistryStub) ResolveRuntime(
+	ctx context.Context,
+	key ports.MicroVMHostLaunchAuthorityKey,
+) (ports.MicroVMHostLaunchRuntimeDigestsV1, error) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return ports.MicroVMHostLaunchRuntimeDigestsV1{}, err
+	}
+	value, found := registry.runtimeDigests[key]
+	if !found {
+		return ports.MicroVMHostLaunchRuntimeDigestsV1{}, errors.New("pipeline-registry: runtime absent")
+	}
+	return value, nil
 }
 
 func (registry *pipelineAuthorityRegistryStub) Prepare(

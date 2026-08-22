@@ -331,9 +331,14 @@ ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END,name`)
 		}
 	}
 	if _, err := transaction.Exec(
-		`DELETE FROM schema_migrations WHERE version IN (?,?,?,?)`,
+		`DROP TRIGGER microvm_host_launch_authorities_runtime_digest_required;
+DROP TABLE microvm_host_launch_runtime_digests;
+DROP TABLE microvm_host_launch_runtime_digest_legacy_exemptions;
+DROP TABLE microvm_host_launch_runtime_digest_epoch;
+DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?)`,
 		recoverySchemaV38EnvironmentLifecycle, recoverySchemaV23WizardGapsSnapshot,
 		recoverySchemaV38StopNonApplication, recoverySchemaV38StopRecoveryClaim,
+		recoverySchemaV38LaunchRuntimeDigests,
 	); err != nil {
 		t.Fatal(err)
 	}

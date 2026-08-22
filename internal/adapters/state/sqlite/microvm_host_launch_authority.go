@@ -24,10 +24,36 @@ FROM microvm_host_launch_authorities
 WHERE execution_ref=? AND action_fence=?`
 
 var _ ports.MicroVMHostLaunchAuthorityRegistry = (*Repository)(nil)
+var _ ports.MicroVMHostLaunchPreparationRegistry = (*Repository)(nil)
 
 func (repository *Repository) Prepare(
 	ctx context.Context,
 	authority ports.MicroVMHostLaunchAuthorityV1,
+) (ports.MicroVMHostLaunchAuthorityV1, error) {
+	if ctx == nil {
+		return ports.MicroVMHostLaunchAuthorityV1{}, invalid(errors.New("sqlite.microvm_host_launch_authority_invalid"))
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.MicroVMHostLaunchAuthorityV1{}, err
+	}
+	return ports.MicroVMHostLaunchAuthorityV1{}, conflict(errors.New("sqlite.microvm_host_launch_runtime_digests_required"))
+}
+
+func (repository *Repository) PrepareWithRuntime(
+	ctx context.Context,
+	authority ports.MicroVMHostLaunchAuthorityV1,
+	runtime ports.MicroVMHostLaunchRuntimeDigestsV1,
+) (ports.MicroVMHostLaunchAuthorityV1, error) {
+	if runtime.Key != authority.Key || ports.ValidateMicroVMHostLaunchRuntimeDigestsV1(runtime) != nil {
+		return ports.MicroVMHostLaunchAuthorityV1{}, invalid(errors.New("sqlite.microvm_host_launch_runtime_digests_invalid"))
+	}
+	return repository.prepareMicroVMHostLaunch(ctx, authority, &runtime)
+}
+
+func (repository *Repository) prepareMicroVMHostLaunch(
+	ctx context.Context,
+	authority ports.MicroVMHostLaunchAuthorityV1,
+	runtime *ports.MicroVMHostLaunchRuntimeDigestsV1,
 ) (ports.MicroVMHostLaunchAuthorityV1, error) {
 	if ctx == nil || authority.Key.ActionFence > math.MaxInt64 ||
 		uint64(authority.OneShotClaim.Version) > math.MaxInt64 ||
@@ -68,10 +94,27 @@ SELECT EXISTS(
 				errors.New("sqlite.microvm_host_launch_authority_conflict"),
 			)
 		}
+		if runtime != nil {
+			stored, runtimeFound, runtimeErr := readMicroVMHostLaunchRuntimeDigests(ctx, transaction, authority.Key)
+			if runtimeErr != nil {
+				return ports.MicroVMHostLaunchAuthorityV1{}, runtimeErr
+			}
+			if runtimeFound && stored != *runtime {
+				return ports.MicroVMHostLaunchAuthorityV1{}, conflict(errors.New("sqlite.microvm_host_launch_runtime_digests_conflict"))
+			}
+			if !runtimeFound {
+				return ports.MicroVMHostLaunchAuthorityV1{}, conflict(errors.New("sqlite.microvm_host_launch_runtime_digests_legacy_exempt"))
+			}
+		}
 		if err := commit(transaction); err != nil {
 			return ports.MicroVMHostLaunchAuthorityV1{}, microVMHostLaunchContextError(ctx, err)
 		}
 		return ports.CloneMicroVMHostLaunchAuthorityV1(persisted), nil
+	}
+	if runtime != nil {
+		if err := insertMicroVMHostLaunchRuntimeDigests(ctx, transaction, *runtime); err != nil {
+			return ports.MicroVMHostLaunchAuthorityV1{}, err
+		}
 	}
 
 	proxyServiceRef, proxyPort, proxyIdentityRef, proxyIdentitySHA256 := storedMicroVMHostLaunchProxy(authority.Services)

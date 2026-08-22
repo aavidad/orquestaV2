@@ -37,7 +37,7 @@ var (
 type dependenciasAutoridadFisicaAgentMicroVM struct {
 	lectorCredencial     credentials.UseAuthorityReader
 	almacenOneShot       credentials.OneShotStore
-	registroLanzamientos ports.MicroVMHostLaunchAuthorityRegistry
+	registroLanzamientos ports.MicroVMHostLaunchPreparationRegistry
 }
 
 type recursoClienteAgentMicroVM struct {
