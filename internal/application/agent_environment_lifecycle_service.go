@@ -10,6 +10,10 @@ import (
 
 var errAgentEnvironmentLifecycleServiceInvalid = errors.New("application.agent_environment_lifecycle_service_invalid")
 
+// ErrAgentEnvironmentLifecycleUnavailable is the stable fail-closed result
+// when the optional physical lifecycle boundary was not composed.
+var ErrAgentEnvironmentLifecycleUnavailable = errors.New("application.agent_environment_lifecycle_unavailable")
+
 type AgentEnvironmentLifecycleActionBuilder func(
 	GoalRecord,
 	AgentEnvironmentLifecycleSnapshot,
@@ -65,6 +69,26 @@ type AgentEnvironmentLifecycleServiceResult struct {
 	NextAction      *ActionRecord
 	Pending         bool
 	ReadyToFinalize bool
+}
+
+func (orchestrator *Orchestrator) InitializeAgentEnvironmentLifecycle(
+	ctx context.Context,
+	request InitializeAgentEnvironmentLifecycleRequest,
+) (AgentEnvironmentLifecycleSnapshot, bool, error) {
+	if orchestrator == nil || orchestrator.agentLifecycle == nil {
+		return AgentEnvironmentLifecycleSnapshot{}, false, ErrAgentEnvironmentLifecycleUnavailable
+	}
+	return orchestrator.agentLifecycle.Initialize(ctx, request)
+}
+
+func (orchestrator *Orchestrator) AdvanceAgentEnvironmentLifecycle(
+	ctx context.Context,
+	request AdvanceAgentEnvironmentLifecycleRequest,
+) (AgentEnvironmentLifecycleServiceResult, error) {
+	if orchestrator == nil || orchestrator.agentLifecycle == nil {
+		return AgentEnvironmentLifecycleServiceResult{}, ErrAgentEnvironmentLifecycleUnavailable
+	}
+	return orchestrator.agentLifecycle.Advance(ctx, request)
 }
 
 func NewAgentEnvironmentLifecycleService(

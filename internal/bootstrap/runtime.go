@@ -82,15 +82,20 @@ func componerFuentesCapacidadAgente(agente AgentAdapter, vigencia time.Duration,
 type AgentFactory func(config.Snapshot, application.Clock) (AgentAdapter, error)
 
 type Options struct {
-	ConfigPath                     string
-	Version                        string
-	Listener                       net.Listener
-	AgentFactory                   AgentFactory
-	IdentityHTTPClient             *http.Client
-	CommandExecutionResolver       commandcore.ExecutionAuthorityResolver
-	ReportError                    func(error)
-	codexGoToolchainTrustForTests  codexGoToolchainTrust
-	constructorClienteAgentMicroVM constructorClienteAgentMicroVM
+	ConfigPath               string
+	Version                  string
+	Listener                 net.Listener
+	AgentFactory             AgentFactory
+	IdentityHTTPClient       *http.Client
+	CommandExecutionResolver commandcore.ExecutionAuthorityResolver
+	ReportError              func(error)
+	// AgentEnvironmentPreservationBuilder is the application-owned B12.2
+	// enrichment seam. A physical adapter alone is deliberately insufficient:
+	// without the public preservation authority the lifecycle stays
+	// uncomposed and Orchestrator fails closed before Quiesce or Close.
+	AgentEnvironmentPreservationBuilder application.AgentEnvironmentPreservationBuilder
+	codexGoToolchainTrustForTests       codexGoToolchainTrust
+	constructorClienteAgentMicroVM      constructorClienteAgentMicroVM
 }
 
 type identityRuntimeComposition struct {
@@ -322,6 +327,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		executionRuntimeComposition{
 			sessions: executionBroker, postArtifactMailbox: postArtifactMailbox,
 			capacitySources: fuentesCapacidad, egressPolicies: egressPolicies,
+			environmentPreservationBuilder: options.AgentEnvironmentPreservationBuilder,
 		},
 	)
 	if err != nil {
@@ -788,10 +794,11 @@ func newBuildOrchestrator(
 }
 
 type executionRuntimeComposition struct {
-	sessions            ports.ExecutionSessionBroker
-	postArtifactMailbox application.PostArtifactMailboxAdmitter
-	capacitySources     []application.FuenteCapacidadColocacionAgente
-	egressPolicies      application.EgressPolicyResolver
+	sessions                       ports.ExecutionSessionBroker
+	postArtifactMailbox            application.PostArtifactMailboxAdmitter
+	capacitySources                []application.FuenteCapacidadColocacionAgente
+	egressPolicies                 application.EgressPolicyResolver
+	environmentPreservationBuilder application.AgentEnvironmentPreservationBuilder
 }
 
 func buildOrchestratorDependencies(
@@ -804,7 +811,7 @@ func buildOrchestratorDependencies(
 	if len(execution) == 1 {
 		composition = execution[0]
 	}
-	return application.Dependencies{
+	dependencies := application.Dependencies{
 		State: repository, WizardGapsStore: repository,
 		IntakeDossierStore: repository, Access: repository,
 		Launcher: agent, Observer: agent, Controller: controller, Artifacts: artifacts,
@@ -824,6 +831,20 @@ func buildOrchestratorDependencies(
 		EgressPolicies:  composition.egressPolicies,
 		CapacitySources: composition.capacitySources, CapacityObservationWait: setup.snapshot.RuntimeCapacityObservationTimeout(),
 	}
+	// The lifecycle port is optional for non-MicroVM providers. Composition is
+	// all-or-nothing: exposing a physical boundary without the application-owned
+	// B12.2 builder would permit an unauthorised partial Quiesce/Close path.
+	physical, hasPhysical := agent.(ports.AgentEnvironmentLifecycle)
+	reconciler, hasReconciler := agent.(ports.AgentEnvironmentLifecycleReconciler)
+	if hasPhysical && hasReconciler && composition.environmentPreservationBuilder != nil {
+		dependencies.AgentLifecycle = &application.AgentEnvironmentLifecycleComposition{
+			Store:             repository,
+			Physical:          physical,
+			Reconciler:        reconciler,
+			BuildPreservation: composition.environmentPreservationBuilder,
+		}
+	}
+	return dependencies
 }
 
 func newBuildRuntime(

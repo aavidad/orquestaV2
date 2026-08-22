@@ -50,6 +50,19 @@ func AgentHistoricalRuntimeAuthorityErrorCode(err error) string {
 	return ""
 }
 
+func ValidateAgentHistoricalRuntimeAuthorityKey(key AgentHistoricalRuntimeAuthorityKey) error {
+	if key.ExecutionRef.String() == "" {
+		return historicalRuntimeAuthorityError("execution_ref_invalid")
+	}
+	if _, err := goal.NewExecutionRef(key.ExecutionRef.String()); err != nil {
+		return historicalRuntimeAuthorityError("execution_ref_invalid")
+	}
+	if key.ActionFence == 0 {
+		return historicalRuntimeAuthorityError("action_fence_invalid")
+	}
+	return nil
+}
+
 func ValidateAgentHistoricalRuntimeAuthority(authority AgentHistoricalRuntimeAuthority) error {
 	if authority.Key.ActionFence == 0 {
 		return historicalRuntimeAuthorityError("action_fence_invalid")
@@ -59,6 +72,9 @@ func ValidateAgentHistoricalRuntimeAuthority(authority AgentHistoricalRuntimeAut
 	}
 	if authority.Key.ExecutionRef != authority.Subject.ExecutionRef {
 		return historicalRuntimeAuthorityError("execution_ref_mismatch")
+	}
+	if err := ValidateAgentHistoricalRuntimeAuthorityKey(authority.Key); err != nil {
+		return err
 	}
 	for _, digest := range []string{
 		authority.Digests.PlanSHA256,

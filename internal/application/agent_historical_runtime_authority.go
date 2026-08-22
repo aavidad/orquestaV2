@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 
 	"orquesta/internal/ports"
@@ -12,35 +13,29 @@ var (
 	ErrAgentHistoricalRuntimeAuthorityMismatch  = errors.New("application.agent_historical_runtime_authority_mismatch")
 )
 
-// ResolveAgentHistoricalRuntimeAuthority accepts a read result, not a store.
-// Persistence will supply the history in the next causal task. Exactly one
-// record must own the requested ExecutionRef+historical launch fence; even
-// duplicate identical records are corruption rather than an implicit replay.
+// AgentHistoricalRuntimeAuthorityResolver is the consumer-owned historical
+// lookup boundary. The request carries only the immutable causal key; callers
+// cannot supply digests or receipt references that could steer the projection.
+type AgentHistoricalRuntimeAuthorityResolver interface {
+	ResolveAgentHistoricalRuntimeAuthority(context.Context, ports.AgentHistoricalRuntimeAuthorityKey) (ports.AgentHistoricalRuntimeAuthority, error)
+}
+
+// ResolveAgentHistoricalRuntimeAuthority resolves one immutable launch fact
+// and verifies that the adapter did not substitute another execution or fence.
 func ResolveAgentHistoricalRuntimeAuthority(
-	history []ports.AgentHistoricalRuntimeAuthority,
-	expected ports.AgentHistoricalRuntimeAuthority,
+	ctx context.Context,
+	resolver AgentHistoricalRuntimeAuthorityResolver,
+	key ports.AgentHistoricalRuntimeAuthorityKey,
 ) (ports.AgentHistoricalRuntimeAuthority, error) {
-	if ports.ValidateAgentHistoricalRuntimeAuthority(expected) != nil {
+	if ctx == nil || resolver == nil || ports.ValidateAgentHistoricalRuntimeAuthorityKey(key) != nil {
 		return ports.AgentHistoricalRuntimeAuthority{}, ErrAgentHistoricalRuntimeAuthorityMismatch
 	}
-	matches := make([]ports.AgentHistoricalRuntimeAuthority, 0, 1)
-	for _, candidate := range history {
-		if candidate.Key != expected.Key {
-			continue
-		}
-		if ports.ValidateAgentHistoricalRuntimeAuthority(candidate) != nil {
-			return ports.AgentHistoricalRuntimeAuthority{}, ErrAgentHistoricalRuntimeAuthorityMismatch
-		}
-		matches = append(matches, candidate)
+	authority, err := resolver.ResolveAgentHistoricalRuntimeAuthority(ctx, key)
+	if err != nil {
+		return ports.AgentHistoricalRuntimeAuthority{}, err
 	}
-	if len(matches) == 0 {
-		return ports.AgentHistoricalRuntimeAuthority{}, ErrAgentHistoricalRuntimeAuthorityNotFound
-	}
-	if len(matches) != 1 {
-		return ports.AgentHistoricalRuntimeAuthority{}, ErrAgentHistoricalRuntimeAuthorityAmbiguous
-	}
-	if matches[0] != expected {
+	if authority.Key != key || ports.ValidateAgentHistoricalRuntimeAuthority(authority) != nil {
 		return ports.AgentHistoricalRuntimeAuthority{}, ErrAgentHistoricalRuntimeAuthorityMismatch
 	}
-	return matches[0], nil
+	return authority, nil
 }

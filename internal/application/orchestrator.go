@@ -46,6 +46,14 @@ type Dependencies struct {
 	ProviderCatalogSources  []ProviderCatalogSource
 	CapacitySources         []FuenteCapacidadColocacionAgente
 	CapacityObservationWait time.Duration
+	AgentLifecycle          *AgentEnvironmentLifecycleComposition
+}
+
+type AgentEnvironmentLifecycleComposition struct {
+	Store             AgentEnvironmentLifecycleStore
+	Physical          ports.AgentEnvironmentLifecycle
+	Reconciler        ports.AgentEnvironmentLifecycleReconciler
+	BuildPreservation AgentEnvironmentPreservationBuilder
 }
 
 type Orchestrator struct {
@@ -81,6 +89,7 @@ type Orchestrator struct {
 	providerCatalogSources  []normalizedProviderCatalogSource
 	capacitySources         []FuenteCapacidadColocacionAgente
 	capacityObservationWait time.Duration
+	agentLifecycle          *AgentEnvironmentLifecycleService
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
@@ -140,6 +149,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.test_attestor_required")
 	case dependencies.TestAttestor != nil && ValidateTestAttestationPolicy(dependencies.TestAttestationPolicy) != nil:
 		return nil, errors.New("application.test_attestation_policy_invalid")
+	case agentEnvironmentLifecycleDependenciesPartial(dependencies):
+		return nil, errors.New("application.agent_environment_lifecycle_composition_invalid")
 	}
 	controller := dependencies.Controller
 	if controller == nil {
@@ -178,7 +189,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 			return nil, err
 		}
 	}
-	return &Orchestrator{
+	orchestrator := &Orchestrator{
 		state:                   dependencies.State,
 		intake:                  intakeService,
 		wizardGaps:              wizardGapsService,
@@ -211,7 +222,40 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		providerCatalogSources:  providerCatalogSources,
 		capacitySources:         capacitySources,
 		capacityObservationWait: dependencies.CapacityObservationWait,
-	}, nil
+	}
+	if dependencies.AgentLifecycle != nil {
+		service, err := NewAgentEnvironmentLifecycleService(AgentEnvironmentLifecycleServiceDependencies{
+			Store:             dependencies.AgentLifecycle.Store,
+			Physical:          dependencies.AgentLifecycle.Physical,
+			Reconciler:        dependencies.AgentLifecycle.Reconciler,
+			Clock:             dependencies.Clock,
+			BuildNextAction:   orchestrator.BuildAgentEnvironmentLifecycleAction,
+			BuildPreservation: dependencies.AgentLifecycle.BuildPreservation,
+		})
+		if err != nil {
+			return nil, errors.New("application.agent_environment_lifecycle_composition_invalid")
+		}
+		orchestrator.agentLifecycle = service
+	}
+	return orchestrator, nil
+}
+
+func agentEnvironmentLifecycleDependenciesPartial(dependencies Dependencies) bool {
+	if dependencies.AgentLifecycle == nil {
+		return false
+	}
+	present := 0
+	for _, dependency := range []bool{
+		dependencies.AgentLifecycle.Store != nil,
+		dependencies.AgentLifecycle.Physical != nil,
+		dependencies.AgentLifecycle.Reconciler != nil,
+		dependencies.AgentLifecycle.BuildPreservation != nil,
+	} {
+		if dependency {
+			present++
+		}
+	}
+	return present != 4
 }
 
 func cloneAgentCapabilities(source ports.AgentCapabilities) ports.AgentCapabilities {

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -9,34 +10,37 @@ import (
 	"orquesta/internal/ports"
 )
 
-func TestResolveAgentHistoricalRuntimeAuthorityIsExactAndFailClosed(t *testing.T) {
-	expected := applicationHistoricalRuntimeAuthorityFixture(t, "a", 11)
-	peer := applicationHistoricalRuntimeAuthorityFixture(t, "b", 12)
-
-	got, err := ResolveAgentHistoricalRuntimeAuthority([]ports.AgentHistoricalRuntimeAuthority{peer, expected}, expected)
-	if err != nil || got != expected {
+func TestResolveAgentHistoricalRuntimeAuthorityUsesOnlyCausalKey(t *testing.T) {
+	authority := applicationHistoricalRuntimeAuthorityFixture(t, "a", 11)
+	resolver := &historicalRuntimeAuthorityResolverStub{authority: authority}
+	got, err := ResolveAgentHistoricalRuntimeAuthority(context.Background(), resolver, authority.Key)
+	if err != nil || got != authority {
 		t.Fatalf("resolved=%+v err=%v", got, err)
 	}
+	if resolver.key != authority.Key {
+		t.Fatalf("lookup key=%+v, want %+v", resolver.key, authority.Key)
+	}
+}
 
+func TestResolveAgentHistoricalRuntimeAuthorityFailsClosed(t *testing.T) {
+	authority := applicationHistoricalRuntimeAuthorityFixture(t, "a", 11)
+	lookupErr := errors.New("lookup failed")
 	tests := map[string]struct {
-		history []ports.AgentHistoricalRuntimeAuthority
-		want    error
+		ctx      context.Context
+		resolver AgentHistoricalRuntimeAuthorityResolver
+		key      ports.AgentHistoricalRuntimeAuthorityKey
+		want     error
 	}{
-		"absent":          {[]ports.AgentHistoricalRuntimeAuthority{peer}, ErrAgentHistoricalRuntimeAuthorityNotFound},
-		"duplicate exact": {[]ports.AgentHistoricalRuntimeAuthority{expected, expected}, ErrAgentHistoricalRuntimeAuthorityAmbiguous},
-		"crossed subject": {[]ports.AgentHistoricalRuntimeAuthority{mutateHistoricalAuthority(expected, func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Subject.ProviderRef = "provider:peer"
-		})}, ErrAgentHistoricalRuntimeAuthorityMismatch},
-		"crossed runtime": {[]ports.AgentHistoricalRuntimeAuthority{mutateHistoricalAuthority(expected, func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Digests.ProfileSHA256 = strings.Repeat("b", 64)
-		})}, ErrAgentHistoricalRuntimeAuthorityMismatch},
-		"invalid matching history": {[]ports.AgentHistoricalRuntimeAuthority{mutateHistoricalAuthority(expected, func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Digests.KernelSHA256 = ""
-		})}, ErrAgentHistoricalRuntimeAuthorityMismatch},
+		"nil context":    {nil, &historicalRuntimeAuthorityResolverStub{authority: authority}, authority.Key, ErrAgentHistoricalRuntimeAuthorityMismatch},
+		"nil resolver":   {context.Background(), nil, authority.Key, ErrAgentHistoricalRuntimeAuthorityMismatch},
+		"invalid key":    {context.Background(), &historicalRuntimeAuthorityResolverStub{authority: authority}, ports.AgentHistoricalRuntimeAuthorityKey{}, ErrAgentHistoricalRuntimeAuthorityMismatch},
+		"lookup error":   {context.Background(), &historicalRuntimeAuthorityResolverStub{err: lookupErr}, authority.Key, lookupErr},
+		"crossed key":    {context.Background(), &historicalRuntimeAuthorityResolverStub{authority: applicationHistoricalRuntimeAuthorityFixture(t, "b", 12)}, authority.Key, ErrAgentHistoricalRuntimeAuthorityMismatch},
+		"invalid result": {context.Background(), &historicalRuntimeAuthorityResolverStub{authority: mutateHistoricalAuthority(authority, func(value *ports.AgentHistoricalRuntimeAuthority) { value.Digests.KernelSHA256 = "" })}, authority.Key, ErrAgentHistoricalRuntimeAuthorityMismatch},
 	}
 	for name, testCase := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := ResolveAgentHistoricalRuntimeAuthority(testCase.history, expected)
+			got, err := ResolveAgentHistoricalRuntimeAuthority(testCase.ctx, testCase.resolver, testCase.key)
 			if !errors.Is(err, testCase.want) || got != (ports.AgentHistoricalRuntimeAuthority{}) {
 				t.Fatalf("resolved=%+v err=%v, want %v", got, err, testCase.want)
 			}
@@ -44,66 +48,18 @@ func TestResolveAgentHistoricalRuntimeAuthorityIsExactAndFailClosed(t *testing.T
 	}
 }
 
-func TestResolveAgentHistoricalRuntimeAuthorityDoesNotOrderFences(t *testing.T) {
-	expected := applicationHistoricalRuntimeAuthorityFixture(t, "a", 11)
-	laterRecovery := expected
-	laterRecovery.Key.ActionFence++
-	if _, err := ResolveAgentHistoricalRuntimeAuthority([]ports.AgentHistoricalRuntimeAuthority{laterRecovery}, expected); !errors.Is(err, ErrAgentHistoricalRuntimeAuthorityNotFound) {
-		t.Fatalf("later recovery fence crossed historical lookup: %v", err)
-	}
+type historicalRuntimeAuthorityResolverStub struct {
+	authority ports.AgentHistoricalRuntimeAuthority
+	err       error
+	key       ports.AgentHistoricalRuntimeAuthorityKey
 }
 
-func TestResolveAgentHistoricalRuntimeAuthorityRejectsEveryCrossedField(t *testing.T) {
-	expected := applicationHistoricalRuntimeAuthorityFixture(t, "a", 11)
-	peer := applicationHistoricalRuntimeAuthorityFixture(t, "b", 11)
-	mutations := map[string]func(*ports.AgentHistoricalRuntimeAuthority){
-		"subject execution": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Subject.ExecutionRef = peer.Subject.ExecutionRef
-		},
-		"goal": func(value *ports.AgentHistoricalRuntimeAuthority) { value.Subject.GoalRef = peer.Subject.GoalRef },
-		"work item": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Subject.WorkItemRef = peer.Subject.WorkItemRef
-		},
-		"plan generation": func(value *ports.AgentHistoricalRuntimeAuthority) { value.Subject.PlanGeneration++ },
-		"spec generation": func(value *ports.AgentHistoricalRuntimeAuthority) { value.Subject.AppSpecGeneration++ },
-		"attempt":         func(value *ports.AgentHistoricalRuntimeAuthority) { value.Subject.ExecutionAttempt++ },
-		"spec":            func(value *ports.AgentHistoricalRuntimeAuthority) { value.Subject.SpecHash = peer.Subject.SpecHash },
-		"provider": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Subject.ProviderRef = peer.Subject.ProviderRef
-		},
-		"model": func(value *ports.AgentHistoricalRuntimeAuthority) { value.Subject.ModelRef = peer.Subject.ModelRef },
-		"agent": func(value *ports.AgentHistoricalRuntimeAuthority) { value.Subject.AgentRef = peer.Subject.AgentRef },
-		"external": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Subject.ExternalRef = peer.Subject.ExternalRef
-		},
-		"plan digest": func(value *ports.AgentHistoricalRuntimeAuthority) { value.Digests.PlanSHA256 = peer.Digests.PlanSHA256 },
-		"grant digest": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Digests.GrantSHA256 = peer.Digests.GrantSHA256
-		},
-		"kernel digest": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Digests.KernelSHA256 = peer.Digests.KernelSHA256
-		},
-		"initramfs digest": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Digests.InitramfsSHA256 = peer.Digests.InitramfsSHA256
-		},
-		"profile digest": func(value *ports.AgentHistoricalRuntimeAuthority) {
-			value.Digests.ProfileSHA256 = peer.Digests.ProfileSHA256
-		},
-	}
-	for name, mutate := range mutations {
-		t.Run(name, func(t *testing.T) {
-			crossed := mutateHistoricalAuthority(expected, mutate)
-			if _, err := ResolveAgentHistoricalRuntimeAuthority([]ports.AgentHistoricalRuntimeAuthority{crossed}, expected); !errors.Is(err, ErrAgentHistoricalRuntimeAuthorityMismatch) {
-				t.Fatalf("crossed field accepted: %v", err)
-			}
-		})
-	}
+func (stub *historicalRuntimeAuthorityResolverStub) ResolveAgentHistoricalRuntimeAuthority(_ context.Context, key ports.AgentHistoricalRuntimeAuthorityKey) (ports.AgentHistoricalRuntimeAuthority, error) {
+	stub.key = key
+	return stub.authority, stub.err
 }
 
-func mutateHistoricalAuthority(
-	value ports.AgentHistoricalRuntimeAuthority,
-	mutate func(*ports.AgentHistoricalRuntimeAuthority),
-) ports.AgentHistoricalRuntimeAuthority {
+func mutateHistoricalAuthority(value ports.AgentHistoricalRuntimeAuthority, mutate func(*ports.AgentHistoricalRuntimeAuthority)) ports.AgentHistoricalRuntimeAuthority {
 	mutate(&value)
 	return value
 }

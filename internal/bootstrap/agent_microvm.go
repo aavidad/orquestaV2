@@ -20,12 +20,34 @@ const (
 )
 
 var (
-	errAgentMicroVMAdapterRequerido        = errors.New("bootstrap.agent_microvm_adapter_required")
-	errAgentMicroVMCierreConexiones        = errors.New("bootstrap.agent_microvm_connection_cleanup_required")
-	errAgentMicroVMCierreCredenciales      = errors.New("bootstrap.agent_microvm_credential_cleanup_required")
-	errAgentMicroVMCerrado                 = errors.New("bootstrap.agent_microvm_closed")
-	errAgentMicroVMCapacidadFisicaInvalida = errors.New("bootstrap.agent_microvm_physical_capacity_invalid")
+	errAgentMicroVMAdapterRequerido            = errors.New("bootstrap.agent_microvm_adapter_required")
+	errAgentMicroVMCierreConexiones            = errors.New("bootstrap.agent_microvm_connection_cleanup_required")
+	errAgentMicroVMCierreCredenciales          = errors.New("bootstrap.agent_microvm_credential_cleanup_required")
+	errAgentMicroVMCerrado                     = errors.New("bootstrap.agent_microvm_closed")
+	errAgentMicroVMCapacidadFisicaInvalida     = errors.New("bootstrap.agent_microvm_physical_capacity_invalid")
+	errAgentMicroVMPreservacionRequerida       = errors.New("bootstrap.agent_microvm_preservation_required")
+	errAgentMicroVMAutoridadHistoricaRequerida = errors.New("bootstrap.agent_microvm_historical_authority_required")
+	errAgentMicroVMRecuperacionRequerida       = errors.New("bootstrap.agent_microvm_preservation_recovery_required")
 )
+
+// Estas fronteras son deliberadamente mas estrechas que el lifecycle completo.
+// B12.2 no hace que el wrapper finja Inspect, Quiesce o Close: esas capacidades
+// siguen pendientes de su contrato propio.
+type preservadorAgentMicroVM interface {
+	Preserve(context.Context, ports.AgentPreserveRequest) (ports.AgentPreserveReceipt, error)
+}
+
+type preservadorHistoricoAgentMicroVM interface {
+	PreserveWithAuthority(
+		context.Context,
+		ports.AgentHistoricalRuntimeAuthority,
+		ports.AgentPreserveRequest,
+	) (ports.AgentPreserveReceipt, error)
+}
+
+type recuperadorPreservacionAgentMicroVM interface {
+	ReconcilePreserve(context.Context, ports.AgentPreserveRequest) (ports.AgentPreserveReceipt, error)
+}
 
 // agenteMicroVMDelegado es la frontera cohesionada que permite probar la
 // composicion sin importar un cliente UDS fisico. El adaptador publico sigue
@@ -60,6 +82,9 @@ func newAgentMicroVM(
 ) (*agenteMicroVM, error) {
 	if adaptador == nil {
 		return nil, errAgentMicroVMAdapterRequerido
+	}
+	if _, ok := any(adaptador).(preservadorHistoricoAgentMicroVM); !ok {
+		return nil, errAgentMicroVMAutoridadHistoricaRequerida
 	}
 	return newAgentMicroVMConDelegado(adaptador, cerrarConexiones, cerrarCredenciales)
 }
@@ -171,6 +196,67 @@ func (agente *agenteMicroVM) Stop(
 	return agente.adaptador.Stop(ctx, solicitud)
 }
 
+func (agente *agenteMicroVM) Preserve(
+	ctx context.Context,
+	solicitud ports.AgentPreserveRequest,
+) (ports.AgentPreserveReceipt, error) {
+	if agente == nil {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMCerrado
+	}
+	preservador, ok := agente.adaptador.(preservadorAgentMicroVM)
+	if !ok {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMPreservacionRequerida
+	}
+	return preservador.Preserve(ctx, solicitud)
+}
+
+// PreserveWithAuthority es el unico camino productivo de B12.2. La autoridad
+// 040 viaja completa hasta el adaptador; el wrapper no reconstruye digests ni
+// refs desde configuracion o desde el request fisico.
+func (agente *agenteMicroVM) PreserveWithAuthority(
+	ctx context.Context,
+	autoridad ports.AgentHistoricalRuntimeAuthority,
+	solicitud ports.AgentPreserveRequest,
+) (ports.AgentPreserveReceipt, error) {
+	if agente == nil {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMCerrado
+	}
+	preservador, ok := agente.adaptador.(preservadorHistoricoAgentMicroVM)
+	if !ok {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMAutoridadHistoricaRequerida
+	}
+	return preservador.PreserveWithAuthority(ctx, autoridad, solicitud)
+}
+
+func (agente *agenteMicroVM) ReconcilePreserve(
+	ctx context.Context,
+	solicitud ports.AgentPreserveRequest,
+) (ports.AgentPreserveReceipt, error) {
+	if agente == nil {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMCerrado
+	}
+	recuperador, ok := agente.adaptador.(recuperadorPreservacionAgentMicroVM)
+	if !ok {
+		return ports.AgentPreserveReceipt{}, errAgentMicroVMRecuperacionRequerida
+	}
+	return recuperador.ReconcilePreserve(ctx, solicitud)
+}
+
 func (agente *agenteMicroVM) DescribirCapacidadColocaciones() ([]application.DescriptorCapacidadColocacionAgente, error) {
 	if agente == nil {
 		return nil, errAgentMicroVMAdapterRequerido
@@ -243,4 +329,5 @@ var _ agenteMicroVMDelegado = (*agentmicrovm.Adapter)(nil)
 var _ AgentAdapter = (*agenteMicroVM)(nil)
 var _ application.AgentLaunchReconciler = (*agenteMicroVM)(nil)
 var _ application.AgentController = (*agenteMicroVM)(nil)
+var _ application.AgentHistoricalRuntimePreserver = (*agenteMicroVM)(nil)
 var _ catalogoCapacidadColocacionAgente = (*agenteMicroVM)(nil)

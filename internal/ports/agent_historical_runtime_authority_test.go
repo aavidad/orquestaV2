@@ -39,6 +39,23 @@ func TestAgentHistoricalRuntimeAuthorityRequiresExactNeutralBinding(t *testing.T
 	}
 }
 
+func TestAgentHistoricalRuntimeAuthorityKeyRejectsIncompleteCausality(t *testing.T) {
+	valid := historicalRuntimeAuthorityFixture(t).Key
+	if err := ValidateAgentHistoricalRuntimeAuthorityKey(valid); err != nil {
+		t.Fatal(err)
+	}
+	for name, key := range map[string]AgentHistoricalRuntimeAuthorityKey{
+		"execution": {ActionFence: valid.ActionFence},
+		"fence":     {ExecutionRef: valid.ExecutionRef},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateAgentHistoricalRuntimeAuthorityKey(key); err == nil {
+				t.Fatal("invalid causal key accepted")
+			}
+		})
+	}
+}
+
 func TestAgentHistoricalRuntimeAuthorityContainsNoMaterialOrTransport(t *testing.T) {
 	for _, typ := range []reflect.Type{
 		reflect.TypeOf(AgentHistoricalRuntimeAuthority{}),

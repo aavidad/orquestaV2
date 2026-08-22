@@ -33,6 +33,23 @@ type agenteMicroVMDelegadoPrueba struct {
 	reconcileReceipt    ports.AgentLaunchReceipt
 }
 
+type agenteMicroVMPreservadorPrueba struct {
+	*agenteMicroVMDelegadoPrueba
+	autoridad ports.AgentHistoricalRuntimeAuthority
+	solicitud ports.AgentPreserveRequest
+	recibo    ports.AgentPreserveReceipt
+}
+
+func (adaptador *agenteMicroVMPreservadorPrueba) PreserveWithAuthority(
+	_ context.Context,
+	autoridad ports.AgentHistoricalRuntimeAuthority,
+	solicitud ports.AgentPreserveRequest,
+) (ports.AgentPreserveReceipt, error) {
+	adaptador.autoridad = autoridad
+	adaptador.solicitud = solicitud
+	return adaptador.recibo, nil
+}
+
 func (adaptador *agenteMicroVMDelegadoPrueba) Capabilities(ctx context.Context) (ports.AgentCapabilities, error) {
 	adaptador.mu.Lock()
 	adaptador.capabilitiesCalls++
@@ -323,6 +340,36 @@ func TestAgentMicroVMShutdownDrenaEnVueloYCierraTodasLasEntradas(t *testing.T) {
 	if delegado.capabilitiesCalls != 1 || delegado.launchCalls != 1 || delegado.observeCalls != 1 || delegado.catalogoCalls != 0 {
 		t.Fatalf("llamadas cruzaron tras shutdown: capabilities=%d launch=%d observe=%d catalogo=%d",
 			delegado.capabilitiesCalls, delegado.launchCalls, delegado.observeCalls, delegado.catalogoCalls)
+	}
+}
+
+func TestAgentMicroVMPreserveConservaAutoridadHistoricaYFallaCerrado(t *testing.T) {
+	autoridad := ports.AgentHistoricalRuntimeAuthority{
+		Key:     ports.AgentHistoricalRuntimeAuthorityKey{ActionFence: 41},
+		Digests: ports.AgentHistoricalRuntimeDigests{PlanSHA256: strings.Repeat("a", 64)},
+	}
+	solicitud := ports.AgentPreserveRequest{IdempotencyKey: "idempotency:preserve:historical"}
+	recibo := ports.AgentPreserveReceipt{IdempotencyKey: solicitud.IdempotencyKey, ReceiptRef: "receipt:preserve"}
+	delegado := &agenteMicroVMPreservadorPrueba{
+		agenteMicroVMDelegadoPrueba: &agenteMicroVMDelegadoPrueba{},
+		recibo:                      recibo,
+	}
+	agente := nuevoAgentMicroVMPrueba(t, delegado, func() error { return nil }, func() error { return nil })
+
+	obtenido, err := agente.PreserveWithAuthority(context.Background(), autoridad, solicitud)
+	if err != nil || !reflect.DeepEqual(obtenido, recibo) || delegado.autoridad != autoridad || delegado.solicitud != solicitud {
+		t.Fatalf("PreserveWithAuthority() recibo=%+v error=%v autoridad=%+v solicitud=%+v", obtenido, err, delegado.autoridad, delegado.solicitud)
+	}
+
+	sinAutoridad := nuevoAgentMicroVMPrueba(t, &agenteMicroVMDelegadoPrueba{}, func() error { return nil }, func() error { return nil })
+	if obtenido, err := sinAutoridad.PreserveWithAuthority(context.Background(), autoridad, solicitud); !errors.Is(err, errAgentMicroVMAutoridadHistoricaRequerida) || !reflect.DeepEqual(obtenido, ports.AgentPreserveReceipt{}) {
+		t.Fatalf("delegado sin autoridad recibo=%+v error=%v", obtenido, err)
+	}
+	if err := agente.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if obtenido, err := agente.PreserveWithAuthority(context.Background(), autoridad, solicitud); !errors.Is(err, errAgentMicroVMCerrado) || !reflect.DeepEqual(obtenido, ports.AgentPreserveReceipt{}) {
+		t.Fatalf("preserve posterior a shutdown recibo=%+v error=%v", obtenido, err)
 	}
 }
 

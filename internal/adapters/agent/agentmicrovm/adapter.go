@@ -781,6 +781,8 @@ func (err *Error) DefinitelyNotApplied() bool {
 		CodeLaunchAuthorityResolveFailed, CodeLaunchAuthorityBuildFailed,
 		CodeLaunchCanceledBeforeSubmit,
 		CodeLaunchRequestInvalid, CodeSessionRequired, CodeAccessAuthorityRequired,
+		CodeHistoricalAuthorityInvalid, CodeHistoricalSubjectMismatch,
+		CodePreserveRecoveryUnsupported,
 		CodeEffectAuthorityInvalid, CodeFenceInvalid, CodeFenceMismatch,
 		CodeProfileBindingInvalid, CodeDescriptorInvalid, CodeControlBrokerRequired,
 		CodeGrantWindowInvalid, CodeLimitsInvalid, CodeLimitOverflow,
