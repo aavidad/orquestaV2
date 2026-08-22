@@ -44,6 +44,9 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	if len(arguments) > 0 && arguments[0] == "command" {
 		return runCommand(arguments[1:], catalog, stdout, stderr)
 	}
+	if len(arguments) > 1 && arguments[0] == "candidate" && arguments[1] == "gate-a" {
+		return runGateA(arguments[2:], stdout, stderr)
+	}
 	if len(arguments) > 1 && arguments[0] == "credentials" && arguments[1] == "provision-codex-microvm" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
