@@ -18,6 +18,8 @@ import (
 	"orquesta/internal/identity"
 )
 
+var v09RestoreOnlyBackupState cachedV09RestoreBackup
+
 func TestV09RecoveryRoundTripPreservesCausalTablesAndClaims(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	running, at := createRunningV06Fixture(t, repository, "v09-roundtrip")
@@ -123,6 +125,9 @@ func TestV09RecoveryFailpointsLeaveNoPartialPublication(t *testing.T) {
 	} {
 		t.Run(stage, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
+			if err := seedFastTestDatabase(path); err != nil {
+				t.Fatalf("seed canonical recovery database: %v", err)
+			}
 			repository := openFullTestRepository(t, Options{
 				Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
 			})
@@ -181,10 +186,16 @@ func TestV09RestoreNeverOverwritesTargetCreatedAtPublicationBoundary(t *testing.
 	repository := openFullTestRepository(t, Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
 	})
-	stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
-	receipt, err := stable.CreateBackup(context.Background())
-	sqliteTestNoError(t, err)
-	_ = stable.Close()
+	base := t.TempDir()
+	backupRoot, restoreRoot := filepath.Join(base, "backups"), filepath.Join(base, "restores")
+	receipt := seedCachedV09RestoreBackup(t, backupRoot, &v09RestoreOnlyBackupState,
+		func(t *testing.T) (application.BackupReceipt, string) {
+			stable, sourceRoot, _ := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
+			receipt, err := stable.CreateBackup(context.Background())
+			sqliteTestNoError(t, err)
+			sqliteTestNoError(t, stable.Close())
+			return receipt, sourceRoot
+		})
 	target, _ := application.NewRecoveryTargetRef("recovery-target:v09-race")
 	targetName := recoveryTargetName(target)
 	targetPath := filepath.Join(restoreRoot, targetName)
@@ -848,12 +859,16 @@ func TestV09RecoveryRejectsRootReplacementBetweenVerificationAndIO(t *testing.T)
 
 func TestV09RestoreRetainsInspectedPayloadHandleAcrossRootSwap(t *testing.T) {
 	repository, _ := openTestRepository(t)
-	stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
-	receipt, err := stable.CreateBackup(context.Background())
-	sqliteTestNoError(t, err)
-	if err := stable.Close(); err != nil {
-		t.Fatal(err)
-	}
+	base := t.TempDir()
+	backupRoot, restoreRoot := filepath.Join(base, "backups"), filepath.Join(base, "restores")
+	receipt := seedCachedV09RestoreBackup(t, backupRoot, &v09RestoreOnlyBackupState,
+		func(t *testing.T) (application.BackupReceipt, string) {
+			stable, sourceRoot, _ := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
+			receipt, err := stable.CreateBackup(context.Background())
+			sqliteTestNoError(t, err)
+			sqliteTestNoError(t, stable.Close())
+			return receipt, sourceRoot
+		})
 	before, err := snapshotV09RecoveryTree(backupRoot)
 	sqliteTestNoError(t, err)
 	lockedRoot := backupRoot + ".locked"

@@ -1526,6 +1526,9 @@ func openTestRepository(t *testing.T) (*Repository, string) {
 
 func openFastTestRepository(t *testing.T, options Options) *Repository {
 	t.Helper()
+	if err := seedFastTestDatabase(options.Path); err != nil {
+		t.Fatalf("seed fast repository: %v", err)
+	}
 	repository, err := openWithDurability(context.Background(), options, fastSQLiteTestDurability)
 	if err != nil {
 		t.Fatalf("open repository: %v", err)

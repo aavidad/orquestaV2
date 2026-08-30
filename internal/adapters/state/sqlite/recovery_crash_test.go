@@ -17,6 +17,8 @@ import (
 
 const v09RecoveryCrashExitCode = 86
 
+var v09RecoveryCrashSeedState cachedTestDatabaseSeed
+
 var v09RecoveryCrashStages = []string{
 	"after_first_backup_step",
 	"after_backup_sync",
@@ -176,6 +178,24 @@ func TestV09RecoveryCrashProcessHelper(t *testing.T) {
 
 func openV09CrashRepository(t *testing.T, path string, at time.Time) *Repository {
 	t.Helper()
+	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
+		seedCachedTestDatabase(t, path, "v09-recovery-crash", &v09RecoveryCrashSeedState,
+			func(t *testing.T, templatePath string) {
+				t.Helper()
+				template, openErr := Open(context.Background(), Options{
+					Path: templatePath, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4,
+					Now: func() time.Time { return at },
+				})
+				if openErr != nil {
+					t.Fatalf("open FULL crash seed through migrations: %v", openErr)
+				}
+				if closeErr := template.Close(); closeErr != nil {
+					t.Fatalf("close FULL crash seed: %v", closeErr)
+				}
+			})
+	} else if err != nil {
+		t.Fatalf("inspect crash repository before open: %v", err)
+	}
 	repository, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4,
 		Now: func() time.Time { return at },
