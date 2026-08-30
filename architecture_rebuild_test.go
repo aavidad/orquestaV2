@@ -134,6 +134,22 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
+	t.Run("tooling_is_shared_inward_contract", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/tooling") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureOnlyInternalPackages(
+					imported.path,
+					"orquesta/internal/tooling",
+					"orquesta/internal/goal",
+					"orquesta/internal/governance",
+					"orquesta/internal/identity",
+				); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/tooling "+reason)
+				}
+			}
+		}
+	})
+
 	t.Run("application_has_no_delivery_or_concrete_runtime_dependencies", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/application") {
 			for _, imported := range file.imports {
@@ -144,6 +160,12 @@ func TestRebuildArchitecture(t *testing.T) {
 					rebuildArchitectureImportError(t, file, imported, reason)
 				}
 			}
+		}
+		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/tooling"); reason != "" {
+			t.Errorf("application rejected exact tooling contract: %s", reason)
+		}
+		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/tooling/provider"); reason == "" {
+			t.Error("application accepted a tooling subpackage as another runtime boundary")
 		}
 	})
 
@@ -852,11 +874,12 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 		importPath != "orquesta/internal/governance" &&
 		importPath != "orquesta/internal/identity" &&
 		importPath != "orquesta/internal/intake" &&
+		importPath != "orquesta/internal/tooling" &&
 		importPath != "orquesta/internal/wizard/catalog" &&
 		importPath != "orquesta/internal/wizard/gaps" &&
 		importPath != "orquesta/internal/wizard/stages" &&
 		importPath != "orquesta/internal/ports" {
-		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity, internal/intake, internal/wizard/catalog, internal/wizard/gaps, internal/wizard/stages and internal/ports"
+		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity, internal/intake, internal/tooling, internal/wizard/catalog, internal/wizard/gaps, internal/wizard/stages and internal/ports"
 	}
 	switch {
 	case importPath == "net/http" || strings.HasPrefix(importPath, "net/http/"):
