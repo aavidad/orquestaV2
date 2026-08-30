@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"orquesta/internal/ports"
+	"orquesta/internal/tooling"
 )
 
 const (
@@ -22,6 +23,9 @@ type Dependencies struct {
 	Observer                AgentObserver
 	Controller              AgentController
 	Artifacts               ArtifactStore
+	ToolRegistry            *tooling.Registry
+	CuratedToolCatalog      *tooling.CuratedCatalog
+	ToolExecutor            ToolExecutor
 	WorkspaceManager        WorkspaceManager
 	VersionControl          VersionControl
 	TestAttestor            TestAttestor
@@ -68,6 +72,9 @@ type Orchestrator struct {
 	observer                AgentObserver
 	controller              AgentController
 	artifacts               ArtifactStore
+	toolRegistry            *tooling.Registry
+	curatedToolCatalog      *tooling.CuratedCatalog
+	toolExecutor            ToolExecutor
 	workspaceManager        WorkspaceManager
 	versionControl          VersionControl
 	testAttestor            TestAttestor
@@ -201,6 +208,9 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		observer:                dependencies.Observer,
 		controller:              controller,
 		artifacts:               dependencies.Artifacts,
+		toolRegistry:            dependencies.ToolRegistry,
+		curatedToolCatalog:      dependencies.CuratedToolCatalog,
+		toolExecutor:            dependencies.ToolExecutor,
 		workspaceManager:        dependencies.WorkspaceManager,
 		versionControl:          dependencies.VersionControl,
 		testAttestor:            dependencies.TestAttestor,
