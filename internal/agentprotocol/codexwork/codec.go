@@ -254,6 +254,131 @@ func validateMCPServerStartupStatus(raw json.RawMessage) (*string, error) {
 	return params.ThreadID, nil
 }
 
+type rateLimitSnapshot struct {
+	Credits              *creditsSnapshot           `json:"credits"`
+	IndividualLimit      *spendControlLimitSnapshot `json:"individualLimit"`
+	LimitID              *string                    `json:"limitId"`
+	LimitName            *string                    `json:"limitName"`
+	PlanType             *string                    `json:"planType"`
+	Primary              *rateLimitWindow           `json:"primary"`
+	RateLimitReachedType *string                    `json:"rateLimitReachedType"`
+	Secondary            *rateLimitWindow           `json:"secondary"`
+	SpendControlReached  *bool                      `json:"spendControlReached"`
+}
+
+type creditsSnapshot struct {
+	Balance    *string `json:"balance"`
+	HasCredits *bool   `json:"hasCredits"`
+	Unlimited  *bool   `json:"unlimited"`
+}
+
+type spendControlLimitSnapshot struct {
+	Limit            *string `json:"limit"`
+	RemainingPercent *int32  `json:"remainingPercent"`
+	ResetsAt         *int64  `json:"resetsAt"`
+	Used             *string `json:"used"`
+}
+
+type rateLimitWindow struct {
+	ResetsAt           *int64 `json:"resetsAt"`
+	UsedPercent        *int32 `json:"usedPercent"`
+	WindowDurationMins *int64 `json:"windowDurationMins"`
+}
+
+func validateAccountRateLimitsUpdated(raw json.RawMessage) error {
+	var params struct {
+		RateLimits *rateLimitSnapshot `json:"rateLimits"`
+	}
+	if err := decodeStrictObject(raw, &params); err != nil || params.RateLimits == nil {
+		return protocolError(CodeFrameMalformed)
+	}
+	snapshot := params.RateLimits
+	if snapshot.Credits != nil &&
+		(snapshot.Credits.HasCredits == nil || snapshot.Credits.Unlimited == nil) {
+		return protocolError(CodeFrameMalformed)
+	}
+	if snapshot.IndividualLimit != nil &&
+		(snapshot.IndividualLimit.Limit == nil || snapshot.IndividualLimit.RemainingPercent == nil ||
+			snapshot.IndividualLimit.ResetsAt == nil || snapshot.IndividualLimit.Used == nil) {
+		return protocolError(CodeFrameMalformed)
+	}
+	for _, window := range []*rateLimitWindow{snapshot.Primary, snapshot.Secondary} {
+		if window != nil && window.UsedPercent == nil {
+			return protocolError(CodeFrameMalformed)
+		}
+	}
+	if snapshot.PlanType != nil && !validPlanType(*snapshot.PlanType) {
+		return protocolError(CodeFrameMalformed)
+	}
+	if snapshot.RateLimitReachedType != nil && !validRateLimitReachedType(*snapshot.RateLimitReachedType) {
+		return protocolError(CodeFrameMalformed)
+	}
+	return nil
+}
+
+func validateThreadSettingsUpdated(raw json.RawMessage, threadID, model, effort string) error {
+	var params struct {
+		ThreadID       *string         `json:"threadId"`
+		ThreadSettings json.RawMessage `json:"threadSettings"`
+	}
+	if err := decodeStrictObject(raw, &params); err != nil || params.ThreadID == nil ||
+		*params.ThreadID != threadID || len(params.ThreadSettings) == 0 ||
+		!uniqueJSONObject(params.ThreadSettings) {
+		return protocolError(CodeFrameMalformed)
+	}
+	var settings struct {
+		ApprovalPolicy json.RawMessage `json:"approvalPolicy"`
+		CWD            *string         `json:"cwd"`
+		Effort         *string         `json:"effort"`
+		Model          *string         `json:"model"`
+		SandboxPolicy  *struct {
+			Type *string `json:"type"`
+		} `json:"sandboxPolicy"`
+	}
+	var approvalPolicy string
+	if json.Unmarshal(params.ThreadSettings, &settings) != nil || settings.CWD == nil ||
+		settings.Effort == nil || settings.Model == nil || settings.SandboxPolicy == nil ||
+		settings.SandboxPolicy.Type == nil ||
+		json.Unmarshal(settings.ApprovalPolicy, &approvalPolicy) != nil || approvalPolicy != "never" ||
+		*settings.CWD != sealedWorkspaceCWD || *settings.Effort != effort || *settings.Model != model ||
+		*settings.SandboxPolicy.Type != sealedSandboxPolicyType {
+		return protocolError(CodeFrameMalformed)
+	}
+	return nil
+}
+
+func validateEnvironmentConnection(raw json.RawMessage, threadID string) error {
+	var params struct {
+		EnvironmentID *string `json:"environmentId"`
+		ThreadID      *string `json:"threadId"`
+	}
+	if err := decodeStrictObject(raw, &params); err != nil || params.EnvironmentID == nil ||
+		params.ThreadID == nil || *params.EnvironmentID != sealedEnvironmentID || *params.ThreadID != threadID {
+		return protocolError(CodeFrameMalformed)
+	}
+	return nil
+}
+
+func validPlanType(value string) bool {
+	switch value {
+	case "free", "go", "plus", "pro", "prolite", "team", "self_serve_business_usage_based",
+		"business", "ent26", "enterprise_cbp_usage_based", "enterprise", "edu", "unknown":
+		return true
+	default:
+		return false
+	}
+}
+
+func validRateLimitReachedType(value string) bool {
+	switch value {
+	case "rate_limit_reached", "workspace_owner_credits_depleted", "workspace_member_credits_depleted",
+		"workspace_owner_usage_limit_reached", "workspace_member_usage_limit_reached":
+		return true
+	default:
+		return false
+	}
+}
+
 func decodeStrictObject(raw json.RawMessage, target any) error {
 	if !uniqueJSONObject(raw) {
 		return protocolError(CodeFrameMalformed)
@@ -310,8 +435,12 @@ type initializeRequest struct {
 }
 
 type initializeParams struct {
-	ClientInfo   initializeClientInfo `json:"clientInfo"`
-	Capabilities any                  `json:"capabilities"`
+	ClientInfo   initializeClientInfo   `json:"clientInfo"`
+	Capabilities initializeCapabilities `json:"capabilities"`
+}
+
+type initializeCapabilities struct {
+	ExperimentalAPI bool `json:"experimentalApi"`
 }
 
 type initializeClientInfo struct {
@@ -321,12 +450,20 @@ type initializeClientInfo struct {
 }
 
 type turnStartParams struct {
-	ThreadID            string               `json:"threadId"`
-	Input               []textInput          `json:"input"`
-	ClientUserMessageID string               `json:"clientUserMessageId"`
-	Model               string               `json:"model"`
-	Effort              string               `json:"effort"`
-	OutputSchema        artifactOutputSchema `json:"outputSchema"`
+	ThreadID              string                  `json:"threadId"`
+	Input                 []textInput             `json:"input"`
+	ClientUserMessageID   string                  `json:"clientUserMessageId"`
+	Model                 string                  `json:"model"`
+	Effort                string                  `json:"effort"`
+	Environments          []turnEnvironmentParams `json:"environments"`
+	RuntimeWorkspaceRoots []string                `json:"runtimeWorkspaceRoots"`
+	OutputSchema          artifactOutputSchema    `json:"outputSchema"`
+}
+
+type turnEnvironmentParams struct {
+	EnvironmentID         string   `json:"environmentId"`
+	CWD                   string   `json:"cwd"`
+	RuntimeWorkspaceRoots []string `json:"runtimeWorkspaceRoots"`
 }
 
 type textInput struct {

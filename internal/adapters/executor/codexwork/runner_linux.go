@@ -154,6 +154,9 @@ func (runner Runner) Run(ctx context.Context, input io.Reader, output io.Writer)
 	}
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
 	command.WaitDelay = postKillWait
+	if command.Dir == "" {
+		command.Dir = sealedHome
+	}
 	// El app-server no hereda proxy, token, HOME ni ninguna otra variable del
 	// ejecutor. Solo se proyecta el endpoint local constante cuando el paquete
 	// causal acredita que el plan firmado contiene la concesion de egreso.

@@ -9,13 +9,17 @@ import (
 type State string
 
 const (
-	StateReady           State = "ready"
-	StateAwaitInitialize State = "await_initialize"
-	StateAwaitThread     State = "await_thread"
-	StateAwaitTurn       State = "await_turn"
-	StateRunning         State = "running"
-	StateCompleted       State = "completed"
-	StateFailed          State = "failed"
+	StateReady              State = "ready"
+	StateAwaitInitialize    State = "await_initialize"
+	StateAwaitThread        State = "await_thread"
+	StateAwaitTurn          State = "await_turn"
+	StateRunning            State = "running"
+	StateCompleted          State = "completed"
+	StateFailed             State = "failed"
+	sealedWorkspaceCWD            = "/trabajo"
+	sealedSandboxMode             = "danger-full-access"
+	sealedSandboxPolicyType       = "dangerFullAccess"
+	sealedEnvironmentID           = "local"
 )
 
 type WorkResultV1 struct {
@@ -94,6 +98,7 @@ func (machine *Machine) Start() ([]byte, error) {
 			ClientInfo: initializeClientInfo{
 				Name: "orquesta-codex-work", Version: "1", Title: "sealed-worker",
 			},
+			Capabilities: initializeCapabilities{ExperimentalAPI: true},
 		},
 	})
 	if err != nil {
@@ -112,7 +117,8 @@ func (machine *Machine) AcceptJSONL(frame []byte) (Transition, error) {
 	if err != nil {
 		return Transition{}, err
 	}
-	if _, duplicate := machine.seenFrames[digest]; duplicate {
+	trackFrame := message.method != "error"
+	if _, duplicate := machine.seenFrames[digest]; trackFrame && duplicate {
 		return Transition{}, protocolError(CodeDuplicateFrame)
 	}
 	var transition Transition
@@ -124,8 +130,8 @@ func (machine *Machine) AcceptJSONL(frame []byte) (Transition, error) {
 	} else {
 		transition, err = machine.acceptResponse(message)
 	}
-	if err == nil || ErrorCode(err) == CodeRemote || ErrorCode(err) == CodeTurnFailed ||
-		ErrorCode(err) == CodeTurnInterrupted {
+	if trackFrame && (err == nil || ErrorCode(err) == CodeRemote || ErrorCode(err) == CodeTurnFailed ||
+		ErrorCode(err) == CodeTurnInterrupted) {
 		machine.seenFrames[digest] = struct{}{}
 	}
 	if err != nil {
@@ -185,15 +191,25 @@ func (machine *Machine) acceptInitialize(raw json.RawMessage) (Transition, error
 		ID     string `json:"id"`
 		Method string `json:"method"`
 		Params struct {
-			Ephemeral      bool   `json:"ephemeral"`
-			Model          string `json:"model"`
-			ApprovalPolicy string `json:"approvalPolicy"`
+			Ephemeral             bool                    `json:"ephemeral"`
+			Model                 string                  `json:"model"`
+			ApprovalPolicy        string                  `json:"approvalPolicy"`
+			CWD                   string                  `json:"cwd"`
+			Sandbox               string                  `json:"sandbox"`
+			Environments          []turnEnvironmentParams `json:"environments"`
+			RuntimeWorkspaceRoots []string                `json:"runtimeWorkspaceRoots"`
 		} `json:"params"`
 	}{ID: id, Method: "thread/start", Params: struct {
-		Ephemeral      bool   `json:"ephemeral"`
-		Model          string `json:"model"`
-		ApprovalPolicy string `json:"approvalPolicy"`
-	}{Ephemeral: true, Model: machine.packet.Model, ApprovalPolicy: "never"}})
+		Ephemeral             bool                    `json:"ephemeral"`
+		Model                 string                  `json:"model"`
+		ApprovalPolicy        string                  `json:"approvalPolicy"`
+		CWD                   string                  `json:"cwd"`
+		Sandbox               string                  `json:"sandbox"`
+		Environments          []turnEnvironmentParams `json:"environments"`
+		RuntimeWorkspaceRoots []string                `json:"runtimeWorkspaceRoots"`
+	}{Ephemeral: true, Model: machine.packet.Model, ApprovalPolicy: "never", CWD: sealedWorkspaceCWD,
+		Sandbox: sealedSandboxMode, Environments: []turnEnvironmentParams{{EnvironmentID: sealedEnvironmentID, CWD: sealedWorkspaceCWD, RuntimeWorkspaceRoots: []string{sealedWorkspaceCWD}}},
+		RuntimeWorkspaceRoots: []string{sealedWorkspaceCWD}}})
 	if err != nil {
 		return Transition{}, err
 	}
@@ -210,8 +226,20 @@ func (machine *Machine) acceptThread(raw json.RawMessage) (Transition, error) {
 		Thread struct {
 			ID string `json:"id"`
 		} `json:"thread"`
+		ApprovalPolicy        json.RawMessage `json:"approvalPolicy"`
+		CWD                   string          `json:"cwd"`
+		Model                 string          `json:"model"`
+		RuntimeWorkspaceRoots []string        `json:"runtimeWorkspaceRoots"`
+		Sandbox               struct {
+			Type string `json:"type"`
+		} `json:"sandbox"`
 	}
-	if json.Unmarshal(raw, &response) != nil || !validOpaqueRef(response.Thread.ID) {
+	var approvalPolicy string
+	if json.Unmarshal(raw, &response) != nil || !validOpaqueRef(response.Thread.ID) ||
+		json.Unmarshal(response.ApprovalPolicy, &approvalPolicy) != nil || approvalPolicy != "never" ||
+		response.CWD != sealedWorkspaceCWD || response.Model != machine.packet.Model ||
+		len(response.RuntimeWorkspaceRoots) != 1 || response.RuntimeWorkspaceRoots[0] != sealedWorkspaceCWD ||
+		response.Sandbox.Type != sealedSandboxPolicyType {
 		machine.state = StateFailed
 		return Transition{}, protocolError(CodeFrameMalformed)
 	}
@@ -225,11 +253,13 @@ func (machine *Machine) acceptThread(raw json.RawMessage) (Transition, error) {
 	turn, err := marshalLine(turnStartRequest{
 		ID: id, Method: "turn/start",
 		Params: turnStartParams{
-			ThreadID:            response.Thread.ID,
-			Input:               []textInput{{Type: "text", Text: machine.packet.Prompt}},
-			ClientUserMessageID: clientMessageID,
-			Model:               machine.packet.Model,
-			Effort:              machine.packet.Effort,
+			ThreadID:              response.Thread.ID,
+			Input:                 []textInput{{Type: "text", Text: machine.packet.Prompt}},
+			ClientUserMessageID:   clientMessageID,
+			Model:                 machine.packet.Model,
+			Effort:                machine.packet.Effort,
+			Environments:          []turnEnvironmentParams{{EnvironmentID: sealedEnvironmentID, CWD: sealedWorkspaceCWD, RuntimeWorkspaceRoots: []string{sealedWorkspaceCWD}}},
+			RuntimeWorkspaceRoots: []string{sealedWorkspaceCWD},
 			OutputSchema: artifactOutputSchema{
 				Type: "object", AdditionalProperties: false,
 				Properties: map[string]artifactSchemaProperty{"artifact": {Type: "string"}},
@@ -301,7 +331,7 @@ func (machine *Machine) acceptNotification(method string, raw json.RawMessage) (
 		}
 		return transition, nil
 	case "turn/started":
-		if machine.state != StateAwaitTurn && machine.state != StateRunning {
+		if machine.state != StateAwaitThread && machine.state != StateAwaitTurn && machine.state != StateRunning {
 			return Transition{}, protocolError(CodeSequence)
 		}
 		threadID, turnID, err := notificationTurnObjectIDs(raw)
@@ -362,6 +392,44 @@ func (machine *Machine) acceptNotification(method string, raw json.RawMessage) (
 			}
 		}
 		return Transition{}, nil
+	case "account/rateLimits/updated":
+		if !machine.acceptsGlobalNotification() {
+			return Transition{}, protocolError(CodeSequence)
+		}
+		if err := validateAccountRateLimitsUpdated(raw); err != nil {
+			return Transition{}, err
+		}
+		return Transition{}, nil
+	case "thread/environment/connected", "thread/environment/disconnected":
+		if machine.state != StateAwaitTurn && machine.state != StateRunning {
+			return Transition{}, protocolError(CodeSequence)
+		}
+		expectedThreadID := machine.threadID
+		if expectedThreadID == "" {
+			expectedThreadID = machine.observedThreadID
+		}
+		if expectedThreadID == "" {
+			return Transition{}, protocolError(CodeSequence)
+		}
+		if err := validateEnvironmentConnection(raw, expectedThreadID); err != nil {
+			return Transition{}, err
+		}
+		if _, err := machine.acceptUniqueEvent(method + ":" + expectedThreadID); err != nil {
+			return Transition{}, err
+		}
+		if method == "thread/environment/disconnected" {
+			machine.state = StateFailed
+			return Transition{}, protocolError(CodeRemote)
+		}
+		return Transition{}, nil
+	case "thread/settings/updated":
+		if machine.state != StateRunning || machine.threadID == "" {
+			return Transition{}, protocolError(CodeSequence)
+		}
+		if err := validateThreadSettingsUpdated(raw, machine.threadID, machine.packet.Model, machine.packet.Effort); err != nil {
+			return Transition{}, err
+		}
+		return machine.acceptUniqueEvent("thread/settings/updated:" + machine.threadID)
 	case "item/completed":
 		return machine.acceptCompletedItem(raw)
 	case "turn/completed":

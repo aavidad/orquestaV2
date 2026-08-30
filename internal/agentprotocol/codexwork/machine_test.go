@@ -42,7 +42,7 @@ func advanceRunning(t *testing.T, machine *Machine) (string, string) {
 		t.Fatalf("initialize: %#v %v", transition, err)
 	}
 	threadRequest := transition.Outbound[1]
-	transition, err = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, threadRequest)) + `,"result":{"thread":{"id":"thread-1"}}}`))
+	transition, err = machine.AcceptJSONL([]byte(validThreadResponse(frameID(t, threadRequest), "thread-1", validPacket().Model)))
 	if err != nil || len(transition.Outbound) != 1 {
 		t.Fatalf("thread: %#v %v", transition, err)
 	}
@@ -58,6 +58,11 @@ func quote(value string) string {
 	return string(raw)
 }
 
+func validThreadResponse(requestID, threadID, model string) string {
+	return `{"id":` + quote(requestID) + `,"result":{"approvalPolicy":"never","cwd":"/trabajo","model":` + quote(model) +
+		`,"runtimeWorkspaceRoots":["/trabajo"],"sandbox":{"type":"dangerFullAccess"},"thread":{"id":` + quote(threadID) + `}}}`
+}
+
 func TestMachineEmitsCurrentJSONLAndPreservesPrompt(t *testing.T) {
 	machine := mustMachine(t)
 	initialize, err := machine.Start()
@@ -70,10 +75,10 @@ func TestMachineEmitsCurrentJSONLAndPreservesPrompt(t *testing.T) {
 	var init struct {
 		Method string `json:"method"`
 		Params struct {
-			Capabilities any `json:"capabilities"`
+			Capabilities initializeCapabilities `json:"capabilities"`
 		} `json:"params"`
 	}
-	if json.Unmarshal(initialize, &init) != nil || init.Method != "initialize" || init.Params.Capabilities != nil {
+	if json.Unmarshal(initialize, &init) != nil || init.Method != "initialize" || !init.Params.Capabilities.ExperimentalAPI {
 		t.Fatalf("initialize=%s", initialize)
 	}
 
@@ -82,12 +87,12 @@ func TestMachineEmitsCurrentJSONLAndPreservesPrompt(t *testing.T) {
 		t.Fatalf("initialized: %#v %v", transition, err)
 	}
 	threadRequest := transition.Outbound[1]
-	if bytes.Contains(threadRequest, []byte("jsonrpc")) || bytes.Contains(threadRequest, []byte("cwd")) ||
+	if bytes.Contains(threadRequest, []byte("jsonrpc")) || !bytes.Contains(threadRequest, []byte(`"cwd":"/trabajo"`)) ||
 		bytes.Contains(threadRequest, []byte("Home")) || bytes.Contains(threadRequest, []byte("credential")) {
 		t.Fatalf("thread/start filtró detalle prohibido: %s", threadRequest)
 	}
 
-	transition, err = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, threadRequest)) + `,"result":{"thread":{"id":"thread-exact"}}}`))
+	transition, err = machine.AcceptJSONL([]byte(validThreadResponse(frameID(t, threadRequest), "thread-exact", validPacket().Model)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,6 +166,42 @@ func TestWorkResultJSONContractIsExact(t *testing.T) {
 	}
 }
 
+func TestMachineRejectsThreadResponseWithoutSealedExecutionContract(t *testing.T) {
+	for _, mutation := range []struct{ old, new string }{
+		{`"approvalPolicy":"never"`, `"approvalPolicy":"on-request"`},
+		{`"cwd":"/trabajo"`, `"cwd":"/otro"`},
+		{`"runtimeWorkspaceRoots":["/trabajo"]`, `"runtimeWorkspaceRoots":[]`},
+		{`"type":"dangerFullAccess"`, `"type":"workspaceWrite"`},
+	} {
+		machine := mustMachine(t)
+		initialize, _ := machine.Start()
+		transition, err := machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, initialize)) + `,"result":{"userAgent":"codex","codexHome":"/sealed","platformFamily":"unix","platformOs":"linux"}}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := transition.Outbound[1]
+		response := strings.Replace(validThreadResponse(frameID(t, request), "thread-1", validPacket().Model), mutation.old, mutation.new, 1)
+		if _, err := machine.AcceptJSONL([]byte(response)); ErrorCode(err) != CodeFrameMalformed {
+			t.Fatalf("contrato relajado aceptado: %s: %v", response, err)
+		}
+	}
+}
+
+func TestMachineAcceptsSealedEnvironmentSettingsAndFailsClosedOnDisconnect(t *testing.T) {
+	machine := mustMachine(t)
+	threadID, _ := advanceRunning(t, machine)
+	if _, err := machine.AcceptJSONL([]byte(`{"method":"thread/environment/connected","params":{"environmentId":"local","threadId":` + quote(threadID) + `}}`)); err != nil {
+		t.Fatal(err)
+	}
+	settings := `{"method":"thread/settings/updated","params":{"threadId":` + quote(threadID) + `,"threadSettings":{"approvalPolicy":"never","cwd":"/trabajo","effort":` + quote(validPacket().Effort) + `,"model":` + quote(validPacket().Model) + `,"sandboxPolicy":{"type":"dangerFullAccess"}}}}`
+	if _, err := machine.AcceptJSONL([]byte(settings)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := machine.AcceptJSONL([]byte(`{"method":"thread/environment/disconnected","params":{"environmentId":"local","threadId":` + quote(threadID) + `}}`)); ErrorCode(err) != CodeRemote || machine.State() != StateFailed {
+		t.Fatalf("disconnect=%v state=%s", err, machine.State())
+	}
+}
+
 func TestMachineBuffersStartedNotificationsBeforeResponses(t *testing.T) {
 	machine := mustMachine(t)
 	initialize, _ := machine.Start()
@@ -179,7 +220,7 @@ func TestMachineBuffersStartedNotificationsBeforeResponses(t *testing.T) {
 	if _, err := machine.AcceptJSONL([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-other"}}}`)); ErrorCode(err) != CodeThreadMismatch {
 		t.Fatalf("thread/started discordante: %v", err)
 	}
-	transition, err = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, threadRequest)) + `,"result":{"thread":{"id":"thread-buffered"}}}`))
+	transition, err = machine.AcceptJSONL([]byte(validThreadResponse(frameID(t, threadRequest), "thread-buffered", validPacket().Model)))
 	if err != nil {
 		t.Fatalf("respuesta thread reconciliada: %v", err)
 	}
@@ -205,7 +246,7 @@ func TestMachineRejectsStartedResponseMismatchAndNonRunningTurnStatus(t *testing
 	transition, _ := machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, initialize)) + `,"result":{"userAgent":"codex","codexHome":"/sealed","platformFamily":"unix","platformOs":"linux"}}`))
 	threadRequest := transition.Outbound[1]
 	_, _ = machine.AcceptJSONL([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-observed"}}}`))
-	if _, err := machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, threadRequest)) + `,"result":{"thread":{"id":"thread-response"}}}`)); ErrorCode(err) != CodeThreadMismatch {
+	if _, err := machine.AcceptJSONL([]byte(validThreadResponse(frameID(t, threadRequest), "thread-response", validPacket().Model))); ErrorCode(err) != CodeThreadMismatch {
 		t.Fatalf("thread response mismatch: %v", err)
 	}
 
@@ -213,7 +254,7 @@ func TestMachineRejectsStartedResponseMismatchAndNonRunningTurnStatus(t *testing
 	initialize, _ = machine.Start()
 	transition, _ = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, initialize)) + `,"result":{"userAgent":"codex","codexHome":"/sealed","platformFamily":"unix","platformOs":"linux"}}`))
 	threadRequest = transition.Outbound[1]
-	transition, _ = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, threadRequest)) + `,"result":{"thread":{"id":"thread-1"}}}`))
+	transition, _ = machine.AcceptJSONL([]byte(validThreadResponse(frameID(t, threadRequest), "thread-1", validPacket().Model)))
 	turnRequest := transition.Outbound[0]
 	if _, err := machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, turnRequest)) + `,"result":{"turn":{"id":"turn-1","status":"completed","items":[]}}}`)); ErrorCode(err) != CodeFrameMalformed {
 		t.Fatalf("turn response status no inProgress: %v", err)
@@ -223,7 +264,7 @@ func TestMachineRejectsStartedResponseMismatchAndNonRunningTurnStatus(t *testing
 	initialize, _ = machine.Start()
 	transition, _ = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, initialize)) + `,"result":{"userAgent":"codex","codexHome":"/sealed","platformFamily":"unix","platformOs":"linux"}}`))
 	threadRequest = transition.Outbound[1]
-	transition, _ = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, threadRequest)) + `,"result":{"thread":{"id":"thread-1"}}}`))
+	transition, _ = machine.AcceptJSONL([]byte(validThreadResponse(frameID(t, threadRequest), "thread-1", validPacket().Model)))
 	turnRequest = transition.Outbound[0]
 	_, _ = machine.AcceptJSONL([]byte(`{"method":"turn/started","params":{"threadId":"thread-1","turn":{"id":"turn-observed","status":"inProgress","items":[]}}}`))
 	if _, err := machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, turnRequest)) + `,"result":{"turn":{"id":"turn-response","status":"inProgress","items":[]}}}`)); ErrorCode(err) != CodeTurnMismatch {
@@ -251,7 +292,7 @@ func TestMachineAcceptsCodex0146GlobalAndMCPNotificationsAcrossActiveStates(t *t
 	transition, _ := machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, initialize)) + `,"result":{"userAgent":"codex","codexHome":"/sealed","platformFamily":"unix","platformOs":"linux"}}`))
 	threadRequest := transition.Outbound[1]
 	activeNotifications("await_thread", "thread", "connecting", "ready", "null")
-	transition, _ = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, threadRequest)) + `,"result":{"thread":{"id":"thread-1"}}}`))
+	transition, _ = machine.AcceptJSONL([]byte(validThreadResponse(frameID(t, threadRequest), "thread-1", validPacket().Model)))
 	turnRequest := transition.Outbound[0]
 	activeNotifications("await_turn", "turn", "connected", "failed", `"thread-1"`)
 	_, _ = machine.AcceptJSONL([]byte(`{"id":` + quote(frameID(t, turnRequest)) + `,"result":{"turn":{"id":"turn-1","status":"inProgress","items":[]}}}`))
@@ -304,6 +345,10 @@ func TestMachineHandlesCodex0146RetryableAndTerminalErrors(t *testing.T) {
 	transition, err := machine.AcceptJSONL([]byte(retry))
 	if err != nil || transition.State != StateRunning || transition.Result != nil || len(transition.Outbound) != 0 || machine.State() != StateRunning {
 		t.Fatalf("retry alteró ejecución: transition=%#v err=%v state=%s", transition, err, machine.State())
+	}
+	transition, err = machine.AcceptJSONL([]byte(retry))
+	if err != nil || transition.State != StateRunning || machine.State() != StateRunning {
+		t.Fatalf("retry idéntico tratado como replay: transition=%#v err=%v", transition, err)
 	}
 
 	terminal := `{"method":"error","params":{"error":{"message":"remote secret","codexErrorInfo":"unauthorized","additionalDetails":null},"willRetry":false,"threadId":"` + threadID + `","turnId":"` + turnID + `"},"emittedAtMs":1785924362452}`

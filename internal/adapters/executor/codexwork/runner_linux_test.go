@@ -351,6 +351,29 @@ func TestRunnerChildReceivesOnlySealedEnvironment(t *testing.T) {
 	assertReaped(t, command)
 }
 
+func TestRunnerSealsProcessWorkingDirectoryBeforeStart(t *testing.T) {
+	var command *exec.Cmd
+	runner, err := New(Config{
+		Command: "/ruta-inexistente/agente", Arguments: []string{SealedArgument},
+		MaxPacketBytes: protocol.MaxPacketBytesV1, MaxFrameBytes: protocol.MaxPacketBytesV1,
+		MaxDiagnosticBytes: 64, CleanupTimeout: time.Second,
+		CommandFactory: func(ctx context.Context, name string, arguments ...string) *exec.Cmd {
+			command = exec.CommandContext(ctx, name, arguments...)
+			return command
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = runner.Run(context.Background(), packetReader(t, time.Second), io.Discard)
+	if ErrorCode(err) != CodeCommandStart {
+		t.Fatalf("code=%q err=%v", ErrorCode(err), err)
+	}
+	if command == nil || command.Dir != sealedHome {
+		t.Fatalf("cwd=%q want=%q", command.Dir, sealedHome)
+	}
+}
+
 func TestRunnerProjectsOnlyPacketAuthorizedControlledEgress(t *testing.T) {
 	t.Setenv("ORQUESTA_EXECUTOR_SECRET_MARKER", "NO_FILTRAR")
 	t.Setenv("HTTP_PROXY", "http://10.0.0.1:8080")
@@ -533,6 +556,7 @@ func (capture *commandCapture) command() *exec.Cmd {
 func helperRunner(t *testing.T, mode, artifact string, maxFrame int) (Runner, *commandCapture) {
 	t.Helper()
 	capture := &commandCapture{}
+	helperWorkingDirectory := t.TempDir()
 	runner, err := New(Config{
 		Command: os.Args[0],
 		Arguments: []string{
@@ -542,6 +566,7 @@ func helperRunner(t *testing.T, mode, artifact string, maxFrame int) (Runner, *c
 		MaxDiagnosticBytes: 64, CleanupTimeout: postKillWait,
 		CommandFactory: func(ctx context.Context, command string, arguments ...string) *exec.Cmd {
 			child := exec.CommandContext(ctx, command, arguments...)
+			child.Dir = helperWorkingDirectory
 			capture.set(child)
 			return child
 		},
@@ -735,6 +760,11 @@ func serveSuccessfulProtocol(reader *bufio.Reader, initial []byte, artifact stri
 	if request["method"] != "initialize" || request["id"] == nil {
 		os.Exit(93)
 	}
+	initializeParams, _ := request["params"].(map[string]any)
+	initializeCapabilities, _ := initializeParams["capabilities"].(map[string]any)
+	if initializeCapabilities["experimentalApi"] != true {
+		os.Exit(88)
+	}
 	_ = encoder.Encode(map[string]any{
 		"id": request["id"],
 		"result": map[string]any{
@@ -750,12 +780,28 @@ func serveSuccessfulProtocol(reader *bufio.Reader, initial []byte, artifact stri
 	if request["method"] != "thread/start" || request["id"] == nil {
 		os.Exit(91)
 	}
+	threadParams, _ := request["params"].(map[string]any)
+	if threadParams["cwd"] != "/trabajo" || threadParams["sandbox"] != "danger-full-access" ||
+		!exactLocalEnvironmentForHelper(threadParams) {
+		os.Exit(87)
+	}
 	_ = encoder.Encode(map[string]any{
-		"id": request["id"], "result": map[string]any{"thread": map[string]any{"id": "thread-1"}},
+		"id": request["id"],
+		"result": map[string]any{
+			"approvalPolicy": "never", "approvalsReviewer": "user", "cwd": "/trabajo",
+			"model": threadParams["model"], "modelProvider": "openai",
+			"runtimeWorkspaceRoots": []any{"/trabajo"},
+			"sandbox":               map[string]any{"type": "dangerFullAccess"},
+			"thread":                map[string]any{"id": "thread-1"},
+		},
 	})
 	request = read()
 	if request["method"] != "turn/start" || request["id"] == nil {
 		os.Exit(90)
+	}
+	turnParams, _ := request["params"].(map[string]any)
+	if !exactLocalEnvironmentForHelper(turnParams) {
+		os.Exit(86)
 	}
 	_ = encoder.Encode(map[string]any{
 		"id": request["id"],
@@ -781,4 +827,21 @@ func serveSuccessfulProtocol(reader *bufio.Reader, initial []byte, artifact stri
 	if _, err := reader.ReadByte(); !errors.Is(err, io.EOF) {
 		os.Exit(89)
 	}
+}
+
+func exactLocalEnvironmentForHelper(params map[string]any) bool {
+	roots, ok := params["runtimeWorkspaceRoots"].([]any)
+	if !ok || len(roots) != 1 || roots[0] != "/trabajo" {
+		return false
+	}
+	environments, ok := params["environments"].([]any)
+	if !ok || len(environments) != 1 {
+		return false
+	}
+	environment, ok := environments[0].(map[string]any)
+	if !ok || environment["environmentId"] != "local" || environment["cwd"] != "/trabajo" {
+		return false
+	}
+	environmentRoots, ok := environment["runtimeWorkspaceRoots"].([]any)
+	return ok && len(environmentRoots) == 1 && environmentRoots[0] == "/trabajo"
 }
