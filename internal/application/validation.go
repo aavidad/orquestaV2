@@ -75,13 +75,21 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 			return errors.New("application.launch_state_invalid")
 		}
 	case ActionObserveAgent:
-		if claim.Action.Ref != "action:observe:"+execution.Ref.String() ||
+		if !validAgentObservationActionRef(claim.Action.Ref, execution.Ref) ||
 			claim.Action.WorkItemGeneration > item.Revision() ||
 			item.State() != goal.WorkItemStateRunning || execution.State != ExecutionRunning ||
 			execution.ProviderRef == "" || execution.ModelRef == "" || execution.AgentRef == "" ||
 			execution.ExternalRef == "" || execution.StartedAt.IsZero() ||
 			execution.ProviderAcceptedAt.IsZero() || !execution.DeadlineAt.After(execution.StartedAt) {
 			return errors.New("application.observe_state_invalid")
+		}
+	case ActionQuiesceAgent, ActionPreserveAgentEnvironment, ActionCloseAgentEnvironment:
+		if claim.Action.Ref != agentEnvironmentLifecycleActionRef(kind, execution.Ref) ||
+			claim.Action.WorkItemGeneration > item.Revision() || item.State() != goal.WorkItemStateRunning ||
+			execution.State != ExecutionRunning || !execution.RequierePreservacionEntorno ||
+			execution.ProviderRef == "" || execution.ModelRef == "" || execution.AgentRef == "" ||
+			execution.ExternalRef == "" || execution.StartedAt.IsZero() || execution.ProviderAcceptedAt.IsZero() {
+			return errors.New("application.agent_environment_lifecycle_state_invalid")
 		}
 	case ActionAdmitMailbox:
 		if claim.Action.Ref != "action:admit-mailbox:"+execution.Ref.String() ||
@@ -109,6 +117,11 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 		}
 	}
 	return nil
+}
+
+func validAgentObservationActionRef(ref string, executionRef goal.ExecutionRef) bool {
+	return ref == "action:observe:"+executionRef.String() ||
+		ref == "action:observe-finalize:"+executionRef.String()
 }
 
 func validWorkspacePrepareClaimState(item goal.WorkItem, execution ExecutionRecord) bool {

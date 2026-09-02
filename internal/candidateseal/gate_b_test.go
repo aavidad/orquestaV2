@@ -9,8 +9,8 @@ func TestGateBBindingUsesCanonicalGateAIdentityAndStaysNoGo(t *testing.T) {
 	}
 	connector := GateBConnector{
 		Module:         "github.com/aavidad/agente_microvm/conectores/orquesta",
-		Version:        "v0.0.0-20260816192103-3d9c68f20721",
-		ModuleSum:      "h1:ijYWT4pPHQmVL6UVx5rNXHRbDzveIn1ykXp16LwWhcs=",
+		Version:        "v0.0.0-20260902163835-f17173c661e8",
+		ModuleSum:      "h1:vuFER9h1mN83LoZiofxSnwNpSpWoHQiE/xMdo0MNoZg=",
 		ContractSHA256: testDigest('b'),
 	}
 	binding, err := BuildGateBBinding(gateA, connector)

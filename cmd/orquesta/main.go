@@ -22,7 +22,11 @@ var version = "dev"
 // bootstrap call explicit also lets the command contract prove that a rejected
 // microVM configuration is returned to the operator without a second runtime
 // attempt or an isolation fallback.
-var runRuntime = bootstrap.Run
+var (
+	runRuntime                         = bootstrap.Run
+	runStateMigration                  = bootstrap.RunStateMigration
+	runContinuationCredentialProvision = bootstrap.RunProvisionMicroVMContinuationAuthority
+)
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
@@ -53,6 +57,17 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		return bootstrap.RunProvisionCodexMicroVMCredentials(
 			ctx, arguments[2:], catalog, stdout, stderr,
 		)
+	}
+	if len(arguments) > 1 && arguments[0] == "credentials" &&
+		arguments[1] == "provision-microvm-continuation-authority" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return runContinuationCredentialProvision(
+			ctx, arguments[2:], catalog, stdout, stderr,
+		)
+	}
+	if len(arguments) > 1 && arguments[0] == "state" && arguments[1] == "migrate" {
+		return runStateMigration(context.Background(), arguments[2:], catalog, stdout, stderr)
 	}
 	if len(arguments) == 0 || arguments[0] != "serve" {
 		if !writeCatalogText(stderr, catalog, i18n.DefaultLocale, "error.invalid_request") ||

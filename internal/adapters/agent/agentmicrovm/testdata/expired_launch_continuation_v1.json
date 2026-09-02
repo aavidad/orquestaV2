@@ -1,0 +1,63 @@
+{
+  "manifiesto": {
+    "esquema": "agentmicrovm.manifiesto-continuacion-lanzamiento-caducado.v1",
+    "audiencia": "agentmicrovm.continuacion-lanzamiento-caducado.v1",
+    "instancia_broker_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "source_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "clave_solicitud_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "solicitud_original_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+    "launch_ref": "launch:fixture",
+    "execution_ref": "ejecucion:fixture",
+    "run_ref": "run:fixture",
+    "cerca": 7,
+    "generacion": 3,
+    "cid": 41,
+    "identidad_sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "validate_launch": {
+      "operacion": "validate_launch",
+      "esquema": 2,
+      "codigo": 8,
+      "intent_ref": "intent:validate_fixture",
+      "clave_idempotencia": "idem:validate_fixture",
+      "request_sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "comando_sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "autorizacion_interior_sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "solicitud_firmada_sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "estado_daemon": "ambiguous",
+      "estado_raiz": "prepared",
+      "revision_raiz": 1
+    },
+    "launch": {
+      "operacion": "launch",
+      "esquema": 1,
+      "codigo": 1,
+      "intent_ref": "intent:launch_fixture",
+      "clave_idempotencia": "idem:launch_fixture",
+      "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "comando_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "autorizacion_interior_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "solicitud_firmada_sha256": null,
+      "estado_daemon": "reserved",
+      "estado_raiz": "absent",
+      "revision_raiz": null
+    }
+  },
+  "manifiesto_sha256": "53217b688cbb12d8fd5852d7cfb635689d2a1ca4bc4ab6ae03b754732821620d",
+  "contenido": {
+    "esquema": "agentmicrovm.autoridad-continuacion-lanzamiento-caducado.v1",
+    "audiencia": "agentmicrovm.continuacion-lanzamiento-caducado.v1",
+    "proposito": "continuar_intento_lanzamiento_caducado",
+    "autoridad_ref": "continuation:fixture",
+    "manifiesto_sha256": "53217b688cbb12d8fd5852d7cfb635689d2a1ca4bc4ab6ae03b754732821620d",
+    "emitida_unix_ms": 2000000000000,
+    "expira_unix_ms": 2000000300000,
+    "clave_id": "continuation-key-fixture",
+    "epoca_clave": 4,
+    "revision_confianza": 9,
+    "algoritmo": "ed25519"
+  },
+  "clave_publica_base64": "6kpsY+KcUgq+9VB7Ey7F+ZVHdq6+vnuSQh7qaRRG0iw=",
+  "mensaje_firma_sha256": "23deae400209315b69e529a386b89da4055899c96bd2e1ceab85928794ee162d",
+  "autoridad_sha256": "cf0e21f772fff740d21be64c4af7c6c64a3a1f289e7861d2bea147a13ab7f711",
+  "firma_base64": "m+w82dy00s+Rl24rTN6ECFB59Hp7INC6WSfFVy/9RA6DokDtfEQUO0U+fo5eBpyeCrb+7gXibN3CqeyCjig7AQ=="
+}

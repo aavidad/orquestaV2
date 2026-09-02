@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-08-06.4",
+  "$id": "urn:orquesta:config:2026-09-02.1",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -1019,6 +1019,83 @@
                 "trimmed_optional_string"
               ]
             },
+            "expired_launch_continuation_authority_key_epoch": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_KEY_EPOCH",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.expired_launch_continuation_authority_key_epoch",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
+            "expired_launch_continuation_authority_key_id": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_KEY_ID",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.expired_launch_continuation_authority_key_id",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
+            "expired_launch_continuation_authority_public_key_sha256": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_PUBLIC_KEY_SHA256",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.expired_launch_continuation_authority_public_key_sha256",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
+            "expired_launch_continuation_authority_signing_credential_ref": {
+              "pattern": "^(|credential:[a-z0-9][a-z0-9._-]{0,127})$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_SIGNING_CREDENTIAL_REF",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.expired_launch_continuation_authority_signing_credential_ref",
+              "x-sensitive": true,
+              "x-validator-ids": [
+                "credential_ref"
+              ]
+            },
+            "expired_launch_continuation_authority_trust_revision": {
+              "default": 0,
+              "maximum": 9223372036854775807,
+              "minimum": 0,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_TRUST_REVISION",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.expired_launch_continuation_authority_trust_revision",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
+            "expired_launch_continuation_authority_validity": {
+              "default": "2m",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_VALIDITY",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.microvm.expired_launch_continuation_authority_validity",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            },
             "launch_grant_key_id": {
               "default": "",
               "type": "string",
@@ -1573,8 +1650,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-08-06.4",
-  "x-registry-hash": "sha256:b01c18c0e4e5c448160dead8b7a0d3b8c09ec22548f266fcb0fbf0419307cd9a",
+  "x-registry-revision": "2026-09-02.1",
+  "x-registry-hash": "sha256:c6b48ae6b20cc11ad4415480c9bf0e1901e8c0ab621a6ee4cf6abcac3645eb63",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1597,6 +1674,7 @@
     {
       "id": "runtime_codex_account_profiles_complete",
       "keys": [
+        "runtime.isolation",
         "runtime.codex.account_home_root",
         "runtime.codex.account_profile",
         "runtime.codex.account_profiles",
@@ -1617,6 +1695,12 @@
         "runtime.microvm.expected_profile_descriptor_sha256",
         "runtime.microvm.launch_grant_key_id",
         "runtime.microvm.launch_grant_signing_credential_ref",
+        "runtime.microvm.expired_launch_continuation_authority_signing_credential_ref",
+        "runtime.microvm.expired_launch_continuation_authority_key_id",
+        "runtime.microvm.expired_launch_continuation_authority_key_epoch",
+        "runtime.microvm.expired_launch_continuation_authority_trust_revision",
+        "runtime.microvm.expired_launch_continuation_authority_public_key_sha256",
+        "runtime.microvm.expired_launch_continuation_authority_validity",
         "runtime.microvm.credential_broker_socket_path",
         "runtime.microvm.credential_broker_peer_uid",
         "runtime.microvm.credential_broker_exchange_timeout",

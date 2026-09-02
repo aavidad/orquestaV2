@@ -17,6 +17,115 @@ import (
 	"time"
 )
 
+func TestProvisionEd25519SigningCredentialCreatesAndResumesWithoutRegenerating(t *testing.T) {
+	privateKey := testProvisionPrivateKey(0x2d)
+	t.Cleanup(func() { clear(privateKey) })
+	store := newProvisionFakeStore()
+	t.Cleanup(store.destroy)
+	request := validEd25519ProvisionRequest()
+	firstSource := &provisionFakeSource{material: privateKey}
+
+	first, err := ProvisionEd25519SigningCredential(
+		context.Background(), store, firstSource, request,
+	)
+	if err != nil || first.Signing.State != CredentialProvisionCreated ||
+		first.Signing.RequestedAuthority.Version != 1 || firstSource.callCount() != 1 ||
+		first.SigningPublicKeyBase64 != base64.StdEncoding.EncodeToString(privateKey[ed25519.SeedSize:]) {
+		t.Fatalf("first=%+v source_calls=%d err=%v", first, firstSource.callCount(), err)
+	}
+
+	retrySource := &provisionFakeSource{panicValue: "keysource-must-not-run-on-resume"}
+	resumed, err := ProvisionEd25519SigningCredential(
+		context.Background(), store, retrySource, request,
+	)
+	if err != nil || resumed.Signing.State != CredentialProvisionResumed ||
+		resumed.Signing.RequestedAuthority.Version != 1 || retrySource.callCount() != 0 ||
+		resumed.SigningPublicKeyBase64 != first.SigningPublicKeyBase64 {
+		t.Fatalf("resumed=%+v source_calls=%d err=%v", resumed, retrySource.callCount(), err)
+	}
+	if got := store.createdCredentialRefs(); !reflect.DeepEqual(got, []CredentialRef{request.Signing.CredentialRef}) {
+		t.Fatalf("create-only effects=%v", got)
+	}
+	assertProvisionProjectionDoesNotContain(t, first, privateKey)
+	assertProvisionProjectionDoesNotContain(t, resumed, privateKey)
+}
+
+func TestProvisionEd25519SigningCredentialRecoversLostCreateResponse(t *testing.T) {
+	privateKey := testProvisionPrivateKey(0x3e)
+	t.Cleanup(func() { clear(privateKey) })
+	store := newProvisionFakeStore()
+	t.Cleanup(store.destroy)
+	store.createCollision = ErrorAlreadyExists
+	request := validEd25519ProvisionRequest()
+
+	result, err := ProvisionEd25519SigningCredential(
+		context.Background(), store, &provisionFakeSource{material: privateKey}, request,
+	)
+	if err != nil || result.Signing.State != CredentialProvisionResumed ||
+		result.Signing.RequestedAuthority.Version != 1 || len(result.Signing.Receipts) != 1 ||
+		result.SigningPublicKeyBase64 != base64.StdEncoding.EncodeToString(privateKey[ed25519.SeedSize:]) {
+		t.Fatalf("lost-response recovery=%+v err=%v", result, err)
+	}
+	if got := store.createdCredentialRefs(); !reflect.DeepEqual(got, []CredentialRef{request.Signing.CredentialRef}) {
+		t.Fatalf("lost response repeated create=%v", got)
+	}
+}
+
+func TestProvisionEd25519SigningCredentialRejectsRefCollisionAndVersionDrift(t *testing.T) {
+	privateKey := testProvisionPrivateKey(0x4f)
+	t.Cleanup(func() { clear(privateKey) })
+	request := validEd25519ProvisionRequest()
+
+	t.Run("invalid request ref", func(t *testing.T) {
+		store := newProvisionFakeStore()
+		defer store.destroy()
+		candidate := request
+		candidate.Signing.RequestRef = "other:continuation"
+		source := &provisionFakeSource{panicValue: "invalid-ref-source"}
+		result, err := ProvisionEd25519SigningCredential(context.Background(), store, source, candidate)
+		if !HasErrorCode(err, ErrorInvalidRef) || source.callCount() != 0 ||
+			!reflect.DeepEqual(result, ProvisionEd25519SigningCredentialResult{}) || store.effectCount() != 0 {
+			t.Fatalf("invalid ref result=%+v source=%d effects=%d err=%v", result, source.callCount(), store.effectCount(), err)
+		}
+	})
+
+	t.Run("existing authority collision", func(t *testing.T) {
+		store := newProvisionFakeStore()
+		defer store.destroy()
+		conflicting := request.Signing
+		conflicting.PurposeRef = "purpose:other"
+		store.seed(conflicting, request.OwnerRef, privateKey, 1)
+		source := &provisionFakeSource{panicValue: "collision-source"}
+		result, err := ProvisionEd25519SigningCredential(context.Background(), store, source, request)
+		if !HasErrorCode(err, ErrorPurposeDenied) || source.callCount() != 0 ||
+			result.Signing.State != CredentialProvisionPending {
+			t.Fatalf("collision result=%+v source=%d err=%v", result, source.callCount(), err)
+		}
+	})
+
+	t.Run("version drift", func(t *testing.T) {
+		store := &provisionVersionConflictStore{ProvisionStore: newProvisionFakeStore()}
+		defer store.ProvisionStore.(*provisionFakeStore).destroy()
+		store.ProvisionStore.(*provisionFakeStore).seed(request.Signing, request.OwnerRef, privateKey, 2)
+		source := &provisionFakeSource{panicValue: "version-source"}
+		result, err := ProvisionEd25519SigningCredential(context.Background(), store, source, request)
+		if !HasErrorCode(err, ErrorVersionConflict) || source.callCount() != 0 ||
+			result.Signing.State != CredentialProvisionPending {
+			t.Fatalf("version drift result=%+v source=%d err=%v", result, source.callCount(), err)
+		}
+	})
+}
+
+type provisionVersionConflictStore struct{ ProvisionStore }
+
+func (store *provisionVersionConflictStore) Use(
+	context.Context,
+	UseRequest,
+	func(Secret) error,
+) (Receipt, error) {
+	return Receipt{}, NewError(ErrorVersionConflict, "version")
+}
+
 func TestProvisionCodexMicroVMCredentialsCreatesSigningThenAuthWithoutMaterialEgress(t *testing.T) {
 	privateKey := testProvisionPrivateKey(0x31)
 	authMaterial := []byte("codex-auth-material-never-project")
@@ -701,7 +810,7 @@ func assertProvisionMaterialFreeType(t *testing.T, value reflect.Type, visited m
 	}
 }
 
-func assertProvisionProjectionDoesNotContain(t *testing.T, result ProvisionCodexMicroVMCredentialsResult, materials ...[]byte) {
+func assertProvisionProjectionDoesNotContain(t *testing.T, result any, materials ...[]byte) {
 	t.Helper()
 	payload, err := json.Marshal(result)
 	if err != nil {
@@ -756,6 +865,19 @@ func validProvisionRequest() ProvisionCodexMicroVMCredentialsRequest {
 		Auth: ProvisionCredentialRequest{
 			RequestRef: "request:provision:auth", CredentialRef: "credential:codex-account-1",
 			ScopeRefs: []ScopeRef{"scope:runtime", "project:first-microvm"}, PurposeRef: "purpose:codex-runtime",
+		},
+	}
+}
+
+func validEd25519ProvisionRequest() ProvisionEd25519SigningCredentialRequest {
+	return ProvisionEd25519SigningCredentialRequest{
+		ActorRef: "actor:operator",
+		OwnerRef: "actor:operator",
+		Signing: ProvisionCredentialRequest{
+			RequestRef:    "request:provision:continuation-signing",
+			CredentialRef: "credential:microvm-continuation-signing",
+			ScopeRefs:     []ScopeRef{"project:first-microvm"},
+			PurposeRef:    "orquesta.microvm-expired-launch-continuation-authority.v1",
 		},
 	}
 }

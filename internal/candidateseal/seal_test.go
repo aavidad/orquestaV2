@@ -139,7 +139,7 @@ func candidateInput(suffix string) Input {
 			{Path: "cmd/orquesta/main.go", Mode: 0755, Content: []byte("package main // " + suffix)},
 		},
 		Binary:          []byte("orquesta-binary-" + suffix),
-		EffectiveConfig: []byte(`{"document_type":"orquesta.effective_config","schema_version":1,"registry_revision":"r1-` + suffix + `","snapshot_hash":"sha256:` + strings.Repeat("a", 64) + `","entries":[{"key":"runtime.secret","value":"[REDACTED]","source":"file","type":"credential_ref","semantic_ref":"orquesta.config.runtime.secret","sensitive":true,"scope":"runtime","restart_required":true,"env_alias":"ORQUESTA_RUNTIME_SECRET","validator_ids":["credential_ref"]}]}`),
+		EffectiveConfig: []byte(`{"document_type":"orquesta.effective_config","schema_version":1,"registry_revision":"r1-` + suffix + `","snapshot_hash":"sha256:` + strings.Repeat("a", 64) + `","entries":[{"key":"runtime.secret","value":"[REDACTED]","source":"file","type":"credential_ref","semantic_ref":"orquesta.config.runtime.secret","sensitive":true,"scope":"runtime","restart_required":true,"env_alias":"ORQUESTA_PRIVATE_API_KEY","validator_ids":["credential_ref"]}]}`),
 	}
 }
 

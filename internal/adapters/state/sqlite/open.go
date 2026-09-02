@@ -64,6 +64,10 @@ func openWithDurability(ctx context.Context, options Options, durability sqliteD
 	if err != nil {
 		return nil, invalid(err)
 	}
+	if err := acquireStateWriterLock(identityHandle); err != nil {
+		_ = identityHandle.Close()
+		return nil, invalid(err)
+	}
 	closeIdentityOnError := true
 	defer func() {
 		if closeIdentityOnError {

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -115,6 +116,100 @@ func TestCredentialProvisionCommandDispatchesExactLocalSurface(t *testing.T) {
 	if code != 2 || stdout.Len() != 0 ||
 		!strings.Contains(stderr.String(), "code=cli.credential_provision_arguments_invalid") {
 		t.Fatalf("extra flag code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestContinuationCredentialProvisionDispatchNeverStartsRuntime(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"credentials", "provision-microvm-continuation-authority", "--help",
+	}, &stdout, &stderr)
+	if code != 0 || stderr.Len() != 0 ||
+		!strings.Contains(stdout.String(), "provision-microvm-continuation-authority") ||
+		strings.Contains(stdout.String(), "--locale") {
+		t.Fatalf("help code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+
+	originalProvision := runContinuationCredentialProvision
+	originalRuntime := runRuntime
+	t.Cleanup(func() {
+		runContinuationCredentialProvision = originalProvision
+		runRuntime = originalRuntime
+	})
+	runtimeCalls := 0
+	runRuntime = func(context.Context, bootstrap.Options) error {
+		runtimeCalls++
+		return errors.New("runtime must not start")
+	}
+	provisionCalls := 0
+	runContinuationCredentialProvision = func(
+		ctx context.Context,
+		arguments []string,
+		catalog *i18n.Catalog,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		provisionCalls++
+		if ctx == nil || catalog == nil || stdout == nil || stderr == nil ||
+			!reflect.DeepEqual(arguments, []string{
+				"--config", "/run/orquesta/config.toml",
+				"--request-ref", "request:continuation-main-test",
+			}) {
+			t.Fatalf("continuation provisioning arguments=%q", arguments)
+		}
+		return 19
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{
+		"credentials", "provision-microvm-continuation-authority",
+		"--config", "/run/orquesta/config.toml",
+		"--request-ref", "request:continuation-main-test",
+	}, &stdout, &stderr)
+	if code != 19 || provisionCalls != 1 || runtimeCalls != 0 {
+		t.Fatalf("code=%d provision=%d runtime=%d", code, provisionCalls, runtimeCalls)
+	}
+}
+
+func TestStateMigrateDispatchNeverStartsRuntime(t *testing.T) {
+	originalMigration := runStateMigration
+	originalRuntime := runRuntime
+	t.Cleanup(func() {
+		runStateMigration = originalMigration
+		runRuntime = originalRuntime
+	})
+	runtimeCalls := 0
+	runRuntime = func(context.Context, bootstrap.Options) error {
+		runtimeCalls++
+		return errors.New("runtime must not start")
+	}
+	migrationCalls := 0
+	runStateMigration = func(
+		ctx context.Context,
+		arguments []string,
+		catalog *i18n.Catalog,
+		stdout io.Writer,
+		stderr io.Writer,
+	) int {
+		migrationCalls++
+		if ctx == nil || ctx.Done() != nil || catalog == nil || stdout == nil || stderr == nil ||
+			!reflect.DeepEqual(arguments, []string{
+				"--config", "/run/orquesta/config.toml", "--mode", "no-runtime",
+				"--expect-from", "39", "--expect-to", "41",
+			}) {
+			t.Fatalf("state migration arguments=%q", arguments)
+		}
+		return 17
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{
+		"state", "migrate", "--config", "/run/orquesta/config.toml", "--mode", "no-runtime",
+		"--expect-from", "39", "--expect-to", "41",
+	}, &stdout, &stderr)
+	if code != 17 || migrationCalls != 1 || runtimeCalls != 0 {
+		t.Fatalf("code=%d migration=%d runtime=%d", code, migrationCalls, runtimeCalls)
 	}
 }
 

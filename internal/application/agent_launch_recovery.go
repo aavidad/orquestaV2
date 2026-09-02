@@ -45,7 +45,25 @@ func (orchestrator *Orchestrator) processAgentLaunchRecovery(
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := orchestrator.state.ValidateAgentLaunchRecoveryClaim(ctx, claim); err != nil {
+	terminal := claim.Disposition == ActionClaimDispositionReconcileTerminalLaunch
+	var reconciliationAttempt *TerminalAgentLaunchReconciliationAttempt
+	fail := func() error {
+		if terminal {
+			return orchestrator.state.QuarantineTerminalAgentLaunchReconciliation(
+				ctx,
+				TerminalAgentLaunchReconciliationQuarantinedState{
+					Claim: claim, Attempt: reconciliationAttempt,
+					ErrorCode: effectUnknownAppliedCode, OperationAt: orchestrator.clock.Now().UTC(),
+				},
+			)
+		}
+		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	}
+	validateClaim := orchestrator.state.ValidateAgentLaunchRecoveryClaim
+	if terminal {
+		validateClaim = orchestrator.state.ValidateTerminalAgentLaunchReconciliationClaim
+	}
+	if err := validateClaim(ctx, claim); err != nil {
 		return err
 	}
 	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
@@ -54,37 +72,50 @@ func (orchestrator *Orchestrator) processAgentLaunchRecovery(
 	}
 	attempt, err := SelectAgentLaunchRecoveryAttempt(record, claim)
 	if err != nil {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	item, itemFound := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	execution, executionFound := executionForAction(record, claim.Action)
 	if !itemFound || !executionFound || execution.State != ExecutionDispatching {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	phase, phaseFound := phaseForWorkItem(record.Goal, item)
 	if !phaseFound {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 
 	request, err := orchestrator.reconstructAgentLaunchRecoveryRequest(record, item, execution, phase)
 	if err != nil {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	request.ReferenciaColocacion = claim.ReferenciaColocacion
 	request.RequierePreservacionEntorno = execution.RequierePreservacionEntorno
 	request.SessionRef = execution.ExecutionSessionRef
 	request, attempt, err = BuildAgentLaunchRecoveryRequest(record, claim, request)
 	if err != nil {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
-	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
-		return orchestrator.requeueAgentLaunchRecovery(
-			ctx, claim, execution, agentLaunchRecoveryApprovalRequiredCode,
-		)
+	if !terminal {
+		if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
+			return orchestrator.requeueAgentLaunchRecovery(
+				ctx, claim, execution, agentLaunchRecoveryApprovalRequiredCode,
+			)
+		}
 	}
-	reconciler, err := AgentLaunchReconcilerFrom(orchestrator.launcher)
-	if err != nil {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+	var reconciler AgentLaunchReconciler
+	var continuer ExpiredAgentLaunchContinuerV41
+	var continuationStore ExpiredAgentLaunchContinuationStoreV41
+	if terminal {
+		continuationStore, _ = orchestrator.state.(ExpiredAgentLaunchContinuationStoreV41)
+		continuer, err = ExpiredAgentLaunchContinuerV41From(orchestrator.launcher)
+		if continuationStore == nil || err != nil {
+			return fail()
+		}
+	} else {
+		reconciler, err = AgentLaunchReconcilerFrom(orchestrator.launcher)
+		if err != nil {
+			return fail()
+		}
 	}
 	request.SessionRef, request.AccessAuthority, err = orchestrator.replayAgentLaunchRecoverySession(
 		ctx, record, execution,
@@ -98,16 +129,60 @@ func (orchestrator *Orchestrator) processAgentLaunchRecovery(
 				ctx, claim, execution, agentLaunchReconciliationPendingCode,
 			)
 		}
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	request, rebuiltAttempt, err := BuildAgentLaunchRecoveryRequest(record, claim, request)
 	if err != nil || rebuiltAttempt != attempt {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
+	}
+	if terminal {
+		value := TerminalAgentLaunchReconciliationAttempt{
+			Ref:                      "agent-launch-reconciliation-attempt:" + claim.TerminalReconciliationRef + ":" + claim.Token,
+			AuthorityRef:             claim.TerminalReconciliationRef,
+			RequestFingerprint:       claim.TerminalReconciliationFingerprint,
+			OriginalEffectAttemptRef: claim.RecoveryEffectAttemptRef,
+			JobFence:                 claim.Fence, DeliveryAttempt: claim.DeliveryAttempt,
+			ClaimToken: claim.Token, WorkerRef: claim.WorkerRef,
+			StartedAt: orchestrator.clock.Now().UTC(), ClaimLeaseUntil: claim.LeaseUntil,
+		}
+		if err := orchestrator.state.RecordTerminalAgentLaunchReconciliationAttempt(
+			ctx, RecordTerminalAgentLaunchReconciliationAttemptState{Claim: claim, Attempt: value},
+		); err != nil {
+			return err
+		}
+		reconciliationAttempt = &value
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	receipt, err := reconciler.ReconcileLaunch(ctx, request)
+	var receipt ports.AgentLaunchReceipt
+	if terminal {
+		continuation, found, readErr := continuationStore.ExpiredAgentLaunchContinuationV41(
+			ctx, claim.TerminalReconciliationRef,
+		)
+		if readErr != nil {
+			if cancellationErr := agentLaunchRecoveryCancellation(ctx, readErr); cancellationErr != nil {
+				return cancellationErr
+			}
+			if isTemporaryAgentError(readErr) {
+				return orchestrator.requeueAgentLaunchRecovery(
+					ctx, claim, execution, agentLaunchReconciliationPendingCode,
+				)
+			}
+			return fail()
+		}
+		if !found {
+			return orchestrator.requeueAgentLaunchRecovery(
+				ctx, claim, execution, agentLaunchReconciliationPendingCode,
+			)
+		}
+		if validateExpiredAgentLaunchContinuationForClaim(record, claim, attempt, continuation) != nil {
+			return fail()
+		}
+		receipt, err = continuer.ContinueExpiredAgentLaunchV41(ctx, request, continuation)
+	} else {
+		receipt, err = reconciler.ReconcileLaunch(ctx, request)
+	}
 	if err != nil {
 		if cancellationErr := agentLaunchRecoveryCancellation(ctx, err); cancellationErr != nil {
 			return cancellationErr
@@ -117,34 +192,62 @@ func (orchestrator *Orchestrator) processAgentLaunchRecovery(
 				ctx, claim, execution, agentLaunchReconciliationPendingCode,
 			)
 		}
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil ||
 		receipt.ProviderRef != orchestrator.agentCapabilities.ProviderRef ||
 		receipt.ModelRef != orchestrator.agentCapabilities.ModelRef ||
 		receipt.AgentRef != orchestrator.agentCapabilities.AgentRef {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	latest, latestItem, latestExecution, err := orchestrator.reloadPreparedLaunch(ctx, claim)
 	if err != nil {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	latestAttempt, err := SelectAgentLaunchRecoveryAttempt(latest, claim)
 	if err != nil || latestAttempt != attempt {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	if _, rebuiltAttempt, buildErr := BuildAgentLaunchRecoveryRequest(latest, claim, request); buildErr != nil || rebuiltAttempt != attempt {
-		return orchestrator.failAgentLaunchRecoveryUnknownApplied(ctx, claim)
+		return fail()
 	}
 	record, item, execution = latest, latestItem, latestExecution
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	return orchestrator.completeAcceptedLaunch(
 		ctx, claim, record, item, execution, attempt, receipt,
-		transitionAt, receipt.AcceptedAt, false,
+		transitionAt, receipt.AcceptedAt, false, reconciliationAttempt,
 	)
+}
+
+func validateExpiredAgentLaunchContinuationForClaim(
+	record GoalRecord,
+	claim ActionClaim,
+	attempt EffectAttempt,
+	continuation ExpiredAgentLaunchContinuationRecordV41,
+) error {
+	intent := claim.Action.EffectIntent
+	if claim.Disposition != ActionClaimDispositionReconcileTerminalLaunch ||
+		!validApplicationRef(continuation.SubjectRef) ||
+		!validApplicationRef(continuation.ReconciliationAttemptRef) ||
+		continuation.ReconciliationAuthorityRef != claim.TerminalReconciliationRef ||
+		continuation.ProjectRef != record.Goal.Project().String() ||
+		continuation.GoalRef != claim.Action.GoalRef.String() ||
+		continuation.WorkItemRef != claim.Action.WorkItemRef.String() ||
+		continuation.ExecutionRef != claim.Action.ExecutionRef.String() ||
+		continuation.ActionRef != claim.Action.Ref ||
+		continuation.EffectIntentRef != claim.Action.EffectIntentRef ||
+		continuation.EffectIntentDigest != intent.Digest ||
+		continuation.EffectAttemptRef != claim.RecoveryEffectAttemptRef ||
+		continuation.EffectAttemptRef != attempt.Ref ||
+		continuation.PlanGeneration != uint64(claim.Action.PlanGeneration) ||
+		continuation.WorkItemGeneration != uint64(claim.Action.WorkItemGeneration) ||
+		continuation.ActionFence != attempt.ActionFence {
+		return ErrAgentLaunchRecoveryInvalid
+	}
+	return nil
 }
 
 func (orchestrator *Orchestrator) reconstructAgentLaunchRecoveryRequest(
@@ -240,7 +343,8 @@ func (orchestrator *Orchestrator) requeueAgentLaunchRecovery(
 		return err
 	}
 	intent := claim.Action.EffectIntent
-	if claim.Disposition != ActionClaimDispositionRecoverEffect ||
+	if (claim.Disposition != ActionClaimDispositionRecoverEffect &&
+		claim.Disposition != ActionClaimDispositionReconcileTerminalLaunch) ||
 		claim.Action.Kind != ActionLaunchAgent ||
 		!validApplicationRef(claim.RecoveryEffectAttemptRef) ||
 		claim.Action.EffectIntentRef != intent.Ref || intent.QuotaRetryDelay <= 0 ||
@@ -252,6 +356,15 @@ func (orchestrator *Orchestrator) requeueAgentLaunchRecovery(
 		return &StateError{Code: StateConflict}
 	}
 	now := orchestrator.clock.Now().UTC()
+	if claim.Disposition == ActionClaimDispositionReconcileTerminalLaunch {
+		return orchestrator.state.RequeueTerminalAgentLaunchReconciliation(
+			ctx,
+			TerminalAgentLaunchReconciliationRequeuedState{
+				Claim: claim, ErrorCode: code, OperationAt: now,
+				AvailableAt: now.Add(intent.QuotaRetryDelay),
+			},
+		)
+	}
 	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
 		Claim: claim, Execution: execution, ErrorCode: code,
 		AvailableAt: now.Add(intent.QuotaRetryDelay), OperationAt: now,
@@ -362,7 +475,8 @@ func BuildAgentLaunchRecoveryRequest(
 
 func validateAgentLaunchRecoveryClaim(record GoalRecord, claim ActionClaim) error {
 	intent := claim.Action.EffectIntent
-	if claim.Disposition != ActionClaimDispositionRecoverEffect ||
+	if (claim.Disposition != ActionClaimDispositionRecoverEffect &&
+		claim.Disposition != ActionClaimDispositionReconcileTerminalLaunch) ||
 		!validApplicationRef(claim.RecoveryEffectAttemptRef) ||
 		claim.RetryBudgetExhaustion != (RetryBudgetExhaustion{}) ||
 		validateClaimedRecord(claim, record, ActionLaunchAgent) != nil ||

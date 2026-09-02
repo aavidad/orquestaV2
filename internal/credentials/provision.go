@@ -57,6 +57,15 @@ type ProvisionCodexMicroVMCredentialsRequest struct {
 	Auth         ProvisionCredentialRequest
 }
 
+// ProvisionEd25519SigningCredentialRequest identifies one create-only signing
+// credential. Consumer-specific public trust metadata remains outside this
+// credential boundary.
+type ProvisionEd25519SigningCredentialRequest struct {
+	ActorRef string
+	OwnerRef OwnerRef
+	Signing  ProvisionCredentialRequest
+}
+
 type CredentialProvisionState string
 
 const (
@@ -96,6 +105,61 @@ type ProvisionCodexMicroVMCredentialsResult struct {
 	SigningPublicKeyBase64 string
 }
 
+// ProvisionEd25519SigningCredentialResult contains only material-free status
+// and the public half derived from the exact stored version.
+type ProvisionEd25519SigningCredentialResult struct {
+	Signing                CredentialProvisionStatus
+	SigningPublicKeyBase64 string
+}
+
+// ProvisionEd25519SigningCredential creates or resumes one canonical Ed25519
+// credential. It never rotates or revokes it, and a resume derives the public
+// half from the stored version without invoking keySource.
+func ProvisionEd25519SigningCredential(
+	ctx context.Context,
+	store ProvisionStore,
+	keySource Ed25519PrivateKeySource,
+	request ProvisionEd25519SigningCredentialRequest,
+) (result ProvisionEd25519SigningCredentialResult, err error) {
+	defer func() {
+		if recover() != nil {
+			err = NewError(ErrorConsumerFailed, "provision")
+		}
+	}()
+
+	if ctx == nil || nilInterfaceValue(store) || nilInterfaceValue(keySource) {
+		return result, NewError(ErrorInvalidRequest, "dependency")
+	}
+	if err := ValidateProvisionEd25519SigningCredentialRequest(request); err != nil {
+		return result, err
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+
+	result.Signing = pendingProvisionStatus(request.OwnerRef, request.Signing)
+	result.Signing, result.SigningPublicKeyBase64, err = provisionSigningCredential(
+		ctx, store, keySource, request.ActorRef, request.OwnerRef, request.Signing,
+	)
+	if err != nil {
+		return result, err
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+// ValidateProvisionEd25519SigningCredentialRequest validates every derived
+// describe/create/use reference before a source or store can be touched.
+func ValidateProvisionEd25519SigningCredentialRequest(
+	request ProvisionEd25519SigningCredentialRequest,
+) error {
+	return validateProvisionCredentialRequest(
+		request.ActorRef, request.OwnerRef, request.Signing,
+	)
+}
+
 // ProvisionCodexMicroVMCredentials creates or resumes the signing and provider
 // auth credentials independently. Signing is intentionally first: after its
 // Create becomes durable, any crash is repairable by describing the exact
@@ -128,12 +192,13 @@ func ProvisionCodexMicroVMCredentials(
 	result.Signing = pendingProvisionStatus(request.OwnerRef, request.Signing)
 	result.Auth = pendingProvisionStatus(request.OwnerRef, request.Auth)
 
-	result.Signing, result.SigningKeyID, result.SigningPublicKeyBase64, err = provisionSigningCredential(
-		ctx, store, keySource, request.ActorRef, request.OwnerRef, request.SigningKeyID, request.Signing,
+	result.Signing, result.SigningPublicKeyBase64, err = provisionSigningCredential(
+		ctx, store, keySource, request.ActorRef, request.OwnerRef, request.Signing,
 	)
 	if err != nil {
 		return result, err
 	}
+	result.SigningKeyID = request.SigningKeyID
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
@@ -163,21 +228,32 @@ func ValidateProvisionCodexMicroVMCredentialsRequest(
 		return NewError(ErrorInvalidRequest, "signing_key_id")
 	}
 	for _, candidate := range []ProvisionCredentialRequest{request.Signing, request.Auth} {
-		scopes, err := canonicalProvisionScopeRefs(candidate.ScopeRefs)
-		if err != nil {
+		if err := validateProvisionCredentialRequest(request.ActorRef, request.OwnerRef, candidate); err != nil {
 			return err
 		}
-		for index, scope := range scopes {
-			describe := describeRequest(request.ActorRef, request.OwnerRef, candidate, scope, index)
-			if err := ValidateDescribeUseAuthorityRequest(describe); err != nil {
-				return err
-			}
+	}
+	return nil
+}
+
+func validateProvisionCredentialRequest(
+	actor string,
+	owner OwnerRef,
+	candidate ProvisionCredentialRequest,
+) error {
+	scopes, err := canonicalProvisionScopeRefs(candidate.ScopeRefs)
+	if err != nil {
+		return err
+	}
+	for index, scope := range scopes {
+		describe := describeRequest(actor, owner, candidate, scope, index)
+		if err := ValidateDescribeUseAuthorityRequest(describe); err != nil {
+			return err
 		}
-		for _, suffix := range []string{"create", "use:v1"} {
-			derived := operationRequestRef(candidate.RequestRef, suffix)
-			if err := validateRef(derived, "request:"); err != nil {
-				return err
-			}
+	}
+	for _, suffix := range []string{"create", "use:v1"} {
+		derived := operationRequestRef(candidate.RequestRef, suffix)
+		if err := validateRef(derived, "request:"); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -189,27 +265,26 @@ func provisionSigningCredential(
 	source Ed25519PrivateKeySource,
 	actor string,
 	owner OwnerRef,
-	keyID string,
 	spec ProvisionCredentialRequest,
-) (CredentialProvisionStatus, string, string, error) {
+) (CredentialProvisionStatus, string, error) {
 	status := pendingProvisionStatus(owner, spec)
 	authority, found, err := describeProvisionAuthority(ctx, store, actor, owner, spec)
 	created := false
 	if err != nil {
-		return status, "", "", err
+		return status, "", err
 	}
 	if !found {
 		mutation, createErr := createFromCallbackSource(ctx, store, actor, owner, spec, source.WithPrivateKey, validateEd25519PrivateMaterial)
 		if createErr != nil {
 			if !creationCollision(createErr) {
-				return status, "", "", createErr
+				return status, "", createErr
 			}
 			authority, found, err = describeProvisionAuthority(ctx, store, actor, owner, spec)
 			if err != nil || !found {
 				if err != nil {
-					return status, "", "", err
+					return status, "", err
 				}
-				return status, "", "", safeProvisionStoreError(createErr, "create_race")
+				return status, "", safeProvisionStoreError(createErr, "create_race")
 			}
 		} else {
 			authority = authorityFromMutation(mutation, canonicalFirstScope(spec))
@@ -221,7 +296,7 @@ func provisionSigningCredential(
 	status.RequestedAuthority = requestedAuthorityFromDescription(authority, spec)
 	publicKey, useReceipt, err := deriveStoredEd25519PublicKey(ctx, store, actor, spec, authority)
 	if err != nil {
-		return status, "", "", err
+		return status, "", err
 	}
 	status.Receipts = append(status.Receipts, useReceipt)
 	if created {
@@ -229,7 +304,7 @@ func provisionSigningCredential(
 	} else {
 		status.State = CredentialProvisionResumed
 	}
-	return status, keyID, publicKey, nil
+	return status, publicKey, nil
 }
 
 func provisionAuthCredential(

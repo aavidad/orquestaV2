@@ -4,11 +4,114 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+func handlePreflightExpiredAgentLaunchContinuation(
+	ctx context.Context, api applicationAPI, bound handlerContext, payload json.RawMessage,
+) (json.RawMessage, error) {
+	var input struct {
+		ReconciliationAuthorityRef string `json:"reconciliation_authority_ref"`
+	}
+	if err := decodePayload(payload, &input); err != nil {
+		return nil, err
+	}
+	result, err := api.PreflightExpiredAgentLaunchContinuationV41(ctx, bound.access,
+		application.PreflightExpiredAgentLaunchContinuationRequestV41{
+			RequestRef: bound.requestRef, ReconciliationAuthorityRef: input.ReconciliationAuthorityRef,
+		})
+	preparation := result.Preparation
+	return marshalApplication(struct {
+		Preparation struct {
+			ReconciliationAuthorityRef string    `json:"reconciliation_authority_ref"`
+			ReconciliationAttemptRef   string    `json:"reconciliation_attempt_ref"`
+			EffectAttemptRef           string    `json:"effect_attempt_ref"`
+			ManifestSHA256             string    `json:"manifest_sha256"`
+			RequestKeySHA256           string    `json:"request_key_sha256"`
+			OriginalRequestSHA256      string    `json:"original_request_sha256"`
+			AMVLaunchRef               string    `json:"amv_launch_ref"`
+			AMVExecutionRef            string    `json:"amv_execution_ref"`
+			AMVRunRef                  string    `json:"amv_run_ref"`
+			AMVFence                   uint64    `json:"amv_fence"`
+			AMVGeneration              uint64    `json:"amv_generation"`
+			AMVCID                     uint32    `json:"amv_cid"`
+			AMVIdentitySHA256          string    `json:"amv_identity_sha256"`
+			PreparedAt                 time.Time `json:"prepared_at"`
+		} `json:"preparation"`
+	}{Preparation: struct {
+		ReconciliationAuthorityRef string    `json:"reconciliation_authority_ref"`
+		ReconciliationAttemptRef   string    `json:"reconciliation_attempt_ref"`
+		EffectAttemptRef           string    `json:"effect_attempt_ref"`
+		ManifestSHA256             string    `json:"manifest_sha256"`
+		RequestKeySHA256           string    `json:"request_key_sha256"`
+		OriginalRequestSHA256      string    `json:"original_request_sha256"`
+		AMVLaunchRef               string    `json:"amv_launch_ref"`
+		AMVExecutionRef            string    `json:"amv_execution_ref"`
+		AMVRunRef                  string    `json:"amv_run_ref"`
+		AMVFence                   uint64    `json:"amv_fence"`
+		AMVGeneration              uint64    `json:"amv_generation"`
+		AMVCID                     uint32    `json:"amv_cid"`
+		AMVIdentitySHA256          string    `json:"amv_identity_sha256"`
+		PreparedAt                 time.Time `json:"prepared_at"`
+	}{preparation.Binding.ReconciliationAuthorityRef, preparation.Binding.ReconciliationAttemptRef,
+		preparation.Binding.EffectAttemptRef, preparation.ManifestSHA256, preparation.RequestKeySHA256,
+		preparation.OriginalRequestSHA256, preparation.AMVLaunchRef, preparation.AMVExecutionRef,
+		preparation.AMVRunRef, preparation.AMVFence, preparation.AMVGeneration, preparation.AMVCID,
+		preparation.AMVIdentitySHA256, preparation.PreparedAt}}, err)
+}
+
+func handleConfirmExpiredAgentLaunchContinuation(
+	ctx context.Context, api applicationAPI, bound handlerContext, payload json.RawMessage,
+) (json.RawMessage, error) {
+	var input struct {
+		ReconciliationAuthorityRef string `json:"reconciliation_authority_ref"`
+		ExpectedManifestSHA256     string `json:"expected_manifest_sha256"`
+		Confirmation               string `json:"confirmation"`
+	}
+	if err := decodePayload(payload, &input); err != nil {
+		return nil, err
+	}
+	result, err := api.ConfirmExpiredAgentLaunchContinuationV41(ctx, bound.access,
+		application.ConfirmExpiredAgentLaunchContinuationRequestV41{
+			RequestRef: bound.requestRef, ReconciliationAuthorityRef: input.ReconciliationAuthorityRef,
+			ExpectedManifestSHA256: input.ExpectedManifestSHA256, Confirmation: input.Confirmation,
+		})
+	record := result.Record
+	return marshalApplication(struct {
+		Authority struct {
+			AuthorityRef               string `json:"authority_ref"`
+			SubjectRef                 string `json:"subject_ref"`
+			ReconciliationAuthorityRef string `json:"reconciliation_authority_ref"`
+			ReconciliationAttemptRef   string `json:"reconciliation_attempt_ref"`
+			EffectAttemptRef           string `json:"effect_attempt_ref"`
+			ManifestSHA256             string `json:"manifest_sha256"`
+			KeyID                      string `json:"key_id"`
+			KeyEpoch                   uint64 `json:"key_epoch"`
+			TrustRevision              uint64 `json:"trust_revision"`
+			IssuedUnixMS               uint64 `json:"issued_unix_ms"`
+			ExpiresUnixMS              uint64 `json:"expires_unix_ms"`
+		} `json:"authority"`
+	}{Authority: struct {
+		AuthorityRef               string `json:"authority_ref"`
+		SubjectRef                 string `json:"subject_ref"`
+		ReconciliationAuthorityRef string `json:"reconciliation_authority_ref"`
+		ReconciliationAttemptRef   string `json:"reconciliation_attempt_ref"`
+		EffectAttemptRef           string `json:"effect_attempt_ref"`
+		ManifestSHA256             string `json:"manifest_sha256"`
+		KeyID                      string `json:"key_id"`
+		KeyEpoch                   uint64 `json:"key_epoch"`
+		TrustRevision              uint64 `json:"trust_revision"`
+		IssuedUnixMS               uint64 `json:"issued_unix_ms"`
+		ExpiresUnixMS              uint64 `json:"expires_unix_ms"`
+	}{record.AuthorityRef, record.SubjectRef, record.ReconciliationAuthorityRef,
+		record.ReconciliationAttemptRef, record.EffectAttemptRef, record.ManifestSHA256,
+		record.KeyID, record.KeyEpoch, record.TrustRevision, record.IssuedUnixMS,
+		record.ExpiresUnixMS}}, err)
+}
 
 func handleClaimDirector(ctx context.Context, api applicationAPI, bound handlerContext, payload json.RawMessage) (json.RawMessage, error) {
 	var input struct {
@@ -185,6 +288,56 @@ func handleDecideEffect(ctx context.Context, api applicationAPI, bound handlerCo
 		IntentRef   string `json:"intent_ref"`
 		Decision    string `json:"decision"`
 	}{result.Approval.Ref, result.Approval.IntentRef, string(result.Approval.Decision)}, err)
+}
+
+func handleReconcileTerminalAgentLaunch(
+	ctx context.Context,
+	api applicationAPI,
+	bound handlerContext,
+	payload json.RawMessage,
+) (json.RawMessage, error) {
+	var input struct {
+		GoalRef            string `json:"goal_ref"`
+		WorkItemRef        string `json:"work_item_ref"`
+		ExecutionRef       string `json:"execution_ref"`
+		ActionRef          string `json:"action_ref"`
+		EffectIntentRef    string `json:"effect_intent_ref"`
+		EffectIntentDigest string `json:"effect_intent_digest"`
+		EffectAttemptRef   string `json:"effect_attempt_ref"`
+		PlanGeneration     uint64 `json:"plan_generation"`
+		WorkItemGeneration uint64 `json:"work_item_generation"`
+		ActionFence        uint64 `json:"action_fence"`
+	}
+	if err := decodePayload(payload, &input); err != nil {
+		return nil, err
+	}
+	goalRef, err := goal.NewGoalRef(input.GoalRef)
+	if err != nil {
+		return nil, err
+	}
+	workItemRef, err := goal.NewWorkItemRef(input.WorkItemRef)
+	if err != nil {
+		return nil, err
+	}
+	executionRef, err := goal.NewExecutionRef(input.ExecutionRef)
+	if err != nil {
+		return nil, err
+	}
+	result, err := api.ReconcileTerminalAgentLaunch(
+		ctx,
+		bound.access,
+		application.ReconcileTerminalAgentLaunchRequest{
+			RequestRef: bound.requestRef, GoalRef: goalRef, WorkItemRef: workItemRef,
+			ExecutionRef: executionRef, ActionRef: input.ActionRef,
+			EffectIntentRef: input.EffectIntentRef, EffectIntentDigest: input.EffectIntentDigest,
+			EffectAttemptRef: input.EffectAttemptRef, PlanGeneration: goal.PlanGeneration(input.PlanGeneration),
+			WorkItemGeneration: goal.Revision(input.WorkItemGeneration), ActionFence: input.ActionFence,
+		},
+	)
+	return marshalApplication(struct {
+		AuthorityRef string `json:"authority_ref"`
+		JobRef       string `json:"job_ref"`
+	}{result.Authority.Ref, result.Authority.JobRef}, err)
 }
 
 func handleListPendingChanges(ctx context.Context, api applicationAPI, bound handlerContext, payload json.RawMessage) (json.RawMessage, error) {

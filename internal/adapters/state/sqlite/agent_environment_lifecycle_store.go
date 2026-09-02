@@ -96,14 +96,39 @@ func (repository *Repository) RecordAgentEnvironmentLifecycleInitial(
 	_, err = tx.ExecContext(ctx, `
 INSERT INTO agent_environment_lifecycles(
  execution_ref,goal_ref,work_item_ref,snapshot_schema,revision,launch_receipt_ref,
- token_state,snapshot_json,recorded_at
-) VALUES(?,?,?,?,?,?,?,?,?)`,
+ token_state,snapshot_json,next_action_ref,next_action_approval_attached,recorded_at
+) VALUES(?,?,?,?,?,?,?,?,NULL,0,?)`,
 		state.Snapshot.Subject.ExecutionRef.String(), state.Snapshot.Subject.GoalRef.String(),
 		state.Snapshot.Subject.WorkItemRef.String(), state.Snapshot.Schema, int64(state.Snapshot.Revision),
 		state.Snapshot.LaunchReceiptRef, string(state.Snapshot.Token.State), string(payload),
 		requiredTime(state.Snapshot.RecordedAt))
 	if err != nil {
 		return application.AgentEnvironmentLifecycleSnapshot{}, false, mapDatabaseError(err)
+	}
+	if state.NextAction != nil {
+		if err := repository.requireLiveLease(state.Claim); err != nil {
+			return application.AgentEnvironmentLifecycleSnapshot{}, false, err
+		}
+		if err := requireClaim(ctx, tx, state.Claim); err != nil {
+			return application.AgentEnvironmentLifecycleSnapshot{}, false, err
+		}
+		if err := completeClaim(ctx, tx, state.Claim, state.OperationAt, "", false); err != nil {
+			return application.AgentEnvironmentLifecycleSnapshot{}, false, err
+		}
+		if err := insertAction(ctx, tx, *state.NextAction); err != nil {
+			return application.AgentEnvironmentLifecycleSnapshot{}, false, err
+		}
+		result, err := tx.ExecContext(ctx, `
+UPDATE agent_environment_lifecycles
+SET next_action_ref=?,next_action_approval_attached=1
+WHERE execution_ref=? AND revision=? AND next_action_ref IS NULL AND ready_to_finalize=0`,
+			state.NextAction.Ref, state.Snapshot.Subject.ExecutionRef.String(), int64(state.Snapshot.Revision))
+		if err != nil {
+			return application.AgentEnvironmentLifecycleSnapshot{}, false, mapDatabaseError(err)
+		}
+		if err := requireOneRow(result); err != nil {
+			return application.AgentEnvironmentLifecycleSnapshot{}, false, err
+		}
 	}
 	if err := commit(tx); err != nil {
 		return application.AgentEnvironmentLifecycleSnapshot{}, false, err
@@ -249,6 +274,12 @@ WHERE ref=? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at I
 				fmt.Errorf("sqlite.agent_environment_lifecycle_terminal_next_action: %w", err)
 		}
 	}
+	if state.FinalizationAction != nil {
+		if err := insertAction(ctx, tx, *state.FinalizationAction); err != nil {
+			return application.AgentEnvironmentLifecycleSnapshot{}, false,
+				fmt.Errorf("sqlite.agent_environment_lifecycle_terminal_finalization_action: %w", err)
+		}
+	}
 	preservation := current.Preservation
 	if state.PreservationFact != nil {
 		preservation = state.PreservationFact
@@ -299,7 +330,8 @@ func validateAgentEnvironmentAttemptTransition(
 		return conflict(errors.New("sqlite.agent_environment_lifecycle_attempt_cas_conflict"))
 	}
 	if current.Snapshot.Effect.IsEmpty() {
-		if current.HasAttempt || current.NextAction != nil || state.Claim.Action.Kind != application.ActionQuiesceAgent {
+		if current.HasAttempt || state.Claim.Action.Kind != application.ActionQuiesceAgent ||
+			(current.NextAction != nil && !sameLifecycleActionIgnoringAttachedApproval(*current.NextAction, state.Claim.Action)) {
 			return conflict(errors.New("sqlite.agent_environment_lifecycle_attempt_frontier_invalid"))
 		}
 		return nil
@@ -391,7 +423,17 @@ func expandAgentEnvironmentLifecycleRow(
 	}
 	if !row.claimActionRef.Valid {
 		if row.snapshot.Effect.IsEmpty() && !row.attemptRef.Valid && !row.preservationRef.Valid &&
-			!row.nextActionRef.Valid && !row.readyToFinalize {
+			!row.readyToFinalize {
+			var next *application.ActionRecord
+			if row.nextActionRef.Valid {
+				action, actionErr := readAgentEnvironmentLifecycleAction(
+					ctx, source, row.nextActionRef.String, row.nextActionApprovalAttached, nil,
+				)
+				if actionErr != nil {
+					return stored, actionErr
+				}
+				next = &action
+			}
 			if application.ValidateAgentEnvironmentLifecycleInitialState(
 				application.AgentEnvironmentLifecycleInitialState{
 					Snapshot: row.snapshot, OperationAt: row.snapshot.RecordedAt,
@@ -399,6 +441,7 @@ func expandAgentEnvironmentLifecycleRow(
 			) != nil {
 				return stored, invalid(errors.New("sqlite.agent_environment_lifecycle_initial_corrupt"))
 			}
+			stored.NextAction = next
 			return stored, nil
 		}
 		return stored, invalid(errors.New("sqlite.agent_environment_lifecycle_authority_corrupt"))
@@ -501,6 +544,15 @@ func validateExpandedAgentEnvironmentLifecycle(
 		ConsumptionReceipt: consumption, NextAction: stored.NextAction,
 		ReadyToFinalize: stored.ReadyToFinalize, OperationAt: stored.Snapshot.RecordedAt,
 	}
+	if stored.ReadyToFinalize && stored.Snapshot.Token.State == ports.AgentEnvironmentClosed {
+		finalization, finalizationErr := readAgentEnvironmentLifecycleAction(
+			ctx, source, "action:observe-finalize:"+stored.Snapshot.Subject.ExecutionRef.String(), false, nil,
+		)
+		if finalizationErr != nil {
+			return finalizationErr
+		}
+		post.FinalizationAction = &finalization
+	}
 	if stored.Claim.Action.Kind == application.ActionPreserveAgentEnvironment {
 		post.PreservationFact = stored.Preservation
 	}
@@ -531,7 +583,10 @@ FROM outbox WHERE ref=?`, ref).Scan(
 	if err != nil {
 		return action, mapDatabaseError(err)
 	}
-	if governanceVersion != 1 || !intentRef.Valid || planGeneration <= 0 || workItemGeneration <= 0 {
+	isFinalization := governanceVersion == 0 && !intentRef.Valid &&
+		application.ActionKind(kind) == application.ActionObserveAgent
+	if planGeneration <= 0 || workItemGeneration <= 0 ||
+		(!isFinalization && (governanceVersion != 1 || !intentRef.Valid)) {
 		return action, invalid(errors.New("sqlite.agent_environment_lifecycle_action_corrupt"))
 	}
 	var refErr error
@@ -550,6 +605,12 @@ FROM outbox WHERE ref=?`, ref).Scan(
 	action.Kind, action.ControlRef = application.ActionKind(kind), controlRef.String
 	action.PlanGeneration, action.WorkItemGeneration = goal.PlanGeneration(planGeneration), goal.Revision(workItemGeneration)
 	action.AvailableAt, action.EffectIntentRef = time.Unix(0, availableAt).UTC(), intentRef.String
+	if isFinalization {
+		if approvalAttached || knownApproval != nil || validateAction(action) != nil {
+			return action, invalid(errors.New("sqlite.agent_environment_lifecycle_action_corrupt"))
+		}
+		return action, nil
+	}
 	action.EffectIntent, err = readEffectIntent(ctx, source, action.EffectIntentRef)
 	if err != nil {
 		return action, err

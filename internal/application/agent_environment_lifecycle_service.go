@@ -57,6 +57,10 @@ type InitializeAgentEnvironmentLifecycleRequest struct {
 	LaunchRequest ports.AgentLaunchRequest
 	LaunchReceipt ports.AgentLaunchReceipt
 	Record        GoalRecord
+	// Claim is optional for replay/inspection-only callers. Productive
+	// successful completion supplies the Observe claim so its consumption and
+	// the first Quiesce action are born atomically with the lifecycle snapshot.
+	Claim ActionClaim
 }
 
 type AdvanceAgentEnvironmentLifecycleRequest struct {
@@ -145,6 +149,17 @@ func (service *AgentEnvironmentLifecycleService) Initialize(
 		return AgentEnvironmentLifecycleSnapshot{}, false, err
 	}
 	state := AgentEnvironmentLifecycleInitialState{Snapshot: snapshot, OperationAt: at}
+	if request.Claim != (ActionClaim{}) {
+		if err := validateClaimedRecord(request.Claim, request.Record, ActionObserveAgent); err != nil {
+			return AgentEnvironmentLifecycleSnapshot{}, false, err
+		}
+		next, buildErr := service.buildNextAction(request.Record, snapshot, ActionQuiesceAgent, at)
+		if buildErr != nil {
+			return AgentEnvironmentLifecycleSnapshot{}, false, buildErr
+		}
+		consumed := consumptionReceipt(request.Claim, ActionConsumedCompleted, "", at)
+		state.Claim, state.NextAction, state.ConsumptionReceipt = request.Claim, &next, &consumed
+	}
 	if err := ValidateAgentEnvironmentLifecycleInitialState(state); err != nil {
 		return AgentEnvironmentLifecycleSnapshot{}, false, err
 	}
@@ -414,6 +429,11 @@ func (service *AgentEnvironmentLifecycleService) persistTerminal(
 		post.NextAction = &next
 	} else if post.Snapshot.Token.State == ports.AgentEnvironmentClosed {
 		post.ReadyToFinalize = true
+		finalize, err := buildAgentEnvironmentFinalizationAction(record, post.Snapshot, post.OperationAt)
+		if err != nil {
+			return AgentEnvironmentLifecycleServiceResult{}, err
+		}
+		post.FinalizationAction = &finalize
 	} else {
 		return AgentEnvironmentLifecycleServiceResult{}, errAgentEnvironmentLifecycleStateInvalid
 	}
@@ -428,7 +448,11 @@ func (service *AgentEnvironmentLifecycleService) persistTerminal(
 		if persisted != post.Snapshot {
 			return AgentEnvironmentLifecycleServiceResult{}, errAgentEnvironmentLifecycleStateInvalid
 		}
-		return agentEnvironmentLifecycleResult(persisted, post.NextAction, false, post.ReadyToFinalize), nil
+		next := post.NextAction
+		if post.FinalizationAction != nil {
+			next = post.FinalizationAction
+		}
+		return agentEnvironmentLifecycleResult(persisted, next, false, post.ReadyToFinalize), nil
 	}
 	winner, found, readErr := service.store.GetAgentEnvironmentLifecycle(ctx, post.Snapshot.Subject.ExecutionRef)
 	if readErr != nil {
@@ -463,7 +487,12 @@ func validateStoredAgentEnvironmentLifecycle(stored AgentEnvironmentLifecycleSto
 	}
 	if stored.Snapshot.Effect.IsEmpty() {
 		if stored.HasAttempt || stored.Claim != (ActionClaim{}) || stored.Attempt != (EffectAttempt{}) ||
-			stored.Preservation != nil || stored.NextAction != nil || stored.ReadyToFinalize {
+			stored.Preservation != nil || stored.ReadyToFinalize {
+			return errAgentEnvironmentLifecycleStateInvalid
+		}
+		if stored.NextAction != nil && validateAgentEnvironmentLifecycleNextAction(
+			*stored.NextAction, stored.Snapshot, ActionQuiesceAgent, stored.Snapshot.RecordedAt,
+		) != nil {
 			return errAgentEnvironmentLifecycleStateInvalid
 		}
 		return nil
@@ -522,6 +551,23 @@ func ValidateAgentEnvironmentLifecycleInitialState(state AgentEnvironmentLifecyc
 		state.OperationAt.IsZero() || !state.Snapshot.RecordedAt.Equal(state.OperationAt) {
 		return errAgentEnvironmentLifecycleStateInvalid
 	}
+	hasAuthority := state.Claim != (ActionClaim{}) || state.NextAction != nil || state.ConsumptionReceipt != nil
+	if !hasAuthority {
+		return nil
+	}
+	if state.Claim == (ActionClaim{}) || state.NextAction == nil || state.ConsumptionReceipt == nil ||
+		state.Claim.Action.Kind != ActionObserveAgent || state.Claim.Action.GoalRef != state.Snapshot.Subject.GoalRef ||
+		state.Claim.Action.WorkItemRef != state.Snapshot.Subject.WorkItemRef ||
+		state.Claim.Action.ExecutionRef != state.Snapshot.Subject.ExecutionRef ||
+		state.Claim.Action.PlanGeneration != state.Snapshot.Subject.PlanGeneration ||
+		!state.Claim.LeaseUntil.After(state.OperationAt) ||
+		validateAgentEnvironmentLifecycleNextAction(*state.NextAction, state.Snapshot, ActionQuiesceAgent, state.OperationAt) != nil {
+		return errAgentEnvironmentLifecycleStateInvalid
+	}
+	want := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
+	if *state.ConsumptionReceipt != want {
+		return errAgentEnvironmentLifecycleStateInvalid
+	}
 	return nil
 }
 
@@ -541,7 +587,48 @@ func ValidateAgentEnvironmentLifecycleTerminalState(state AgentEnvironmentLifecy
 		}
 		return nil
 	}
-	if state.Snapshot.Token.State != ports.AgentEnvironmentClosed || !state.ReadyToFinalize || state.NextAction != nil {
+	if state.Snapshot.Token.State != ports.AgentEnvironmentClosed || !state.ReadyToFinalize || state.NextAction != nil ||
+		state.FinalizationAction == nil ||
+		validateAgentEnvironmentFinalizationAction(*state.FinalizationAction, state.Snapshot, state.OperationAt) != nil {
+		return errAgentEnvironmentLifecycleStateInvalid
+	}
+	return nil
+}
+
+func buildAgentEnvironmentFinalizationAction(
+	record GoalRecord,
+	snapshot AgentEnvironmentLifecycleSnapshot,
+	at time.Time,
+) (ActionRecord, error) {
+	item, found := record.Goal.WorkItem(snapshot.Subject.WorkItemRef)
+	if !found {
+		return ActionRecord{}, errAgentEnvironmentLifecycleStateInvalid
+	}
+	action := ActionRecord{
+		Ref:  "action:observe-finalize:" + snapshot.Subject.ExecutionRef.String(),
+		Kind: ActionObserveAgent, GoalRef: snapshot.Subject.GoalRef,
+		WorkItemRef: snapshot.Subject.WorkItemRef, ExecutionRef: snapshot.Subject.ExecutionRef,
+		PlanGeneration: snapshot.Subject.PlanGeneration, WorkItemGeneration: item.Revision(),
+		AvailableAt: at.UTC(),
+	}
+	if validateAgentEnvironmentFinalizationAction(action, snapshot, at) != nil {
+		return ActionRecord{}, errAgentEnvironmentLifecycleStateInvalid
+	}
+	return action, nil
+}
+
+func validateAgentEnvironmentFinalizationAction(
+	action ActionRecord,
+	snapshot AgentEnvironmentLifecycleSnapshot,
+	at time.Time,
+) error {
+	if snapshot.Token.State != ports.AgentEnvironmentClosed || action.Kind != ActionObserveAgent ||
+		action.Ref != "action:observe-finalize:"+snapshot.Subject.ExecutionRef.String() ||
+		action.GoalRef != snapshot.Subject.GoalRef || action.WorkItemRef != snapshot.Subject.WorkItemRef ||
+		action.ExecutionRef != snapshot.Subject.ExecutionRef ||
+		action.PlanGeneration != snapshot.Subject.PlanGeneration || action.WorkItemGeneration == 0 ||
+		!action.AvailableAt.Equal(at.UTC()) || action.ControlRef != "" || action.ChangeRef.String() != "" ||
+		action.EffectIntentRef != "" || action.EffectIntent != (EffectIntent{}) || action.EffectApproval != nil {
 		return errAgentEnvironmentLifecycleStateInvalid
 	}
 	return nil

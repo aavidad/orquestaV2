@@ -172,5 +172,5 @@ func gateAArguments(fixture gateACandidateFixture, manifest string) []string {
 }
 
 func gateAEffectiveConfig() string {
-	return `{"document_type":"orquesta.effective_config","schema_version":1,"registry_revision":"r1","snapshot_hash":"sha256:` + strings.Repeat("a", 64) + `","entries":[{"key":"runtime.secret","value":"[REDACTED]","source":"file","type":"credential_ref","semantic_ref":"orquesta.config.runtime.secret","sensitive":true,"scope":"runtime","restart_required":true,"env_alias":"ORQUESTA_RUNTIME_SECRET","validator_ids":["credential_ref"]}]}`
+	return `{"document_type":"orquesta.effective_config","schema_version":1,"registry_revision":"r1","snapshot_hash":"sha256:` + strings.Repeat("a", 64) + `","entries":[{"key":"runtime.secret","value":"[REDACTED]","source":"file","type":"credential_ref","semantic_ref":"orquesta.config.runtime.secret","sensitive":true,"scope":"runtime","restart_required":true,"env_alias":"ORQUESTA_PRIVATE_API_KEY","validator_ids":["credential_ref"]}]}`
 }

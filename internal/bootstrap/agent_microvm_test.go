@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"orquesta/internal/adapters/agent/agentmicrovm"
 	"orquesta/internal/application"
@@ -205,6 +206,52 @@ func TestAgentMicroVMRechazaDependenciasNulas(t *testing.T) {
 	}
 	if _, err := newAgentMicroVMConDelegado(valido, cierre, nil); !errors.Is(err, errAgentMicroVMCierreCredenciales) {
 		t.Fatalf("cierre credenciales nil error=%v", err)
+	}
+}
+
+type iniciadorCuotaAgentMicroVMPrueba struct {
+	llamadas      int
+	configuracion application.ConfiguracionControladoresCuotaAgente
+}
+
+func (iniciador *iniciadorCuotaAgentMicroVMPrueba) IniciarControladoresCuota(
+	_ context.Context,
+	configuracion application.ConfiguracionControladoresCuotaAgente,
+) ([]application.ControladorCuotaAgente, error) {
+	iniciador.llamadas++
+	iniciador.configuracion = configuracion
+	return []application.ControladorCuotaAgente{}, nil
+}
+
+func TestAgentMicroVMDelegaSoloElControladorAnfitrionDeCuota(t *testing.T) {
+	agente := nuevoAgentMicroVMPrueba(
+		t,
+		&agenteMicroVMDelegadoPrueba{},
+		func() error { return nil },
+		func() error { return nil },
+	)
+	iniciador := &iniciadorCuotaAgentMicroVMPrueba{}
+	agente.iniciadorCuota = iniciador
+	configuracion := application.ConfiguracionControladoresCuotaAgente{
+		VigenciaObservacion: time.Minute,
+		DemoraReconexion:    time.Second,
+		Ahora:               time.Now,
+		Sumidero: func(context.Context, application.AgentQuotaObservation, []byte) error {
+			return nil
+		},
+	}
+	controladores, err := agente.IniciarControladoresCuota(context.Background(), configuracion)
+	if err != nil || controladores == nil || iniciador.llamadas != 1 ||
+		iniciador.configuracion.VigenciaObservacion != configuracion.VigenciaObservacion ||
+		iniciador.configuracion.DemoraReconexion != configuracion.DemoraReconexion {
+		t.Fatalf("controladores=%v error=%v llamadas=%d configuracion=%+v",
+			controladores, err, iniciador.llamadas, iniciador.configuracion)
+	}
+	if err := agente.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if controladores, err = agente.IniciarControladoresCuota(context.Background(), configuracion); !errors.Is(err, errAgentMicroVMCerrado) || controladores != nil {
+		t.Fatalf("inicio posterior al cierre controladores=%v error=%v", controladores, err)
 	}
 }
 

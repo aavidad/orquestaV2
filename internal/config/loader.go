@@ -37,11 +37,28 @@ func ResolveForCredentialProvisioning(options ResolveOptions) (Snapshot, error) 
 	return resolve(options, resolveProfileCredentialProvisioning)
 }
 
+// ResolveForContinuationCredentialProvisioning resolves the canonical
+// runtime document before the public continuation-key digest is known. It
+// relaxes only that derived digest; the normal runtime resolver still requires
+// the final value and every other microVM authority remains mandatory.
+func ResolveForContinuationCredentialProvisioning(options ResolveOptions) (Snapshot, error) {
+	return resolve(options, resolveProfileContinuationCredentialProvisioning)
+}
+
+// ResolveForStateMigration parses the canonical document but resolves only
+// the three SQLite options needed by the offline maintenance command. Known
+// runtime, provider and attestor values are deliberately not interpreted.
+func ResolveForStateMigration(options ResolveOptions) (Snapshot, error) {
+	return resolve(options, resolveProfileStateMigration)
+}
+
 type resolveProfile uint8
 
 const (
 	resolveProfileRuntime resolveProfile = iota
 	resolveProfileCredentialProvisioning
+	resolveProfileContinuationCredentialProvisioning
+	resolveProfileStateMigration
 )
 
 func resolve(options ResolveOptions, profile resolveProfile) (Snapshot, error) {
@@ -54,7 +71,14 @@ func resolve(options ResolveOptions, profile resolveProfile) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 	if options.TOML != nil {
-		explicit, err := parseExplicitWithRegistry(options.TOML, registry)
+		var explicit map[Key]any
+		if profile == resolveProfileStateMigration {
+			explicit, err = parseExplicitSelectedWithRegistry(
+				options.TOML, registry, isStateMigrationConfigKey,
+			)
+		} else {
+			explicit, err = parseExplicitWithRegistry(options.TOML, registry)
+		}
 		if err != nil {
 			return Snapshot{}, err
 		}
@@ -67,7 +91,7 @@ func resolve(options ResolveOptions, profile resolveProfile) (Snapshot, error) {
 			return Snapshot{}, &Error{Code: ErrorUnknownKey, Key: Key(name)}
 		}
 	}
-	if err := applyEnvironmentMap(values, registry, options.Environment); err != nil {
+	if err := applyEnvironmentMapForProfile(values, registry, options.Environment, profile); err != nil {
 		return Snapshot{}, err
 	}
 	if err := validateCrossRegistryValues(registry, values, options.SourcePath, profile); err != nil {
@@ -100,11 +124,23 @@ func applyExplicit(resolved map[Key]resolvedValue, explicit map[Key]any) {
 }
 
 func applyEnvironmentMap(resolved map[Key]resolvedValue, registry registry, environment map[string]string) error {
+	return applyEnvironmentMapForProfile(resolved, registry, environment, resolveProfileRuntime)
+}
+
+func applyEnvironmentMapForProfile(
+	resolved map[Key]resolvedValue,
+	registry registry,
+	environment map[string]string,
+	profile resolveProfile,
+) error {
 	normalized := make(map[Key]string, len(environment))
 	for name, raw := range environment {
 		key, canonical := registry.environmentTargets[name]
 		if !canonical {
 			key = registry.environmentAliases[name]
+		}
+		if profile == resolveProfileStateMigration && !isStateMigrationConfigKey(key) {
+			continue
 		}
 		if _, duplicate := normalized[key]; duplicate {
 			return &Error{Code: ErrorValueInvalid, Key: key, Cause: fmt.Errorf("config_environment_alias_ambiguous")}
@@ -128,6 +164,9 @@ func validateCrossRegistryValues(
 	sourcePath string,
 	profile resolveProfile,
 ) error {
+	if profile == resolveProfileStateMigration {
+		return nil
+	}
 	fail := func(id string) error {
 		return &Error{Code: ErrorCrossValidation, Cause: fmt.Errorf("%s", id)}
 	}
@@ -166,6 +205,7 @@ func validateCrossRegistryValues(
 				return fail(validator.ID)
 			}
 		case "runtime_codex_account_profiles_complete":
+			isolation, isolationOK := values[KeyRuntimeIsolation].value.(string)
 			root, rootOK := values[KeyRuntimeCodexAccountHomeRoot].value.(string)
 			profile, profileOK := values[KeyRuntimeCodexAccountProfile].value.(string)
 			profiles, profilesOK := values[KeyRuntimeCodexAccountProfiles].value.([]string)
@@ -173,18 +213,20 @@ func validateCrossRegistryValues(
 			credentialRef, credentialOK := values[KeyRuntimeCodexCredentialRef].value.(CredentialRef)
 			hasProfile := profile != ""
 			hasProfiles := len(profiles) > 0
-			if !rootOK || !profileOK || !profilesOK || !concurrentOK || !credentialOK ||
+			if !isolationOK || !rootOK || !profileOK || !profilesOK || !concurrentOK || !credentialOK ||
 				(root != "") != (hasProfile || hasProfiles) ||
 				hasProfile && hasProfiles ||
 				hasProfile && (maxConcurrent != 1 || !validCodexAccountProfile(profile)) ||
 				hasProfiles && !validCodexAccountProfiles(profiles) ||
-				(hasProfile || hasProfiles) && credentialRef != "" {
+				(hasProfile || hasProfiles) && credentialRef != "" && isolation != "microvm" {
 				return fail(validator.ID)
 			}
 		case "runtime_microvm_requirements":
 			valid := validRuntimeMicroVMValues(values)
 			if profile == resolveProfileCredentialProvisioning {
 				valid = validRuntimeMicroVMCredentialProvisioningValues(values)
+			} else if profile == resolveProfileContinuationCredentialProvisioning {
+				valid = validRuntimeMicroVMContinuationCredentialProvisioningValues(values)
 			}
 			if !valid {
 				return fail(validator.ID)
@@ -222,17 +264,31 @@ func validateCrossRegistryValues(
 	return nil
 }
 
+func isStateMigrationConfigKey(key Key) bool {
+	switch key {
+	case KeyStateSQLitePath, KeyStateSQLiteBusyTimeout, KeyStateSQLiteMaxOpenConnections:
+		return true
+	default:
+		return false
+	}
+}
+
 func validRuntimeMicroVMValues(values map[Key]resolvedValue) bool {
-	return validRuntimeMicroVMValuesWithProfileDescriptor(values, true)
+	return validRuntimeMicroVMValuesWithOptions(values, true, true)
 }
 
 func validRuntimeMicroVMCredentialProvisioningValues(values map[Key]resolvedValue) bool {
-	return validRuntimeMicroVMValuesWithProfileDescriptor(values, false)
+	return validRuntimeMicroVMValuesWithOptions(values, false, true)
 }
 
-func validRuntimeMicroVMValuesWithProfileDescriptor(
+func validRuntimeMicroVMContinuationCredentialProvisioningValues(values map[Key]resolvedValue) bool {
+	return validRuntimeMicroVMValuesWithOptions(values, true, false)
+}
+
+func validRuntimeMicroVMValuesWithOptions(
 	values map[Key]resolvedValue,
 	requireProfileDescriptor bool,
+	requireContinuationPublicKeyDigest bool,
 ) bool {
 	provider, providerOK := values[KeyRuntimeProvider].value.(string)
 	isolation, isolationOK := values[KeyRuntimeIsolation].value.(string)
@@ -244,6 +300,12 @@ func validRuntimeMicroVMValuesWithProfileDescriptor(
 	profileDigest, digestOK := values[KeyRuntimeMicroVMExpectedProfileDescriptorSHA256].value.(string)
 	keyID, keyIDOK := values[KeyRuntimeMicroVMLaunchGrantKeyID].value.(string)
 	credentialRef, credentialOK := values[KeyRuntimeMicroVMLaunchGrantSigningCredentialRef].value.(CredentialRef)
+	continuationCredentialRef, continuationCredentialOK := values[KeyRuntimeMicroVMExpiredLaunchContinuationAuthoritySigningCredentialRef].value.(CredentialRef)
+	continuationKeyID, continuationKeyIDOK := values[KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityKeyID].value.(string)
+	continuationKeyEpoch, continuationKeyEpochOK := values[KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityKeyEpoch].value.(int64)
+	continuationTrustRevision, continuationTrustRevisionOK := values[KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityTrustRevision].value.(int64)
+	continuationPublicKeySHA256, continuationPublicKeyOK := values[KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityPublicKeySHA256].value.(string)
+	continuationValidity, continuationValidityOK := values[KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityValidity].value.(time.Duration)
 	brokerSocketPath, brokerSocketOK := values[KeyRuntimeMicroVMCredentialBrokerSocketPath].value.(string)
 	brokerPeerUID, brokerPeerUIDOK := values[KeyRuntimeMicroVMCredentialBrokerPeerUID].value.(int64)
 	brokerExchangeTimeout, brokerTimeoutOK := values[KeyRuntimeMicroVMCredentialBrokerExchangeTimeout].value.(time.Duration)
@@ -253,7 +315,9 @@ func validRuntimeMicroVMValuesWithProfileDescriptor(
 	egressPolicyDigest, egressPolicyDigestOK := values[KeyRuntimeMicroVMEgressPolicyExpectedSHA256].value.(string)
 	egressPolicyMaxBytes, egressPolicyMaxBytesOK := values[KeyRuntimeMicroVMEgressPolicyMaxBytes].value.(int64)
 	if !providerOK || !isolationOK || !modelOK || !providerCredentialOK || !placementOK || !socketOK ||
-		!profileOK || !digestOK || !keyIDOK || !credentialOK || !brokerSocketOK || !brokerPeerUIDOK ||
+		!profileOK || !digestOK || !keyIDOK || !credentialOK || !continuationCredentialOK ||
+		!continuationKeyIDOK || !continuationKeyEpochOK || !continuationTrustRevisionOK ||
+		!continuationPublicKeyOK || !continuationValidityOK || !brokerSocketOK || !brokerPeerUIDOK ||
 		!brokerTimeoutOK || !brokerMaxConnectionsOK || !egressPolicyRefOK || !egressPolicyPathOK ||
 		!egressPolicyDigestOK || !egressPolicyMaxBytesOK {
 		return false
@@ -262,6 +326,8 @@ func validRuntimeMicroVMValuesWithProfileDescriptor(
 		egressPolicyMaxBytes != 64<<10
 	configured := placementRef != "" || socketPath != "" || profilePath != "" || profileDigest != "" ||
 		keyID != "" || credentialRef != "" || brokerSocketPath != "" || brokerPeerUID != 0 ||
+		continuationCredentialRef != "" || continuationKeyID != "" || continuationKeyEpoch != 0 ||
+		continuationTrustRevision != 0 || continuationPublicKeySHA256 != "" || continuationValidity != 2*time.Minute ||
 		brokerExchangeTimeout != 30*time.Second || brokerMaxConnections != 16 || egressPolicyConfigured
 	if isolation == "process" {
 		return !configured
@@ -273,6 +339,10 @@ func validRuntimeMicroVMValuesWithProfileDescriptor(
 	if !requireProfileDescriptor && profilePath == "" && profileDigest == "" {
 		validProfileDescriptor = true
 	}
+	validContinuationPublicKeyDigest := validBareSHA256(continuationPublicKeySHA256)
+	if !requireContinuationPublicKeyDigest && continuationPublicKeySHA256 == "" {
+		validContinuationPublicKeyDigest = true
+	}
 	return isolation == "microvm" && provider == "codex" && validEgressPolicy &&
 		validProviderModel(providerModel) &&
 		providerCredentialRef != "" && providerCredentialRef != credentialRef &&
@@ -280,7 +350,11 @@ func validRuntimeMicroVMValuesWithProfileDescriptor(
 		canonicalAbsolutePath(socketPath) &&
 		validProfileDescriptor &&
 		validLaunchGrantKeyID(keyID) &&
-		credentialRef != "" &&
+		credentialRef != "" && continuationCredentialRef != "" &&
+		continuationCredentialRef != providerCredentialRef && continuationCredentialRef != credentialRef &&
+		validExpiredLaunchContinuationKeyID(continuationKeyID) && continuationKeyEpoch > 0 &&
+		continuationTrustRevision > 0 && validContinuationPublicKeyDigest &&
+		continuationValidity > 0 && continuationValidity <= 5*time.Minute &&
 		canonicalAbsolutePath(brokerSocketPath) && brokerSocketPath != socketPath &&
 		brokerExchangeTimeout > 0 && brokerMaxConnections > 0
 }
@@ -311,6 +385,25 @@ func validRuntimeMicroVMPlacementRef(value string) bool {
 func validLaunchGrantKeyID(value string) bool {
 	const prefix = "clave-publica:"
 	if !strings.HasPrefix(value, prefix) || len(value) > 160 {
+		return false
+	}
+	suffix := strings.TrimPrefix(value, prefix)
+	if suffix == "" {
+		return false
+	}
+	for _, character := range []byte(suffix) {
+		if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' ||
+			character == '-' || character == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validExpiredLaunchContinuationKeyID(value string) bool {
+	const prefix = "continuation-"
+	if !strings.HasPrefix(value, prefix) || len(value) > 128 {
 		return false
 	}
 	suffix := strings.TrimPrefix(value, prefix)

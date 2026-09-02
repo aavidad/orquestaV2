@@ -1535,6 +1535,48 @@ func (repository *memoryRepository) ValidateAgentLaunchRecoveryClaim(
 	return nil
 }
 
+func (repository *memoryRepository) AuthorizeTerminalAgentLaunchReconciliation(
+	_ context.Context,
+	state AuthorizeTerminalAgentLaunchReconciliationState,
+) (TerminalAgentLaunchReconciliationAuthority, bool, error) {
+	return TerminalAgentLaunchReconciliationAuthority{}, false, &StateError{Code: StateConflict}
+}
+
+func (repository *memoryRepository) ValidateTerminalAgentLaunchReconciliationClaim(
+	_ context.Context,
+	claim ActionClaim,
+) error {
+	return &StateError{Code: StateConflict}
+}
+
+func (repository *memoryRepository) RecordTerminalAgentLaunchReconciliationAttempt(
+	_ context.Context,
+	state RecordTerminalAgentLaunchReconciliationAttemptState,
+) error {
+	return &StateError{Code: StateConflict}
+}
+
+func (repository *memoryRepository) RequeueTerminalAgentLaunchReconciliation(
+	_ context.Context,
+	state TerminalAgentLaunchReconciliationRequeuedState,
+) error {
+	return &StateError{Code: StateConflict}
+}
+
+func (repository *memoryRepository) RecordTerminalAgentLaunchReconciled(
+	_ context.Context,
+	state TerminalAgentLaunchReconciliationCompletedState,
+) error {
+	return &StateError{Code: StateConflict}
+}
+
+func (repository *memoryRepository) QuarantineTerminalAgentLaunchReconciliation(
+	_ context.Context,
+	state TerminalAgentLaunchReconciliationQuarantinedState,
+) error {
+	return &StateError{Code: StateConflict}
+}
+
 func reservaCapacidadMemoria(accion ActionRecord, candidato AgentCapacityPlacementCandidate, cerca uint64, ahora time.Time) AgentCapacityReservation {
 	demanda, _ := AgentCapacityDemandFromBudget(accion.EffectIntent.Demand)
 	return AgentCapacityReservation{Ref: "capacity-reservation:" + accion.Ref, ObservationRef: candidato.Physical.Ref, ObservationRevision: 1,

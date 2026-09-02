@@ -28,6 +28,7 @@ type applicationAPI interface {
 	ProposeDirectorPlan(context.Context, application.Access, application.ProposeDirectorPlanRequest) (application.DirectorPlanResult, error)
 	Control(context.Context, application.Access, application.ControlRequest) (application.ControlResult, error)
 	DecideEffect(context.Context, application.Access, application.DecideEffectRequest) (application.DecideEffectResult, error)
+	ReconcileTerminalAgentLaunch(context.Context, application.Access, application.ReconcileTerminalAgentLaunchRequest) (application.ReconcileTerminalAgentLaunchResult, error)
 	ListPendingChanges(context.Context, application.Access, application.ListPendingChangesRequest) (application.ListPendingChangesResult, error)
 	IntegrateChange(context.Context, application.Access, application.IntegrateChangeRequest) (application.IntegrateChangeResult, error)
 	AdmitMailbox(context.Context, application.Access, application.AdmitMailboxRequest) (application.MailboxAdmissionResult, error)
@@ -50,6 +51,8 @@ type applicationAPI interface {
 	PrepareWizardDossier(context.Context, application.Access, application.PrepareWizardDossierRequest) (application.WizardDossierResult, error)
 	GetIntakeDossier(context.Context, application.Access, application.GetIntakeDossierRequest) (application.IntakeDossierRecord, error)
 	ConfirmIntakeDossier(context.Context, application.Access, application.ConfirmIntakeDossierRequest) (application.ConfirmIntakeDossierResult, error)
+	PreflightExpiredAgentLaunchContinuationV41(context.Context, application.Access, application.PreflightExpiredAgentLaunchContinuationRequestV41) (application.PreflightExpiredAgentLaunchContinuationResultV41, error)
+	ConfirmExpiredAgentLaunchContinuationV41(context.Context, application.Access, application.ConfirmExpiredAgentLaunchContinuationRequestV41) (application.ConfirmExpiredAgentLaunchContinuationResultV41, error)
 }
 
 var _ applicationAPI = (*application.Orchestrator)(nil)
@@ -59,6 +62,8 @@ var expectedHandlerPermissions = map[string]string{
 	"GetArtifact": "artifacts.read", "Status": "project.status", "GrantMembership": "project.membership.manage",
 	"RevokeMembership": "project.membership.manage", "ClaimDirector": "goals.direct", "RenewDirector": "goals.direct",
 	"ProposeDirectorPlan": "goals.direct", "Control": "goals.direct", "DecideEffect": "effects.approve",
+	"ReconcileTerminalAgentLaunch":            "effects.approve",
+	"PreflightExpiredAgentLaunchContinuation": "effects.approve", "ConfirmExpiredAgentLaunchContinuation": "effects.approve",
 	"ListPendingChanges": "goals.list", "IntegrateChange": "changes.integrate", "AdmitMailbox": "goals.direct",
 	"ClaimMailbox": "goals.get", "MarkMailboxDelivered": "goals.get", "ConsumeMailbox": "goals.get",
 	"GetMailbox": "goals.get", "ListMailbox": "goals.get", "AcknowledgeMailbox": "goals.get", "BlockMailbox": "goals.get",
@@ -82,8 +87,9 @@ func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
 		"GrantMembership": wrap(handleGrantMembership), "RevokeMembership": wrap(handleRevokeMembership),
 		"ClaimDirector": wrap(handleClaimDirector), "RenewDirector": wrap(handleRenewDirector),
 		"ProposeDirectorPlan": wrap(handleProposeDirectorPlan), "Control": wrap(handleControl),
-		"DecideEffect": wrap(handleDecideEffect), "ListPendingChanges": wrap(handleListPendingChanges),
-		"IntegrateChange": wrap(handleIntegrateChange), "AdmitMailbox": wrap(handleAdmitMailbox),
+		"DecideEffect": wrap(handleDecideEffect), "ReconcileTerminalAgentLaunch": wrap(handleReconcileTerminalAgentLaunch),
+		"ListPendingChanges": wrap(handleListPendingChanges),
+		"IntegrateChange":    wrap(handleIntegrateChange), "AdmitMailbox": wrap(handleAdmitMailbox),
 		"ClaimMailbox": wrap(handleClaimMailbox), "MarkMailboxDelivered": wrap(handleMarkMailboxDelivered),
 		"ConsumeMailbox": wrap(handleConsumeMailbox), "GetMailbox": wrap(handleGetMailbox),
 		"ListMailbox": wrap(handleListMailbox), "AcknowledgeMailbox": wrap(handleAcknowledgeMailbox),
@@ -93,13 +99,15 @@ func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
 			return handleCreateIntake(ctx, dispatcher.application, bound, payload, dispatcher.intakePolicy)
 		},
 		"GetIntake": wrap(handleGetIntake), "ApplyIntake": wrap(handleApplyIntake),
-		"ApplyWizardGaps":             wrap(handleApplyWizardGaps),
-		"AcceptIntakeRecommendations": wrap(handleAcceptIntakeRecommendations),
-		"GetIntakeContext":            wrap(handleGetIntakeContext),
-		"PrepareIntakeDossier":        wrap(handlePrepareIntakeDossier),
-		"PrepareWizardDossier":        wrap(handlePrepareWizardDossier),
-		"GetIntakeDossier":            wrap(handleGetIntakeDossier),
-		"ConfirmIntakeDossier":        wrap(handleConfirmIntakeDossier),
+		"ApplyWizardGaps":                         wrap(handleApplyWizardGaps),
+		"AcceptIntakeRecommendations":             wrap(handleAcceptIntakeRecommendations),
+		"GetIntakeContext":                        wrap(handleGetIntakeContext),
+		"PrepareIntakeDossier":                    wrap(handlePrepareIntakeDossier),
+		"PrepareWizardDossier":                    wrap(handlePrepareWizardDossier),
+		"GetIntakeDossier":                        wrap(handleGetIntakeDossier),
+		"ConfirmIntakeDossier":                    wrap(handleConfirmIntakeDossier),
+		"PreflightExpiredAgentLaunchContinuation": wrap(handlePreflightExpiredAgentLaunchContinuation),
+		"ConfirmExpiredAgentLaunchContinuation":   wrap(handleConfirmExpiredAgentLaunchContinuation),
 	}
 }
 

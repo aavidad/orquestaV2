@@ -150,9 +150,9 @@ func TestPublicPlansCarryExactOptionalEgressPolicyRefIntoApplication(t *testing.
 	}
 }
 
-func TestCanonicalRegistryHas35CommandsAndPropagatesCouncilContracts(t *testing.T) {
+func TestCanonicalRegistryHas38CommandsAndPropagatesCouncilContracts(t *testing.T) {
 	dispatcher, api, _ := testDispatcher(t)
-	if got := len(dispatcher.Definitions()); got != 35 {
+	if got := len(dispatcher.Definitions()); got != 38 {
 		t.Fatalf("definitions=%d", got)
 	}
 	byID := compiledDefinitionsByID()
@@ -466,7 +466,7 @@ func TestAllCanonicalHandlersInvokeExistingApplicationUseCases(t *testing.T) {
 	dispatcher, api, _ := testDispatcher(t)
 	cases := canonicalPayloads()
 	for index, definition := range dispatcher.Definitions() {
-		result := invoke(t, dispatcher, definition.ID, "request:all:"+string(rune('a'+index)), cases[definition.ID], definition.ExecutionBound)
+		result := invoke(t, dispatcher, definition.ID, fmt.Sprintf("request:all:%02d", index), cases[definition.ID], definition.ExecutionBound)
 		if result.Failure != nil {
 			t.Errorf("%s: %+v", definition.ID, result.Failure)
 		}
@@ -506,7 +506,22 @@ func canonicalPayloads() map[string]any {
 		"orquesta.director.plan.propose": map[string]any{"goal_ref": "goal:g", "expected_goal_revision": 1, "expected_plan_generation": 1, "lease_token": "token:t", "lease_fence": 1, "cause": "execution_failed", "source_work_item_ref": "work-item:w", "expected_work_item_revision": 1, "source_execution_ref": "execution:e", "source_execution_attempt": 1, "reason": "retry", "plan": map[string]any{"phases": []any{}, "work_items": []any{map[string]any{"key": "work:next", "objective": "retry", "phase": "phase:main", "role": "role:worker", "dependencies": []any{}, "write_set": []any{}, "output_contract": "evidence_bundle"}}}},
 		"orquesta.goals.control":         map[string]any{"operation": "pause", "target": "goal", "goal_ref": "goal:g", "expected_goal_revision": 1, "expected_plan_generation": 1, "expected_app_spec_generation": 1, "expected_spec_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "reason": "pause"},
 		"orquesta.effects.decide":        map[string]any{"goal_ref": "goal:g", "intent_ref": "intent:i", "expected_intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "decision": "denied", "reason": "risk"},
-		"orquesta.changes.list":          map[string]any{"limit": 1}, "orquesta.changes.integrate": map[string]any{"goal_ref": "goal:g", "change_ref": "change:c", "expected_target_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+		"orquesta.effects.reconcile_agent_launch": map[string]any{
+			"goal_ref": "goal:g", "work_item_ref": "work-item:w", "execution_ref": "execution:e",
+			"action_ref": "action:launch:execution:e", "effect_intent_ref": "effect-intent:i",
+			"effect_intent_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			"effect_attempt_ref":   "effect-attempt:a", "plan_generation": 1,
+			"work_item_generation": 1, "action_fence": 1,
+		},
+		"orquesta.effects.expired_agent_launch_continuation.preflight": map[string]any{
+			"reconciliation_authority_ref": "agent-launch-reconciliation:one",
+		},
+		"orquesta.effects.expired_agent_launch_continuation.confirm": map[string]any{
+			"reconciliation_authority_ref": "agent-launch-reconciliation:one",
+			"expected_manifest_sha256":     strings.Repeat("a", 64),
+			"confirmation":                 "emitir_autoridad_v41",
+		},
+		"orquesta.changes.list": map[string]any{"limit": 1}, "orquesta.changes.integrate": map[string]any{"goal_ref": "goal:g", "change_ref": "change:c", "expected_target_oid": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 		"orquesta.mailbox.admit":          map[string]any{"goal_ref": "goal:g", "expected_plan_generation": 1, "kind": "child_delivery", "parent_work_item_ref": "work-item:p", "child_work_item_ref": "work-item:c", "recipient_principal_ref": "principal:parent", "recipient_execution_ref": "execution:parent", "summary": "done", "artifact_refs": []string{}},
 		"orquesta.mailbox.claim":          map[string]any{"goal_ref": "goal:g", "message_ref": "mailbox-message:m", "recipient_work_item_ref": "work-item:w"},
 		"orquesta.mailbox.mark_delivered": map[string]any{"goal_ref": "goal:g", "message_ref": "mailbox-message:m", "recipient_work_item_ref": "work-item:w", "claim_token": "claim:t", "fence": 1},

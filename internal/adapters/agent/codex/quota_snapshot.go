@@ -45,7 +45,6 @@ func traducirLecturaCuotaCodex(datos []byte, colocacion ports.AgentPlacementRef,
 	}
 	var respuesta respuestaCuotaCodex
 	decodificador := json.NewDecoder(bytes.NewReader(datos))
-	decodificador.DisallowUnknownFields()
 	if decodificador.Decode(&respuesta) != nil || requireJSONEOF(decodificador) != nil ||
 		respuesta.Limites == nil {
 		return traduccionCuotaCodex{}, &Error{Code: CodeOutputInvalid}

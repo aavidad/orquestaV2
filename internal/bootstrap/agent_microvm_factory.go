@@ -15,6 +15,8 @@ import (
 
 	"orquesta/internal/adapters/agent/agentmicrovm"
 	"orquesta/internal/adapters/agent/codex"
+	localruntime "orquesta/internal/adapters/system/local"
+	"orquesta/internal/application"
 	"orquesta/internal/config"
 	"orquesta/internal/credentials"
 	"orquesta/internal/ports"
@@ -122,6 +124,22 @@ func productionAgentMicroVMConConstructor(
 	if err != nil {
 		return nil, err
 	}
+	firmanteContinuacion, err := agentmicrovm.NewExpiredLaunchContinuationAuthoritySignerV41(
+		agentmicrovm.ExpiredLaunchContinuationAuthoritySignerConfigV41{
+			Store: credentialStore, AuthorityReader: autoridad.lectorCredencial,
+			CredentialRef: credentials.CredentialRef(
+				snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthoritySigningCredentialRef(),
+			),
+			KeyID:                   snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityKeyID(),
+			KeyEpoch:                uint64(snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityKeyEpoch()),
+			TrustRevision:           uint64(snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityTrustRevision()),
+			ExpectedPublicKeySHA256: snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityPublicKeySHA256(),
+			Validity:                snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityValidity(),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
 	resolutorCredencial, err := agentmicrovm.NewCredentialClaimResolver(
 		autoridad.lectorCredencial,
 		credentials.PurposeRef(codex.ProviderRef),
@@ -178,7 +196,8 @@ func productionAgentMicroVMConConstructor(
 		return fallarCliente(err)
 	}
 	if capacidadesRemotas.Protocolo != protocoloAgentMicroVMFijado ||
-		capacidadesRemotas.Version != versionAgentMicroVMFijada {
+		capacidadesRemotas.Version != versionAgentMicroVMFijada ||
+		agentmicrovm.ValidateExpiredLaunchContinuationCapabilitiesV41(capacidadesRemotas) != nil {
 		return fallarCliente(errFactoriaAgentMicroVMProtocoloInvalido)
 	}
 
@@ -203,15 +222,38 @@ func productionAgentMicroVMConConstructor(
 				Descriptor:   descriptor,
 			},
 		},
-		PromptRenderer: promptRenderer,
+		PromptRenderer:            promptRenderer,
+		ExpiredContinuationSigner: firmanteContinuacion,
 	})
 	if err != nil {
 		return fallarCliente(err)
 	}
+	var iniciadorCuota application.IniciadorControladoresCuotaAgente
+	cerrarCuota := func() error { return nil }
+	if snapshot.RuntimeCodexAccountHomeRoot() != "" {
+		agenteCuota, quotaErr := productionCodexQuotaObserver(
+			snapshot,
+			localruntime.Clock{},
+			promptRenderer,
+			codexGoToolchainOwnerTrusted,
+		)
+		if quotaErr != nil {
+			return fallarCliente(quotaErr)
+		}
+		var disponible bool
+		iniciadorCuota, disponible = agenteCuota.(application.IniciadorControladoresCuotaAgente)
+		if !disponible {
+			return fallarCliente(errors.Join(
+				errFactoriaAgentMicroVMAutoridadInvalida,
+				agenteCuota.Shutdown(context.Background()),
+			))
+		}
+		cerrarCuota = func() error { return agenteCuota.Shutdown(context.Background()) }
+	}
 	// El listener pertenece a la composición residente, no al contexto efímero
 	// de Build. Start acredita la publicación antes de devolver el agente.
 	if err := servidorBroker.Start(context.Background()); err != nil {
-		return fallarCliente(err)
+		return nil, errors.Join(err, cerrarCuota(), recurso.liberarConexiones())
 	}
 	cerrarBrokerYCliente := func() error {
 		shutdownCtx, cancel := context.WithTimeout(
@@ -229,12 +271,13 @@ func productionAgentMicroVMConConstructor(
 		return errors.Join(brokerErr, recurso.liberarConexiones())
 	}
 
-	// El store pertenece al Runtime. El callback explícito sin efecto evita que
-	// el wrapper lo descubra o cierre por aproximación estructural.
-	agente, err := newAgentMicroVM(adaptador, cerrarBrokerYCliente, func() error { return nil })
+	// El store pertenece al Runtime. El segundo callback cierra únicamente el
+	// observador anfitrión de cuota; nunca toma ownership del store compartido.
+	agente, err := newAgentMicroVM(adaptador, cerrarBrokerYCliente, cerrarCuota)
 	if err != nil {
-		return nil, errors.Join(err, cerrarBrokerYCliente())
+		return nil, errors.Join(err, cerrarBrokerYCliente(), cerrarCuota())
 	}
+	agente.iniciadorCuota = iniciadorCuota
 	return agente, nil
 }
 

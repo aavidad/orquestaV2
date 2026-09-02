@@ -75,12 +75,20 @@ func (orchestrator *Orchestrator) processClaim(
 	claim ActionClaim,
 ) (ProcessResult, error) {
 	result := ProcessResult{Processed: true, GoalRef: claim.Action.GoalRef, Action: claim.Action.Kind}
+	if claim.Disposition == ActionClaimDispositionReconcileTerminalLaunch {
+		if claim.Action.Kind != ActionLaunchAgent {
+			return result, &StateError{Code: StateConflict}
+		}
+		return result, orchestrator.processAgentLaunchRecovery(ctx, claim)
+	}
 	if claim.Disposition == ActionClaimDispositionRecoverEffect {
 		switch claim.Action.Kind {
 		case ActionLaunchAgent:
 			return result, orchestrator.processAgentLaunchRecovery(ctx, claim)
 		case ActionStopAgent:
 			return result, orchestrator.processAgentStopRecovery(ctx, claim)
+		case ActionQuiesceAgent, ActionPreserveAgentEnvironment, ActionCloseAgentEnvironment:
+			return result, orchestrator.processAgentEnvironmentLifecycle(ctx, claim)
 		default:
 			return result, &StateError{Code: StateConflict}
 		}
@@ -104,6 +112,8 @@ func (orchestrator *Orchestrator) processClaim(
 		err = orchestrator.processObservation(ctx, claim)
 	case ActionStopAgent:
 		err = orchestrator.processStop(ctx, claim)
+	case ActionQuiesceAgent, ActionPreserveAgentEnvironment, ActionCloseAgentEnvironment:
+		err = orchestrator.processAgentEnvironmentLifecycle(ctx, claim)
 	case ActionCommitChange:
 		err = orchestrator.processCommitChange(ctx, claim)
 	case ActionAttestTest:
@@ -281,6 +291,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	return orchestrator.completeAcceptedLaunch(
 		ctx, claim, record, item, execution, attempt, receipt, transitionAt, transitionAt, true,
+		nil,
 	)
 }
 
@@ -295,15 +306,28 @@ func (orchestrator *Orchestrator) completeAcceptedLaunch(
 	transitionAt time.Time,
 	effectConfirmedAt time.Time,
 	abortDuplicateReviewer bool,
+	reconciliationAttempt *TerminalAgentLaunchReconciliationAttempt,
 ) error {
+	dispatchingExecution := execution
+	fail := func() error {
+		if claim.Disposition == ActionClaimDispositionReconcileTerminalLaunch {
+			return orchestrator.state.QuarantineTerminalAgentLaunchReconciliation(
+				ctx, TerminalAgentLaunchReconciliationQuarantinedState{
+					Claim: claim, Attempt: reconciliationAttempt, ErrorCode: effectUnknownAppliedCode,
+					OperationAt: orchestrator.clock.Now().UTC(),
+				},
+			)
+		}
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
 	if isReviewerExecution(execution) && !reviewExternalRefAvailable(record, execution, receipt.ExternalRef) {
 		if abortDuplicateReviewer {
 			return orchestrator.abortReviewerLaunch(ctx, claim, record, execution, attempt, receipt)
 		}
-		return orchestrator.quarantineUnknownApplied(ctx, claim)
+		return fail()
 	}
 	if isCouncilExecution(execution) && !councilExternalRefAvailable(record, execution, receipt.ExternalRef) {
-		return orchestrator.quarantineUnknownApplied(ctx, claim)
+		return fail()
 	}
 	execution.State = ExecutionRunning
 	execution.ProviderRef, execution.ModelRef = receipt.ProviderRef, receipt.ModelRef
@@ -315,7 +339,7 @@ func (orchestrator *Orchestrator) completeAcceptedLaunch(
 		claim, attempt, receipt.ReceiptRef, EffectStatusAccepted, unknownUsage(), effectConfirmedAt,
 	)
 	if err != nil {
-		return orchestrator.quarantineUnknownApplied(ctx, claim)
+		return fail()
 	}
 	execution.ProviderAcceptedAt = receipt.AcceptedAt.UTC()
 	execution.LaunchReceiptRef = externalReceipt.Ref
@@ -328,23 +352,23 @@ func (orchestrator *Orchestrator) completeAcceptedLaunch(
 	if cleanup, pending := pendingReviewCleanupControl(record, execution); pending {
 		policy, policyErr := historicalEffectPolicy(record)
 		if policyErr != nil {
-			return orchestrator.quarantineUnknownApplied(ctx, claim)
+			return fail()
 		}
 		next, err = orchestrator.reviewCleanupStopAction(policy, cleanup, record.Goal, item, execution, transitionAt)
 		if err != nil {
-			return orchestrator.quarantineUnknownApplied(ctx, claim)
+			return fail()
 		}
 	} else if cleanup, pending := pendingCouncilCleanupControl(record, execution); pending {
 		policy, policyErr := historicalEffectPolicy(record)
 		if policyErr != nil {
-			return orchestrator.quarantineUnknownApplied(ctx, claim)
+			return fail()
 		}
 		next, err = orchestrator.councilCleanupStopAction(policy, cleanup, record.Goal, item, execution, transitionAt)
 		if err != nil {
-			return orchestrator.quarantineUnknownApplied(ctx, claim)
+			return fail()
 		}
 	}
-	err = orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
+	accepted := LaunchAcceptedState{
 		Claim: claim, Execution: execution, NextAction: next, EffectReceipt: externalReceipt,
 		Event: EventRecord{
 			Ref: "event:execution-accepted:" + execution.Ref.String(), Kind: "execution.accepted",
@@ -352,17 +376,56 @@ func (orchestrator *Orchestrator) completeAcceptedLaunch(
 			OccurredAt: transitionAt,
 		},
 		OperationAt: transitionAt,
-	})
+	}
+	if claim.Disposition == ActionClaimDispositionReconcileTerminalLaunch {
+		if reconciliationAttempt == nil {
+			return fail()
+		}
+		completion := TerminalAgentLaunchReconciliationCompletedState{
+			Claim: accepted.Claim, Execution: accepted.Execution, NextAction: accepted.NextAction,
+			Event: accepted.Event, EffectReceipt: accepted.EffectReceipt,
+			Attempt: *reconciliationAttempt, OperationAt: accepted.OperationAt,
+		}
+		err = orchestrator.recordTerminalAgentLaunchReconciled(ctx, completion)
+	} else {
+		err = orchestrator.state.RecordLaunchAccepted(ctx, accepted)
+	}
 	if err != nil {
+		if claim.Disposition == ActionClaimDispositionReconcileTerminalLaunch {
+			return orchestrator.requeueAgentLaunchRecovery(
+				ctx, claim, dispatchingExecution, agentLaunchReconciliationPendingCode,
+			)
+		}
 		if abortDuplicateReviewer && isReviewerExecution(execution) {
 			latest, _, latestExecution, reloadErr := orchestrator.reloadPreparedLaunch(ctx, claim)
 			if reloadErr == nil && !reviewExternalRefAvailable(latest, latestExecution, receipt.ExternalRef) {
 				return orchestrator.abortReviewerLaunch(ctx, claim, latest, latestExecution, attempt, receipt)
 			}
 		}
-		return orchestrator.quarantineUnknownApplied(ctx, claim)
+		return fail()
 	}
 	return nil
+}
+
+func (orchestrator *Orchestrator) recordTerminalAgentLaunchReconciled(
+	ctx context.Context,
+	completion TerminalAgentLaunchReconciliationCompletedState,
+) error {
+	err := orchestrator.state.RecordTerminalAgentLaunchReconciled(ctx, completion)
+	if err == nil {
+		return nil
+	}
+	if ctx == nil {
+		return err
+	}
+	if cancellationErr := ctx.Err(); cancellationErr != nil {
+		return cancellationErr
+	}
+	// The physical receipt is already confirmed. Replay only the exact local
+	// terminal write once. If both writes fail, the caller requeues the same
+	// V41 authority, whose Continue operation replays the durable AMV receipt;
+	// it never falls back to Launch or ordinary reconciliation.
+	return orchestrator.state.RecordTerminalAgentLaunchReconciled(ctx, completion)
 }
 
 func (orchestrator *Orchestrator) ensureExecutionSession(
@@ -784,10 +847,92 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		if len(item.WriteSet()) != 0 {
 			return orchestrator.stageExecutionOutput(ctx, claim, record, execution, observation, transitionAt)
 		}
+		if execution.RequierePreservacionEntorno {
+			launchRequest, launchReceipt, historyErr := agentEnvironmentLaunchPair(record, execution)
+			if historyErr != nil {
+				return historyErr
+			}
+			snapshot, created, lifecycleErr := orchestrator.InitializeAgentEnvironmentLifecycle(
+				ctx,
+				InitializeAgentEnvironmentLifecycleRequest{
+					LaunchRequest: launchRequest, LaunchReceipt: launchReceipt,
+					Record: record, Claim: claim,
+				},
+			)
+			if lifecycleErr != nil {
+				return lifecycleErr
+			}
+			if created {
+				return nil
+			}
+			if snapshot.Token.State != ports.AgentEnvironmentClosed {
+				return &StateError{Code: StateConflict}
+			}
+		}
 		return orchestrator.succeedGoal(ctx, claim, record, execution, observation, transitionAt)
 	default:
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_status_invalid")
 	}
+}
+
+func (orchestrator *Orchestrator) processAgentEnvironmentLifecycle(
+	ctx context.Context,
+	claim ActionClaim,
+) error {
+	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
+	if err != nil {
+		return err
+	}
+	if err := validateClaimedRecord(claim, record, claim.Action.Kind); err != nil {
+		return err
+	}
+	execution, found := executionForAction(record, claim.Action)
+	if !found || !execution.RequierePreservacionEntorno {
+		return &StateError{Code: StateConflict}
+	}
+	launchRequest, launchReceipt, err := agentEnvironmentLaunchPair(record, execution)
+	if err != nil {
+		return err
+	}
+	_, err = orchestrator.AdvanceAgentEnvironmentLifecycle(ctx, AdvanceAgentEnvironmentLifecycleRequest{
+		LaunchRequest: launchRequest, LaunchReceipt: launchReceipt, Record: record, Claim: claim,
+	})
+	return err
+}
+
+func agentEnvironmentLaunchPair(
+	record GoalRecord,
+	execution ExecutionRecord,
+) (ports.AgentLaunchRequest, ports.AgentLaunchReceipt, error) {
+	var launch EffectReceipt
+	matches := 0
+	for _, receipt := range record.EffectReceipts {
+		if receipt.Ref == execution.LaunchReceiptRef {
+			launch = receipt
+			matches++
+		}
+	}
+	request := ports.AgentLaunchRequest{
+		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
+		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
+		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
+		IdempotencyKey:              execution.IdempotencyKey,
+		RequierePreservacionEntorno: execution.RequierePreservacionEntorno,
+	}
+	receipt := ports.AgentLaunchReceipt{
+		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
+		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
+		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
+		ProviderRef: execution.ProviderRef, ModelRef: execution.ModelRef, AgentRef: execution.AgentRef,
+		ExternalRef: execution.ExternalRef, IdempotencyKey: execution.IdempotencyKey,
+		ReceiptRef: launch.ExternalRef, AcceptedAt: execution.ProviderAcceptedAt,
+		RequierePreservacionEntorno: execution.RequierePreservacionEntorno,
+	}
+	if matches != 1 || launch.Status != EffectStatusAccepted ||
+		ports.ValidateAgentLaunchReceipt(request, receipt) != nil {
+		return ports.AgentLaunchRequest{}, ports.AgentLaunchReceipt{}, errAgentEnvironmentLifecycleStateInvalid
+	}
+	return request, receipt, nil
 }
 
 func agentObserveRequest(execution ExecutionRecord) ports.AgentObserveRequest {

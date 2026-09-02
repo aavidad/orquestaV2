@@ -215,10 +215,31 @@ func assertV39RuntimeAndParentCounts(t *testing.T, repository *Repository, key p
 
 func downgradeV39RuntimeDigestsToV38(t *testing.T, database *sql.DB) {
 	t.Helper()
-	mustV10Exec(t, database, `DROP TRIGGER microvm_host_launch_authorities_runtime_digest_required;
+	migrations, err := loadMigrations()
+	sqliteTestNoError(t, err)
+	canonical, err := sql.Open(driverName, ":memory:")
+	sqliteTestNoError(t, err)
+	canonical.SetMaxOpenConns(1)
+	defer canonical.Close()
+	sqliteTestNoError(t, applyRecoveryMigrationPrefix(
+		context.Background(), canonical, migrations[:recoverySchemaV38StopRecoveryClaim],
+	))
+	var causalGuard string
+	sqliteTestNoError(t, canonical.QueryRow(`SELECT sql FROM sqlite_schema
+WHERE type='trigger' AND name='effect_receipts_causal_guard'`).Scan(&causalGuard))
+
+	mustV10Exec(t, database, `DROP TABLE agent_launch_expired_continuation_authorities;
+DROP TABLE agent_launch_expired_continuation_subjects;
+DROP TRIGGER effect_receipts_causal_guard;
+DROP TABLE agent_launch_reconciliation_receipts;
+DROP TABLE agent_launch_reconciliation_attempts;
+DROP TABLE agent_launch_reconciliation_jobs;
+DROP TABLE agent_launch_reconciliation_authorities;
+DROP TRIGGER microvm_host_launch_authorities_runtime_digest_required;
 DROP TABLE microvm_host_launch_runtime_digests;
 DROP TABLE microvm_host_launch_runtime_digest_legacy_exemptions;
 DROP TABLE microvm_host_launch_runtime_digest_epoch;
-DELETE FROM schema_migrations WHERE version=39;
+DELETE FROM schema_migrations WHERE version IN (39,40,41);
 PRAGMA user_version=38`)
+	mustV10Exec(t, database, causalGuard)
 }

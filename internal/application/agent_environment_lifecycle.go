@@ -68,8 +68,11 @@ type AgentEnvironmentLifecycleSnapshot struct {
 // its exact Execution; an exact replay returns the stored snapshot without
 // inventing another physical inspection fact.
 type AgentEnvironmentLifecycleInitialState struct {
-	Snapshot    AgentEnvironmentLifecycleSnapshot
-	OperationAt time.Time
+	Snapshot           AgentEnvironmentLifecycleSnapshot
+	Claim              ActionClaim
+	NextAction         *ActionRecord
+	ConsumptionReceipt *ActionConsumptionReceipt
+	OperationAt        time.Time
 }
 
 // AgentEnvironmentLifecycleStoredState is the restart read model. Claim and
@@ -120,7 +123,11 @@ type AgentEnvironmentLifecyclePostEffectState struct {
 	// ReadyToFinalize is true only for the durable closed physical frontier.
 	// It is a convenience projection; Snapshot.Token remains authority.
 	ReadyToFinalize bool
-	OperationAt     time.Time
+	// FinalizationAction is inserted atomically with Close but is not part of
+	// the lifecycle projection. It re-observes the durable Codex result so the
+	// ordinary success writer remains the sole Goal terminalizer.
+	FinalizationAction *ActionRecord
+	OperationAt        time.Time
 }
 
 // AgentEnvironmentLifecycleStore is one cohesive durable application port.

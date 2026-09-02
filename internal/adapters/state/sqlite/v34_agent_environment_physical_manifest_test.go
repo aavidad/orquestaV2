@@ -287,6 +287,14 @@ ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END,name`)
 		t.Fatal(err)
 	}
 	defer transaction.Rollback()
+	if _, err := transaction.Exec(`DROP TABLE agent_launch_expired_continuation_authorities;
+DROP TABLE agent_launch_expired_continuation_subjects;
+DROP TABLE agent_launch_reconciliation_receipts;
+DROP TABLE agent_launch_reconciliation_attempts;
+DROP TABLE agent_launch_reconciliation_jobs;
+DROP TABLE agent_launch_reconciliation_authorities`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := transaction.Exec(`DROP TABLE effect_non_application_evidence`); err != nil {
 		t.Fatal(err)
 	}
@@ -335,10 +343,11 @@ ORDER BY CASE type WHEN 'index' THEN 0 ELSE 1 END,name`)
 DROP TABLE microvm_host_launch_runtime_digests;
 DROP TABLE microvm_host_launch_runtime_digest_legacy_exemptions;
 DROP TABLE microvm_host_launch_runtime_digest_epoch;
-DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?)`,
+DELETE FROM schema_migrations WHERE version IN (?,?,?,?,?,?,?)`,
 		recoverySchemaV38EnvironmentLifecycle, recoverySchemaV23WizardGapsSnapshot,
 		recoverySchemaV38StopNonApplication, recoverySchemaV38StopRecoveryClaim,
-		recoverySchemaV38LaunchRuntimeDigests,
+		recoverySchemaV38LaunchRuntimeDigests, recoverySchemaV38TerminalLaunchReconciliation,
+		recoverySchemaV38ExpiredLaunchContinuation,
 	); err != nil {
 		t.Fatal(err)
 	}

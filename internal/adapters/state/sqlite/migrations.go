@@ -35,10 +35,32 @@ type migration struct {
 	effectAttemptClaimLeaseBackfill bool
 }
 
+type migrationPolicy struct {
+	bounded     bool
+	expectFrom  int
+	expectTo    int
+	before      func(context.Context, *sql.Tx, int) error
+	after       func(context.Context, *sql.Tx, int) error
+	afterStep   func(int) error
+	afterCommit func()
+}
+
 func applyMigrations(ctx context.Context, database *sql.DB) error {
+	return applyMigrationsWithPolicy(ctx, database, migrationPolicy{})
+}
+
+func applyMigrationsWithPolicy(ctx context.Context, database *sql.DB, policy migrationPolicy) error {
 	migrations, err := loadMigrations()
 	if err != nil {
 		return invalid(err)
+	}
+	selected := migrations
+	if policy.bounded {
+		if policy.expectFrom < 0 || policy.expectTo <= policy.expectFrom ||
+			policy.expectTo > len(migrations) || migrations[policy.expectTo-1].version != policy.expectTo {
+			return invalid(fmt.Errorf("sqlite.state_migration_bounds_invalid"))
+		}
+		selected = migrations[:policy.expectTo]
 	}
 	connection, err := database.Conn(ctx)
 	if err != nil {
@@ -74,9 +96,22 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 	if current > migrations[len(migrations)-1].version {
 		return invalid(fmt.Errorf("sqlite.schema_newer_than_binary"))
 	}
-	current, migrated, err := applyMigrationSteps(ctx, transaction, migrations, current)
+	if policy.bounded && current != policy.expectFrom {
+		return invalid(fmt.Errorf("sqlite.state_migration_source_version_mismatch"))
+	}
+	if policy.before != nil {
+		if err := policy.before(ctx, transaction, current); err != nil {
+			return err
+		}
+	}
+	current, migrated, err := applyMigrationStepsWithHook(
+		ctx, transaction, selected, current, policy.afterStep,
+	)
 	if err != nil {
 		return err
+	}
+	if policy.bounded && current != policy.expectTo {
+		return invalid(fmt.Errorf("sqlite.state_migration_target_version_mismatch"))
 	}
 	// Validate only after the complete schema chain. Domain snapshot readers
 	// intentionally understand the latest schema, not transient migration
@@ -86,14 +121,22 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 			return invalid(fmt.Errorf("sqlite.migrated_goal_invalid: %w", err))
 		}
 	}
-	if err := verifyAppliedMigrations(ctx, transaction, migrations, current); err != nil {
+	if err := verifyAppliedMigrations(ctx, transaction, selected, current); err != nil {
 		return err
 	}
 	if err := verifyForeignKeys(ctx, transaction); err != nil {
 		return err
 	}
+	if policy.after != nil {
+		if err := policy.after(ctx, transaction, current); err != nil {
+			return err
+		}
+	}
 	if err := transaction.Commit(); err != nil {
 		return mapDatabaseError(err)
+	}
+	if policy.afterCommit != nil {
+		policy.afterCommit()
 	}
 	if _, err := connection.ExecContext(context.Background(), "PRAGMA foreign_keys = ON"); err != nil {
 		return mapDatabaseError(err)
@@ -113,6 +156,16 @@ func applyMigrationSteps(
 	transaction *sql.Tx,
 	migrations []migration,
 	current int,
+) (int, bool, error) {
+	return applyMigrationStepsWithHook(ctx, transaction, migrations, current, nil)
+}
+
+func applyMigrationStepsWithHook(
+	ctx context.Context,
+	transaction *sql.Tx,
+	migrations []migration,
+	current int,
+	afterStep func(int) error,
 ) (int, bool, error) {
 	migrated := false
 	for _, migration := range migrations {
@@ -184,6 +237,11 @@ func applyMigrationSteps(
 		}
 		current = migration.version
 		migrated = true
+		if afterStep != nil {
+			if err := afterStep(current); err != nil {
+				return current, migrated, invalid(err)
+			}
+		}
 	}
 	return current, migrated, nil
 }

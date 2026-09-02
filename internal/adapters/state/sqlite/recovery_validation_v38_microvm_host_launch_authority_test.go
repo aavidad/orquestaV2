@@ -17,6 +17,9 @@ func TestRecoveryV32MicroVMHostLaunchAuthorityPreparedAndBoundSurviveReopen(t *t
 	t.Run("prepared", func(t *testing.T) {
 		system, _, _, authority := seedRecoveryV32MicroVMHostLaunchAuthority(t, "prepared")
 		requireRecoveryV32MicroVMHostLaunchAuthorityValid(t, system.repository.db)
+		if err := system.repository.Close(); err != nil {
+			t.Fatal(err)
+		}
 		reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
 		requireRecoveryV32MicroVMHostLaunchAuthorityValid(t, reopened.db)
 		resolved, err := reopened.Resolve(context.Background(), authority.Key)
@@ -33,6 +36,9 @@ func TestRecoveryV32MicroVMHostLaunchAuthorityPreparedAndBoundSurviveReopen(t *t
 		}
 		recordRecoveryV32AcceptedLaunch(t, system, claim, attempt, externalRef)
 		requireRecoveryV32MicroVMHostLaunchAuthorityValid(t, system.repository.db)
+		if err := system.repository.Close(); err != nil {
+			t.Fatal(err)
+		}
 		reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
 		requireRecoveryV32MicroVMHostLaunchAuthorityValid(t, reopened.db)
 		resolved, err := reopened.Resolve(context.Background(), authority.Key)

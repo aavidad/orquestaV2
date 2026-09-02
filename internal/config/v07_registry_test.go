@@ -89,9 +89,9 @@ func TestRegistryAliasesAreTypedBoundedAndCanonicalized(t *testing.T) {
 	source := decodedRegistry(t)
 	source.Aliases = []registryAliasDefinition{
 		{Kind: AliasKindTOMLKey, Name: "server.address", Target: KeyServerListen,
-			IntroducedRevision: "2026-07-15.7", RemoveAfterRevision: "2026-09-01.9"},
+			IntroducedRevision: "2026-07-15.7", RemoveAfterRevision: "2026-09-02.9"},
 		{Kind: AliasKindEnvironment, Name: "ORQUESTA_SERVER_ADDRESS", Target: KeyServerListen,
-			IntroducedRevision: "2026-07-15.7", RemoveAfterRevision: "2026-09-01.9"},
+			IntroducedRevision: "2026-07-15.7", RemoveAfterRevision: "2026-09-02.9"},
 	}
 	registry, err := parseRegistrySource(marshalRegistry(t, source))
 	if err != nil {

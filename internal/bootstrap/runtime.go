@@ -89,10 +89,9 @@ type Options struct {
 	IdentityHTTPClient       *http.Client
 	CommandExecutionResolver commandcore.ExecutionAuthorityResolver
 	ReportError              func(error)
-	// AgentEnvironmentPreservationBuilder is the application-owned B12.2
-	// enrichment seam. A physical adapter alone is deliberately insufficient:
-	// without the public preservation authority the lifecycle stays
-	// uncomposed and Orchestrator fails closed before Quiesce or Close.
+	// AgentEnvironmentPreservationBuilder optionally overrides the application-
+	// owned B12.2 builder in focused compositions. Production defaults to the
+	// deployment ArtifactStore; a physical adapter alone is insufficient.
 	AgentEnvironmentPreservationBuilder application.AgentEnvironmentPreservationBuilder
 	codexGoToolchainTrustForTests       codexGoToolchainTrust
 	constructorClienteAgentMicroVM      constructorClienteAgentMicroVM
@@ -304,6 +303,12 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = artifacts.Close() })
+	preservationBuilder, err := composeAgentEnvironmentPreservationBuilder(
+		options.AgentEnvironmentPreservationBuilder, artifacts,
+	)
+	if err != nil {
+		return nil, err
+	}
 	controladoresCuota, err := abrirControladoresCuota(ctx, setup, agent, repository, artifacts)
 	if err != nil {
 		return nil, err
@@ -327,7 +332,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		executionRuntimeComposition{
 			sessions: executionBroker, postArtifactMailbox: postArtifactMailbox,
 			capacitySources: fuentesCapacidad, egressPolicies: egressPolicies,
-			environmentPreservationBuilder: options.AgentEnvironmentPreservationBuilder,
+			environmentPreservationBuilder: preservationBuilder,
 		},
 	)
 	if err != nil {
@@ -849,6 +854,13 @@ func buildOrchestratorDependencies(
 			dependencies.AgentLifecycle.HistoricalPreserver = historicalPreserver
 		}
 	}
+	if writer, ok := agent.(application.ExpiredAgentLaunchContinuationWriterV41); ok {
+		dependencies.ExpiredLaunchContinuation = &application.ExpiredAgentLaunchContinuationCompositionV41{
+			Source: repository, Store: repository, Writer: writer,
+			SessionAuthoritySource:      repository,
+			SessionAuthenticationMethod: executiontoken.AuthenticationMethod,
+		}
+	}
 	return dependencies
 }
 
@@ -1263,6 +1275,10 @@ func productionAgentAdapterWithGoToolchainTrust(
 	if err != nil {
 		return nil, err
 	}
+	return newProductionCodexAdapter(snapshot, adapterConfig)
+}
+
+func newProductionCodexAdapter(snapshot config.Snapshot, adapterConfig codex.Config) (AgentAdapter, error) {
 	profiles := snapshot.RuntimeCodexAccountProfiles()
 	if len(profiles) == 0 {
 		return codex.New(adapterConfig)
@@ -1282,6 +1298,30 @@ func productionAgentAdapterWithGoToolchainTrust(
 	})
 }
 
+func productionCodexQuotaObserver(
+	snapshot config.Snapshot,
+	clock application.Clock,
+	promptRenderer codex.PromptRenderer,
+	ownerTrusted codexGoToolchainTrust,
+) (AgentAdapter, error) {
+	if snapshot.RuntimeProvider() != "codex" {
+		return nil, errors.New("bootstrap.runtime_provider_unsupported")
+	}
+	if snapshot.RuntimeIsolation() != "microvm" || snapshot.RuntimeCodexAccountHomeRoot() == "" {
+		return nil, errors.New("bootstrap.runtime_quota_observer_not_composed")
+	}
+	adapterConfig, err := productionCodexAdapterConfigBaseWithGoToolchainTrust(
+		snapshot,
+		clock,
+		promptRenderer,
+		ownerTrusted,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return newProductionCodexAdapter(snapshot, adapterConfig)
+}
+
 func productionCodexAdapterConfigWithGoToolchainTrust(
 	snapshot config.Snapshot,
 	clock application.Clock,
@@ -1292,6 +1332,32 @@ func productionCodexAdapterConfigWithGoToolchainTrust(
 	if err := validateProductionAgentSelection(snapshot); err != nil {
 		return codex.Config{}, err
 	}
+	adapterConfig, err := productionCodexAdapterConfigBaseWithGoToolchainTrust(
+		snapshot,
+		clock,
+		promptRenderer,
+		ownerTrusted,
+	)
+	if err != nil {
+		return codex.Config{}, err
+	}
+	credentialRef := snapshot.RuntimeCodexCredentialRef()
+	if credentialRef != "" {
+		if credentialStore == nil {
+			return codex.Config{}, errors.New("bootstrap.credential_store_required")
+		}
+		adapterConfig.CredentialStore = credentialStore
+		adapterConfig.CredentialRef = credentials.CredentialRef(credentialRef)
+	}
+	return adapterConfig, nil
+}
+
+func productionCodexAdapterConfigBaseWithGoToolchainTrust(
+	snapshot config.Snapshot,
+	clock application.Clock,
+	promptRenderer codex.PromptRenderer,
+	ownerTrusted codexGoToolchainTrust,
+) (codex.Config, error) {
 	environment, err := config.ResolveChildEnvironment(snapshot.RuntimeCodexEnvAllowlist())
 	if err != nil {
 		return codex.Config{}, err
@@ -1330,14 +1396,6 @@ func productionCodexAdapterConfigWithGoToolchainTrust(
 		AccountAuthMaxDocumentBytes: snapshot.RuntimeCodexAccountAuthMaxDocumentBytes(),
 		PromptRenderer:              promptRenderer,
 		Environment:                 environment, Now: clock.Now,
-	}
-	credentialRef := snapshot.RuntimeCodexCredentialRef()
-	if credentialRef != "" {
-		if credentialStore == nil {
-			return codex.Config{}, errors.New("bootstrap.credential_store_required")
-		}
-		adapterConfig.CredentialStore = credentialStore
-		adapterConfig.CredentialRef = credentials.CredentialRef(credentialRef)
 	}
 	return adapterConfig, nil
 }

@@ -117,7 +117,7 @@ func TestAgentEnvironmentLifecycleServiceComposesQuiescePreserveClose(t *testing
 		t.Fatal(err)
 	}
 	if result.Snapshot.Token.State != ports.AgentEnvironmentClosed || result.Pending || !result.ReadyToFinalize ||
-		result.NextAction != nil {
+		result.NextAction == nil || result.NextAction.Kind != ActionObserveAgent {
 		t.Fatalf("closed result invalid: %+v", result)
 	}
 	if physical.quiesceCalls != 1 || physical.preserveCalls != 1 || physical.closeCalls != 1 ||
@@ -447,13 +447,18 @@ func (store *fakeAgentEnvironmentLifecycleStore) RecordAgentEnvironmentLifecycle
 		store.state.Preservation = &value
 	}
 	if terminal.NextAction != nil {
-		if err := appendLifecycleServiceAction(&store.record, *terminal.NextAction); err != nil {
-			return AgentEnvironmentLifecycleSnapshot{}, false, err
+		if terminal.NextAction.Kind != ActionObserveAgent {
+			if err := appendLifecycleServiceAction(&store.record, *terminal.NextAction); err != nil {
+				return AgentEnvironmentLifecycleSnapshot{}, false, err
+			}
 		}
 		value := *terminal.NextAction
 		store.state.NextAction = &value
 	} else {
 		store.state.NextAction = nil
+	}
+	if terminal.FinalizationAction != nil && terminal.FinalizationAction.Kind != ActionObserveAgent {
+		return AgentEnvironmentLifecycleSnapshot{}, false, errors.New("test.lifecycle_finalization_invalid")
 	}
 	store.state.Snapshot, store.state.Claim, store.state.Attempt = terminal.Snapshot, terminal.Claim, terminal.Attempt
 	store.state.HasAttempt, store.state.ReadyToFinalize = true, terminal.ReadyToFinalize

@@ -445,7 +445,7 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeCodexSupervisorStartTimeout, KeyRuntimeCodexTimeout, KeyServerShutdownTimeout,
 		},
 		"runtime_codex_account_profiles_complete": {
-			KeyRuntimeCodexAccountHomeRoot, KeyRuntimeCodexAccountProfile, KeyRuntimeCodexAccountProfiles,
+			KeyRuntimeIsolation, KeyRuntimeCodexAccountHomeRoot, KeyRuntimeCodexAccountProfile, KeyRuntimeCodexAccountProfiles,
 			KeyRuntimeCodexMaxConcurrentExecutions, KeyRuntimeCodexCredentialRef,
 		},
 		"runtime_microvm_requirements": {
@@ -459,6 +459,12 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyRuntimeMicroVMExpectedProfileDescriptorSHA256,
 			KeyRuntimeMicroVMLaunchGrantKeyID,
 			KeyRuntimeMicroVMLaunchGrantSigningCredentialRef,
+			KeyRuntimeMicroVMExpiredLaunchContinuationAuthoritySigningCredentialRef,
+			KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityKeyID,
+			KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityKeyEpoch,
+			KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityTrustRevision,
+			KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityPublicKeySHA256,
+			KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityValidity,
 			KeyRuntimeMicroVMCredentialBrokerSocketPath,
 			KeyRuntimeMicroVMCredentialBrokerPeerUID,
 			KeyRuntimeMicroVMCredentialBrokerExchangeTimeout,

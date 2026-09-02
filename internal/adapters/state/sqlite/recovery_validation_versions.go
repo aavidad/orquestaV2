@@ -11,42 +11,44 @@ import (
 )
 
 const (
-	recoverySchemaV09                     = 5
-	recoverySchemaV10                     = 6
-	recoverySchemaV12                     = 7
-	recoverySchemaV13                     = 8
-	recoverySchemaV14                     = 9
-	recoverySchemaV15                     = 10
-	recoverySchemaV16                     = 11
-	recoverySchemaV17                     = 12
-	recoverySchemaV18                     = 13
-	recoverySchemaV19                     = 14
-	recoverySchemaV20                     = 15
-	recoverySchemaV21                     = 16
-	recoverySchemaV23Intake               = 17
-	recoverySchemaV23Dossier              = 18
-	recoverySchemaV23Confirmation         = 19
-	recoverySchemaV23WizardGaps           = 20
-	recoverySchemaV23                     = 21
-	recoverySchemaV38Physical             = 22
-	recoverySchemaV38Capacity             = 23
-	recoverySchemaV38Claim                = 24
-	recoverySchemaV38Environment          = 25
-	recoverySchemaV38EnvironmentGate      = 26
-	recoverySchemaV38AttemptLease         = 27
-	recoverySchemaV38RecoveryClaim        = 28
-	recoverySchemaV38PreservationRatchet  = 29
-	recoverySchemaV38RecoveryRequeue      = 30
-	recoverySchemaV38EgressAuthority      = 31
-	recoverySchemaV38MicroVMHostLaunch    = 32
-	recoverySchemaV38MicroVMHostSession   = 33
-	recoverySchemaV38PhysicalManifest     = 34
-	recoverySchemaV38EnvironmentLifecycle = 35
-	recoverySchemaV23WizardGapsSnapshot   = 36
-	recoverySchemaV38StopNonApplication   = 37
-	recoverySchemaV38StopRecoveryClaim    = 38
-	recoverySchemaV38LaunchRuntimeDigests = 39
-	recoverySchemaLatest                  = recoverySchemaV38LaunchRuntimeDigests
+	recoverySchemaV09                             = 5
+	recoverySchemaV10                             = 6
+	recoverySchemaV12                             = 7
+	recoverySchemaV13                             = 8
+	recoverySchemaV14                             = 9
+	recoverySchemaV15                             = 10
+	recoverySchemaV16                             = 11
+	recoverySchemaV17                             = 12
+	recoverySchemaV18                             = 13
+	recoverySchemaV19                             = 14
+	recoverySchemaV20                             = 15
+	recoverySchemaV21                             = 16
+	recoverySchemaV23Intake                       = 17
+	recoverySchemaV23Dossier                      = 18
+	recoverySchemaV23Confirmation                 = 19
+	recoverySchemaV23WizardGaps                   = 20
+	recoverySchemaV23                             = 21
+	recoverySchemaV38Physical                     = 22
+	recoverySchemaV38Capacity                     = 23
+	recoverySchemaV38Claim                        = 24
+	recoverySchemaV38Environment                  = 25
+	recoverySchemaV38EnvironmentGate              = 26
+	recoverySchemaV38AttemptLease                 = 27
+	recoverySchemaV38RecoveryClaim                = 28
+	recoverySchemaV38PreservationRatchet          = 29
+	recoverySchemaV38RecoveryRequeue              = 30
+	recoverySchemaV38EgressAuthority              = 31
+	recoverySchemaV38MicroVMHostLaunch            = 32
+	recoverySchemaV38MicroVMHostSession           = 33
+	recoverySchemaV38PhysicalManifest             = 34
+	recoverySchemaV38EnvironmentLifecycle         = 35
+	recoverySchemaV23WizardGapsSnapshot           = 36
+	recoverySchemaV38StopNonApplication           = 37
+	recoverySchemaV38StopRecoveryClaim            = 38
+	recoverySchemaV38LaunchRuntimeDigests         = 39
+	recoverySchemaV38TerminalLaunchReconciliation = 40
+	recoverySchemaV38ExpiredLaunchContinuation    = 41
+	recoverySchemaLatest                          = recoverySchemaV38ExpiredLaunchContinuation
 )
 
 func migrationSchemaRef(migrations []migration) string {
@@ -75,7 +77,9 @@ func recoveryMigrationPrefix(migrations []migration, version int) ([]migration, 
 		version != recoverySchemaV38MicroVMHostSession && version != recoverySchemaV38PhysicalManifest &&
 		version != recoverySchemaV38EnvironmentLifecycle && version != recoverySchemaV23WizardGapsSnapshot &&
 		version != recoverySchemaV38StopNonApplication && version != recoverySchemaV38StopRecoveryClaim &&
-		version != recoverySchemaV38LaunchRuntimeDigests {
+		version != recoverySchemaV38LaunchRuntimeDigests &&
+		version != recoverySchemaV38TerminalLaunchReconciliation &&
+		version != recoverySchemaV38ExpiredLaunchContinuation {
 		return nil, errors.New("sqlite.recovery_schema_version_invalid")
 	}
 	if version > len(migrations) || migrations[version-1].version != version {

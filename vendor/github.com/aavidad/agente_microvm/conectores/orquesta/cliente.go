@@ -106,6 +106,37 @@ var esquemaRespuestaDetencionConfirmadaConTrabajoV1 = esquemaRespuestaDetencionC
 	esquemaRespuestaEjecucionDetencionConTrabajoV1,
 )
 
+func esquemaRespuestaCierrePendienteV1(ejecucion esquemaObjetoJSONEstricto) esquemaObjetoJSONEstricto {
+	return esquemaObjetoJSONEstricto{
+		"ejecucion":          esquemaObjetoEstricto(ejecucion),
+		"clave_idempotencia": esquemaEscalarJSONEstricto,
+		"estado":             esquemaEscalarJSONEstricto,
+	}
+}
+
+func esquemaRespuestaCierreConfirmadaV1(ejecucion esquemaObjetoJSONEstricto) esquemaObjetoJSONEstricto {
+	return esquemaObjetoJSONEstricto{
+		"ejecucion":          esquemaObjetoEstricto(ejecucion),
+		"clave_idempotencia": esquemaEscalarJSONEstricto,
+		"estado":             esquemaEscalarJSONEstricto,
+		"receipt_ref":        esquemaEscalarJSONEstricto,
+		"confirmada_unix_ms": esquemaEscalarJSONEstricto,
+	}
+}
+
+var esquemaRespuestaCierrePendienteSinTrabajoV1 = esquemaRespuestaCierrePendienteV1(
+	esquemaRespuestaEjecucionDetencionV1,
+)
+var esquemaRespuestaCierrePendienteConTrabajoV1 = esquemaRespuestaCierrePendienteV1(
+	esquemaRespuestaEjecucionDetencionConTrabajoV1,
+)
+var esquemaRespuestaCierreConfirmadaSinTrabajoV1 = esquemaRespuestaCierreConfirmadaV1(
+	esquemaRespuestaEjecucionDetencionV1,
+)
+var esquemaRespuestaCierreConfirmadaConTrabajoV1 = esquemaRespuestaCierreConfirmadaV1(
+	esquemaRespuestaEjecucionDetencionConTrabajoV1,
+)
+
 // Cliente consume la API local sin conocer tipos internos de Agente MicroVM.
 type Cliente struct {
 	http *http.Client
@@ -153,6 +184,54 @@ func (c *Cliente) Lanzar(
 	solicitud SolicitudLanzamiento,
 ) (RespuestaEjecucion, error) {
 	return mutar[RespuestaEjecucion](ctx, c, "/v1/ejecuciones", clave, solicitud)
+}
+
+// ReconciliarLanzamiento reanuda la misma conversación durable; no admite una
+// clave ni un cuerpo distintos de los usados por Lanzar.
+func (c *Cliente) ReconciliarLanzamiento(
+	ctx context.Context,
+	clave string,
+	solicitud SolicitudLanzamiento,
+) (RespuestaEjecucion, error) {
+	return mutar[RespuestaEjecucion](ctx, c, "/v1/ejecuciones/reconciliacion", clave, solicitud)
+}
+
+// PrepararContinuacionLanzamientoCaducado obtiene la foto cerrada de un
+// intento ya registrado. Esta llamada no crea ni reenvía un Launch normal.
+func (c *Cliente) PrepararContinuacionLanzamientoCaducado(
+	ctx context.Context,
+	clave string,
+	solicitud SolicitudLanzamiento,
+) (RespuestaPreparacionContinuacionLanzamientoCaducadoV1, error) {
+	if err := validarSolicitudOriginalContinuacion(clave, solicitud); err != nil {
+		return RespuestaPreparacionContinuacionLanzamientoCaducadoV1{}, err
+	}
+	return mutarEstricto[RespuestaPreparacionContinuacionLanzamientoCaducadoV1](
+		ctx,
+		c,
+		"/v1/ejecuciones/continuaciones/preparacion",
+		clave,
+		solicitud,
+	)
+}
+
+// ContinuarLanzamientoCaducado presenta una autoridad exterior para el mismo
+// cuerpo original. No contiene ruta alternativa a Lanzar o Reconciliar.
+func (c *Cliente) ContinuarLanzamientoCaducado(
+	ctx context.Context,
+	clave string,
+	solicitud SolicitudContinuacionLanzamientoCaducadoV1,
+) (RespuestaEjecucion, error) {
+	if err := validarSolicitudOriginalContinuacion(clave, solicitud.SolicitudOriginal); err != nil {
+		return RespuestaEjecucion{}, err
+	}
+	return mutarEstricto[RespuestaEjecucion](
+		ctx,
+		c,
+		"/v1/ejecuciones/continuaciones",
+		clave,
+		solicitud,
+	)
 }
 
 func (c *Cliente) Observar(ctx context.Context, referencia string) (RespuestaEjecucion, error) {
@@ -467,14 +546,24 @@ func (c *Cliente) Cerrar(
 	clave string,
 	referencia string,
 	solicitud SolicitudCierre,
-) (RespuestaEjecucion, error) {
-	return mutar[RespuestaEjecucion](
+) (RespuestaCierre, error) {
+	if err := validarSolicitudCierre(clave, referencia, solicitud); err != nil {
+		return RespuestaCierre{}, err
+	}
+	respuesta, err := mutarEstricto[RespuestaCierre](
 		ctx,
 		c,
 		rutaEjecucion(referencia, "/cierre"),
 		clave,
 		solicitud,
 	)
+	if err != nil {
+		return RespuestaCierre{}, err
+	}
+	if err := validarRespuestaCierre(clave, referencia, solicitud, respuesta); err != nil {
+		return RespuestaCierre{}, err
+	}
+	return respuesta, nil
 }
 
 func rutaEjecucion(referencia string, sufijo string) string {
@@ -955,6 +1044,89 @@ func modosDetencionCoherentes(
 
 func errorDetencion(codigo string) error { return &ErrorDetencionV1{Codigo: codigo} }
 
+func validarSolicitudOriginalContinuacion(clave string, solicitud SolicitudLanzamiento) error {
+	if !claveDetencionValida(clave) {
+		return &ErrorConfiguracion{Causa: "clave_idempotencia_invalida"}
+	}
+	for _, contenido := range []json.RawMessage{solicitud.Perfil, solicitud.Plan, solicitud.Concesion} {
+		if len(contenido) == 0 || !json.Valid(contenido) || !jsonSinClavesDuplicadas(contenido) {
+			return &ErrorConfiguracion{Causa: "solicitud_original_continuacion_invalida"}
+		}
+		var objeto map[string]json.RawMessage
+		if err := json.Unmarshal(contenido, &objeto); err != nil || objeto == nil {
+			return &ErrorConfiguracion{Causa: "solicitud_original_continuacion_invalida"}
+		}
+	}
+	return nil
+}
+
+func validarSolicitudCierre(clave string, referencia string, solicitud SolicitudCierre) error {
+	if !claveDetencionValida(clave) {
+		return &ErrorConfiguracion{Causa: "clave_idempotencia_invalida"}
+	}
+	if !referenciaSesionValida(referencia) {
+		return errorCierre("cierre.referencia_ejecucion_invalida")
+	}
+	if !revisionSesionValida(solicitud.RevisionEsperada) {
+		return errorCierre("cierre.revision_invalida")
+	}
+	if !cercaSesionValida(solicitud.Cerca) {
+		return errorCierre("cierre.cerca_invalida")
+	}
+	if !sha256Valido(solicitud.ManifiestoSHA256Esperado) {
+		return errorCierre("cierre.manifiesto_invalido")
+	}
+	return nil
+}
+
+func validarRespuestaCierre(
+	clave string,
+	referencia string,
+	solicitud SolicitudCierre,
+	respuesta RespuestaCierre,
+) error {
+	if respuesta.ClaveIdempotencia != clave || respuesta.Ejecucion.Referencia != referencia {
+		return errorCierre("cierre.identidad_incoherente")
+	}
+	if respuesta.Ejecucion.Cerca != solicitud.Cerca {
+		return errorCierre("cierre.cerca_invalida")
+	}
+	switch respuesta.Estado {
+	case EstadoCierrePendiente:
+		if respuesta.Ejecucion.Estado != "preservada" ||
+			respuesta.Ejecucion.Revision != solicitud.RevisionEsperada ||
+			respuesta.ReceiptRef != nil || respuesta.ConfirmadaUnixMS != nil {
+			return errorCierre("cierre.confirmacion_incoherente")
+		}
+	case EstadoCierreConfirmada:
+		revision, sumaValida := sumaRevision(solicitud.RevisionEsperada, 2)
+		if !sumaValida || respuesta.Ejecucion.Estado != "cerrada" ||
+			respuesta.Ejecucion.Revision != revision || respuesta.ReceiptRef == nil ||
+			respuesta.ConfirmadaUnixMS == nil || *respuesta.ConfirmadaUnixMS == 0 ||
+			*respuesta.ConfirmadaUnixMS > maximoEnteroDurableV1 ||
+			!receiptCierreValido(*respuesta.ReceiptRef) {
+			return errorCierre("cierre.confirmacion_incoherente")
+		}
+	default:
+		return errorCierre("cierre.estado_invalido")
+	}
+	return nil
+}
+
+func sumaRevision(revision uint64, incremento uint64) (uint64, bool) {
+	if revision > maximoEnteroDurableV1-incremento {
+		return 0, false
+	}
+	return revision + incremento, true
+}
+
+func receiptCierreValido(referencia string) bool {
+	digest := strings.TrimPrefix(referencia, "cierre:")
+	return digest != referencia && sha256Valido(digest)
+}
+
+func errorCierre(codigo string) error { return &ErrorCierreV1{Codigo: codigo} }
+
 func referenciaSesionValida(referencia string) bool {
 	if referencia == "" || len(referencia) > 128 || !utf8.ValidString(referencia) {
 		return false
@@ -1144,6 +1316,29 @@ func validarEstructuraJSONSesion[T any](datos []byte) error {
 			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaDetencionConfirmadaSinTrabajoV1, &respuesta) &&
 			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaDetencionConfirmadaConTrabajoV1, &respuesta) {
 			return errors.New("respuesta JSON de detencion invalida")
+		}
+	case RespuestaCierre:
+		var respuesta RespuestaCierre
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaCierrePendienteSinTrabajoV1, &respuesta) &&
+			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaCierrePendienteConTrabajoV1, &respuesta) &&
+			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaCierreConfirmadaSinTrabajoV1, &respuesta) &&
+			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaCierreConfirmadaConTrabajoV1, &respuesta) {
+			return errors.New("respuesta JSON de cierre invalida")
+		}
+	case RespuestaPreparacionContinuacionLanzamientoCaducadoV1:
+		var respuesta RespuestaPreparacionContinuacionLanzamientoCaducadoV1
+		if !decodificarObjetoJSONEstricto(
+			datos,
+			esquemaRespuestaPreparacionContinuacionLanzamientoCaducadoV1,
+			&respuesta,
+		) {
+			return errors.New("respuesta JSON de preparacion de continuacion invalida")
+		}
+	case RespuestaEjecucion:
+		var respuesta RespuestaEjecucion
+		if !decodificarObjetoJSONEstricto(datos, esquemaRespuestaEjecucionDetencionV1, &respuesta) &&
+			!decodificarObjetoJSONEstricto(datos, esquemaRespuestaEjecucionDetencionConTrabajoV1, &respuesta) {
+			return errors.New("respuesta JSON de ejecucion invalida")
 		}
 	}
 	return nil

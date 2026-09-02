@@ -449,15 +449,14 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	clock := v06ClockFromFixture(t, fixture)
 	lease := v06Duration(t, fixture.ClockAndRetry.ClaimLease)
 	databasePath := v06PrivateDatabasePath(t, "fence.db")
-	first := v06OpenSQLite(t, ctx, databasePath, clock)
-	second := v06OpenSQLite(t, ctx, databasePath, clock)
+	repository := v06OpenSQLite(t, ctx, databasePath, clock)
 	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "accepted")
-	orchestrator := v06NewOrchestrator(t, first, clock, &v06IDs{}, agent, newV06ArtifactStore(), fixture)
+	orchestrator := v06NewOrchestrator(t, repository, clock, &v06IDs{}, agent, newV06ArtifactStore(), fixture)
 	created, err := orchestrator.Submit(ctx, v06Access(t), v06SubmitRequest(t, "request:v06-fence", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	capacityCandidates := v06CapacityCandidates(t, first, clock)
+	capacityCandidates := v06CapacityCandidates(t, repository, clock)
 
 	type claimResult struct {
 		claim application.ActionClaim
@@ -468,10 +467,6 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	results := make(chan claimResult, fixture.ClockAndRetry.ClaimContenders)
 	capabilities := v06Capabilities(fixture.OpaqueRequirements, true)
 	for index := 0; index < fixture.ClockAndRetry.ClaimContenders; index++ {
-		repository := first
-		if index%2 == 1 {
-			repository = second
-		}
 		go func(index int, repository *sqlite.Repository) {
 			<-start
 			claim, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
@@ -498,7 +493,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	}
 	stale := winners[0]
 	clock.Advance(lease + time.Nanosecond)
-	reclaimed, found, err := second.ClaimNextAction(ctx, application.ClaimRequest{
+	reclaimed, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:v06-reclaimer", Token: "claim:v06-reclaimer", LeaseDuration: lease, Capabilities: capabilities,
 		BudgetPolicy: v06BudgetPolicy(t, clock.Now()), CapacityCandidates: capacityCandidates,
 	})
@@ -507,7 +502,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 		t.Fatalf("reclaim is not monotonic/exact: stale=%+v reclaimed=%+v found=%v err=%v", stale, reclaimed, found, err)
 	}
 	operationAt := clock.Now()
-	err = first.QuarantineAction(ctx, application.ActionQuarantinedState{
+	err = repository.QuarantineAction(ctx, application.ActionQuarantinedState{
 		Claim: stale, ErrorCode: "v06.stale",
 		Event: application.EventRecord{
 			Ref: "event:action-quarantined:v06-stale", Kind: "action.quarantined",
@@ -519,10 +514,10 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	if !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("stale fence mutation = %v, want state conflict", err)
 	}
-	if receipts := v06GetGoal(t, first, created.Record.Goal.Ref()).ConsumptionReceipts; len(receipts) != 0 {
+	if receipts := v06GetGoal(t, repository, created.Record.Goal.Ref()).ConsumptionReceipts; len(receipts) != 0 {
 		t.Fatalf("stale mutation wrote partial receipt: %+v", receipts)
 	}
-	if status, err := first.Status(ctx, v06Project(t)); err != nil || status.PendingActions != 1 || status.QuarantinedActions != 0 {
+	if status, err := repository.Status(ctx, v06Project(t)); err != nil || status.PendingActions != 1 || status.QuarantinedActions != 0 {
 		t.Fatalf("stale mutation changed durable outbox: status=%+v err=%v", status, err)
 	}
 
@@ -534,10 +529,10 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	quarantine := application.ActionQuarantinedState{
 		Claim: reclaimed, ErrorCode: "v06.test_quarantine", Event: event, OperationAt: operationAt,
 	}
-	if err := second.QuarantineAction(ctx, quarantine); err != nil {
+	if err := repository.QuarantineAction(ctx, quarantine); err != nil {
 		t.Fatalf("consume reclaimed action: %v", err)
 	}
-	after := v06GetGoal(t, first, created.Record.Goal.Ref())
+	after := v06GetGoal(t, repository, created.Record.Goal.Ref())
 	if len(after.ConsumptionReceipts) != 1 {
 		t.Fatalf("consumption receipt count = %d, want 1", len(after.ConsumptionReceipts))
 	}
@@ -549,10 +544,10 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 		receipt.WorkItemGeneration != reclaimed.Action.WorkItemGeneration {
 		t.Fatalf("incomplete causal consumption receipt: %+v", receipt)
 	}
-	if err := second.QuarantineAction(ctx, quarantine); !application.IsStateError(err, application.StateConflict) {
+	if err := repository.QuarantineAction(ctx, quarantine); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("consumption replay = %v, want conflict without duplicate", err)
 	}
-	if got := len(v06GetGoal(t, first, created.Record.Goal.Ref()).ConsumptionReceipts); got != 1 {
+	if got := len(v06GetGoal(t, repository, created.Record.Goal.Ref()).ConsumptionReceipts); got != 1 {
 		t.Fatalf("consumption replay duplicated receipt: %d", got)
 	}
 	raw, err := sql.Open("sqlite", databasePath)
@@ -570,10 +565,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	if err := raw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := second.Close(); err != nil {
+	if err := repository.Close(); err != nil {
 		t.Fatal(err)
 	}
 	restarted := v06OpenSQLite(t, ctx, databasePath, clock)

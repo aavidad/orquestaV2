@@ -35,6 +35,8 @@ jobs:
 
       - run: go version
       - run: git diff --check
+      - name: Verify Agente MicroVM connector vendor provenance
+        run: ./scripts/check_agentmicrovm_connector_vendor_identity.sh
       - run: go mod download
       - run: go build ./...
       - run: go vet ./...

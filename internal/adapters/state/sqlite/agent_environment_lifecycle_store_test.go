@@ -312,14 +312,23 @@ SELECT (SELECT COUNT(*) FROM agent_environment_receipts WHERE ref=?),
 	}
 	postC := *outcomeC.Terminal
 	postC.ReadyToFinalize = true
+	postC.FinalizationAction = &application.ActionRecord{
+		Ref:  "action:observe-finalize:" + preparedC.Snapshot.Subject.ExecutionRef.String(),
+		Kind: application.ActionObserveAgent, GoalRef: preparedC.Snapshot.Subject.GoalRef,
+		WorkItemRef:        preparedC.Snapshot.Subject.WorkItemRef,
+		ExecutionRef:       preparedC.Snapshot.Subject.ExecutionRef,
+		PlanGeneration:     preparedC.Snapshot.Subject.PlanGeneration,
+		WorkItemGeneration: closeClaim.Action.WorkItemGeneration,
+		AvailableAt:        postC.OperationAt,
+	}
 	if _, written, err := fixture.system.repository.RecordAgentEnvironmentLifecycleTerminal(ctx, postC); err != nil || !written {
-		t.Fatalf("terminal C written=%v err=%v", written, err)
+		t.Fatalf("terminal C written=%v err=%s", written, sqliteTestErrorChain(err))
 	}
 	final, found, err := fixture.system.repository.GetAgentEnvironmentLifecycle(ctx, fixture.execution.Ref)
 	if err != nil || !found || !final.ReadyToFinalize || final.NextAction != nil ||
 		final.Snapshot.Token.State != ports.AgentEnvironmentClosed || final.Preservation == nil ||
 		final.Preservation.Ref != fact.Ref {
-		t.Fatalf("final lifecycle found=%v state=%+v err=%v", found, final, err)
+		t.Fatalf("final lifecycle found=%v state=%+v err=%s", found, final, sqliteTestErrorChain(err))
 	}
 	var lifecycleAttempts, lifecycleReceipts, lifecycleConsumptions int
 	if err := fixture.system.repository.db.QueryRow(`SELECT COUNT(*) FROM effect_attempts

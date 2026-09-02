@@ -285,6 +285,10 @@ const (
 	ActionClaimDispositionNormal                  ActionClaimDisposition = ""
 	ActionClaimDispositionRetryBudgetIrreversible ActionClaimDisposition = "retry_budget_irreversible"
 	ActionClaimDispositionRecoverEffect           ActionClaimDisposition = "recover_effect"
+	// ActionClaimDispositionReconcileTerminalLaunch belongs to the separate,
+	// explicitly approved journal that can resolve an already-consumed launch.
+	// It never reopens or mutates the original outbox delivery.
+	ActionClaimDispositionReconcileTerminalLaunch ActionClaimDisposition = "reconcile_terminal_launch"
 )
 
 // RetryBudgetExhaustion is the typed, replayable projection that proves a
@@ -303,20 +307,22 @@ type RetryBudgetExhaustion struct {
 }
 
 type ActionClaim struct {
-	Action                   ActionRecord
-	Token                    string
-	WorkerRef                string
-	DeliveryAttempt          uint64
-	Fence                    uint64
-	Disposition              ActionClaimDisposition
-	RecoveryEffectAttemptRef string
-	RetryBudgetExhaustion    RetryBudgetExhaustion
-	BudgetReservationRef     string
-	BudgetReservation        governance.BudgetReservation
-	CapacityReservation      AgentCapacityReservation
-	ReferenciaColocacion     ports.AgentPlacementRef
-	EffectApproval           EffectApproval
-	LeaseUntil               time.Time
+	Action                            ActionRecord
+	Token                             string
+	WorkerRef                         string
+	DeliveryAttempt                   uint64
+	Fence                             uint64
+	Disposition                       ActionClaimDisposition
+	RecoveryEffectAttemptRef          string
+	RetryBudgetExhaustion             RetryBudgetExhaustion
+	BudgetReservationRef              string
+	BudgetReservation                 governance.BudgetReservation
+	CapacityReservation               AgentCapacityReservation
+	ReferenciaColocacion              ports.AgentPlacementRef
+	EffectApproval                    EffectApproval
+	LeaseUntil                        time.Time
+	TerminalReconciliationRef         string
+	TerminalReconciliationFingerprint string
 }
 
 type ClaimRequest struct {
@@ -541,6 +547,68 @@ type LaunchAcceptedState struct {
 	OperationAt   time.Time
 }
 
+// TerminalAgentLaunchReconciliationAuthority is immutable operator authority
+// to reconcile one exact ambiguous physical attempt after its original action
+// was terminally quarantined. The original action and consumption receipt are
+// evidence only and must remain unchanged.
+type TerminalAgentLaunchReconciliationAuthority struct {
+	Ref, JobRef, RequestRef, RequestFingerprint string
+	AuthorizationReceipt                        identity.AuthorizationReceipt
+	PrincipalRef                                identity.PrincipalRef
+	ProjectRef                                  goal.ProjectRef
+	GoalRef                                     goal.GoalRef
+	WorkItemRef                                 goal.WorkItemRef
+	ExecutionRef                                goal.ExecutionRef
+	ActionRef, EffectIntentRef                  string
+	EffectIntentDigest, EffectAttemptRef        string
+	PlanGeneration                              goal.PlanGeneration
+	WorkItemGeneration                          goal.Revision
+	ActionFence                                 uint64
+	OriginalReceiptFingerprint                  string
+	AuthorizedAt                                time.Time
+}
+
+type AuthorizeTerminalAgentLaunchReconciliationState struct {
+	Authority   TerminalAgentLaunchReconciliationAuthority
+	AvailableAt time.Time
+}
+
+type TerminalAgentLaunchReconciliationAttempt struct {
+	Ref, AuthorityRef, RequestFingerprint string
+	OriginalEffectAttemptRef              string
+	JobFence, DeliveryAttempt             uint64
+	ClaimToken, WorkerRef                 string
+	StartedAt, ClaimLeaseUntil            time.Time
+}
+
+type RecordTerminalAgentLaunchReconciliationAttemptState struct {
+	Claim   ActionClaim
+	Attempt TerminalAgentLaunchReconciliationAttempt
+}
+
+type TerminalAgentLaunchReconciliationRequeuedState struct {
+	Claim                    ActionClaim
+	AvailableAt, OperationAt time.Time
+	ErrorCode                string
+}
+
+type TerminalAgentLaunchReconciliationCompletedState struct {
+	Claim         ActionClaim
+	Execution     ExecutionRecord
+	NextAction    ActionRecord
+	Event         EventRecord
+	EffectReceipt EffectReceipt
+	Attempt       TerminalAgentLaunchReconciliationAttempt
+	OperationAt   time.Time
+}
+
+type TerminalAgentLaunchReconciliationQuarantinedState struct {
+	Claim       ActionClaim
+	Attempt     *TerminalAgentLaunchReconciliationAttempt
+	ErrorCode   string
+	OperationAt time.Time
+}
+
 type ActionRequeuedState struct {
 	Claim                ActionClaim
 	Execution            ExecutionRecord
@@ -731,6 +799,12 @@ type StateRepository interface {
 	ListMailbox(context.Context, goal.ProjectRef, goal.GoalRef, MailboxEndpoint, int) ([]MailboxRecord, error)
 	ClaimNextAction(context.Context, ClaimRequest) (ActionClaim, bool, error)
 	ValidateAgentLaunchRecoveryClaim(context.Context, ActionClaim) error
+	AuthorizeTerminalAgentLaunchReconciliation(context.Context, AuthorizeTerminalAgentLaunchReconciliationState) (TerminalAgentLaunchReconciliationAuthority, bool, error)
+	ValidateTerminalAgentLaunchReconciliationClaim(context.Context, ActionClaim) error
+	RecordTerminalAgentLaunchReconciliationAttempt(context.Context, RecordTerminalAgentLaunchReconciliationAttemptState) error
+	RequeueTerminalAgentLaunchReconciliation(context.Context, TerminalAgentLaunchReconciliationRequeuedState) error
+	RecordTerminalAgentLaunchReconciled(context.Context, TerminalAgentLaunchReconciliationCompletedState) error
+	QuarantineTerminalAgentLaunchReconciliation(context.Context, TerminalAgentLaunchReconciliationQuarantinedState) error
 	RecordLaunchPrepared(context.Context, LaunchPreparedState) error
 	RecordLaunchAccepted(context.Context, LaunchAcceptedState) error
 	RequeueAction(context.Context, ActionRequeuedState) error

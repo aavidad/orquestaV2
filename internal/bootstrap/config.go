@@ -19,6 +19,14 @@ func loadCredentialProvisionConfigSnapshot(ctx context.Context, sourcePath strin
 	return loadConfigSnapshotWithResolver(ctx, sourcePath, config.ResolveForCredentialProvisioning)
 }
 
+func loadContinuationCredentialProvisionConfigSnapshot(ctx context.Context, sourcePath string) (config.Snapshot, error) {
+	return loadConfigSnapshotWithResolver(ctx, sourcePath, config.ResolveForContinuationCredentialProvisioning)
+}
+
+func loadStateMigrationConfigSnapshot(ctx context.Context, sourcePath string) (config.Snapshot, error) {
+	return loadConfigSnapshotWithResolver(ctx, sourcePath, config.ResolveForStateMigration)
+}
+
 func loadConfigSnapshotWithResolver(
 	ctx context.Context,
 	sourcePath string,

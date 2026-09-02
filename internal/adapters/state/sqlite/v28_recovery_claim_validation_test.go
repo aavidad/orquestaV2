@@ -21,7 +21,11 @@ func TestV28ValidateAgentLaunchRecoveryClaimFencesRestartExpiryAndReclaim(t *tes
 	if err := system.repository.ValidateAgentLaunchRecoveryClaim(context.Background(), first); err != nil {
 		t.Fatalf("current recovery claim rejected: %s", sqliteTestErrorChain(err))
 	}
+	if err := system.repository.Close(); err != nil {
+		t.Fatal(err)
+	}
 	restarted := openSQLiteV15Repository(t, system.path, system.clock.Now)
+	system.repository = restarted
 	if err := restarted.ValidateAgentLaunchRecoveryClaim(context.Background(), first); err != nil {
 		t.Fatalf("restart rejected current recovery claim: %s", sqliteTestErrorChain(err))
 	}

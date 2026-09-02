@@ -3,6 +3,8 @@ package acceptance_test
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -163,13 +165,18 @@ func v38B12UDSPeer(t *testing.T) (*microvm.Cliente, *int) {
 	}
 	calls := new(int)
 	external := "ejecucion:" + strings.Repeat("a", 64)
+	manifest := []byte(fmt.Sprintf(
+		`{"protocolo":"agentmicrovm.preservacion.v1","contexto":{"referencia":%q,"cerca":1,"revision_trabajo":2}}`,
+		external,
+	))
+	manifestSHA256 := fmt.Sprintf("%x", sha256.Sum256(manifest))
 	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		*calls++
 		w.Header().Set(microvm.CabeceraProtocolo, microvm.ProtocoloLocal)
 		w.Header().Set("content-type", "application/json")
 		switch {
 		case r.URL.Path == "/v1/capacidades":
-			json.NewEncoder(w).Encode(microvm.RespuestaCapacidades{Protocolo: microvm.ProtocoloLocal, Version: "0.1.0", Operaciones: []string{"salud", "capacidades", "crear_ejecucion", "consultar_ejecucion", "consultar_revision_trabajo", "iniciar_sesion", "enviar_entrada_sesion", "leer_eventos_sesion", "reconciliar_entrada_sesion", "detener_ejecucion"}, KVMDisponible: true, FirecrackerConfigurado: true, FirecrackerEjecutable: true, MaximoEjecuciones: 1})
+			json.NewEncoder(w).Encode(microvm.RespuestaCapacidades{Protocolo: microvm.ProtocoloLocal, Version: "0.1.0", Operaciones: []string{"salud", "capacidades", "crear_ejecucion", "reconciliar_lanzamiento", "consultar_ejecucion", "consultar_revision_trabajo", "iniciar_sesion", "enviar_entrada_sesion", "leer_eventos_sesion", "reconciliar_entrada_sesion", "detener_ejecucion"}, KVMDisponible: true, FirecrackerConfigurado: true, FirecrackerEjecutable: true, MaximoEjecuciones: 1})
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/ejecuciones":
 			var request microvm.SolicitudLanzamiento
 			_ = json.NewDecoder(r.Body).Decode(&request)
@@ -189,7 +196,14 @@ func v38B12UDSPeer(t *testing.T) (*microvm.Cliente, *int) {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/ejecuciones/"+external+"/preservacion":
 			var request microvm.SolicitudPreservacion
 			_ = json.NewDecoder(r.Body).Decode(&request)
-			json.NewEncoder(w).Encode(microvm.RespuestaPreservacion{Ejecucion: microvm.RespuestaEjecucion{Referencia: external, Estado: "preservada", Revision: request.RevisionEsperada + 1, Cerca: request.Cerca}, RevisionTrabajo: 2, ManifiestoSHA256: strings.Repeat("9", 64), ManifiestoBytes: 10})
+			json.NewEncoder(w).Encode(microvm.RespuestaPreservacion{Ejecucion: microvm.RespuestaEjecucion{Referencia: external, Estado: "preservada", Revision: request.RevisionEsperada + 1, Cerca: request.Cerca}, RevisionTrabajo: 2, ManifiestoSHA256: manifestSHA256, ManifiestoBytes: uint64(len(manifest))})
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/ejecuciones/"+external+"/preservacion/manifiesto":
+			json.NewEncoder(w).Encode(microvm.RespuestaManifiestoPreservacion{
+				Referencia: external, Cerca: 1, RevisionTrabajo: 2,
+				ManifiestoRef: manifestSHA256, ManifiestoSHA256: manifestSHA256,
+				ManifiestoBytes: uint64(len(manifest)), SelladaUnixMS: 1_786_905_600_000,
+				ContenidoBase64: base64.StdEncoding.EncodeToString(manifest),
+			})
 		default:
 			http.NotFound(w, r)
 		}

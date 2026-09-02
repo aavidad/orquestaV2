@@ -138,6 +138,11 @@ func (client *sessionLaunchClientStub) Lanzar(context.Context, string, microvm.S
 	return client.physical, nil
 }
 
+func (client *sessionLaunchClientStub) ReconciliarLanzamiento(context.Context, string, microvm.SolicitudLanzamiento) (microvm.RespuestaEjecucion, error) {
+	client.record("reconcile-launch")
+	return client.physical, nil
+}
+
 func (client *sessionLaunchClientStub) RevisionTrabajo(context.Context, string) (microvm.RespuestaRevisionTrabajo, error) {
 	client.record("work-revision")
 	return client.work, client.workErr
@@ -766,6 +771,10 @@ func (client *concurrentResolvedSessionClient) Capacidades(context.Context) (mic
 	return validRemoteCapabilities(), nil
 }
 func (client *concurrentResolvedSessionClient) Lanzar(context.Context, string, microvm.SolicitudLanzamiento) (microvm.RespuestaEjecucion, error) {
+	client.launches.Add(1)
+	return client.physical, nil
+}
+func (client *concurrentResolvedSessionClient) ReconciliarLanzamiento(context.Context, string, microvm.SolicitudLanzamiento) (microvm.RespuestaEjecucion, error) {
 	client.launches.Add(1)
 	return client.physical, nil
 }

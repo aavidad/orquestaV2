@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -30,15 +31,19 @@ func (stopUnsupportedClient) Detener(context.Context, string, string, microvm.So
 
 type launchClientStub struct {
 	stopUnsupportedClient
-	capabilities     microvm.RespuestaCapacidades
-	capabilitiesErr  error
-	response         microvm.RespuestaEjecucion
-	launchErr        error
-	capabilitiesCall int
-	launchKeys       []string
-	launchRequests   []microvm.SolicitudLanzamiento
-	onCapabilities   func()
-	onLaunch         func()
+	capabilities      microvm.RespuestaCapacidades
+	capabilitiesErr   error
+	response          microvm.RespuestaEjecucion
+	launchErr         error
+	capabilitiesCall  int
+	launchKeys        []string
+	launchRequests    []microvm.SolicitudLanzamiento
+	reconcileKeys     []string
+	reconcileRequests []microvm.SolicitudLanzamiento
+	reconcileErr      error
+	onCapabilities    func()
+	onLaunch          func()
+	onReconcile       func()
 }
 
 type blockingCapabilitiesClient struct {
@@ -94,6 +99,19 @@ func (client *launchClientStub) Lanzar(
 	return client.response, client.launchErr
 }
 
+func (client *launchClientStub) ReconciliarLanzamiento(
+	_ context.Context,
+	key string,
+	request microvm.SolicitudLanzamiento,
+) (microvm.RespuestaEjecucion, error) {
+	client.reconcileKeys = append(client.reconcileKeys, key)
+	client.reconcileRequests = append(client.reconcileRequests, cloneSignedRequestUnchecked(request))
+	if client.onReconcile != nil {
+		client.onReconcile()
+	}
+	return client.response, client.reconcileErr
+}
+
 func (client *launchClientStub) Observar(
 	context.Context,
 	string,
@@ -111,6 +129,11 @@ func (client *launchClientStub) LeerEventosSesion(
 }
 
 type launchOnlyClientStub struct{ stopUnsupportedClient }
+
+type clientWithoutLaunchReconciliation struct {
+	Client
+	observationClient
+}
 
 func (*launchOnlyClientStub) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
 	return microvm.RespuestaCapacidades{}, nil
@@ -201,10 +224,11 @@ func TestAdapterLaunchAndReconcileSignAndReplayExactPhysicalRequest(t *testing.T
 	if first != second {
 		t.Fatalf("replay receipt changed: first=%+v second=%+v", first, second)
 	}
-	if client.capabilitiesCall != 2 || len(client.launchKeys) != 2 ||
-		client.launchKeys[0] != request.IdempotencyKey || client.launchKeys[1] != request.IdempotencyKey ||
-		!reflect.DeepEqual(client.launchRequests[0], client.launchRequests[1]) {
-		t.Fatalf("physical replay changed: capability_calls=%d keys=%v requests=%+v", client.capabilitiesCall, client.launchKeys, client.launchRequests)
+	if client.capabilitiesCall != 2 || len(client.launchKeys) != 1 || len(client.reconcileKeys) != 1 ||
+		client.launchKeys[0] != request.IdempotencyKey || client.reconcileKeys[0] != request.IdempotencyKey ||
+		!reflect.DeepEqual(client.launchRequests[0], client.reconcileRequests[0]) {
+		t.Fatalf("physical reconciliation changed: capability_calls=%d launch_keys=%v reconcile_keys=%v launch_requests=%+v reconcile_requests=%+v",
+			client.capabilitiesCall, client.launchKeys, client.reconcileKeys, client.launchRequests, client.reconcileRequests)
 	}
 	if len(signer.calls) != 2 || !reflect.DeepEqual(signer.calls[0], signer.calls[1]) {
 		t.Fatalf("signing material changed: %+v", signer.calls)
@@ -223,6 +247,11 @@ func TestAdapterLaunchAndReconcileSignAndReplayExactPhysicalRequest(t *testing.T
 	if err := ports.ValidateAgentLaunchReceipt(request, first); err != nil {
 		t.Fatalf("ValidateAgentLaunchReceipt() = %v", err)
 	}
+	var launchedProfile microvm.DescriptorPerfilLanzamientoV1
+	if err := json.Unmarshal(client.launchRequests[0].Perfil, &launchedProfile); err != nil ||
+		!reflect.DeepEqual(launchedProfile, descriptor) {
+		t.Fatalf("physical launch profile = %+v, error = %v, want %+v", launchedProfile, err, descriptor)
+	}
 
 	client.launchErr = &microvm.ErrorRespuesta{Estado: 409, Codigo: "api.idempotencia_conflictiva"}
 	mutated := request
@@ -231,8 +260,38 @@ func TestAdapterLaunchAndReconcileSignAndReplayExactPhysicalRequest(t *testing.T
 		isDefinitelyNotApplied(err) {
 		t.Fatalf("ReconcileLaunch() divergent replay error=%v code=%q", err, ErrorCode(err))
 	}
-	if len(client.launchKeys) != 2 {
-		t.Fatalf("divergent replay crossed sibling: keys=%v requests=%+v", client.launchKeys, client.launchRequests)
+	if len(client.launchKeys) != 1 || len(client.reconcileKeys) != 1 {
+		t.Fatalf("divergent replay crossed sibling: launch_keys=%v reconcile_keys=%v", client.launchKeys, client.reconcileKeys)
+	}
+}
+
+func TestVendoredClientUsesExplicitLaunchReconciliationRoute(t *testing.T) {
+	key := "reconcile:b12:launch"
+	request := microvm.SolicitudLanzamiento{
+		Perfil: json.RawMessage(`{"profile":"sealed"}`), Plan: json.RawMessage(`{"plan":"signed"}`),
+		Concesion: json.RawMessage(`{"grant":"signed"}`),
+	}
+	calls := 0
+	handler := http.HandlerFunc(func(response http.ResponseWriter, incoming *http.Request) {
+		calls++
+		response.Header().Set(microvm.CabeceraProtocolo, microvm.ProtocoloLocal)
+		if incoming.Method != http.MethodPost || incoming.URL.Path != "/v1/ejecuciones/reconciliacion" ||
+			incoming.Header.Get(microvm.CabeceraIdempotencia) != key ||
+			incoming.Header.Get(microvm.CabeceraProtocolo) != microvm.ProtocoloLocal {
+			t.Errorf("request method=%q path=%q idempotency=%q protocol=%q", incoming.Method,
+				incoming.URL.Path, incoming.Header.Get(microvm.CabeceraIdempotencia),
+				incoming.Header.Get(microvm.CabeceraProtocolo))
+		}
+		var got microvm.SolicitudLanzamiento
+		if err := json.NewDecoder(incoming.Body).Decode(&got); err != nil || !reflect.DeepEqual(got, request) {
+			t.Errorf("request body=%+v err=%v want=%+v", got, err, request)
+		}
+		_, _ = response.Write([]byte(`{"referencia":"ejecucion:reconciliada","estado":"disponible","revision":2,"cerca":1,"vcpu":2,"memoria_mib":2048,"identidad":null,"proceso_vivo":null,"estado_motor":null}`))
+	})
+	client := newUnixHistoricalPreservationClient(t, handler)
+	got, err := client.ReconciliarLanzamiento(context.Background(), key, request)
+	if err != nil || calls != 1 || got.Referencia != "ejecucion:reconciliada" {
+		t.Fatalf("ReconciliarLanzamiento() response=%+v calls=%d err=%v", got, calls, err)
 	}
 }
 
@@ -740,6 +799,7 @@ func TestAdapterRejectsIncompleteRemoteCapabilitiesBeforeLaunch(t *testing.T) {
 		{"executable", func(value *microvm.RespuestaCapacidades) { value.FirecrackerEjecutable = false }, CodePhysicalUnavailable, true},
 		{"capacity", func(value *microvm.RespuestaCapacidades) { value.MaximoEjecuciones = 0 }, CodePhysicalUnavailable, true},
 		{"create", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationCreateExecution) }, CodeOperationUnsupported, false},
+		{"reconcile launch", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReconcileLaunch) }, CodeOperationUnsupported, false},
 		{"observe execution", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationObserveExecution) }, CodeOperationUnsupported, false},
 		{"work revision", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationReadWorkRevision) }, CodeOperationUnsupported, false},
 		{"start", func(value *microvm.RespuestaCapacidades) { removeOperation(value, operationStartSession) }, CodeOperationUnsupported, false},
@@ -816,6 +876,14 @@ func TestAdapterRejectsInvalidConfigurationAndSigningBeforeSocketMutation(t *tes
 	config = validAdapterConfig(&launchOnlyClientStub{}, validSigner(), request, descriptor)
 	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeObservationClientInvalid {
 		t.Fatalf("New() accepted client without read-only observation: adapter=%v error=%v", adapter, err)
+	}
+	baseClient := &launchClientStub{}
+	config = validAdapterConfig(&clientWithoutLaunchReconciliation{
+		Client:            baseClient,
+		observationClient: baseClient,
+	}, validSigner(), request, descriptor)
+	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeConfigurationInvalid {
+		t.Fatalf("New() accepted client without launch reconciliation: adapter=%v error=%v", adapter, err)
 	}
 
 	client := &launchClientStub{capabilities: validRemoteCapabilities(), response: validPhysicalResponse(t, request, descriptor)}
@@ -1007,6 +1075,7 @@ func validRemoteCapabilities() microvm.RespuestaCapacidades {
 		Protocolo: microvm.ProtocoloLocal, Version: "0.1.0",
 		Operaciones: []string{
 			"salud", "capacidades", operationCreateExecution, operationObserveExecution,
+			operationReconcileLaunch,
 			operationReadWorkRevision, operationStartSession,
 			operationSendSessionInput, operationReadSessionEvents, operationReconcileSessionInput,
 			operationStopExecution,

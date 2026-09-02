@@ -14,43 +14,52 @@ const (
 )
 
 type Dependencies struct {
-	State                   StateRepository
-	IntakeStore             IntakeStore
-	WizardGapsStore         WizardGapsStore
-	IntakeDossierStore      IntakeDossierStore
-	Access                  AccessRepository
-	Launcher                AgentLauncher
-	Observer                AgentObserver
-	Controller              AgentController
-	Artifacts               ArtifactStore
-	ToolRegistry            *tooling.Registry
-	CuratedToolCatalog      *tooling.CuratedCatalog
-	ToolExecutor            ToolExecutor
-	WorkspaceManager        WorkspaceManager
-	VersionControl          VersionControl
-	TestAttestor            TestAttestor
-	TestAttestationPolicy   TestAttestationPolicy
-	Clock                   Clock
-	IDs                     IDGenerator
-	MaxOutputBytes          int64
-	MaxMailboxEnvelopeBytes int64
-	MaxExecutionAttempts    uint64
-	MaxChildrenPerParent    int
-	ClaimLease              time.Duration
-	AttestTestClaimLease    time.Duration
-	DirectorLeaseDuration   time.Duration
-	EffectApprovalTTL       time.Duration
-	BudgetPolicy            BudgetPolicy
-	ObservationDelay        time.Duration
-	ExecutionTimeout        time.Duration
-	AgentCapabilities       ports.AgentCapabilities
-	ExecutionSessions       ports.ExecutionSessionBroker
-	PostArtifactMailbox     PostArtifactMailboxAdmitter
-	EgressPolicies          EgressPolicyResolver
-	ProviderCatalogSources  []ProviderCatalogSource
-	CapacitySources         []FuenteCapacidadColocacionAgente
-	CapacityObservationWait time.Duration
-	AgentLifecycle          *AgentEnvironmentLifecycleComposition
+	State                     StateRepository
+	IntakeStore               IntakeStore
+	WizardGapsStore           WizardGapsStore
+	IntakeDossierStore        IntakeDossierStore
+	Access                    AccessRepository
+	Launcher                  AgentLauncher
+	Observer                  AgentObserver
+	Controller                AgentController
+	Artifacts                 ArtifactStore
+	ToolRegistry              *tooling.Registry
+	CuratedToolCatalog        *tooling.CuratedCatalog
+	ToolExecutor              ToolExecutor
+	WorkspaceManager          WorkspaceManager
+	VersionControl            VersionControl
+	TestAttestor              TestAttestor
+	TestAttestationPolicy     TestAttestationPolicy
+	Clock                     Clock
+	IDs                       IDGenerator
+	MaxOutputBytes            int64
+	MaxMailboxEnvelopeBytes   int64
+	MaxExecutionAttempts      uint64
+	MaxChildrenPerParent      int
+	ClaimLease                time.Duration
+	AttestTestClaimLease      time.Duration
+	DirectorLeaseDuration     time.Duration
+	EffectApprovalTTL         time.Duration
+	BudgetPolicy              BudgetPolicy
+	ObservationDelay          time.Duration
+	ExecutionTimeout          time.Duration
+	AgentCapabilities         ports.AgentCapabilities
+	ExecutionSessions         ports.ExecutionSessionBroker
+	PostArtifactMailbox       PostArtifactMailboxAdmitter
+	EgressPolicies            EgressPolicyResolver
+	ProviderCatalogSources    []ProviderCatalogSource
+	CapacitySources           []FuenteCapacidadColocacionAgente
+	CapacityObservationWait   time.Duration
+	AgentLifecycle            *AgentEnvironmentLifecycleComposition
+	ExpiredLaunchContinuation *ExpiredAgentLaunchContinuationCompositionV41
+}
+
+type ExpiredAgentLaunchContinuationCompositionV41 struct {
+	Source                      ExpiredAgentLaunchContinuationSourceStoreV41
+	Store                       ExpiredAgentLaunchContinuationStoreV41
+	Writer                      ExpiredAgentLaunchContinuationWriterV41
+	SessionAuthoritySource      ExecutionSessionAuthoritySource
+	SessionAuthenticationMethod string
 }
 
 type AgentEnvironmentLifecycleComposition struct {
@@ -63,42 +72,47 @@ type AgentEnvironmentLifecycleComposition struct {
 }
 
 type Orchestrator struct {
-	state                   StateRepository
-	intake                  *IntakeService
-	wizardGaps              *WizardGapsService
-	intakeDossier           *IntakeDossierService
-	access                  AccessRepository
-	launcher                AgentLauncher
-	observer                AgentObserver
-	controller              AgentController
-	artifacts               ArtifactStore
-	toolRegistry            *tooling.Registry
-	curatedToolCatalog      *tooling.CuratedCatalog
-	toolExecutor            ToolExecutor
-	workspaceManager        WorkspaceManager
-	versionControl          VersionControl
-	testAttestor            TestAttestor
-	testAttestationPolicy   TestAttestationPolicy
-	clock                   Clock
-	ids                     IDGenerator
-	maxOutputBytes          int64
-	maxMailboxEnvelopeBytes int64
-	maxExecutionAttempts    uint64
-	maxChildrenPerParent    int
-	claimLease              time.Duration
-	attestTestClaimLease    time.Duration
-	directorLeaseDuration   time.Duration
-	budgetPolicy            BudgetPolicy
-	observationDelay        time.Duration
-	executionTimeout        time.Duration
-	agentCapabilities       ports.AgentCapabilities
-	executionSessions       ports.ExecutionSessionBroker
-	postArtifactMailbox     PostArtifactMailboxAdmitter
-	egressPolicies          EgressPolicyResolver
-	providerCatalogSources  []normalizedProviderCatalogSource
-	capacitySources         []FuenteCapacidadColocacionAgente
-	capacityObservationWait time.Duration
-	agentLifecycle          *AgentEnvironmentLifecycleService
+	state                                  StateRepository
+	intake                                 *IntakeService
+	wizardGaps                             *WizardGapsService
+	intakeDossier                          *IntakeDossierService
+	access                                 AccessRepository
+	launcher                               AgentLauncher
+	observer                               AgentObserver
+	controller                             AgentController
+	artifacts                              ArtifactStore
+	toolRegistry                           *tooling.Registry
+	curatedToolCatalog                     *tooling.CuratedCatalog
+	toolExecutor                           ToolExecutor
+	workspaceManager                       WorkspaceManager
+	versionControl                         VersionControl
+	testAttestor                           TestAttestor
+	testAttestationPolicy                  TestAttestationPolicy
+	clock                                  Clock
+	ids                                    IDGenerator
+	maxOutputBytes                         int64
+	maxMailboxEnvelopeBytes                int64
+	maxExecutionAttempts                   uint64
+	maxChildrenPerParent                   int
+	claimLease                             time.Duration
+	attestTestClaimLease                   time.Duration
+	directorLeaseDuration                  time.Duration
+	budgetPolicy                           BudgetPolicy
+	observationDelay                       time.Duration
+	executionTimeout                       time.Duration
+	agentCapabilities                      ports.AgentCapabilities
+	executionSessions                      ports.ExecutionSessionBroker
+	postArtifactMailbox                    PostArtifactMailboxAdmitter
+	egressPolicies                         EgressPolicyResolver
+	providerCatalogSources                 []normalizedProviderCatalogSource
+	capacitySources                        []FuenteCapacidadColocacionAgente
+	capacityObservationWait                time.Duration
+	agentLifecycle                         *AgentEnvironmentLifecycleService
+	expiredLaunchContinuationSource        ExpiredAgentLaunchContinuationSourceStoreV41
+	expiredLaunchContinuationStore         ExpiredAgentLaunchContinuationStoreV41
+	expiredLaunchContinuationWriter        ExpiredAgentLaunchContinuationWriterV41
+	expiredLaunchContinuationSessionSource ExecutionSessionAuthoritySource
+	expiredLaunchContinuationSessionMethod string
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
@@ -160,6 +174,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.test_attestation_policy_invalid")
 	case agentEnvironmentLifecycleDependenciesPartial(dependencies):
 		return nil, errors.New("application.agent_environment_lifecycle_composition_invalid")
+	case expiredAgentLaunchContinuationDependenciesPartial(dependencies):
+		return nil, errors.New("application.expired_agent_launch_continuation_composition_invalid")
 	}
 	controller := dependencies.Controller
 	if controller == nil {
@@ -235,6 +251,14 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		capacitySources:         capacitySources,
 		capacityObservationWait: dependencies.CapacityObservationWait,
 	}
+	if dependencies.ExpiredLaunchContinuation != nil {
+		composition := dependencies.ExpiredLaunchContinuation
+		orchestrator.expiredLaunchContinuationSource = composition.Source
+		orchestrator.expiredLaunchContinuationStore = composition.Store
+		orchestrator.expiredLaunchContinuationWriter = composition.Writer
+		orchestrator.expiredLaunchContinuationSessionSource = composition.SessionAuthoritySource
+		orchestrator.expiredLaunchContinuationSessionMethod = composition.SessionAuthenticationMethod
+	}
 	if dependencies.AgentLifecycle != nil {
 		service, err := NewAgentEnvironmentLifecycleService(AgentEnvironmentLifecycleServiceDependencies{
 			Store:               dependencies.AgentLifecycle.Store,
@@ -252,6 +276,15 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		orchestrator.agentLifecycle = service
 	}
 	return orchestrator, nil
+}
+
+func expiredAgentLaunchContinuationDependenciesPartial(dependencies Dependencies) bool {
+	composition := dependencies.ExpiredLaunchContinuation
+	if composition == nil {
+		return false
+	}
+	return composition.Source == nil || composition.Store == nil || composition.Writer == nil ||
+		composition.SessionAuthoritySource == nil || composition.SessionAuthenticationMethod == ""
 }
 
 func agentEnvironmentLifecycleDependenciesPartial(dependencies Dependencies) bool {

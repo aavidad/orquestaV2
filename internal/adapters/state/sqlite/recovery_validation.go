@@ -22,60 +22,71 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 		return "", "", mapDatabaseError(err)
 	}
 	defer transaction.Rollback()
-	migrations, err := loadMigrations()
+	schemaRef, logicalDigest, _, err := validateRecoveryTransaction(ctx, transaction)
 	if err != nil {
-		return "", "", invalid(err)
-	}
-	var current int
-	if err := transaction.QueryRowContext(ctx, "PRAGMA user_version").Scan(&current); err != nil {
-		return "", "", mapDatabaseError(err)
-	}
-	prefix, err := recoveryMigrationPrefix(migrations, current)
-	if err != nil {
-		return "", "", invalid(err)
-	}
-	if err := verifyAppliedMigrations(ctx, transaction, prefix, current); err != nil {
 		return "", "", err
-	}
-	if err := verifyForeignKeys(ctx, transaction); err != nil {
-		return "", "", err
-	}
-	actualSchema, err := schemaInventoryDigest(ctx, transaction)
-	if err != nil {
-		return "", "", invalid(err)
-	}
-	expectedSchema, err := canonicalSchemaInventoryDigest(current)
-	if err != nil || actualSchema != expectedSchema {
-		return "", "", invalid(errors.New("sqlite.recovery_schema_inventory_invalid"))
-	}
-	var integrity string
-	if err := transaction.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&integrity); err != nil {
-		return "", "", invalid(fmt.Errorf("sqlite.integrity_check_failed: %w", err))
-	}
-	if integrity != "ok" {
-		return "", "", invalid(fmt.Errorf("sqlite.integrity_check_failed:%s", integrity))
-	}
-	if err := validateRecoveryVersion(ctx, transaction, current); err != nil {
-		return "", "", invalid(err)
-	}
-	if err := validateRecoveryEvents(ctx, transaction); err != nil {
-		return "", "", invalid(err)
-	}
-	if err := validateRecoveryOutbox(ctx, transaction); err != nil {
-		return "", "", invalid(err)
-	}
-	if err := validateRecoveryReceiptBindings(ctx, transaction); err != nil {
-		return "", "", invalid(err)
-	}
-	schemaRef := migrationSchemaRef(prefix)
-	logicalDigest, err := logicalStateDigest(ctx, transaction)
-	if err != nil {
-		return "", "", invalid(err)
 	}
 	if err := transaction.Commit(); err != nil {
 		return "", "", mapDatabaseError(err)
 	}
 	return schemaRef, logicalDigest, nil
+}
+
+func validateRecoveryTransaction(
+	ctx context.Context,
+	transaction *sql.Tx,
+) (string, string, int, error) {
+	migrations, err := loadMigrations()
+	if err != nil {
+		return "", "", 0, invalid(err)
+	}
+	var current int
+	if err := transaction.QueryRowContext(ctx, "PRAGMA user_version").Scan(&current); err != nil {
+		return "", "", 0, mapDatabaseError(err)
+	}
+	prefix, err := recoveryMigrationPrefix(migrations, current)
+	if err != nil {
+		return "", "", current, invalid(err)
+	}
+	if err := verifyAppliedMigrations(ctx, transaction, prefix, current); err != nil {
+		return "", "", current, err
+	}
+	if err := verifyForeignKeys(ctx, transaction); err != nil {
+		return "", "", current, err
+	}
+	actualSchema, err := schemaInventoryDigest(ctx, transaction)
+	if err != nil {
+		return "", "", current, invalid(err)
+	}
+	expectedSchema, err := canonicalSchemaInventoryDigest(current)
+	if err != nil || actualSchema != expectedSchema {
+		return "", "", current, invalid(errors.New("sqlite.recovery_schema_inventory_invalid"))
+	}
+	var integrity string
+	if err := transaction.QueryRowContext(ctx, "PRAGMA integrity_check").Scan(&integrity); err != nil {
+		return "", "", current, invalid(fmt.Errorf("sqlite.integrity_check_failed: %w", err))
+	}
+	if integrity != "ok" {
+		return "", "", current, invalid(fmt.Errorf("sqlite.integrity_check_failed:%s", integrity))
+	}
+	if err := validateRecoveryVersion(ctx, transaction, current); err != nil {
+		return "", "", current, invalid(err)
+	}
+	if err := validateRecoveryEvents(ctx, transaction); err != nil {
+		return "", "", current, invalid(err)
+	}
+	if err := validateRecoveryOutbox(ctx, transaction); err != nil {
+		return "", "", current, invalid(err)
+	}
+	if err := validateRecoveryReceiptBindings(ctx, transaction); err != nil {
+		return "", "", current, invalid(err)
+	}
+	schemaRef := migrationSchemaRef(prefix)
+	logicalDigest, err := logicalStateDigest(ctx, transaction)
+	if err != nil {
+		return "", "", current, invalid(err)
+	}
+	return schemaRef, logicalDigest, current, nil
 }
 
 type recoveryValidator func(context.Context, *sql.Tx) error
@@ -90,6 +101,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		}
 		if version >= recoverySchemaV38StopNonApplication {
 			governanceValidator = validateRecoveryV37Governance
+		}
+		if version >= recoverySchemaV38TerminalLaunchReconciliation {
+			governanceValidator = validateRecoveryV40Governance
 		}
 		validators := []recoveryValidator{
 			validateRecoveryV10Identity,
@@ -135,12 +149,19 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 			}
 		}
 		if version >= recoverySchemaV38AttemptLease {
-			validators = append(validators, validateRecoveryV27EffectAttemptClaimLease)
+			attemptLeaseValidator := validateRecoveryV27EffectAttemptClaimLease
+			if version >= recoverySchemaV38TerminalLaunchReconciliation {
+				attemptLeaseValidator = validateRecoveryV40EffectAttemptClaimLease
+			}
+			validators = append(validators, attemptLeaseValidator)
 		}
 		if version >= recoverySchemaV38RecoveryClaim {
 			recoveryClaimValidator := validateRecoveryV28EffectRecoveryClaim
 			if version >= recoverySchemaV38RecoveryRequeue {
 				recoveryClaimValidator = validateRecoveryV30EffectRecoveryClaim
+			}
+			if version >= recoverySchemaV38TerminalLaunchReconciliation {
+				recoveryClaimValidator = validateRecoveryV40EffectRecoveryClaim
 			}
 			validators = append(validators, recoveryClaimValidator)
 		}
@@ -155,6 +176,12 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		}
 		if version >= recoverySchemaV38StopNonApplication {
 			validators = append(validators, validateRecoveryV37EffectNonApplication)
+		}
+		if version >= recoverySchemaV38TerminalLaunchReconciliation {
+			validators = append(validators, validateRecoveryV40TerminalAgentLaunchReconciliation)
+		}
+		if version >= recoverySchemaV38ExpiredLaunchContinuation {
+			validators = append(validators, validateRecoveryV41ExpiredAgentLaunchContinuation)
 		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {

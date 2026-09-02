@@ -23,21 +23,31 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	if got := catalog.Locales(); !reflect.DeepEqual(got, []string{"es", "en"}) {
 		t.Fatalf("Locales() = %v", got)
 	}
-	if got := len(catalog.Keys()); got != 923 {
+	if got := len(catalog.Keys()); got != 934 {
 		t.Fatalf("Keys() count = %d", got)
 	}
 	for _, key := range []string{
 		"cli.credentials.provision_codex_microvm.usage",
+		"cli.credentials.provision_microvm_continuation_authority.usage",
+		"cli.state.migrate.usage",
 		"error.cli.credential_provision_arguments_invalid",
 		"error.cli.credential_provision_canceled",
 		"error.cli.credential_provision_configuration_invalid",
 		"error.cli.credential_provision_failed",
+		"error.cli.continuation_credential_public_key_digest_mismatch",
+		"error.cli.state_migration_arguments_invalid",
+		"error.cli.state_migration_canceled",
+		"error.cli.state_migration_committed_postcheck_pending",
+		"error.cli.state_migration_configuration_invalid",
+		"error.cli.state_migration_failed",
 		"command.intakes.dossier.confirm.description",
 		"command.intakes.dossier.get.description",
 		"command.intakes.dossier.prepare.description",
 		"command.intakes.context.get.description",
 		"command.intakes.recommendations.accept.description",
 		"command.intakes.wizard.gaps.apply.description",
+		"command.effects.expired_agent_launch_continuation.confirm.description",
+		"command.effects.expired_agent_launch_continuation.preflight.description",
 	} {
 		if !contains(catalog.Keys(), key) {
 			t.Errorf("missing dossier command key: %s", key)

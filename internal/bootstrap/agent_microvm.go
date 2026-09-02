@@ -20,14 +20,15 @@ const (
 )
 
 var (
-	errAgentMicroVMAdapterRequerido            = errors.New("bootstrap.agent_microvm_adapter_required")
-	errAgentMicroVMCierreConexiones            = errors.New("bootstrap.agent_microvm_connection_cleanup_required")
-	errAgentMicroVMCierreCredenciales          = errors.New("bootstrap.agent_microvm_credential_cleanup_required")
-	errAgentMicroVMCerrado                     = errors.New("bootstrap.agent_microvm_closed")
-	errAgentMicroVMCapacidadFisicaInvalida     = errors.New("bootstrap.agent_microvm_physical_capacity_invalid")
-	errAgentMicroVMPreservacionRequerida       = errors.New("bootstrap.agent_microvm_preservation_required")
-	errAgentMicroVMAutoridadHistoricaRequerida = errors.New("bootstrap.agent_microvm_historical_authority_required")
-	errAgentMicroVMRecuperacionRequerida       = errors.New("bootstrap.agent_microvm_preservation_recovery_required")
+	errAgentMicroVMAdapterRequerido              = errors.New("bootstrap.agent_microvm_adapter_required")
+	errAgentMicroVMCierreConexiones              = errors.New("bootstrap.agent_microvm_connection_cleanup_required")
+	errAgentMicroVMCierreCredenciales            = errors.New("bootstrap.agent_microvm_credential_cleanup_required")
+	errAgentMicroVMCerrado                       = errors.New("bootstrap.agent_microvm_closed")
+	errAgentMicroVMCapacidadFisicaInvalida       = errors.New("bootstrap.agent_microvm_physical_capacity_invalid")
+	errAgentMicroVMPreservacionRequerida         = errors.New("bootstrap.agent_microvm_preservation_required")
+	errAgentMicroVMAutoridadHistoricaRequerida   = errors.New("bootstrap.agent_microvm_historical_authority_required")
+	errAgentMicroVMRecuperacionRequerida         = errors.New("bootstrap.agent_microvm_preservation_recovery_required")
+	errAgentMicroVMContinuacionCaducadaRequerida = errors.New("bootstrap.agent_microvm_expired_launch_continuation_required")
 )
 
 // Estas fronteras son deliberadamente mas estrechas que el lifecycle completo.
@@ -65,12 +66,33 @@ type agenteMicroVMDelegado interface {
 // locales de composicion y nunca sustituye ese control exacto.
 type agenteMicroVM struct {
 	adaptador          agenteMicroVMDelegado
+	iniciadorCuota     application.IniciadorControladoresCuotaAgente
 	cerrarConexiones   func() error
 	cerrarCredenciales func() error
 	compuerta          sync.RWMutex
 	cerrado            bool
 	shutdownOnce       sync.Once
 	shutdownErr        error
+}
+
+// IniciarControladoresCuota conserva la observación Codex en el anfitrión.
+// El ejecutor físico sigue siendo el único adaptador que recibe launches.
+func (agente *agenteMicroVM) IniciarControladoresCuota(
+	ctx context.Context,
+	configuracion application.ConfiguracionControladoresCuotaAgente,
+) ([]application.ControladorCuotaAgente, error) {
+	if agente == nil {
+		return nil, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return nil, errAgentMicroVMCerrado
+	}
+	if agente.iniciadorCuota == nil {
+		return nil, nil
+	}
+	return agente.iniciadorCuota.IniciarControladoresCuota(ctx, configuracion)
 }
 
 // newAgentMicroVM mantiene concreta la frontera productiva. La construccion
@@ -85,6 +107,9 @@ func newAgentMicroVM(
 	}
 	if _, ok := any(adaptador).(preservadorHistoricoAgentMicroVM); !ok {
 		return nil, errAgentMicroVMAutoridadHistoricaRequerida
+	}
+	if _, ok := any(adaptador).(application.ExpiredAgentLaunchContinuationWriterV41); !ok {
+		return nil, errAgentMicroVMContinuacionCaducadaRequerida
 	}
 	return newAgentMicroVMConDelegado(adaptador, cerrarConexiones, cerrarCredenciales)
 }
@@ -150,6 +175,67 @@ func (agente *agenteMicroVM) ReconcileLaunch(
 		return ports.AgentLaunchReceipt{}, errAgentMicroVMCerrado
 	}
 	return agente.adaptador.ReconcileLaunch(ctx, solicitud)
+}
+
+func (agente *agenteMicroVM) ContinueExpiredAgentLaunchV41(
+	ctx context.Context,
+	solicitud ports.AgentLaunchRequest,
+	record application.ExpiredAgentLaunchContinuationRecordV41,
+) (ports.AgentLaunchReceipt, error) {
+	if agente == nil {
+		return ports.AgentLaunchReceipt{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return ports.AgentLaunchReceipt{}, errAgentMicroVMCerrado
+	}
+	continuer, ok := agente.adaptador.(application.ExpiredAgentLaunchContinuerV41)
+	if !ok {
+		return ports.AgentLaunchReceipt{}, errAgentMicroVMContinuacionCaducadaRequerida
+	}
+	return continuer.ContinueExpiredAgentLaunchV41(ctx, solicitud, record)
+}
+
+func (agente *agenteMicroVM) PrepareExpiredAgentLaunchContinuationV41(
+	ctx context.Context,
+	solicitud ports.AgentLaunchRequest,
+	binding application.ExpiredAgentLaunchContinuationCausalBindingV41,
+) (application.ExpiredAgentLaunchContinuationPreparationV41, error) {
+	if agente == nil {
+		return application.ExpiredAgentLaunchContinuationPreparationV41{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return application.ExpiredAgentLaunchContinuationPreparationV41{}, errAgentMicroVMCerrado
+	}
+	escritor, ok := agente.adaptador.(application.ExpiredAgentLaunchContinuationWriterV41)
+	if !ok {
+		return application.ExpiredAgentLaunchContinuationPreparationV41{}, errAgentMicroVMContinuacionCaducadaRequerida
+	}
+	return escritor.PrepareExpiredAgentLaunchContinuationV41(ctx, solicitud, binding)
+}
+
+func (agente *agenteMicroVM) IssueExpiredAgentLaunchContinuationV41(
+	ctx context.Context,
+	solicitud ports.AgentLaunchRequest,
+	binding application.ExpiredAgentLaunchContinuationCausalBindingV41,
+	issuance application.ExpiredAgentLaunchContinuationIssuanceV41,
+) (application.ExpiredAgentLaunchContinuationRecordV41, error) {
+	if agente == nil {
+		return application.ExpiredAgentLaunchContinuationRecordV41{}, errAgentMicroVMAdapterRequerido
+	}
+	agente.compuerta.RLock()
+	defer agente.compuerta.RUnlock()
+	if agente.cerrado {
+		return application.ExpiredAgentLaunchContinuationRecordV41{}, errAgentMicroVMCerrado
+	}
+	escritor, ok := agente.adaptador.(application.ExpiredAgentLaunchContinuationWriterV41)
+	if !ok {
+		return application.ExpiredAgentLaunchContinuationRecordV41{}, errAgentMicroVMContinuacionCaducadaRequerida
+	}
+	return escritor.IssueExpiredAgentLaunchContinuationV41(ctx, solicitud, binding, issuance)
 }
 
 func (agente *agenteMicroVM) ObserveAgent(
@@ -404,6 +490,7 @@ func interfazNulaAgentMicroVM(valor any) bool {
 var _ agenteMicroVMDelegado = (*agentmicrovm.Adapter)(nil)
 var _ AgentAdapter = (*agenteMicroVM)(nil)
 var _ application.AgentLaunchReconciler = (*agenteMicroVM)(nil)
+var _ application.ExpiredAgentLaunchContinuerV41 = (*agenteMicroVM)(nil)
 var _ application.AgentController = (*agenteMicroVM)(nil)
 var _ application.AgentHistoricalRuntimePreserver = (*agenteMicroVM)(nil)
 var _ catalogoCapacidadColocacionAgente = (*agenteMicroVM)(nil)

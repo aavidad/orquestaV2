@@ -82,12 +82,21 @@ func (repository *Repository) ClaimNextAction(
 	if err := requireFreshClaimToken(ctx, transaction, request.Token); err != nil {
 		return application.ActionClaim{}, false, err
 	}
+	terminal, found, err := repository.claimTerminalAgentLaunchReconciliation(ctx, transaction, request, now)
+	if err != nil {
+		return application.ActionClaim{}, false, err
+	}
+	if found {
+		if err := commit(transaction); err != nil {
+			return application.ActionClaim{}, false, err
+		}
+		return terminal, true, nil
+	}
 	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
 	if err != nil {
 		return application.ActionClaim{}, false, mapDatabaseError(err)
 	}
 	var selected claimSelection
-	var found bool
 	var after *claimCandidateOrder
 	for {
 		candidates, err := readClaimCandidateWindow(
@@ -164,7 +173,9 @@ func requireFreshClaimToken(ctx context.Context, tx *sql.Tx, token string) error
 	var exists int
 	err := tx.QueryRowContext(ctx, `SELECT 1 FROM (
 SELECT claim_token FROM outbox WHERE claim_token=? UNION ALL
-SELECT claim_token FROM action_consumption_receipts WHERE claim_token=?) LIMIT 1`, token, token).Scan(&exists)
+SELECT claim_token FROM action_consumption_receipts WHERE claim_token=? UNION ALL
+SELECT claim_token FROM agent_launch_reconciliation_jobs WHERE claim_token=? UNION ALL
+SELECT claim_token FROM agent_launch_reconciliation_attempts WHERE claim_token=?) LIMIT 1`, token, token, token, token).Scan(&exists)
 	if err == nil {
 		return stateError(application.StateAlreadyClaimed, errors.New("sqlite.claim_token_reused"))
 	}

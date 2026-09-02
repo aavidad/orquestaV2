@@ -1,7 +1,16 @@
 // Package microvm ofrece a Orquesta un cliente del protocolo local de Agente MicroVM.
 package microvm
 
-import "encoding/json"
+import (
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"strings"
+)
 
 const (
 	// ProtocoloLocal identifica la única versión negociada por este conector.
@@ -35,8 +44,78 @@ type RespuestaCapacidades struct {
 
 // SolicitudLanzamiento conserva los contratos firmados sin duplicar su schema en Go.
 type SolicitudLanzamiento struct {
+	Perfil    json.RawMessage `json:"perfil"`
 	Plan      json.RawMessage `json:"plan"`
 	Concesion json.RawMessage `json:"concesion"`
+}
+
+// ExpiredLaunchContinuationTargetV1 fija una de las dos operaciones físicas
+// ya existentes. No permite solicitar una operación, intención o clave nueva.
+type ExpiredLaunchContinuationTargetV1 struct {
+	Operation                string  `json:"operacion"`
+	Schema                   uint16  `json:"esquema"`
+	Code                     uint8   `json:"codigo"`
+	IntentRef                string  `json:"intent_ref"`
+	IdempotencyKey           string  `json:"clave_idempotencia"`
+	RequestSHA256            string  `json:"request_sha256"`
+	CommandSHA256            string  `json:"comando_sha256"`
+	InnerAuthorizationSHA256 string  `json:"autorizacion_interior_sha256"`
+	SignedRequestSHA256      *string `json:"solicitud_firmada_sha256"`
+	DaemonState              string  `json:"estado_daemon"`
+	RootState                string  `json:"estado_raiz"`
+	RootRevision             *uint64 `json:"revision_raiz"`
+}
+
+// ExpiredLaunchContinuationManifestV1 es la foto inmutable devuelta por la
+// preparación de Agente MicroVM para el intento ya registrado.
+type ExpiredLaunchContinuationManifestV1 struct {
+	Schema                string                            `json:"esquema"`
+	Audience              string                            `json:"audiencia"`
+	BrokerInstanceSHA256  string                            `json:"instancia_broker_sha256"`
+	SourceDigest          string                            `json:"source_digest"`
+	RequestKeySHA256      string                            `json:"clave_solicitud_sha256"`
+	OriginalRequestSHA256 string                            `json:"solicitud_original_sha256"`
+	LaunchRef             string                            `json:"launch_ref"`
+	ExecutionRef          string                            `json:"execution_ref"`
+	RunRef                string                            `json:"run_ref"`
+	Fence                 uint64                            `json:"cerca"`
+	Generation            uint64                            `json:"generacion"`
+	CID                   uint32                            `json:"cid"`
+	IdentitySHA256        string                            `json:"identidad_sha256"`
+	ValidateLaunch        ExpiredLaunchContinuationTargetV1 `json:"validate_launch"`
+	Launch                ExpiredLaunchContinuationTargetV1 `json:"launch"`
+}
+
+type ExpiredLaunchContinuationAuthorityContentV1 struct {
+	Schema         string `json:"esquema"`
+	Audience       string `json:"audiencia"`
+	Purpose        string `json:"proposito"`
+	AuthorityRef   string `json:"autoridad_ref"`
+	ManifestSHA256 string `json:"manifiesto_sha256"`
+	IssuedUnixMS   uint64 `json:"emitida_unix_ms"`
+	ExpiresUnixMS  uint64 `json:"expira_unix_ms"`
+	KeyID          string `json:"clave_id"`
+	KeyEpoch       uint64 `json:"epoca_clave"`
+	TrustRevision  uint64 `json:"revision_confianza"`
+	Algorithm      string `json:"algoritmo"`
+}
+
+// ExpiredLaunchContinuationAuthorityV1 transporta el mismo manifiesto y una
+// firma exterior separada de la concesión de lanzamiento ya caducada.
+type ExpiredLaunchContinuationAuthorityV1 struct {
+	Content         ExpiredLaunchContinuationAuthorityContentV1 `json:"contenido"`
+	Manifest        ExpiredLaunchContinuationManifestV1         `json:"manifiesto"`
+	SignatureBase64 string                                      `json:"firma_base64"`
+}
+
+type SolicitudContinuacionLanzamientoCaducadoV1 struct {
+	SolicitudOriginal SolicitudLanzamiento                 `json:"solicitud_original"`
+	Autoridad         ExpiredLaunchContinuationAuthorityV1 `json:"autoridad"`
+}
+
+type RespuestaPreparacionContinuacionLanzamientoCaducadoV1 struct {
+	Manifiesto       ExpiredLaunchContinuationManifestV1 `json:"manifiesto"`
+	ManifiestoSHA256 string                              `json:"manifiesto_sha256"`
 }
 
 type ModoDetencionSolicitadoV1 string
@@ -86,6 +165,13 @@ type SolicitudCierre struct {
 	Cerca                    uint64 `json:"cerca"`
 	ManifiestoSHA256Esperado string `json:"manifiesto_sha256_esperado"`
 }
+
+type EstadoCierreV1 string
+
+const (
+	EstadoCierrePendiente  EstadoCierreV1 = "pendiente"
+	EstadoCierreConfirmada EstadoCierreV1 = "confirmada"
+)
 
 type VariableEntorno struct {
 	Nombre string `json:"nombre"`
@@ -157,6 +243,16 @@ type RespuestaDetencion struct {
 	ModoEfectivo      *ModoDetencionEfectivoV1  `json:"modo_efectivo,omitempty"`
 	ReceiptRef        *string                   `json:"receipt_ref,omitempty"`
 	ConfirmadaUnixMS  *uint64                   `json:"confirmada_unix_ms,omitempty"`
+}
+
+// RespuestaCierre distingue admision de confirmacion fisica. Solo confirmada
+// porta el receipt durable y el instante observado por Agente MicroVM.
+type RespuestaCierre struct {
+	Ejecucion         RespuestaEjecucion `json:"ejecucion"`
+	ClaveIdempotencia string             `json:"clave_idempotencia"`
+	Estado            EstadoCierreV1     `json:"estado"`
+	ReceiptRef        *string            `json:"receipt_ref,omitempty"`
+	ConfirmadaUnixMS  *uint64            `json:"confirmada_unix_ms,omitempty"`
 }
 
 type RespuestaOrden struct {
@@ -324,6 +420,17 @@ func (e *ErrorDetencionV1) Error() string {
 	return e.Codigo
 }
 
+// ErrorCierreV1 identifica una solicitud o respuesta de cierre que no prueba
+// el efecto terminal durable.
+type ErrorCierreV1 struct{ Codigo string }
+
+func (e *ErrorCierreV1) Error() string {
+	if e == nil || e.Codigo == "" {
+		return "cierre.contrato_invalido"
+	}
+	return e.Codigo
+}
+
 type ArtefactoPreservado struct {
 	Origen          string  `json:"origen"`
 	Clase           string  `json:"clase"`
@@ -358,4 +465,380 @@ type RespuestaManifiestoPreservacion struct {
 type Problema struct {
 	Codigo  string `json:"codigo"`
 	Detalle string `json:"detalle"`
+}
+
+const (
+	ExpiredLaunchContinuationManifestSchemaV1  = "agentmicrovm.manifiesto-continuacion-lanzamiento-caducado.v1"
+	ExpiredLaunchContinuationAuthoritySchemaV1 = "agentmicrovm.autoridad-continuacion-lanzamiento-caducado.v1"
+	ExpiredLaunchContinuationAudienceV1        = "agentmicrovm.continuacion-lanzamiento-caducado.v1"
+	ExpiredLaunchContinuationPurposeV1         = "continuar_intento_lanzamiento_caducado"
+	ExpiredLaunchContinuationAlgorithmV1       = "ed25519"
+
+	expiredContinuationMaximumValidityMS = uint64(5 * 60 * 1000)
+	expiredContinuationMaximumField      = 512
+	expiredContinuationMaximumBlock      = 64 * 1024
+)
+
+var (
+	expiredContinuationManifestDomain  = []byte("agentmicrovm.manifiesto-continuacion-lanzamiento-caducado.v1\x00")
+	expiredContinuationSignatureDomain = []byte("agentmicrovm.firma-autoridad-continuacion-lanzamiento-caducado.v1\x00")
+	expiredContinuationAuthorityDomain = []byte("agentmicrovm.autoridad-continuacion-lanzamiento-caducado.v1\x00")
+
+	expiredContinuationTargetSchema = esquemaObjetoEstricto(esquemaObjetoJSONEstricto{
+		"operacion":                    esquemaEscalarJSONEstricto,
+		"esquema":                      esquemaEscalarJSONEstricto,
+		"codigo":                       esquemaEscalarJSONEstricto,
+		"intent_ref":                   esquemaEscalarJSONEstricto,
+		"clave_idempotencia":           esquemaEscalarJSONEstricto,
+		"request_sha256":               esquemaEscalarJSONEstricto,
+		"comando_sha256":               esquemaEscalarJSONEstricto,
+		"autorizacion_interior_sha256": esquemaEscalarJSONEstricto,
+		"solicitud_firmada_sha256":     esquemaEscalarJSONEstrictoOpcional,
+		"estado_daemon":                esquemaEscalarJSONEstricto,
+		"estado_raiz":                  esquemaEscalarJSONEstricto,
+		"revision_raiz":                esquemaEscalarJSONEstrictoOpcional,
+	})
+	expiredContinuationManifestSchema = esquemaObjetoJSONEstricto{
+		"esquema":                   esquemaEscalarJSONEstricto,
+		"audiencia":                 esquemaEscalarJSONEstricto,
+		"instancia_broker_sha256":   esquemaEscalarJSONEstricto,
+		"source_digest":             esquemaEscalarJSONEstricto,
+		"clave_solicitud_sha256":    esquemaEscalarJSONEstricto,
+		"solicitud_original_sha256": esquemaEscalarJSONEstricto,
+		"launch_ref":                esquemaEscalarJSONEstricto,
+		"execution_ref":             esquemaEscalarJSONEstricto,
+		"run_ref":                   esquemaEscalarJSONEstricto,
+		"cerca":                     esquemaEscalarJSONEstricto,
+		"generacion":                esquemaEscalarJSONEstricto,
+		"cid":                       esquemaEscalarJSONEstricto,
+		"identidad_sha256":          esquemaEscalarJSONEstricto,
+		"validate_launch":           expiredContinuationTargetSchema,
+		"launch":                    expiredContinuationTargetSchema,
+	}
+	expiredContinuationAuthorityContentSchema = esquemaObjetoEstricto(esquemaObjetoJSONEstricto{
+		"esquema":            esquemaEscalarJSONEstricto,
+		"audiencia":          esquemaEscalarJSONEstricto,
+		"proposito":          esquemaEscalarJSONEstricto,
+		"autoridad_ref":      esquemaEscalarJSONEstricto,
+		"manifiesto_sha256":  esquemaEscalarJSONEstricto,
+		"emitida_unix_ms":    esquemaEscalarJSONEstricto,
+		"expira_unix_ms":     esquemaEscalarJSONEstricto,
+		"clave_id":           esquemaEscalarJSONEstricto,
+		"epoca_clave":        esquemaEscalarJSONEstricto,
+		"revision_confianza": esquemaEscalarJSONEstricto,
+		"algoritmo":          esquemaEscalarJSONEstricto,
+	})
+	expiredContinuationAuthoritySchema = esquemaObjetoJSONEstricto{
+		"contenido":    expiredContinuationAuthorityContentSchema,
+		"manifiesto":   esquemaObjetoEstricto(expiredContinuationManifestSchema),
+		"firma_base64": esquemaEscalarJSONEstricto,
+	}
+	esquemaRespuestaPreparacionContinuacionLanzamientoCaducadoV1 = esquemaObjetoJSONEstricto{
+		"manifiesto":        esquemaObjetoEstricto(expiredContinuationManifestSchema),
+		"manifiesto_sha256": esquemaEscalarJSONEstricto,
+	}
+)
+
+// DecodeExpiredLaunchContinuationManifestV1 decodifica y valida la forma
+// completa del manifiesto antes de que el consumidor lo persista o firme.
+func DecodeExpiredLaunchContinuationManifestV1(data []byte) (ExpiredLaunchContinuationManifestV1, error) {
+	var value ExpiredLaunchContinuationManifestV1
+	if !decodificarObjetoJSONEstricto(data, expiredContinuationManifestSchema, &value) {
+		return ExpiredLaunchContinuationManifestV1{}, errors.New("agentmicrovm.expired_launch_continuation.invalid_manifest_json")
+	}
+	if err := validateExpiredLaunchContinuationManifest(value); err != nil {
+		return ExpiredLaunchContinuationManifestV1{}, err
+	}
+	return value, nil
+}
+
+// DecodeExpiredLaunchContinuationAuthorityV1 decodifica una autoridad sin
+// aceptar campos ausentes, desconocidos, duplicados ni JSON adicional.
+func DecodeExpiredLaunchContinuationAuthorityV1(data []byte) (ExpiredLaunchContinuationAuthorityV1, error) {
+	var value ExpiredLaunchContinuationAuthorityV1
+	if !decodificarObjetoJSONEstricto(data, expiredContinuationAuthoritySchema, &value) {
+		return ExpiredLaunchContinuationAuthorityV1{}, errors.New("agentmicrovm.expired_launch_continuation.invalid_authority_json")
+	}
+	if err := validateExpiredLaunchContinuationAuthority(value); err != nil {
+		return ExpiredLaunchContinuationAuthorityV1{}, err
+	}
+	return value, nil
+}
+
+func ExpiredLaunchContinuationManifestMessageV1(manifest ExpiredLaunchContinuationManifestV1) ([]byte, error) {
+	if err := validateExpiredLaunchContinuationManifest(manifest); err != nil {
+		return nil, err
+	}
+	output := append([]byte(nil), expiredContinuationManifestDomain...)
+	for _, field := range []string{
+		manifest.Schema, manifest.Audience, manifest.BrokerInstanceSHA256,
+		manifest.SourceDigest, manifest.RequestKeySHA256, manifest.OriginalRequestSHA256,
+		manifest.LaunchRef, manifest.ExecutionRef, manifest.RunRef,
+	} {
+		if err := appendExpiredContinuationField(&output, field); err != nil {
+			return nil, err
+		}
+	}
+	output = binary.BigEndian.AppendUint64(output, manifest.Fence)
+	output = binary.BigEndian.AppendUint64(output, manifest.Generation)
+	output = binary.BigEndian.AppendUint32(output, manifest.CID)
+	if err := appendExpiredContinuationField(&output, manifest.IdentitySHA256); err != nil {
+		return nil, err
+	}
+	if err := appendExpiredContinuationTarget(&output, manifest.ValidateLaunch); err != nil {
+		return nil, err
+	}
+	if err := appendExpiredContinuationTarget(&output, manifest.Launch); err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
+func ExpiredLaunchContinuationManifestSHA256V1(manifest ExpiredLaunchContinuationManifestV1) (string, error) {
+	message, err := ExpiredLaunchContinuationManifestMessageV1(manifest)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(message)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func ExpiredLaunchContinuationSigningMessageV1(content ExpiredLaunchContinuationAuthorityContentV1) ([]byte, error) {
+	if err := validateExpiredLaunchContinuationContent(content); err != nil {
+		return nil, err
+	}
+	output := append([]byte(nil), expiredContinuationSignatureDomain...)
+	for _, field := range []string{content.Schema, content.Audience, content.Purpose, content.AuthorityRef, content.ManifestSHA256} {
+		if err := appendExpiredContinuationField(&output, field); err != nil {
+			return nil, err
+		}
+	}
+	output = binary.BigEndian.AppendUint64(output, content.IssuedUnixMS)
+	output = binary.BigEndian.AppendUint64(output, content.ExpiresUnixMS)
+	if err := appendExpiredContinuationField(&output, content.KeyID); err != nil {
+		return nil, err
+	}
+	output = binary.BigEndian.AppendUint64(output, content.KeyEpoch)
+	output = binary.BigEndian.AppendUint64(output, content.TrustRevision)
+	if err := appendExpiredContinuationField(&output, content.Algorithm); err != nil {
+		return nil, err
+	}
+	return output, nil
+}
+
+func ExpiredLaunchContinuationAuthoritySHA256V1(authority ExpiredLaunchContinuationAuthorityV1) (string, error) {
+	if err := validateExpiredLaunchContinuationAuthority(authority); err != nil {
+		return "", err
+	}
+	content, err := ExpiredLaunchContinuationSigningMessageV1(authority.Content)
+	if err != nil {
+		return "", err
+	}
+	manifest, err := ExpiredLaunchContinuationManifestMessageV1(authority.Manifest)
+	if err != nil {
+		return "", err
+	}
+	output := append([]byte(nil), expiredContinuationAuthorityDomain...)
+	if err := appendExpiredContinuationBlock(&output, content); err != nil {
+		return "", err
+	}
+	if err := appendExpiredContinuationBlock(&output, manifest); err != nil {
+		return "", err
+	}
+	if err := appendExpiredContinuationField(&output, authority.SignatureBase64); err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(output)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func SignExpiredLaunchContinuationAuthorityV1(
+	privateKey ed25519.PrivateKey,
+	content ExpiredLaunchContinuationAuthorityContentV1,
+	manifest ExpiredLaunchContinuationManifestV1,
+) (ExpiredLaunchContinuationAuthorityV1, error) {
+	if len(privateKey) != ed25519.PrivateKeySize {
+		return ExpiredLaunchContinuationAuthorityV1{}, errors.New("agentmicrovm.expired_launch_continuation.invalid_private_key")
+	}
+	manifestDigest, err := ExpiredLaunchContinuationManifestSHA256V1(manifest)
+	if err != nil || manifestDigest != content.ManifestSHA256 {
+		return ExpiredLaunchContinuationAuthorityV1{}, errors.New("agentmicrovm.expired_launch_continuation.manifest_mismatch")
+	}
+	message, err := ExpiredLaunchContinuationSigningMessageV1(content)
+	if err != nil {
+		return ExpiredLaunchContinuationAuthorityV1{}, err
+	}
+	signature := ed25519.Sign(privateKey, message)
+	value := ExpiredLaunchContinuationAuthorityV1{
+		Content: content, Manifest: manifest,
+		SignatureBase64: base64.StdEncoding.EncodeToString(signature),
+	}
+	if err := validateExpiredLaunchContinuationAuthority(value); err != nil {
+		return ExpiredLaunchContinuationAuthorityV1{}, err
+	}
+	return value, nil
+}
+
+func VerifyExpiredLaunchContinuationAuthorityV1(
+	publicKey ed25519.PublicKey,
+	authority ExpiredLaunchContinuationAuthorityV1,
+) error {
+	if len(publicKey) != ed25519.PublicKeySize {
+		return errors.New("agentmicrovm.expired_launch_continuation.invalid_public_key")
+	}
+	if err := validateExpiredLaunchContinuationAuthority(authority); err != nil {
+		return err
+	}
+	signature, valid := decodeExpiredContinuationSignatureBase64(authority.SignatureBase64)
+	if !valid {
+		return errors.New("agentmicrovm.expired_launch_continuation.invalid_signature")
+	}
+	message, err := ExpiredLaunchContinuationSigningMessageV1(authority.Content)
+	if err != nil {
+		return err
+	}
+	if !ed25519.Verify(publicKey, message, signature) {
+		return errors.New("agentmicrovm.expired_launch_continuation.signature_rejected")
+	}
+	return nil
+}
+
+func validateExpiredLaunchContinuationAuthority(value ExpiredLaunchContinuationAuthorityV1) error {
+	if err := validateExpiredLaunchContinuationContent(value.Content); err != nil {
+		return err
+	}
+	manifestDigest, err := ExpiredLaunchContinuationManifestSHA256V1(value.Manifest)
+	if err != nil || manifestDigest != value.Content.ManifestSHA256 {
+		return errors.New("agentmicrovm.expired_launch_continuation.manifest_mismatch")
+	}
+	_, valid := decodeExpiredContinuationSignatureBase64(value.SignatureBase64)
+	if !valid {
+		return errors.New("agentmicrovm.expired_launch_continuation.invalid_signature")
+	}
+	return nil
+}
+
+func decodeExpiredContinuationSignatureBase64(value string) ([]byte, bool) {
+	if strings.ContainsAny(value, "\r\n") {
+		return nil, false
+	}
+	signature, err := base64.StdEncoding.Strict().DecodeString(value)
+	if err != nil || len(signature) != ed25519.SignatureSize ||
+		base64.StdEncoding.EncodeToString(signature) != value {
+		return nil, false
+	}
+	return signature, true
+}
+
+func validateExpiredLaunchContinuationContent(value ExpiredLaunchContinuationAuthorityContentV1) error {
+	validity, validWindow := value.ExpiresUnixMS-value.IssuedUnixMS, value.ExpiresUnixMS > value.IssuedUnixMS
+	if value.Schema != ExpiredLaunchContinuationAuthoritySchemaV1 || value.Audience != ExpiredLaunchContinuationAudienceV1 ||
+		value.Purpose != ExpiredLaunchContinuationPurposeV1 || !validExpiredContinuationMachineReference(value.AuthorityRef, "continuation:", 160) ||
+		!digestValido(value.ManifestSHA256) || value.IssuedUnixMS == 0 || !validWindow || validity > expiredContinuationMaximumValidityMS ||
+		!validExpiredContinuationMachineText(value.KeyID, 128) || value.KeyEpoch == 0 || value.TrustRevision == 0 ||
+		value.Algorithm != ExpiredLaunchContinuationAlgorithmV1 {
+		return errors.New("agentmicrovm.expired_launch_continuation.invalid_content")
+	}
+	return nil
+}
+
+func validateExpiredLaunchContinuationManifest(value ExpiredLaunchContinuationManifestV1) error {
+	if value.Schema != ExpiredLaunchContinuationManifestSchemaV1 || value.Audience != ExpiredLaunchContinuationAudienceV1 ||
+		!digestValido(value.BrokerInstanceSHA256) || !digestValido(value.SourceDigest) ||
+		!digestValido(value.RequestKeySHA256) || !digestValido(value.OriginalRequestSHA256) ||
+		!validExpiredContinuationMachineReference(value.LaunchRef, "launch:", 160) ||
+		!validExpiredContinuationMachineReference(value.ExecutionRef, "ejecucion:", 160) ||
+		!validExpiredContinuationMachineReference(value.RunRef, "run:", 160) || value.Fence == 0 || value.Generation == 0 || value.CID < 3 ||
+		!digestValido(value.IdentitySHA256) || !validExpiredContinuationTarget(value.ValidateLaunch, true) ||
+		!validExpiredContinuationTarget(value.Launch, false) || value.ValidateLaunch.IntentRef == value.Launch.IntentRef ||
+		value.ValidateLaunch.IdempotencyKey == value.Launch.IdempotencyKey {
+		return errors.New("agentmicrovm.expired_launch_continuation.invalid_manifest")
+	}
+	return nil
+}
+
+func validExpiredContinuationTarget(value ExpiredLaunchContinuationTargetV1, validate bool) bool {
+	if !validExpiredContinuationMachineReference(value.IntentRef, "intent:", 160) ||
+		!validExpiredContinuationMachineText(value.IdempotencyKey, 128) || !digestValido(value.RequestSHA256) ||
+		!digestValido(value.CommandSHA256) || !digestValido(value.InnerAuthorizationSHA256) {
+		return false
+	}
+	if validate {
+		return value.Operation == "validate_launch" && value.Schema == 2 && value.Code == 8 &&
+			(value.DaemonState == "signed_request" || value.DaemonState == "ambiguous") && value.RootState == "prepared" &&
+			value.RootRevision != nil && *value.RootRevision == 1 && value.SignedRequestSHA256 != nil && digestValido(*value.SignedRequestSHA256)
+	}
+	return value.Operation == "launch" && value.Schema == 1 && value.Code == 1 && value.DaemonState == "reserved" &&
+		value.RootState == "absent" && value.RootRevision == nil && value.SignedRequestSHA256 == nil
+}
+
+func appendExpiredContinuationTarget(output *[]byte, value ExpiredLaunchContinuationTargetV1) error {
+	if err := appendExpiredContinuationField(output, value.Operation); err != nil {
+		return err
+	}
+	*output = binary.BigEndian.AppendUint16(*output, value.Schema)
+	*output = append(*output, value.Code)
+	for _, field := range []string{value.IntentRef, value.IdempotencyKey, value.RequestSHA256, value.CommandSHA256, value.InnerAuthorizationSHA256} {
+		if err := appendExpiredContinuationField(output, field); err != nil {
+			return err
+		}
+	}
+	if value.SignedRequestSHA256 == nil {
+		*output = append(*output, 0)
+	} else {
+		*output = append(*output, 1)
+		if err := appendExpiredContinuationField(output, *value.SignedRequestSHA256); err != nil {
+			return err
+		}
+	}
+	if err := appendExpiredContinuationField(output, value.DaemonState); err != nil {
+		return err
+	}
+	if err := appendExpiredContinuationField(output, value.RootState); err != nil {
+		return err
+	}
+	if value.RootRevision == nil {
+		*output = append(*output, 0)
+	} else {
+		*output = append(*output, 1)
+		*output = binary.BigEndian.AppendUint64(*output, *value.RootRevision)
+	}
+	return nil
+}
+
+func appendExpiredContinuationField(output *[]byte, value string) error {
+	if len(value) > expiredContinuationMaximumField {
+		return errors.New("agentmicrovm.expired_launch_continuation.field_too_large")
+	}
+	*output = binary.BigEndian.AppendUint32(*output, uint32(len(value)))
+	*output = append(*output, value...)
+	return nil
+}
+
+func appendExpiredContinuationBlock(output *[]byte, value []byte) error {
+	if len(value) > expiredContinuationMaximumBlock {
+		return errors.New("agentmicrovm.expired_launch_continuation.block_too_large")
+	}
+	*output = binary.BigEndian.AppendUint32(*output, uint32(len(value)))
+	*output = append(*output, value...)
+	return nil
+}
+
+func validExpiredContinuationMachineReference(value, prefix string, maximum int) bool {
+	return strings.HasPrefix(value, prefix) && len(value) > len(prefix) && len(value) <= maximum &&
+		validExpiredContinuationMachineBytes(value)
+}
+
+func validExpiredContinuationMachineText(value string, maximum int) bool {
+	return value != "" && len(value) <= maximum && validExpiredContinuationMachineBytes(value)
+}
+
+func validExpiredContinuationMachineBytes(value string) bool {
+	for _, value := range []byte(value) {
+		if !((value >= 'a' && value <= 'z') || (value >= 'A' && value <= 'Z') || (value >= '0' && value <= '9') ||
+			value == '.' || value == '_' || value == ':' || value == '-') {
+			return false
+		}
+	}
+	return true
 }

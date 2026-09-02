@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-08-06.4`
+Registry revision: `2026-09-02.1`
 
-Registry hash: `sha256:b01c18c0e4e5c448160dead8b7a0d3b8c09ec22548f266fcb0fbf0419307cd9a`
+Registry hash: `sha256:c6b48ae6b20cc11ad4415480c9bf0e1901e8c0ab621a6ee4cf6abcac3645eb63`
 
 Precedence: `default < file < env`
 
@@ -36,6 +36,12 @@ Source limit: `1048576` bytes
 | `runtime.microvm.expected_profile_descriptor_sha256` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_EXPECTED_PROFILE_DESCRIPTOR_SHA256` | `true` | `trimmed_optional_string` |
 | `runtime.microvm.launch_grant_key_id` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_LAUNCH_GRANT_KEY_ID` | `true` | `trimmed_optional_string` |
 | `runtime.microvm.launch_grant_signing_credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_MICROVM_LAUNCH_GRANT_SIGNING_CREDENTIAL_REF` | `true` | `credential_ref` |
+| `runtime.microvm.expired_launch_continuation_authority_signing_credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_SIGNING_CREDENTIAL_REF` | `true` | `credential_ref` |
+| `runtime.microvm.expired_launch_continuation_authority_key_id` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_KEY_ID` | `true` | `trimmed_optional_string` |
+| `runtime.microvm.expired_launch_continuation_authority_key_epoch` | `integer` | `0` | `ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_KEY_EPOCH` | `true` | `integer_bounds` |
+| `runtime.microvm.expired_launch_continuation_authority_trust_revision` | `integer` | `0` | `ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_TRUST_REVISION` | `true` | `integer_bounds` |
+| `runtime.microvm.expired_launch_continuation_authority_public_key_sha256` | `string` | `""` | `ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_PUBLIC_KEY_SHA256` | `true` | `trimmed_optional_string` |
+| `runtime.microvm.expired_launch_continuation_authority_validity` | `duration` | `"2m"` | `ORQUESTA_RUNTIME_MICROVM_EXPIRED_LAUNCH_CONTINUATION_AUTHORITY_VALIDITY` | `true` | `positive_duration` |
 | `runtime.microvm.credential_broker_socket_path` | `optional_path` | `""` | `ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_SOCKET_PATH` | `true` | `optional_path` |
 | `runtime.microvm.credential_broker_peer_uid` | `integer` | `0` | `ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_PEER_UID` | `true` | `integer_bounds` |
 | `runtime.microvm.credential_broker_exchange_timeout` | `duration` | `"30s"` | `ORQUESTA_RUNTIME_MICROVM_CREDENTIAL_BROKER_EXCHANGE_TIMEOUT` | `true` | `positive_duration` |
@@ -124,8 +130,8 @@ Source limit: `1048576` bytes
 
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`; maximum duration `30s`
-- `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.account_profiles`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
-- `runtime_microvm_requirements`: `runtime.provider`, `runtime.isolation`, `runtime.codex.model`, `runtime.codex.credential_ref`, `runtime.microvm.placement_ref`, `runtime.microvm.socket_path`, `runtime.microvm.profile_descriptor_path`, `runtime.microvm.expected_profile_descriptor_sha256`, `runtime.microvm.launch_grant_key_id`, `runtime.microvm.launch_grant_signing_credential_ref`, `runtime.microvm.credential_broker_socket_path`, `runtime.microvm.credential_broker_peer_uid`, `runtime.microvm.credential_broker_exchange_timeout`, `runtime.microvm.credential_broker_max_connections`, `runtime.microvm.egress_policy_ref`, `runtime.microvm.egress_policy_path`, `runtime.microvm.egress_policy_expected_sha256`, `runtime.microvm.egress_policy_max_bytes`
+- `runtime_codex_account_profiles_complete`: `runtime.isolation`, `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.account_profiles`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
+- `runtime_microvm_requirements`: `runtime.provider`, `runtime.isolation`, `runtime.codex.model`, `runtime.codex.credential_ref`, `runtime.microvm.placement_ref`, `runtime.microvm.socket_path`, `runtime.microvm.profile_descriptor_path`, `runtime.microvm.expected_profile_descriptor_sha256`, `runtime.microvm.launch_grant_key_id`, `runtime.microvm.launch_grant_signing_credential_ref`, `runtime.microvm.expired_launch_continuation_authority_signing_credential_ref`, `runtime.microvm.expired_launch_continuation_authority_key_id`, `runtime.microvm.expired_launch_continuation_authority_key_epoch`, `runtime.microvm.expired_launch_continuation_authority_trust_revision`, `runtime.microvm.expired_launch_continuation_authority_public_key_sha256`, `runtime.microvm.expired_launch_continuation_authority_validity`, `runtime.microvm.credential_broker_socket_path`, `runtime.microvm.credential_broker_peer_uid`, `runtime.microvm.credential_broker_exchange_timeout`, `runtime.microvm.credential_broker_max_connections`, `runtime.microvm.egress_policy_ref`, `runtime.microvm.egress_policy_path`, `runtime.microvm.egress_policy_expected_sha256`, `runtime.microvm.egress_policy_max_bytes`
 - `agent_firecracker_vsock_cid_lease_bounds`: `agent.firecracker.vsock_cid.minimum_lease_duration`, `agent.firecracker.vsock_cid.maximum_lease_duration`; maximum duration `24h`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`

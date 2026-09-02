@@ -28,6 +28,20 @@ func (lifecycleOnlyAgent) Close(context.Context, ports.AgentCloseRequest) (ports
 
 type completeLifecycleAgent struct{ lifecycleOnlyAgent }
 
+type expiredContinuationWriterAgent struct{ AgentAdapter }
+
+func (expiredContinuationWriterAgent) PrepareExpiredAgentLaunchContinuationV41(
+	context.Context, ports.AgentLaunchRequest, application.ExpiredAgentLaunchContinuationCausalBindingV41,
+) (application.ExpiredAgentLaunchContinuationPreparationV41, error) {
+	return application.ExpiredAgentLaunchContinuationPreparationV41{}, nil
+}
+func (expiredContinuationWriterAgent) IssueExpiredAgentLaunchContinuationV41(
+	context.Context, ports.AgentLaunchRequest, application.ExpiredAgentLaunchContinuationCausalBindingV41,
+	application.ExpiredAgentLaunchContinuationIssuanceV41,
+) (application.ExpiredAgentLaunchContinuationRecordV41, error) {
+	return application.ExpiredAgentLaunchContinuationRecordV41{}, nil
+}
+
 func (completeLifecycleAgent) ReconcileQuiesce(context.Context, ports.AgentQuiesceRequest) (ports.AgentQuiesceReceipt, error) {
 	return ports.AgentQuiesceReceipt{}, nil
 }
@@ -67,5 +81,24 @@ func TestBuildOrchestratorDependenciesComposesAgentLifecycleAllOrNothing(t *test
 	got := dependencies(agent, builder).AgentLifecycle
 	if got == nil || got.Store != repository || got.Physical == nil || got.Reconciler == nil || got.BuildPreservation == nil {
 		t.Fatalf("complete lifecycle composition = %+v", got)
+	}
+}
+
+func TestBuildOrchestratorDependenciesComposesExpiredContinuationWriterWithoutLaunchFallback(t *testing.T) {
+	snapshot, err := config.Resolve(config.ResolveOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &statesqlite.Repository{}
+	agent := expiredContinuationWriterAgent{}
+	dependencies := buildOrchestratorDependencies(
+		buildSetup{snapshot: snapshot}, repository, nil, agent, nil,
+		ports.AgentCapabilities{}, nil, buildTestAttestorComposition{},
+	)
+	composition := dependencies.ExpiredLaunchContinuation
+	if composition == nil || composition.Source != repository || composition.Store != repository ||
+		composition.Writer == nil || composition.SessionAuthoritySource != repository ||
+		composition.SessionAuthenticationMethod != "execution_token" {
+		t.Fatalf("expired continuation composition=%+v", composition)
 	}
 }

@@ -55,7 +55,12 @@ SELECT
 	(SELECT COUNT(*) FROM outbox o JOIN goals g ON g.ref = o.goal_ref
 	 WHERE g.project_ref = ? AND o.completed_at IS NULL AND o.retired_at IS NULL AND o.quarantined_at IS NULL),
 	(SELECT COUNT(*) FROM outbox o JOIN goals g ON g.ref = o.goal_ref
-	 WHERE g.project_ref = ? AND o.quarantined_at IS NOT NULL)`,
+	 WHERE g.project_ref = ? AND o.quarantined_at IS NOT NULL
+	 AND NOT EXISTS (
+	  SELECT 1 FROM agent_launch_reconciliation_authorities authority
+	  JOIN agent_launch_reconciliation_receipts receipt ON receipt.authority_ref=authority.ref
+	  WHERE authority.action_ref=o.ref AND receipt.outcome='completed'
+	 ))`,
 		projectRef.String(), projectRef.String(), projectRef.String(), projectRef.String(),
 	).Scan(
 		&status.Goals,

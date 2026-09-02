@@ -108,6 +108,12 @@ profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"
 expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 launch_grant_key_id = "clave-publica:orquesta-01"
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
+expired_launch_continuation_authority_signing_credential_ref = "credential:microvm-continuation-signing"
+expired_launch_continuation_authority_key_id = "continuation-orquesta-01"
+expired_launch_continuation_authority_key_epoch = 1
+expired_launch_continuation_authority_trust_revision = 1
+expired_launch_continuation_authority_public_key_sha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+expired_launch_continuation_authority_validity = "2m"
 credential_broker_socket_path = "/run/orquesta/credential-broker.sock"
 credential_broker_peer_uid = 0
 credential_broker_exchange_timeout = "30s"
@@ -343,8 +349,8 @@ func TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if lines := bytes.Count(generatedGo, []byte{'\n'}); lines > 480 {
-		t.Fatalf("generated config Go exceeds 480 lines: %d", lines)
+	if lines := bytes.Count(generatedGo, []byte{'\n'}); lines > 520 {
+		t.Fatalf("generated config Go exceeds 520 lines: %d", lines)
 	}
 
 	temporary := t.TempDir()

@@ -58,8 +58,10 @@ func TestTraduccionCuotaCodexEsConservadora(t *testing.T) {
 		strings.Contains(evidencia, "/ruta/perfil") || strings.Contains(evidencia, "perfil-secreto") {
 		t.Fatalf("evidencia no saneada: %s", evidencia)
 	}
-	invalido := strings.Replace(string(respuesta(`"codex"`, primaria, secundaria, "null", "null")), `"rateLimits":`, `"campoAjeno":true,"rateLimits":`, 1)
-	if _, err := traducirLecturaCuotaCodex([]byte(invalido), colocacion, time.Minute, func() time.Time { return instante }); ErrorCode(err) != CodeOutputInvalid {
-		t.Fatalf("respuesta no estricta aceptada: %v", err)
+	extendida := strings.Replace(string(respuesta(`"codex"`, primaria, secundaria, "null", "null")), `"rateLimits":`, `"accountId":"opaco","rateLimitUpsell":null,"rateLimits":`, 1)
+	traducida, err := traducirLecturaCuotaCodex([]byte(extendida), colocacion, time.Minute, func() time.Time { return instante })
+	if err != nil || traducida.Observacion.Status != application.AgentQuotaAvailable ||
+		strings.Contains(string(traducida.Evidencia), "opaco") {
+		t.Fatalf("extensión oficial contaminó la observación: %+v, %v", traducida, err)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -191,14 +192,28 @@ func autoridadFisicaFactoriaAgentMicroVM(
 
 type clienteFactoriaAgentMicroVM struct{}
 
+type clienteSinContinuacionFactoriaAgentMicroVM struct{ clienteFactoriaAgentMicroVM }
+
+func (*clienteSinContinuacionFactoriaAgentMicroVM) Capacidades(ctx context.Context) (microvm.RespuestaCapacidades, error) {
+	capabilities, err := (&clienteFactoriaAgentMicroVM{}).Capacidades(ctx)
+	if err != nil {
+		return microvm.RespuestaCapacidades{}, err
+	}
+	capabilities.Operaciones = slices.DeleteFunc(capabilities.Operaciones, func(value string) bool {
+		return value == "preparar_continuacion_lanzamiento_caducado" || value == "continuar_lanzamiento_caducado"
+	})
+	return capabilities, nil
+}
+
 func (*clienteFactoriaAgentMicroVM) Capacidades(context.Context) (microvm.RespuestaCapacidades, error) {
 	return microvm.RespuestaCapacidades{
 		Protocolo: microvm.ProtocoloLocal,
 		Version:   "0.1.0",
 		Operaciones: []string{
-			"salud", "capacidades", "crear_ejecucion", "consultar_ejecucion",
+			"salud", "capacidades", "crear_ejecucion", "reconciliar_lanzamiento", "consultar_ejecucion",
 			"consultar_revision_trabajo", "iniciar_sesion", "enviar_entrada_sesion",
 			"leer_eventos_sesion", "reconciliar_entrada_sesion", "detener_ejecucion",
+			"preparar_continuacion_lanzamiento_caducado", "continuar_lanzamiento_caducado",
 		},
 		KVMDisponible: true, FirecrackerConfigurado: true, FirecrackerEjecutable: true,
 		MaximoEjecuciones: 16,
@@ -206,6 +221,9 @@ func (*clienteFactoriaAgentMicroVM) Capacidades(context.Context) (microvm.Respue
 }
 func (*clienteFactoriaAgentMicroVM) Lanzar(context.Context, string, microvm.SolicitudLanzamiento) (microvm.RespuestaEjecucion, error) {
 	return microvm.RespuestaEjecucion{}, nil
+}
+func (*clienteFactoriaAgentMicroVM) ReconciliarLanzamiento(context.Context, string, microvm.SolicitudLanzamiento) (microvm.RespuestaEjecucion, error) {
+	return microvm.RespuestaEjecucion{}, errors.New("reconciliacion de prueba no configurada")
 }
 func (*clienteFactoriaAgentMicroVM) RevisionTrabajo(context.Context, string) (microvm.RespuestaRevisionTrabajo, error) {
 	return microvm.RespuestaRevisionTrabajo{}, nil
@@ -227,6 +245,16 @@ func (*clienteFactoriaAgentMicroVM) Detener(context.Context, string, string, mic
 }
 func (*clienteFactoriaAgentMicroVM) LeerEventosSesion(context.Context, string, string, microvm.ConsultaEventosSesionTrabajoV1) (microvm.PaginaEventosSesionTrabajoV1, error) {
 	return microvm.PaginaEventosSesionTrabajoV1{}, nil
+}
+func (*clienteFactoriaAgentMicroVM) PrepararContinuacionLanzamientoCaducado(
+	context.Context, string, microvm.SolicitudLanzamiento,
+) (microvm.RespuestaPreparacionContinuacionLanzamientoCaducadoV1, error) {
+	return microvm.RespuestaPreparacionContinuacionLanzamientoCaducadoV1{}, errors.New("continuacion de prueba no configurada")
+}
+func (*clienteFactoriaAgentMicroVM) ContinuarLanzamientoCaducado(
+	context.Context, string, microvm.SolicitudContinuacionLanzamientoCaducadoV1,
+) (microvm.RespuestaEjecucion, error) {
+	return microvm.RespuestaEjecucion{}, errors.New("continuacion de prueba no configurada")
 }
 
 type clienteLanzamientoFactoriaAgentMicroVM struct {
@@ -256,6 +284,13 @@ func (cliente *clienteLanzamientoFactoriaAgentMicroVM) Lanzar(
 		VCPU:  cliente.descriptor.VCPU, MemoriaMiB: cliente.descriptor.MemoriaMiB,
 		Identidad: &microvm.IdentidadProceso{PID: 1234, InicioTicks: 5678},
 	}, nil
+}
+func (*clienteLanzamientoFactoriaAgentMicroVM) ReconciliarLanzamiento(
+	context.Context,
+	string,
+	microvm.SolicitudLanzamiento,
+) (microvm.RespuestaEjecucion, error) {
+	return microvm.RespuestaEjecucion{}, errors.New("reconciliacion de prueba no configurada")
 }
 func (*clienteLanzamientoFactoriaAgentMicroVM) RevisionTrabajo(
 	_ context.Context,
@@ -320,6 +355,16 @@ func (*clienteLanzamientoFactoriaAgentMicroVM) LeerEventosSesion(
 	return microvm.PaginaEventosSesionTrabajoV1{}, &microvm.ErrorRespuesta{
 		Estado: 404, Codigo: "sesion.ausente",
 	}
+}
+func (*clienteLanzamientoFactoriaAgentMicroVM) PrepararContinuacionLanzamientoCaducado(
+	context.Context, string, microvm.SolicitudLanzamiento,
+) (microvm.RespuestaPreparacionContinuacionLanzamientoCaducadoV1, error) {
+	return microvm.RespuestaPreparacionContinuacionLanzamientoCaducadoV1{}, errors.New("continuacion de prueba no configurada")
+}
+func (*clienteLanzamientoFactoriaAgentMicroVM) ContinuarLanzamientoCaducado(
+	context.Context, string, microvm.SolicitudContinuacionLanzamientoCaducadoV1,
+) (microvm.RespuestaEjecucion, error) {
+	return microvm.RespuestaEjecucion{}, errors.New("continuacion de prueba no configurada")
 }
 
 func TestProductionAgentMicroVMComponeBindingCapacidadYCierraSoloConexiones(t *testing.T) {
@@ -757,6 +802,26 @@ func TestProductionAgentMicroVMRechazaSeleccionClienteYRecursoIncompleto(t *test
 	}
 }
 
+func TestProductionAgentMicroVMFallaCerradoSinCapacidadV41(t *testing.T) {
+	snapshot, _, _ := fixtureFactoriaAgentMicroVM(t)
+	store := &storeFactoriaAgentMicroVM{}
+	registro := &registroLanzamientosFactoriaAgentMicroVM{}
+	var cierres atomic.Int64
+	agente, err := productionAgentMicroVMConConstructor(
+		snapshot, rendererFactoriaAgentMicroVM{}, store,
+		autoridadFisicaFactoriaAgentMicroVM(store, registro),
+		func(string) (recursoClienteAgentMicroVM, error) {
+			return recursoClienteAgentMicroVM{
+				cliente:           &clienteSinContinuacionFactoriaAgentMicroVM{},
+				liberarConexiones: func() error { cierres.Add(1); return nil },
+			}, nil
+		},
+	)
+	if agente != nil || !errors.Is(err, errFactoriaAgentMicroVMProtocoloInvalido) || cierres.Load() != 1 {
+		t.Fatalf("agente=%v error=%v cierres=%d", agente, err, cierres.Load())
+	}
+}
+
 func fixtureFactoriaAgentMicroVM(t *testing.T) (config.Snapshot, string, string) {
 	t.Helper()
 	_, raw := descriptorFactoriaAgentMicroVM(t)
@@ -770,6 +835,10 @@ func fixtureFactoriaAgentMicroVM(t *testing.T) (config.Snapshot, string, string)
 	}
 	rutaSocket := filepath.Join(root, "agente-microvm.sock")
 	rutaBroker := filepath.Join(root, "b.sock")
+	claveContinuacion := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize))
+	publicaContinuacion := claveContinuacion.Public().(ed25519.PublicKey)
+	digestPublicaContinuacion := sha256.Sum256(publicaContinuacion)
+	clear(claveContinuacion)
 	toml := `[runtime]
 provider = "codex"
 isolation = "microvm"
@@ -781,6 +850,12 @@ profile_descriptor_path = "` + rutaDescriptor + `"
 expected_profile_descriptor_sha256 = "` + digestRawFactoriaAgentMicroVM(raw) + `"
 launch_grant_key_id = "clave-publica:orquesta-prueba"
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
+expired_launch_continuation_authority_signing_credential_ref = "credential:microvm-continuation-signing"
+expired_launch_continuation_authority_key_id = "continuation-orquesta-prueba"
+expired_launch_continuation_authority_key_epoch = 1
+expired_launch_continuation_authority_trust_revision = 1
+expired_launch_continuation_authority_public_key_sha256 = "` + hex.EncodeToString(digestPublicaContinuacion[:]) + `"
+expired_launch_continuation_authority_validity = "2m"
 credential_broker_socket_path = "` + rutaBroker + `"
 credential_broker_peer_uid = ` + strconv.Itoa(os.Geteuid()) + `
 credential_broker_exchange_timeout = "1s"

@@ -10,7 +10,7 @@ import (
 
 const (
 	v38B10Module  = "github.com/aavidad/agente_microvm/conectores/orquesta"
-	v38B10Version = "v0.0.0-20260816192103-3d9c68f20721"
+	v38B10Version = "v0.0.0-20260902163835-f17173c661e8"
 )
 
 func TestV38B10PinsPublishedAgentMicroVMConnectorWithoutLocalReplace(t *testing.T) {

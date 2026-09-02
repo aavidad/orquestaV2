@@ -6,6 +6,14 @@ import (
 )
 
 func validateRecoveryV27EffectAttemptClaimLease(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryEffectAttemptClaimLease(ctx, tx, false)
+}
+
+func validateRecoveryV40EffectAttemptClaimLease(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryEffectAttemptClaimLease(ctx, tx, true)
+}
+
+func validateRecoveryEffectAttemptClaimLease(ctx context.Context, tx *sql.Tx, allowTerminalReconciliation bool) error {
 	lateReceiptQuery := `SELECT COUNT(*) FROM effect_receipts receipt
 JOIN effect_attempts attempt ON attempt.ref=receipt.attempt_ref
 WHERE attempt.claim_lease_until IS NOT NULL
@@ -52,6 +60,10 @@ WHERE attempt.claim_lease_until IS NOT NULL
     AND action.execution_ref=attempt.execution_ref
     AND lifecycle.goal_ref=attempt.goal_ref
     AND lifecycle.work_item_ref=attempt.work_item_ref))`
+	}
+	if allowTerminalReconciliation {
+		lateReceiptQuery += `
+ AND NOT (` + terminalAgentLaunchReconciliationReceiptProof + `)`
 	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{

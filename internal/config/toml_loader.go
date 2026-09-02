@@ -21,6 +21,14 @@ func ParseExplicit(content []byte) (map[Key]any, error) {
 }
 
 func parseExplicitWithRegistry(content []byte, registry registry) (map[Key]any, error) {
+	return parseExplicitSelectedWithRegistry(content, registry, nil)
+}
+
+func parseExplicitSelectedWithRegistry(
+	content []byte,
+	registry registry,
+	selected func(Key) bool,
+) (map[Key]any, error) {
 	if int64(len(content)) > registry.documentLimits.SourceMaxBytes {
 		return nil, &Error{Code: ErrorFileInvalid, Cause: errors.New("config_source_too_large")}
 	}
@@ -42,6 +50,9 @@ func parseExplicitWithRegistry(content []byte, registry registry) (map[Key]any, 
 	}
 	result := make(map[Key]any, len(flattened))
 	for key, raw := range flattened {
+		if selected != nil && !selected(key) {
+			continue
+		}
 		definition, _ := registry.definition(key)
 		value, err := parseFileValue(definition, raw)
 		if err != nil {

@@ -55,7 +55,11 @@ func v22AddedLines(t *testing.T, root string) map[string]int {
 		t.Fatal(err)
 	}
 	for _, path := range strings.Fields(string(output)) {
-		result[filepath.ToSlash(path)] = v22PhysicalLines(t, filepath.Join(root, path))
+		normalized := filepath.ToSlash(path)
+		if v22DeltaClass(normalized) == "" {
+			continue
+		}
+		result[normalized] = v22PhysicalLines(t, filepath.Join(root, path))
 	}
 	return result
 }

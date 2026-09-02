@@ -294,7 +294,16 @@ func provisionWithOwnedCredentialStore(
 		credentials.Ed25519PrivateKeySource,
 		credentials.ProvisionCodexMicroVMCredentialsRequest,
 	) (credentials.ProvisionCodexMicroVMCredentialsResult, error),
-) (result credentials.ProvisionCodexMicroVMCredentialsResult, err error) {
+) (credentials.ProvisionCodexMicroVMCredentialsResult, error) {
+	return operateWithOwnedCredentialStore(store, func() (credentials.ProvisionCodexMicroVMCredentialsResult, error) {
+		return provision(ctx, store, authSource, keySource, request)
+	})
+}
+
+func operateWithOwnedCredentialStore[T any](
+	store credentialProvisionOwnedStore,
+	operation func() (T, error),
+) (result T, err error) {
 	defer func() {
 		if recover() != nil {
 			err = errCredentialProvisionPanic
@@ -303,7 +312,7 @@ func provisionWithOwnedCredentialStore(
 			err = errCredentialProvisionClose
 		}
 	}()
-	return provision(ctx, store, authSource, keySource, request)
+	return operation()
 }
 
 func closeCredentialProvisionStore(store credentialProvisionOwnedStore) (err error) {

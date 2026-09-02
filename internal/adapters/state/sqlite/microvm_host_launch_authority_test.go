@@ -31,6 +31,9 @@ func TestMicroVMHostLaunchAuthorityPrepareResolveReplayAndReopen(t *testing.T) {
 	}
 	resolved.Services[0].IdentityRef = "identidad-servicio:mutated"
 
+	if err := system.repository.Close(); err != nil {
+		t.Fatal(err)
+	}
 	reopened := openSQLiteV15Repository(t, system.path, system.clock.Now)
 	replayed, err := prepareSQLiteMicroVMHostLaunch(reopened, context.Background(), authority)
 	if err != nil || !reflect.DeepEqual(replayed, authority) {

@@ -6,20 +6,28 @@ import (
 )
 
 func validateRecoveryV28EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryEffectRecoveryClaim(ctx, tx, false)
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, false, false)
 }
 
 func validateRecoveryV30EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryEffectRecoveryClaim(ctx, tx, true)
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, false)
 }
 
-func validateRecoveryEffectRecoveryClaim(ctx context.Context, tx *sql.Tx, allowUnclaimedRetry bool) error {
+func validateRecoveryV40EffectRecoveryClaim(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryEffectRecoveryClaim(ctx, tx, true, true)
+}
+
+func validateRecoveryEffectRecoveryClaim(ctx context.Context, tx *sql.Tx, allowUnclaimedRetry, allowTerminalReconciliation bool) error {
 	pendingClaim := `(action.claim_token IS NOT NULL AND action.claimed_by IS NOT NULL
            AND action.claimed_until IS NOT NULL)`
 	if allowUnclaimedRetry {
 		pendingClaim = `(` + pendingClaim + `
        OR (action.claim_token IS NULL AND action.claimed_by IS NULL
            AND action.claimed_until IS NULL AND length(trim(action.last_error_code))>0))`
+	}
+	terminalLateReceipt := ""
+	if allowTerminalReconciliation {
+		terminalLateReceipt = ` AND NOT (` + terminalAgentLaunchReconciliationReceiptProof + `)`
 	}
 	return validateRecoveryV17Checks(ctx, tx, []recoveryV17Check{
 		{
@@ -68,7 +76,7 @@ WHERE attempt.ref IS NULL OR receipt.action_ref<>attempt.action_ref
  OR receipt.confirmed_at<attempt.started_at
 	 OR (attempt.claim_lease_until IS NOT NULL
 	     AND receipt.confirmed_at>=attempt.claim_lease_until
-	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close'))`,
+	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close')` + terminalLateReceipt + `)`,
 		},
 		{
 			"sqlite.recovery_v28_effect_consumption_claim_invalid",
@@ -115,14 +123,18 @@ WHERE NOT (
 }
 
 func validateRecoveryV28Governance(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryV28GovernanceWithOutcome(ctx, tx, false)
+	return validateRecoveryV28GovernanceWithOutcome(ctx, tx, false, false)
 }
 
 func validateRecoveryV37Governance(ctx context.Context, tx *sql.Tx) error {
-	return validateRecoveryV28GovernanceWithOutcome(ctx, tx, true)
+	return validateRecoveryV28GovernanceWithOutcome(ctx, tx, true, false)
 }
 
-func validateRecoveryV28GovernanceWithOutcome(ctx context.Context, tx *sql.Tx, allowNonApplication bool) error {
+func validateRecoveryV40Governance(ctx context.Context, tx *sql.Tx) error {
+	return validateRecoveryV28GovernanceWithOutcome(ctx, tx, true, true)
+}
+
+func validateRecoveryV28GovernanceWithOutcome(ctx context.Context, tx *sql.Tx, allowNonApplication, allowTerminalReconciliation bool) error {
 	checks := make([]recoveryV15Check, 0, len(recoveryV15Checks))
 	for _, check := range recoveryV15Checks {
 		switch check.code {
@@ -131,6 +143,12 @@ func validateRecoveryV28GovernanceWithOutcome(ctx context.Context, tx *sql.Tx, a
 		default:
 			checks = append(checks, check)
 		}
+	}
+	terminalLateReceipt := ""
+	terminalOrphanReceipt := ""
+	if allowTerminalReconciliation {
+		terminalLateReceipt = ` AND NOT (` + terminalAgentLaunchReconciliationReceiptProof + `)`
+		terminalOrphanReceipt = ` AND NOT (` + terminalAgentLaunchReconciliationReceiptProof + `)`
 	}
 	checks = append(checks,
 		recoveryV15Check{"sqlite.recovery_v15_effect_receipt_invalid", `
@@ -147,7 +165,7 @@ WHERE attempt.ref IS NULL OR intent.ref IS NULL OR action.ref IS NULL
  OR receipt.action_fence<>attempt.action_fence OR receipt.idempotency_key<>attempt.idempotency_key
 	 OR receipt.confirmed_at<attempt.started_at
 	 OR (attempt.claim_lease_until IS NOT NULL AND receipt.confirmed_at>=attempt.claim_lease_until
-	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close'))
+	     AND intent.kind NOT IN ('agent_quiesce','agent_environment_preserve','agent_environment_close')` + terminalLateReceipt + `)
  OR (intent.kind='agent_launch' AND receipt.status<>'accepted')
  OR (intent.kind='agent_quiesce' AND receipt.status<>'quiesced')
  OR (intent.kind='agent_environment_preserve' AND receipt.status<>'preserved')
@@ -190,9 +208,12 @@ SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents inten
  OR (consumed.governance_version=1 AND consumed.kind='stop_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL AND EXISTS(SELECT 1 FROM effect_attempts attempt
       WHERE attempt.action_ref=consumed.action_ref AND attempt.action_fence=consumed.fence)))
-+(SELECT COUNT(*) FROM effect_receipts receipt LEFT JOIN action_consumption_receipts consumed
++(SELECT COUNT(*) FROM effect_receipts receipt
+ LEFT JOIN effect_attempts attempt ON attempt.ref=receipt.attempt_ref
+ LEFT JOIN effect_intents intent ON intent.ref=receipt.intent_ref
+ LEFT JOIN action_consumption_receipts consumed
  ON consumed.effect_receipt_ref=receipt.ref AND consumed.action_ref=receipt.action_ref
- WHERE consumed.action_ref IS NULL)`},
+ WHERE consumed.action_ref IS NULL` + terminalOrphanReceipt + `)`},
 	)
 	return validateRecoveryV17GovernanceWithOutcome(ctx, tx, checks, allowNonApplication)
 }

@@ -19,6 +19,7 @@ import (
 
 	microvm "github.com/aavidad/agente_microvm/conectores/orquesta"
 
+	"orquesta/internal/application"
 	"orquesta/internal/ports"
 )
 
@@ -47,6 +48,7 @@ const (
 
 const (
 	operationCreateExecution       = "crear_ejecucion"
+	operationReconcileLaunch       = "reconciliar_lanzamiento"
 	operationObserveExecution      = "consultar_ejecucion"
 	operationReadWorkRevision      = "consultar_revision_trabajo"
 	operationStartSession          = "iniciar_sesion"
@@ -62,6 +64,7 @@ const (
 
 var requiredRemoteOperations = [...]string{
 	operationCreateExecution,
+	operationReconcileLaunch,
 	operationObserveExecution,
 	operationReadWorkRevision,
 	operationStartSession,
@@ -101,6 +104,19 @@ type Client interface {
 	Detener(context.Context, string, string, microvm.SolicitudDetencion) (microvm.RespuestaDetencion, error)
 }
 
+// launchReconciliationClient keeps recovery distinct from ordinary launch at
+// the public sibling boundary. The main Client stays source-compatible for
+// focused test doubles and other read/write facets.
+type launchReconciliationClient interface {
+	ReconciliarLanzamiento(
+		context.Context,
+		string,
+		microvm.SolicitudLanzamiento,
+	) (microvm.RespuestaEjecucion, error)
+}
+
+var _ launchReconciliationClient = (*microvm.Cliente)(nil)
+
 // Signer receives the exact durable compilation. Key material remains owned by
 // composition and never enters the adapter configuration as bytes.
 type Signer interface {
@@ -127,13 +143,14 @@ type ProviderModelBinding struct {
 // hosted inside the microVM; ModelBinding prevents a logical selector, runtime
 // model and physical executor from drifting independently.
 type Config struct {
-	Client                  Client
-	Signer                  Signer
-	ClaimResolver           *CredentialClaimResolver
-	LaunchAuthorityRegistry ports.MicroVMHostLaunchPreparationRegistry
-	Capabilities            ports.AgentCapabilities
-	ModelBinding            ProviderModelBinding
-	PromptRenderer          PromptRenderer
+	Client                    Client
+	Signer                    Signer
+	ClaimResolver             *CredentialClaimResolver
+	LaunchAuthorityRegistry   ports.MicroVMHostLaunchPreparationRegistry
+	Capabilities              ports.AgentCapabilities
+	ModelBinding              ProviderModelBinding
+	PromptRenderer            PromptRenderer
+	ExpiredContinuationSigner *ExpiredLaunchContinuationAuthoritySignerV41
 }
 
 // NegotiatedPhysicalCapacity is the last complete physical-capacity proof
@@ -148,15 +165,18 @@ type NegotiatedPhysicalCapacity struct {
 // replay state. Repetition always crosses the sibling idempotency boundary with
 // the same key and signed bytes.
 type Adapter struct {
-	client                  Client
-	observer                observationClient
-	signer                  Signer
-	claimResolver           *CredentialClaimResolver
-	launchAuthorityRegistry ports.MicroVMHostLaunchPreparationRegistry
-	profile                 ProfileBinding
-	capabilities            ports.AgentCapabilities
-	model                   string
-	renderer                PromptRenderer
+	client                    Client
+	launchReconciler          launchReconciliationClient
+	expiredContinuation       *ExpiredLaunchContinuationTransportV41
+	expiredContinuationSigner *ExpiredLaunchContinuationAuthoritySignerV41
+	observer                  observationClient
+	signer                    Signer
+	claimResolver             *CredentialClaimResolver
+	launchAuthorityRegistry   ports.MicroVMHostLaunchPreparationRegistry
+	profile                   ProfileBinding
+	capabilities              ports.AgentCapabilities
+	model                     string
+	renderer                  PromptRenderer
 
 	negotiationGate                     chan struct{}
 	physicalCapacityMu                  sync.RWMutex
@@ -180,6 +200,10 @@ func New(config Config) (*Adapter, error) {
 	if !ok || nilInterface(observer) {
 		return nil, fail(CodeObservationClientInvalid, nil)
 	}
+	launchReconciler, ok := config.Client.(launchReconciliationClient)
+	if !ok || nilInterface(launchReconciler) {
+		return nil, fail(CodeConfigurationInvalid, nil)
+	}
 	if config.ModelBinding.Profile.PlacementRef.String() == "" {
 		return nil, fail(CodeProfileBindingInvalid, nil)
 	}
@@ -190,17 +214,27 @@ func New(config Config) (*Adapter, error) {
 		!config.Capabilities.RequierePreservacionEntorno {
 		return nil, fail(CodeConfigurationInvalid, err)
 	}
+	var expiredContinuation *ExpiredLaunchContinuationTransportV41
+	if client, supported := config.Client.(ExpiredLaunchContinuationClientV1); supported && !nilInterface(client) {
+		expiredContinuation, _ = NewExpiredLaunchContinuationTransportV41(client)
+	}
+	if config.ExpiredContinuationSigner != nil && expiredContinuation == nil {
+		return nil, fail(CodeConfigurationInvalid, ErrExpiredLaunchContinuationUnsupported)
+	}
 	return &Adapter{
-		client:                  config.Client,
-		observer:                observer,
-		signer:                  config.Signer,
-		claimResolver:           config.ClaimResolver,
-		launchAuthorityRegistry: config.LaunchAuthorityRegistry,
-		profile:                 cloneProfileBinding(config.ModelBinding.Profile),
-		capabilities:            cloneCapabilities(config.Capabilities),
-		model:                   config.ModelBinding.ProviderModel,
-		renderer:                config.PromptRenderer,
-		negotiationGate:         make(chan struct{}, 1),
+		client:                    config.Client,
+		launchReconciler:          launchReconciler,
+		expiredContinuation:       expiredContinuation,
+		expiredContinuationSigner: config.ExpiredContinuationSigner,
+		observer:                  observer,
+		signer:                    config.Signer,
+		claimResolver:             config.ClaimResolver,
+		launchAuthorityRegistry:   config.LaunchAuthorityRegistry,
+		profile:                   cloneProfileBinding(config.ModelBinding.Profile),
+		capabilities:              cloneCapabilities(config.Capabilities),
+		model:                     config.ModelBinding.ProviderModel,
+		renderer:                  config.PromptRenderer,
+		negotiationGate:           make(chan struct{}, 1),
 	}, nil
 }
 
@@ -250,6 +284,9 @@ func (adapter *Adapter) launch(
 	if adapter == nil || nilInterface(adapter.client) || nilInterface(adapter.signer) ||
 		nilInterface(adapter.claimResolver) || nilInterface(adapter.launchAuthorityRegistry) ||
 		nilInterface(adapter.renderer) || nilInterface(ctx) {
+		return ports.AgentLaunchReceipt{}, fail(CodeConfigurationInvalid, nil)
+	}
+	if reconcile && nilInterface(adapter.launchReconciler) {
 		return ports.AgentLaunchReceipt{}, fail(CodeConfigurationInvalid, nil)
 	}
 	if err := ctx.Err(); err != nil {
@@ -305,6 +342,11 @@ func (adapter *Adapter) launch(
 	if !validSignedPlan(compiled, signed.Plan) {
 		return ports.AgentLaunchReceipt{}, fail(CodeSigningFailed, nil)
 	}
+	profileJSON, err := json.Marshal(adapter.profile.Descriptor)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeDescriptorInvalid, err)
+	}
+	signed.Perfil = profileJSON
 	if err := ctx.Err(); err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
@@ -354,14 +396,38 @@ func (adapter *Adapter) launch(
 	if err := ctx.Err(); err != nil {
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchCanceledBeforeSubmit, err)
 	}
-	receiptRef := launchReceiptRef(signed)
-	response, err := adapter.client.Lanzar(ctx, request.IdempotencyKey, cloneSignedRequestUnchecked(signed))
+	var response microvm.RespuestaEjecucion
+	if reconcile {
+		response, err = adapter.launchReconciler.ReconciliarLanzamiento(
+			ctx, request.IdempotencyKey, cloneSignedRequestUnchecked(signed),
+		)
+	} else {
+		response, err = adapter.client.Lanzar(
+			ctx, request.IdempotencyKey, cloneSignedRequestUnchecked(signed),
+		)
+	}
 	if err != nil {
 		if contextErr := preserveContextError(ctx, err); contextErr != nil {
 			return ports.AgentLaunchReceipt{}, contextErr
 		}
 		return ports.AgentLaunchReceipt{}, classifyLaunchError(err)
 	}
+	return adapter.completeLaunch(
+		ctx, request, compiled, signed, authority, prepared, response, packet.TimeBudgetMS, packetJSON,
+	)
+}
+
+func (adapter *Adapter) completeLaunch(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+	compiled Compilation,
+	signed microvm.SolicitudLanzamiento,
+	authority ports.MicroVMHostLaunchAuthorityV1,
+	prepared ports.MicroVMHostLaunchAuthorityV1,
+	response microvm.RespuestaEjecucion,
+	timeBudgetMS uint64,
+	packetJSON []byte,
+) (ports.AgentLaunchReceipt, error) {
 	if !validLaunchResponse(response, compiled.Plan) {
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchResponseInvalid, nil)
 	}
@@ -374,7 +440,7 @@ func (adapter *Adapter) launch(
 	if !validBoundLaunchAuthority(authority, prepared, bound, response.Referencia) {
 		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityBindFailed, nil)
 	}
-	if err := adapter.launchSession(ctx, request, response, packet.TimeBudgetMS, packetJSON); err != nil {
+	if err := adapter.launchSession(ctx, request, response, timeBudgetMS, packetJSON); err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
 	receipt := ports.AgentLaunchReceipt{
@@ -383,7 +449,7 @@ func (adapter *Adapter) launch(
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: adapter.capabilities.ProviderRef, ModelRef: adapter.capabilities.ModelRef,
 		AgentRef: adapter.capabilities.AgentRef, ExternalRef: bound.ExternalRef,
-		IdempotencyKey: request.IdempotencyKey, ReceiptRef: receiptRef,
+		IdempotencyKey: request.IdempotencyKey, ReceiptRef: launchReceiptRef(signed),
 		AcceptedAt: compiled.IssuedAt, RequierePreservacionEntorno: request.RequierePreservacionEntorno,
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
@@ -444,16 +510,117 @@ func validBoundLaunchAuthority(
 		reflect.DeepEqual(bound, want)
 }
 
-// ReconcileLaunch repeats the exact durable launch through the sibling's
-// idempotency boundary. It deliberately shares the complete Launch pipeline so
-// signing, session delivery and receipt derivation cannot drift during host
-// recovery.
+// ReconcileLaunch continues an exact durable launch through the sibling's
+// explicit reconciliation boundary. It shares validation, signing, session
+// delivery and receipt derivation with Launch, but never calls ordinary launch.
 func (adapter *Adapter) ReconcileLaunch(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
 ) (ports.AgentLaunchReceipt, error) {
 	return adapter.launch(ctx, request, true)
 }
+
+// ContinueExpiredAgentLaunchV41 consumes only an authority already admitted
+// by Orquesta V41. It never invokes Lanzar or ReconciliarLanzamiento.
+func (adapter *Adapter) ContinueExpiredAgentLaunchV41(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+	record application.ExpiredAgentLaunchContinuationRecordV41,
+) (ports.AgentLaunchReceipt, error) {
+	if adapter == nil || adapter.expiredContinuation == nil || nilInterface(ctx) ||
+		nilInterface(adapter.launchAuthorityRegistry) || validateExpiredContinuationRequestBinding(request, record) != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeConfigurationInvalid, ErrExpiredLaunchContinuationInvalid)
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	if err := adapter.validateRequirements(request); err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	key := ports.MicroVMHostLaunchAuthorityKey{
+		RunRef: request.ExecutionRef, ActionFence: request.EffectAuthority.ActionFence,
+	}
+	historical, err := adapter.launchAuthorityRegistry.Resolve(ctx, key)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityLookupFailed, err)
+	}
+	if !adapter.validHistoricalLaunchAuthority(request, historical) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, nil)
+	}
+	compiled, err := Compile(request, adapter.profile, request.EffectAuthority.ActionFence)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	packet, packetJSON, err := BuildWorkPacketV1(
+		request, adapter.profile, compiled, adapter.model, adapter.renderer,
+	)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	issued, err := issuedExpiredAgentLaunchContinuationFromRecordV41(record, request.IdempotencyKey)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, err)
+	}
+	signed := cloneOriginalContinuationRequest(issued.Prepared.Subject.Original)
+	if !validSignedPlan(compiled, signed.Plan) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, nil)
+	}
+	profileJSON, err := json.Marshal(adapter.profile.Descriptor)
+	if err != nil || !bytes.Equal(profileJSON, signed.Perfil) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, err)
+	}
+	resolved := ResolvedCredentialClaim{placement: request.ReferenciaColocacion, claim: historical.OneShotClaim}
+	authority, err := BuildHostLaunchAuthorityV1(request, compiled, signed, resolved)
+	if err != nil || !validPreparedLaunchAuthorityReplay(authority, historical) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, err)
+	}
+	runtimeDigests, err := BuildMicroVMHostLaunchRuntimeDigestsV1(request, compiled, signed)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	historicalDigests, resolveErr := adapter.launchAuthorityRegistry.ResolveRuntime(ctx, authority.Key)
+	if resolveErr != nil || historicalDigests != runtimeDigests {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityReplayInvalid, resolveErr)
+	}
+	prepared, err := adapter.launchAuthorityRegistry.PrepareWithRuntime(ctx, authority, runtimeDigests)
+	if err != nil || !validPreparedLaunchAuthorityReplay(authority, prepared) {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchAuthorityPrepareFailed, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return ports.AgentLaunchReceipt{}, fail(CodeLaunchCanceledBeforeSubmit, err)
+	}
+	response, err := adapter.expiredContinuation.Continue(ctx, issued)
+	if err != nil {
+		if contextErr := preserveContextError(ctx, err); contextErr != nil {
+			return ports.AgentLaunchReceipt{}, contextErr
+		}
+		if errors.Is(err, ErrExpiredLaunchContinuationInvalid) ||
+			errors.Is(err, ErrExpiredLaunchContinuationUnsupported) ||
+			errors.Is(err, ErrExpiredLaunchContinuationDivergent) {
+			return ports.AgentLaunchReceipt{}, fail(CodeLaunchRejected, err)
+		}
+		return ports.AgentLaunchReceipt{}, classifyLaunchError(err)
+	}
+	return adapter.completeLaunch(
+		ctx, request, compiled, signed, authority, prepared, response, packet.TimeBudgetMS, packetJSON,
+	)
+}
+
+func validateExpiredContinuationRequestBinding(
+	request ports.AgentLaunchRequest,
+	record application.ExpiredAgentLaunchContinuationRecordV41,
+) error {
+	if request.ProjectRef.String() != record.ProjectRef || request.GoalRef.String() != record.GoalRef ||
+		request.WorkItemRef.String() != record.WorkItemRef || request.ExecutionRef.String() != record.ExecutionRef ||
+		uint64(request.PlanGeneration) != record.PlanGeneration ||
+		request.EffectAuthority.EffectAttemptRef != record.EffectAttemptRef ||
+		request.EffectAuthority.ActionFence != record.ActionFence || record.ActionFence != record.AMVFence {
+		return ErrExpiredLaunchContinuationDivergent
+	}
+	return nil
+}
+
+var _ application.ExpiredAgentLaunchContinuerV41 = (*Adapter)(nil)
 
 func validSignedPlan(compiled Compilation, raw json.RawMessage) bool {
 	trimmed := bytes.TrimSpace(raw)
@@ -618,6 +785,7 @@ func validRemoteVersion(value string) bool {
 func launchReceiptRef(request microvm.SolicitudLanzamiento) string {
 	digest := sha256.New()
 	digest.Write([]byte(launchReceiptDomain))
+	appendDigestField(digest, request.Perfil)
 	appendDigestField(digest, request.Plan)
 	appendDigestField(digest, request.Concesion)
 	return "agentmicrovm-launch:sha256:" + hex.EncodeToString(digest.Sum(nil))
@@ -640,6 +808,7 @@ func cloneSignedRequest(request microvm.SolicitudLanzamiento) (microvm.Solicitud
 
 func cloneSignedRequestUnchecked(request microvm.SolicitudLanzamiento) microvm.SolicitudLanzamiento {
 	return microvm.SolicitudLanzamiento{
+		Perfil:    append(json.RawMessage(nil), request.Perfil...),
 		Plan:      append(json.RawMessage(nil), request.Plan...),
 		Concesion: append(json.RawMessage(nil), request.Concesion...),
 	}

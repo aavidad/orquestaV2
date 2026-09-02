@@ -23,6 +23,12 @@ profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"
 expected_profile_descriptor_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 launch_grant_key_id = "clave-publica:orquesta-01"
 launch_grant_signing_credential_ref = "credential:microvm-launch-signing"
+expired_launch_continuation_authority_signing_credential_ref = "credential:microvm-continuation-signing"
+expired_launch_continuation_authority_key_id = "continuation-orquesta-01"
+expired_launch_continuation_authority_key_epoch = 1
+expired_launch_continuation_authority_trust_revision = 1
+expired_launch_continuation_authority_public_key_sha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+expired_launch_continuation_authority_validity = "2m"
 credential_broker_socket_path = "/run/orquesta/credential-broker.sock"
 credential_broker_peer_uid = 0
 credential_broker_exchange_timeout = "30s"
@@ -46,6 +52,12 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 		snapshot.RuntimeMicroVMExpectedProfileDescriptorSHA256() != strings.Repeat("a", 64) ||
 		snapshot.RuntimeMicroVMLaunchGrantKeyID() != "clave-publica:orquesta-01" ||
 		snapshot.RuntimeMicroVMLaunchGrantSigningCredentialRef() != "credential:microvm-launch-signing" ||
+		snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthoritySigningCredentialRef() != "credential:microvm-continuation-signing" ||
+		snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityKeyID() != "continuation-orquesta-01" ||
+		snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityKeyEpoch() != 1 ||
+		snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityTrustRevision() != 1 ||
+		snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityPublicKeySHA256() != strings.Repeat("c", 64) ||
+		snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityValidity() != 2*time.Minute ||
 		snapshot.RuntimeMicroVMCredentialBrokerSocketPath() != "/run/orquesta/credential-broker.sock" ||
 		snapshot.RuntimeMicroVMCredentialBrokerPeerUID() != 0 ||
 		snapshot.RuntimeMicroVMCredentialBrokerExchangeTimeout() != 30*time.Second ||
@@ -56,6 +68,10 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 	definition, found := Definition(KeyRuntimeMicroVMLaunchGrantSigningCredentialRef)
 	if !found || definition.Type != "credential_ref" || !definition.Sensitive || definition.Scope != "runtime" {
 		t.Fatalf("launch signing credential definition = %+v/%v", definition, found)
+	}
+	continuationDefinition, found := Definition(KeyRuntimeMicroVMExpiredLaunchContinuationAuthoritySigningCredentialRef)
+	if !found || continuationDefinition.Type != "credential_ref" || !continuationDefinition.Sensitive || continuationDefinition.Scope != "runtime" {
+		t.Fatalf("continuation signing credential definition = %+v/%v", continuationDefinition, found)
 	}
 	placement, found := Definition(KeyRuntimeMicroVMPlacementRef)
 	if !found || placement.Type != "string" || placement.Sensitive || placement.Scope != "runtime" ||
@@ -68,6 +84,7 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 		t.Fatalf("effective config: %v", err)
 	}
 	if strings.Contains(string(effective), "credential:microvm-launch-signing") ||
+		strings.Contains(string(effective), "credential:microvm-continuation-signing") ||
 		strings.Contains(string(effective), "credential:codex-account-1") {
 		t.Fatal("effective config leaks a microVM credential reference")
 	}
@@ -121,6 +138,24 @@ func TestV38RuntimeMicroVMConfigurationIsCanonicalAndRedacted(t *testing.T) {
 	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMCredentialBrokerPeerUID, SourceEnv)
 	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMCredentialBrokerExchangeTimeout, SourceEnv)
 	assertSource(t, environmentSnapshot, KeyRuntimeMicroVMCredentialBrokerMaxConnections, SourceEnv)
+}
+
+func TestV38MicroVMSeparatesHostQuotaProfileFromGuestCredential(t *testing.T) {
+	source := strings.Replace(validRuntimeMicroVMTOML, "[runtime.codex]\n", `[runtime.codex]
+account_home_root = "/srv/orquesta/codex-accounts"
+account_profile = "C46Pilot"
+max_concurrent_executions = 1
+`, 1)
+	snapshot, err := Resolve(ResolveOptions{TOML: []byte(source)})
+	if err != nil {
+		t.Fatalf("Resolve(microVM quota profile) error = %v", err)
+	}
+	if snapshot.RuntimeIsolation() != "microvm" ||
+		snapshot.RuntimeCodexCredentialRef() != "credential:codex-account-1" ||
+		snapshot.RuntimeCodexAccountHomeRoot() != "/srv/orquesta/codex-accounts" ||
+		snapshot.RuntimeCodexAccountProfile() != "C46Pilot" {
+		t.Fatal("microVM mixed host/guest authority drifted")
+	}
 }
 
 func TestCredentialProvisioningResolverOmitsOnlyFutureProfileDescriptor(t *testing.T) {
@@ -181,6 +216,63 @@ func TestCredentialProvisioningResolverOmitsOnlyFutureProfileDescriptor(t *testi
 	}
 }
 
+func TestContinuationCredentialProvisioningResolverOmitsOnlyDerivedPublicDigest(t *testing.T) {
+	withoutDigest := strings.Replace(
+		validRuntimeMicroVMTOML,
+		`expired_launch_continuation_authority_public_key_sha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"`+"\n",
+		"",
+		1,
+	)
+	if withoutDigest == validRuntimeMicroVMTOML {
+		t.Fatal("continuation digest fixture was not removed")
+	}
+	snapshot, err := ResolveForContinuationCredentialProvisioning(ResolveOptions{TOML: []byte(withoutDigest)})
+	if err != nil {
+		t.Fatalf("ResolveForContinuationCredentialProvisioning() error=%v", err)
+	}
+	if snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthorityPublicKeySHA256() != "" ||
+		snapshot.RuntimeMicroVMExpiredLaunchContinuationAuthoritySigningCredentialRef() !=
+			"credential:microvm-continuation-signing" {
+		t.Fatalf("continuation bootstrap snapshot drifted")
+	}
+	if _, err := Resolve(ResolveOptions{TOML: []byte(withoutDigest)}); err == nil ||
+		!HasErrorCode(err, ErrorCrossValidation) {
+		t.Fatalf("runtime Resolve accepted missing continuation digest: %v", err)
+	}
+	if _, err := ResolveForCredentialProvisioning(ResolveOptions{TOML: []byte(withoutDigest)}); err == nil ||
+		!HasErrorCode(err, ErrorCrossValidation) {
+		t.Fatalf("launch credential resolver accepted missing continuation digest: %v", err)
+	}
+
+	for _, mutation := range []struct {
+		name string
+		old  string
+		new  string
+	}{
+		{name: "credential ref", old: `expired_launch_continuation_authority_signing_credential_ref = "credential:microvm-continuation-signing"`, new: `expired_launch_continuation_authority_signing_credential_ref = ""`},
+		{name: "key id", old: `expired_launch_continuation_authority_key_id = "continuation-orquesta-01"`, new: `expired_launch_continuation_authority_key_id = ""`},
+		{name: "key epoch", old: `expired_launch_continuation_authority_key_epoch = 1`, new: `expired_launch_continuation_authority_key_epoch = 0`},
+		{name: "trust revision", old: `expired_launch_continuation_authority_trust_revision = 1`, new: `expired_launch_continuation_authority_trust_revision = 0`},
+		{name: "profile", old: `profile_descriptor_path = "/srv/orquesta/profiles/codex-v1.json"` + "\n", new: ""},
+		{name: "invalid nonempty digest", old: "", new: `expired_launch_continuation_authority_public_key_sha256 = "not-a-digest"` + "\n"},
+	} {
+		t.Run(mutation.name, func(t *testing.T) {
+			source := withoutDigest
+			if mutation.old == "" {
+				source = strings.Replace(source, "[runtime.microvm]\n", "[runtime.microvm]\n"+mutation.new, 1)
+			} else {
+				source = strings.Replace(source, mutation.old, mutation.new, 1)
+			}
+			if source == withoutDigest {
+				t.Fatal("fixture mutation did not apply")
+			}
+			if _, err := ResolveForContinuationCredentialProvisioning(ResolveOptions{TOML: []byte(source)}); err == nil {
+				t.Fatal("continuation provisioning resolver accepted non-digest omission")
+			}
+		})
+	}
+}
+
 func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
 	wantKeys := []Key{
 		KeyRuntimeProvider,
@@ -193,6 +285,12 @@ func TestV38RuntimeMicroVMCrossValidatorIdentityAndOrderAreExact(t *testing.T) {
 		KeyRuntimeMicroVMExpectedProfileDescriptorSHA256,
 		KeyRuntimeMicroVMLaunchGrantKeyID,
 		KeyRuntimeMicroVMLaunchGrantSigningCredentialRef,
+		KeyRuntimeMicroVMExpiredLaunchContinuationAuthoritySigningCredentialRef,
+		KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityKeyID,
+		KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityKeyEpoch,
+		KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityTrustRevision,
+		KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityPublicKeySHA256,
+		KeyRuntimeMicroVMExpiredLaunchContinuationAuthorityValidity,
 		KeyRuntimeMicroVMCredentialBrokerSocketPath,
 		KeyRuntimeMicroVMCredentialBrokerPeerUID,
 		KeyRuntimeMicroVMCredentialBrokerExchangeTimeout,
@@ -455,6 +553,12 @@ func TestV38MicroVMIsolationRejectsIncompleteOrNonCanonicalConfiguration(t *test
 		{name: "empty launch key suffix", old: `launch_grant_key_id = "clave-publica:orquesta-01"`, new: `launch_grant_key_id = "clave-publica:"`},
 		{name: "non canonical launch key", old: `launch_grant_key_id = "clave-publica:orquesta-01"`, new: `launch_grant_key_id = "clave-publica:Orquesta.01"`},
 		{name: "missing signing credential", old: `launch_grant_signing_credential_ref = "credential:microvm-launch-signing"`, new: `launch_grant_signing_credential_ref = ""`},
+		{name: "missing continuation signing credential", old: `expired_launch_continuation_authority_signing_credential_ref = "credential:microvm-continuation-signing"`, new: `expired_launch_continuation_authority_signing_credential_ref = ""`},
+		{name: "missing continuation key id", old: `expired_launch_continuation_authority_key_id = "continuation-orquesta-01"`, new: `expired_launch_continuation_authority_key_id = ""`},
+		{name: "missing continuation key epoch", old: `expired_launch_continuation_authority_key_epoch = 1`, new: `expired_launch_continuation_authority_key_epoch = 0`},
+		{name: "missing continuation trust revision", old: `expired_launch_continuation_authority_trust_revision = 1`, new: `expired_launch_continuation_authority_trust_revision = 0`},
+		{name: "missing continuation public key digest", old: `expired_launch_continuation_authority_public_key_sha256 = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"`, new: `expired_launch_continuation_authority_public_key_sha256 = ""`},
+		{name: "continuation validity above protocol bound", old: `expired_launch_continuation_authority_validity = "2m"`, new: `expired_launch_continuation_authority_validity = "6m"`},
 		{name: "missing broker socket", old: `credential_broker_socket_path = "/run/orquesta/credential-broker.sock"`, new: `credential_broker_socket_path = ""`},
 		{name: "relative broker socket", old: `credential_broker_socket_path = "/run/orquesta/credential-broker.sock"`, new: `credential_broker_socket_path = "run/orquesta/credential-broker.sock"`},
 		{name: "broker socket equals launcher socket", old: `credential_broker_socket_path = "/run/orquesta/credential-broker.sock"`, new: `credential_broker_socket_path = "/run/orquesta/agente-microvm.sock"`},

@@ -269,6 +269,15 @@ func (client *pipelineOrderedClient) Lanzar(
 	return client.launchClientStub.Lanzar(ctx, key, request)
 }
 
+func (client *pipelineOrderedClient) ReconciliarLanzamiento(
+	ctx context.Context,
+	key string,
+	request microvm.SolicitudLanzamiento,
+) (microvm.RespuestaEjecucion, error) {
+	client.recorder.add("reconcile-launch")
+	return client.launchClientStub.ReconciliarLanzamiento(ctx, key, request)
+}
+
 func (client *pipelineOrderedClient) ReconciliarEntradaSesion(
 	ctx context.Context,
 	key string,
@@ -489,7 +498,7 @@ func TestAdapterReconcileLaunchAcceptsExactBoundReplayAndRejectsCrossedResponse(
 	receipt, err := adapter.ReconcileLaunch(context.Background(), request)
 	assertPipelineAuthorityError(t, receipt, err, CodeLaunchAuthorityBindFailed, nil, false)
 	if steps := recorder.snapshot(); !reflect.DeepEqual(steps, []string{
-		"launch", "session", "launch", "session", "launch",
+		"launch", "session", "reconcile-launch", "session", "reconcile-launch",
 	}) {
 		t.Fatalf("session count changed after crossed response: steps=%v", steps)
 	}
@@ -538,13 +547,15 @@ func TestAdapterReconcilePreparedLaunchUsesHistoricalCredentialVersion(t *testin
 	reader.mu.Unlock()
 	prepareCalls, bindCalls, resolveCalls, _, _ := registry.snapshot()
 	if describeCalls != 1 || prepareCalls != 2 || bindCalls != 1 || resolveCalls != 1 ||
-		len(base.launchRequests) != 2 || !reflect.DeepEqual(base.launchRequests[0], base.launchRequests[1]) {
-		t.Fatalf("describe=%d prepare=%d bind=%d resolve=%d launches=%d equal=%t",
+		len(base.launchRequests) != 1 || len(base.reconcileRequests) != 1 ||
+		!reflect.DeepEqual(base.launchRequests[0], base.reconcileRequests[0]) {
+		t.Fatalf("describe=%d prepare=%d bind=%d resolve=%d launches=%d reconciliations=%d equal=%t",
 			describeCalls, prepareCalls, bindCalls, resolveCalls, len(base.launchRequests),
-			len(base.launchRequests) == 2 && reflect.DeepEqual(base.launchRequests[0], base.launchRequests[1]))
+			len(base.reconcileRequests), len(base.launchRequests) == 1 && len(base.reconcileRequests) == 1 &&
+				reflect.DeepEqual(base.launchRequests[0], base.reconcileRequests[0]))
 	}
 	if steps := recorder.snapshot(); !reflect.DeepEqual(steps, []string{
-		"prepare", "launch", "resolve", "prepare", "launch", "bind", "session",
+		"prepare", "launch", "resolve", "prepare", "reconcile-launch", "bind", "session",
 	}) {
 		t.Fatalf("steps=%v", steps)
 	}

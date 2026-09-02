@@ -1,4 +1,4 @@
-# github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260816192103-3d9c68f20721
+# github.com/aavidad/agente_microvm/conectores/orquesta v0.0.0-20260902163835-f17173c661e8
 ## explicit; go 1.25
 github.com/aavidad/agente_microvm/conectores/orquesta
 # github.com/coreos/go-oidc/v3 v3.20.0
@@ -88,8 +88,6 @@ golang.org/x/text/language
 golang.org/x/text/message
 golang.org/x/text/message/catalog
 golang.org/x/text/number
-golang.org/x/text/transform
-golang.org/x/text/unicode/norm
 # modernc.org/libc v1.73.4
 ## explicit; go 1.25.0
 modernc.org/libc
@@ -130,6 +128,5 @@ modernc.org/sqlite
 modernc.org/sqlite/lib
 modernc.org/sqlite/vtab
 # pgregory.net/rapid v1.3.0 => ./modulos/orquesta-estado-vivo/testdeps/rapid
-## explicit; go 1.25.0
-pgregory.net/rapid
+## explicit
 # pgregory.net/rapid => ./modulos/orquesta-estado-vivo/testdeps/rapid

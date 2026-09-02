@@ -9,9 +9,10 @@ import (
 	"orquesta/internal/application"
 )
 
-// V40 is a read-only projection, not a schema migration. Backup/restore must
-// preserve the V32 authority, V39 runtime supplement, attempt and accepted
-// receipt from which the same authority is derived after restart.
+// The historical runtime authority is a read-only projection. Backup/restore
+// must preserve the V32 authority, V39 runtime supplement, attempt and accepted
+// receipt from which the same authority is derived after restart, independently
+// of later additive schema migrations.
 func TestB12BackupRestoreRecomputesDerivedV40Authority(t *testing.T) {
 	system, claim, attempt, authority, runtime := seedV40PreparedLaunch(t, "backup-restore")
 	receipt := receiptV40Launch(t, system, claim, attempt)
@@ -45,7 +46,7 @@ func TestB12BackupRestoreRecomputesDerivedV40Authority(t *testing.T) {
 	if err := restored.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != 39 {
-		t.Fatalf("derived V40 created schema version %d, want 39", version)
+	if version != recoverySchemaLatest {
+		t.Fatalf("derived runtime authority restored schema version %d, want %d", version, recoverySchemaLatest)
 	}
 }

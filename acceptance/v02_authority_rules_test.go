@@ -551,6 +551,7 @@ var v02SharedDomainPackages = map[string]struct{}{
 // Goal cannot silently acquire another lifecycle dependency.
 var v02ApplicationDomainPackages = map[string]struct{}{
 	"orquesta/internal/intake":         {},
+	"orquesta/internal/tooling":        {},
 	"orquesta/internal/wizard/catalog": {},
 	"orquesta/internal/wizard/gaps":    {},
 	"orquesta/internal/wizard/stages":  {},
@@ -564,6 +565,7 @@ func v02ApplicationDomainImportAllowed(importPath string) bool {
 func TestV02ApplicationDomainImportAllowlistRejectsOutwardMutants(t *testing.T) {
 	want := map[string]struct{}{
 		"orquesta/internal/intake":         {},
+		"orquesta/internal/tooling":        {},
 		"orquesta/internal/wizard/catalog": {},
 		"orquesta/internal/wizard/gaps":    {},
 		"orquesta/internal/wizard/stages":  {},
@@ -574,6 +576,7 @@ func TestV02ApplicationDomainImportAllowlistRejectsOutwardMutants(t *testing.T) 
 	for _, mutant := range []string{
 		"orquesta/internal/wizard",
 		"orquesta/internal/wizard/other",
+		"orquesta/internal/tooling/provider",
 		"orquesta/internal/adapters/state/sqlite",
 		"orquesta/internal/interfaces/http",
 		"orquesta/internal/bootstrap",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -114,6 +115,41 @@ func (api *fakeApplication) Status(context.Context, application.Access) (applica
 	api.mu.Unlock()
 	return application.RepositoryStatus{Goals: goals}, api.statusErr
 }
+func (api *fakeApplication) PreflightExpiredAgentLaunchContinuationV41(
+	context.Context, application.Access, application.PreflightExpiredAgentLaunchContinuationRequestV41,
+) (application.PreflightExpiredAgentLaunchContinuationResultV41, error) {
+	api.called("PreflightExpiredAgentLaunchContinuation")
+	return application.PreflightExpiredAgentLaunchContinuationResultV41{
+		Preparation: application.ExpiredAgentLaunchContinuationPreparationV41{
+			Binding: application.ExpiredAgentLaunchContinuationCausalBindingV41{
+				ReconciliationAuthorityRef: "agent-launch-reconciliation:one",
+				ReconciliationAttemptRef:   "agent-launch-reconciliation-attempt:one",
+				EffectAttemptRef:           "effect-attempt:one",
+			},
+			ManifestSHA256: strings.Repeat("a", 64), RequestKeySHA256: strings.Repeat("b", 64),
+			OriginalRequestSHA256: strings.Repeat("c", 64), AMVLaunchRef: "lanzamiento:one",
+			AMVExecutionRef: "ejecucion:one", AMVRunRef: "execution:one", AMVFence: 2,
+			AMVGeneration: 1, AMVCID: 3, AMVIdentitySHA256: strings.Repeat("d", 64),
+			PreparedAt: time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC),
+		},
+	}, nil
+}
+func (api *fakeApplication) ConfirmExpiredAgentLaunchContinuationV41(
+	context.Context, application.Access, application.ConfirmExpiredAgentLaunchContinuationRequestV41,
+) (application.ConfirmExpiredAgentLaunchContinuationResultV41, error) {
+	api.called("ConfirmExpiredAgentLaunchContinuation")
+	return application.ConfirmExpiredAgentLaunchContinuationResultV41{
+		Record: application.ExpiredAgentLaunchContinuationRecordV41{
+			AuthorityRef: "continuation:one", SubjectRef: "expired-launch-continuation-subject:one",
+			ReconciliationAuthorityRef: "agent-launch-reconciliation:one",
+			ReconciliationAttemptRef:   "agent-launch-reconciliation-attempt:one",
+			EffectAttemptRef:           "effect-attempt:one", ManifestSHA256: strings.Repeat("a", 64),
+			KeyID: "continuation-orquesta-01", KeyEpoch: 1, TrustRevision: 1,
+			IssuedUnixMS: 1, ExpiresUnixMS: 2,
+		},
+		Created: true,
+	}, nil
+}
 func (api *fakeApplication) GrantMembership(_ context.Context, _ application.Access, request identity.MembershipGrantRequest, _ identity.Principal) (identity.Membership, identity.MembershipAuditReceipt, bool, error) {
 	created := api.called("GrantMembership") == 1
 	membershipRevision := request.ExpectedRevision() + 1
@@ -188,6 +224,12 @@ func (api *fakeApplication) DecideEffect(context.Context, application.Access, ap
 	return application.DecideEffectResult{Approval: application.EffectApproval{
 		Ref: "effect-approval:test", IntentRef: "effect-intent:test", Decision: application.EffectApproved,
 	}, Created: api.called("DecideEffect") == 1}, nil
+}
+func (api *fakeApplication) ReconcileTerminalAgentLaunch(context.Context, application.Access, application.ReconcileTerminalAgentLaunchRequest) (application.ReconcileTerminalAgentLaunchResult, error) {
+	api.called("ReconcileTerminalAgentLaunch")
+	return application.ReconcileTerminalAgentLaunchResult{Authority: application.TerminalAgentLaunchReconciliationAuthority{
+		Ref: "agent-launch-reconciliation-authority:test", JobRef: "agent-launch-reconciliation-job:test",
+	}}, nil
 }
 func (api *fakeApplication) ListPendingChanges(context.Context, application.Access, application.ListPendingChangesRequest) (application.ListPendingChangesResult, error) {
 	api.called("ListPendingChanges")
